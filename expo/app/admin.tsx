@@ -2,15 +2,20 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
+  Activity,
   ArrowLeft,
   BadgeCheck,
   Ban,
+  Bell,
   Crown,
   Flame,
   LifeBuoy,
+  Megaphone,
   Plus,
+  RefreshCw,
   Rocket,
   Search,
+  Settings as SettingsIcon,
   Shield,
   ShieldOff,
   Sparkles,
@@ -30,6 +35,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -43,7 +49,15 @@ import { fmtUsd as sharedFmtUsd } from "@/utils/format";
 import { useAdmin, type AdminRole } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
 
-type Section = "overview" | "admins" | "users" | "listings" | "tickets" | "audit";
+type Section =
+  | "overview"
+  | "admins"
+  | "users"
+  | "listings"
+  | "tickets"
+  | "broadcasts"
+  | "settings"
+  | "audit";
 
 interface UserRow {
   user_id: string;
@@ -65,10 +79,21 @@ interface DashboardStats {
   listings: number;
   featured: number;
   verified: number;
+  hot: number;
   support_open: number;
+  support_pending: number;
   support_total: number;
+  banned_users: number;
+  verified_users: number;
+  new_users_24h: number;
   new_users_7d: number;
+  new_listings_24h: number;
   new_listings_7d: number;
+  posts_total: number;
+  posts_24h: number;
+  announcements: number;
+  last_listing_at: string | null;
+  last_signup_at: string | null;
 }
 
 interface AdminRow {
@@ -107,6 +132,8 @@ interface TicketRow {
 interface AuditRow {
   id: string;
   admin_id: string | null;
+  admin_username: string | null;
+  admin_avatar: string | null;
   action: string;
   target_type: string | null;
   target_id: string | null;
@@ -114,10 +141,40 @@ interface AuditRow {
   created_at: string;
 }
 
+interface AnnouncementRow {
+  id: string;
+  title: string;
+  body: string;
+  severity: "info" | "success" | "warning" | "critical";
+  audience: "all" | "traders" | "admins";
+  created_by: string | null;
+  created_at: string;
+  expires_at: string | null;
+}
+
+interface SettingRow {
+  key: string;
+  value: unknown;
+  updated_at: string;
+}
+
+interface TopUserRow {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  followers_count: number;
+  verified: boolean;
+  is_banned: boolean;
+  created_at: string;
+}
+
 const ROLES: AdminRole[] = ["superadmin", "admin", "moderator", "support"];
+const fmtUsd = sharedFmtUsd;
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const qc = useQueryClient();
   const { isAuthenticated, email } = useAuth();
   const { isAdmin, isSuperadmin, role, isLoading } = useAdmin();
   const [section, setSection] = useState<Section>("overview");
@@ -148,19 +205,31 @@ export default function AdminDashboard() {
     );
   }
 
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["admin"] });
+  };
+
   return (
     <View style={styles.root} testID="admin-dashboard">
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
+      <LinearGradient
+        colors={["rgba(85,245,178,0.10)", "rgba(56,215,255,0.04)", "transparent"]}
+        style={styles.bgGlow}
+        pointerEvents="none"
+      />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn} testID="admin-back">
+          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} testID="admin-back">
             <ArrowLeft color={Colors.text} size={18} strokeWidth={2.4} />
           </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerEyebrow}>SolTools control room</Text>
             <Text style={styles.headerTitle}>Admin Console</Text>
           </View>
+          <Pressable onPress={refresh} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} testID="admin-refresh">
+            <RefreshCw color={Colors.mint} size={16} strokeWidth={2.4} />
+          </Pressable>
           <View style={[styles.rolePill, { borderColor: roleColor(role) }]}>
             <Crown color={roleColor(role)} size={11} strokeWidth={3} />
             <Text style={[styles.rolePillText, { color: roleColor(role) }]}>
@@ -181,7 +250,9 @@ export default function AdminDashboard() {
               { id: "users", label: "Users", Icon: Users },
               { id: "listings", label: "Listings", Icon: Rocket },
               { id: "tickets", label: "Support", Icon: LifeBuoy },
-              { id: "audit", label: "Audit Log", Icon: Shield },
+              { id: "broadcasts", label: "Broadcasts", Icon: Megaphone },
+              { id: "settings", label: "Settings", Icon: SettingsIcon },
+              { id: "audit", label: "Audit", Icon: Shield },
             ] as { id: Section; label: string; Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }> }[]
           ).map((t) => {
             const active = section === t.id;
@@ -189,7 +260,7 @@ export default function AdminDashboard() {
               <Pressable
                 key={t.id}
                 onPress={() => setSection(t.id)}
-                style={[styles.tabBtn, active && styles.tabBtnActive]}
+                style={({ pressed }) => [styles.tabBtn, active && styles.tabBtnActive, pressed && styles.pressed]}
                 testID={`admin-tab-${t.id}`}
               >
                 <t.Icon color={active ? Colors.ink : Colors.text} size={13} strokeWidth={2.6} />
@@ -200,11 +271,13 @@ export default function AdminDashboard() {
         </ScrollView>
 
         <View style={{ flex: 1 }}>
-          {section === "overview" && <OverviewSection />}
+          {section === "overview" && <OverviewSection onJump={setSection} />}
           {section === "admins" && <AdminsSection isSuperadmin={isSuperadmin} />}
-          {section === "users" && <UsersSection />}
+          {section === "users" && <UsersSection isSuperadmin={isSuperadmin} />}
           {section === "listings" && <ListingsSection />}
           {section === "tickets" && <TicketsSection />}
+          {section === "broadcasts" && <BroadcastsSection />}
+          {section === "settings" && <SettingsSection />}
           {section === "audit" && <AuditSection />}
         </View>
       </SafeAreaView>
@@ -227,7 +300,18 @@ function roleColor(r: AdminRole | null): string {
   }
 }
 
-function OverviewSection() {
+function severityColor(s: AnnouncementRow["severity"]): string {
+  switch (s) {
+    case "success": return Colors.mint;
+    case "warning": return Colors.orange;
+    case "critical": return Colors.rose;
+    default: return Colors.cyan;
+  }
+}
+
+/* ---------------------------- OVERVIEW --------------------------- */
+
+function OverviewSection({ onJump }: { onJump: (s: Section) => void }) {
   const statsQuery = useQuery<DashboardStats>({
     queryKey: ["admin", "dashboard-stats"],
     queryFn: async () => {
@@ -238,32 +322,129 @@ function OverviewSection() {
     refetchInterval: 30_000,
   });
 
+  const topUsersQuery = useQuery<TopUserRow[]>({
+    queryKey: ["admin", "top-users"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_top_users", { max_rows: 6 });
+      if (error) throw error;
+      return (data ?? []) as TopUserRow[];
+    },
+  });
+
+  const recentActivityQuery = useQuery<AuditRow[]>({
+    queryKey: ["admin", "recent-activity"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_recent_activity", { max_rows: 8 });
+      if (error) throw error;
+      return (data ?? []) as AuditRow[];
+    },
+    refetchInterval: 60_000,
+  });
+
   const s = statsQuery.data;
 
   return (
     <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
       <LinearGradient
-        colors={[Colors.mint, Colors.cyan]}
+        colors={["#55F5B2", "#38D7FF"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.heroCard}
       >
-        <Sparkles color={Colors.ink} size={18} strokeWidth={3} />
-        <Text style={styles.heroTitle}>SolTools at a glance</Text>
+        <View style={styles.heroBadge}>
+          <Sparkles color={Colors.ink} size={11} strokeWidth={3} />
+          <Text style={styles.heroBadgeText}>LIVE · 30s</Text>
+        </View>
+        <Text style={styles.heroTitle}>Mission control</Text>
         <Text style={styles.heroBody}>
-          Live operations data refreshed every 30s. Curate the launchpad, manage your team, and keep traders moving.
+          Curate launches, manage your team, and keep traders shipping.
         </Text>
+        <View style={styles.heroMetricsRow}>
+          <HeroMetric label="USERS" value={s?.users} />
+          <HeroMetric label="LISTINGS" value={s?.listings} />
+          <HeroMetric label="OPEN TICKETS" value={s?.support_open} accent={Colors.rose} />
+        </View>
       </LinearGradient>
 
+      <Text style={styles.sectionLabel}>QUICK ACTIONS</Text>
+      <View style={styles.quickGrid}>
+        <QuickAction Icon={Users} label="Users" sub={`${s?.users ?? "—"} total`} accent={Colors.mint} onPress={() => onJump("users")} />
+        <QuickAction Icon={Crown} label="Admins" sub={`${s?.admins ?? "—"} active`} accent="#FFD56B" onPress={() => onJump("admins")} />
+        <QuickAction Icon={Rocket} label="Launches" sub={`${s?.featured ?? "—"} featured`} accent={Colors.cyan} onPress={() => onJump("listings")} />
+        <QuickAction Icon={LifeBuoy} label="Support" sub={`${s?.support_open ?? "—"} open`} accent={Colors.rose} onPress={() => onJump("tickets")} />
+        <QuickAction Icon={Megaphone} label="Broadcasts" sub={`${s?.announcements ?? "—"} sent`} accent={Colors.orange} onPress={() => onJump("broadcasts")} />
+        <QuickAction Icon={SettingsIcon} label="Settings" sub="Platform flags" accent="#B88CFF" onPress={() => onJump("settings")} />
+      </View>
+
+      <Text style={styles.sectionLabel}>TODAY</Text>
       <View style={styles.statsGrid}>
-        <StatCard label="USERS" value={s?.users} accent={Colors.mint} Icon={Users} />
-        <StatCard label="ADMINS" value={s?.admins} accent="#FFD56B" Icon={Crown} />
-        <StatCard label="LISTINGS" value={s?.listings} accent={Colors.cyan} Icon={Rocket} />
-        <StatCard label="FEATURED" value={s?.featured} accent={Colors.orange} Icon={Star} />
-        <StatCard label="VERIFIED" value={s?.verified} accent={Colors.cyan} Icon={BadgeCheck} />
-        <StatCard label="OPEN TICKETS" value={s?.support_open} accent={Colors.rose} Icon={LifeBuoy} />
-        <StatCard label="NEW USERS · 7D" value={s?.new_users_7d} accent={Colors.mint} Icon={TrendingUp} />
-        <StatCard label="NEW LISTINGS · 7D" value={s?.new_listings_7d} accent="#B88CFF" Icon={Flame} />
+        <StatCard label="NEW USERS · 24H" value={s?.new_users_24h} accent={Colors.mint} Icon={UserPlus} />
+        <StatCard label="NEW LISTINGS · 24H" value={s?.new_listings_24h} accent={Colors.cyan} Icon={Rocket} />
+        <StatCard label="POSTS · 24H" value={s?.posts_24h} accent="#B88CFF" Icon={Activity} />
+        <StatCard label="VERIFIED USERS" value={s?.verified_users} accent={Colors.cyan} Icon={BadgeCheck} />
+        <StatCard label="BANNED USERS" value={s?.banned_users} accent={Colors.rose} Icon={Ban} />
+        <StatCard label="HOT LAUNCHES" value={s?.hot} accent="#FF7A45" Icon={Flame} />
+      </View>
+
+      <Text style={styles.sectionLabel}>WEEK · 7D GROWTH</Text>
+      <View style={styles.statsGrid}>
+        <StatCard label="USERS · 7D" value={s?.new_users_7d} accent={Colors.mint} Icon={TrendingUp} />
+        <StatCard label="LISTINGS · 7D" value={s?.new_listings_7d} accent={Colors.cyan} Icon={Flame} />
+      </View>
+
+      <Text style={styles.sectionLabel}>TOP TRADERS</Text>
+      <View style={styles.cardWrap}>
+        {topUsersQuery.isLoading ? (
+          <ActivityIndicator color={Colors.mint} style={{ padding: 20 }} />
+        ) : (topUsersQuery.data ?? []).length === 0 ? (
+          <Text style={styles.empty}>No traders yet.</Text>
+        ) : (
+          (topUsersQuery.data ?? []).map((u) => (
+            <View key={u.user_id} style={styles.miniRow}>
+              <View style={[styles.avatar, { backgroundColor: "rgba(85,245,178,0.16)" }]}>
+                <Text style={{ color: Colors.mint, fontWeight: "900" }}>
+                  {(u.display_name ?? u.username ?? "?").slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle} numberOfLines={1}>
+                  {u.display_name ?? u.username ?? u.user_id.slice(0, 8)}
+                  {u.verified ? " ✓" : ""}
+                </Text>
+                <Text style={styles.rowSub}>@{u.username ?? "—"} · {u.followers_count} followers</Text>
+              </View>
+              {u.is_banned ? (
+                <View style={[styles.miniPill, { backgroundColor: "rgba(255,93,143,0.18)" }]}>
+                  <Text style={[styles.miniPillText, { color: Colors.rose }]}>BANNED</Text>
+                </View>
+              ) : null}
+            </View>
+          ))
+        )}
+      </View>
+
+      <Text style={styles.sectionLabel}>RECENT ACTIVITY</Text>
+      <View style={styles.cardWrap}>
+        {recentActivityQuery.isLoading ? (
+          <ActivityIndicator color={Colors.mint} style={{ padding: 20 }} />
+        ) : (recentActivityQuery.data ?? []).length === 0 ? (
+          <Text style={styles.empty}>No admin actions yet.</Text>
+        ) : (
+          (recentActivityQuery.data ?? []).map((a) => (
+            <View key={a.id} style={styles.miniRow}>
+              <View style={[styles.avatar, { backgroundColor: "rgba(56,215,255,0.16)" }]}>
+                <Shield color={Colors.cyan} size={13} strokeWidth={2.6} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle} numberOfLines={1}>{a.action.replace(/_/g, " ")}</Text>
+                <Text style={styles.rowSub} numberOfLines={1}>
+                  {a.admin_username ?? "system"} · {a.target_type ?? "—"}
+                </Text>
+              </View>
+              <Text style={styles.rowSub}>{relTime(a.created_at)}</Text>
+            </View>
+          ))
+        )}
       </View>
 
       {statsQuery.isError ? (
@@ -275,15 +456,38 @@ function OverviewSection() {
   );
 }
 
-function StatCard({
-  label,
-  value,
-  accent,
-  Icon,
+function HeroMetric({ label, value, accent }: { label: string; value: number | undefined; accent?: string }) {
+  return (
+    <View style={styles.heroMetric}>
+      <Text style={[styles.heroMetricVal, accent ? { color: accent } : null]}>
+        {typeof value === "number" ? value.toLocaleString() : "—"}
+      </Text>
+      <Text style={styles.heroMetricKey}>{label}</Text>
+    </View>
+  );
+}
+
+function QuickAction({
+  Icon, label, sub, accent, onPress,
 }: {
-  label: string;
-  value: number | undefined;
-  accent: string;
+  Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+  label: string; sub: string; accent: string; onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.quickCard, pressed && styles.pressedDeep]} testID={`quick-${label.toLowerCase()}`}>
+      <View style={[styles.quickIcon, { backgroundColor: `${accent}1F`, borderColor: `${accent}55` }]}>
+        <Icon color={accent} size={16} strokeWidth={2.6} />
+      </View>
+      <Text style={styles.quickLabel}>{label}</Text>
+      <Text style={styles.quickSub}>{sub}</Text>
+    </Pressable>
+  );
+}
+
+function StatCard({
+  label, value, accent, Icon,
+}: {
+  label: string; value: number | undefined; accent: string;
   Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
 }) {
   return (
@@ -296,6 +500,17 @@ function StatCard({
     </View>
   );
 }
+
+function relTime(iso: string): string {
+  const d = new Date(iso).getTime();
+  const diff = (Date.now() - d) / 1000;
+  if (diff < 60) return `${Math.max(1, Math.floor(diff))}s`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  return `${Math.floor(diff / 86400)}d`;
+}
+
+/* ----------------------------- ADMINS ---------------------------- */
 
 function AdminsSection({ isSuperadmin }: { isSuperadmin: boolean }) {
   const qc = useQueryClient();
@@ -324,8 +539,7 @@ function AdminsSection({ isSuperadmin }: { isSuperadmin: boolean }) {
       setAddOpen(false);
       setEmailInput("");
       setRoleInput("admin");
-      qc.invalidateQueries({ queryKey: ["admin", "admins"] });
-      qc.invalidateQueries({ queryKey: ["admin", "dashboard-stats"] });
+      qc.invalidateQueries({ queryKey: ["admin"] });
       Alert.alert("Admin added", "Role granted successfully.");
     },
     onError: (e: Error) => Alert.alert("Couldn't add admin", e.message),
@@ -336,10 +550,7 @@ function AdminsSection({ isSuperadmin }: { isSuperadmin: boolean }) {
       const { error } = await supabase.rpc("admin_remove", { target_user_id: uid });
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "admins"] });
-      qc.invalidateQueries({ queryKey: ["admin", "dashboard-stats"] });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
     onError: (e: Error) => Alert.alert("Couldn't revoke", e.message),
   });
 
@@ -361,10 +572,7 @@ function AdminsSection({ isSuperadmin }: { isSuperadmin: boolean }) {
     <View style={{ flex: 1 }}>
       {isSuperadmin ? (
         <View style={styles.actionRow}>
-          <Pressable onPress={() => setAddOpen(true)} style={styles.primaryBtn} testID="admin-add">
-            <UserPlus color={Colors.ink} size={14} strokeWidth={3} />
-            <Text style={styles.primaryBtnText}>Add admin by email</Text>
-          </Pressable>
+          <PrimaryButton onPress={() => setAddOpen(true)} Icon={UserPlus} label="Add admin by email" testID="admin-add" />
         </View>
       ) : (
         <Text style={styles.notice}>Only superadmins can add or revoke admins.</Text>
@@ -403,7 +611,7 @@ function AdminsSection({ isSuperadmin }: { isSuperadmin: boolean }) {
               <Pressable
                 onPress={() => onConfirmRemove(item)}
                 hitSlop={8}
-                style={styles.dangerBtn}
+                style={({ pressed }) => [styles.dangerBtn, pressed && styles.pressed]}
                 testID={`admin-remove-${item.user_id}`}
               >
                 <ShieldOff color={Colors.rose} size={14} strokeWidth={2.6} />
@@ -453,18 +661,13 @@ function AdminsSection({ isSuperadmin }: { isSuperadmin: boolean }) {
                 );
               })}
             </View>
-            <Pressable
-              onPress={() =>
-                addMutation.mutate({ email: emailInput.trim(), role: roleInput })
-              }
+            <PrimaryButton
+              onPress={() => addMutation.mutate({ email: emailInput.trim(), role: roleInput })}
               disabled={!emailInput.trim() || addMutation.isPending}
-              style={[styles.primaryBtn, { marginTop: 18 }, (!emailInput.trim() || addMutation.isPending) && { opacity: 0.55 }]}
+              label={addMutation.isPending ? "Granting…" : "Grant role"}
               testID="admin-add-confirm"
-            >
-              <Text style={styles.primaryBtnText}>
-                {addMutation.isPending ? "Granting…" : "Grant role"}
-              </Text>
-            </Pressable>
+              style={{ marginTop: 18 }}
+            />
           </Pressable>
         </Pressable>
       </Modal>
@@ -472,7 +675,9 @@ function AdminsSection({ isSuperadmin }: { isSuperadmin: boolean }) {
   );
 }
 
-function UsersSection() {
+/* ------------------------------ USERS ---------------------------- */
+
+function UsersSection({ isSuperadmin }: { isSuperadmin: boolean }) {
   const qc = useQueryClient();
   const [query, setQuery] = useState<string>("");
   const [badgeFor, setBadgeFor] = useState<UserRow | null>(null);
@@ -482,7 +687,7 @@ function UsersSection() {
     queryFn: async () => {
       const { data, error } = await supabase.rpc("admin_search_users", {
         q: query.trim(),
-        max_rows: 60,
+        max_rows: 80,
       });
       if (error) throw error;
       return ((data ?? []) as Record<string, unknown>[]).map(
@@ -522,7 +727,7 @@ function UsersSection() {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      qc.invalidateQueries({ queryKey: ["admin"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
     },
     onError: (e: Error) => Alert.alert("Update failed", e.message),
@@ -537,10 +742,19 @@ function UsersSection() {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      qc.invalidateQueries({ queryKey: ["admin"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
     },
     onError: (e: Error) => Alert.alert("Couldn't remove badge", e.message),
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (uid: string) => {
+      const { error } = await supabase.rpc("admin_delete_user", { target_user_id: uid });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
+    onError: (e: Error) => Alert.alert("Delete failed", e.message),
   });
 
   return (
@@ -556,6 +770,11 @@ function UsersSection() {
           autoCapitalize="none"
           testID="admin-users-search"
         />
+        {query.length > 0 ? (
+          <Pressable onPress={() => setQuery("")} hitSlop={8}>
+            <X color={Colors.muted} size={14} strokeWidth={2.6} />
+          </Pressable>
+        ) : null}
       </View>
       <FlatList
         data={usersQuery.data ?? []}
@@ -581,11 +800,27 @@ function UsersSection() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle} numberOfLines={1}>
                   {item.display_name ?? item.username ?? item.email ?? item.user_id.slice(0, 8)}
+                  {item.verified ? "  ✓" : ""}
                 </Text>
                 <Text style={styles.rowSub} numberOfLines={1}>
                   @{item.username ?? "—"} · {item.email ?? "no email"} · {item.followers_count} followers
                 </Text>
               </View>
+              {isSuperadmin ? (
+                <Pressable
+                  onPress={() =>
+                    Alert.alert("Delete user?", `${item.email ?? item.username ?? "this account"} will be wiped permanently.`, [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Delete", style: "destructive", onPress: () => deleteUserMutation.mutate(item.user_id) },
+                    ])
+                  }
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.dangerBtn, pressed && styles.pressed]}
+                  testID={`user-delete-${item.user_id}`}
+                >
+                  <Trash2 color={Colors.rose} size={14} strokeWidth={2.6} />
+                </Pressable>
+              ) : null}
             </View>
 
             {item.custom_badges.length > 0 ? (
@@ -613,12 +848,7 @@ function UsersSection() {
                     ]}
                   >
                     <Sparkles color={b.color ?? "#FFD56B"} size={10} strokeWidth={3} />
-                    <Text
-                      style={[
-                        styles.userBadgeText,
-                        { color: b.color ?? "#FFD56B" },
-                      ]}
-                    >
+                    <Text style={[styles.userBadgeText, { color: b.color ?? "#FFD56B" }]}>
                       {b.label}
                     </Text>
                   </Pressable>
@@ -645,7 +875,11 @@ function UsersSection() {
               />
               <Pressable
                 onPress={() => setBadgeFor(item)}
-                style={[styles.toggleChip, { borderColor: "rgba(255,213,107,0.55)", backgroundColor: "rgba(255,213,107,0.12)" }]}
+                style={({ pressed }) => [
+                  styles.toggleChip,
+                  { borderColor: "rgba(255,213,107,0.55)", backgroundColor: "rgba(255,213,107,0.12)" },
+                  pressed && styles.pressed,
+                ]}
                 testID={`user-add-badge-${item.user_id}`}
               >
                 <Plus color="#FFD56B" size={11} strokeWidth={2.8} />
@@ -661,7 +895,7 @@ function UsersSection() {
         onClose={() => setBadgeFor(null)}
         onSaved={() => {
           setBadgeFor(null);
-          qc.invalidateQueries({ queryKey: ["admin", "users"] });
+          qc.invalidateQueries({ queryKey: ["admin"] });
           qc.invalidateQueries({ queryKey: ["profile"] });
         }}
       />
@@ -670,13 +904,9 @@ function UsersSection() {
 }
 
 function BadgeModal({
-  target,
-  onClose,
-  onSaved,
+  target, onClose, onSaved,
 }: {
-  target: UserRow | null;
-  onClose: () => void;
-  onSaved: () => void;
+  target: UserRow | null; onClose: () => void; onSaved: () => void;
 }) {
   const [label, setLabel] = useState<string>("");
   const [color, setColor] = useState<string>("#FFD56B");
@@ -742,25 +972,20 @@ function BadgeModal({
               );
             })}
           </View>
-          <Pressable
+          <PrimaryButton
             onPress={() => addMutation.mutate()}
             disabled={!label.trim() || addMutation.isPending}
-            style={[
-              styles.primaryBtn,
-              { marginTop: 18 },
-              (!label.trim() || addMutation.isPending) && { opacity: 0.55 },
-            ]}
+            label={addMutation.isPending ? "Granting…" : "Grant bag"}
             testID="badge-grant"
-          >
-            <Text style={styles.primaryBtnText}>
-              {addMutation.isPending ? "Granting…" : "Grant bag"}
-            </Text>
-          </Pressable>
+            style={{ marginTop: 18 }}
+          />
         </Pressable>
       </Pressable>
     </Modal>
   );
 }
+
+/* ----------------------------- LISTINGS -------------------------- */
 
 function ListingsSection() {
   const qc = useQueryClient();
@@ -792,11 +1017,7 @@ function ListingsSection() {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "listings"] });
-      qc.invalidateQueries({ queryKey: ["admin", "dashboard-stats"] });
-      qc.invalidateQueries({ queryKey: ["launchpad"] });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
     onError: (e: Error) => Alert.alert("Update failed", e.message),
   });
 
@@ -805,10 +1026,7 @@ function ListingsSection() {
       const { error } = await supabase.rpc("admin_delete_listing", { submission_id: id });
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "listings"] });
-      qc.invalidateQueries({ queryKey: ["launchpad"] });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
     onError: (e: Error) => Alert.alert("Delete failed", e.message),
   });
 
@@ -890,7 +1108,7 @@ function ListingsSection() {
                   ])
                 }
                 hitSlop={8}
-                style={styles.dangerBtn}
+                style={({ pressed }) => [styles.dangerBtn, pressed && styles.pressed]}
                 testID={`listing-delete-${item.id}`}
               >
                 <Trash2 color={Colors.rose} size={14} strokeWidth={2.6} />
@@ -903,26 +1121,17 @@ function ListingsSection() {
             </View>
             <View style={styles.toggleRow}>
               <ToggleChip
-                label="Featured"
-                active={item.is_featured}
-                color={Colors.orange}
-                Icon={Star}
+                label="Featured" active={item.is_featured} color={Colors.orange} Icon={Star}
                 onPress={() => flagsMutation.mutate({ id: item.id, featured: !item.is_featured })}
                 testID={`listing-featured-${item.id}`}
               />
               <ToggleChip
-                label="Verified"
-                active={item.is_verified}
-                color={Colors.cyan}
-                Icon={BadgeCheck}
+                label="Verified" active={item.is_verified} color={Colors.cyan} Icon={BadgeCheck}
                 onPress={() => flagsMutation.mutate({ id: item.id, verified: !item.is_verified })}
                 testID={`listing-verified-${item.id}`}
               />
               <ToggleChip
-                label="Hot"
-                active={item.is_hot}
-                color={Colors.rose}
-                Icon={Flame}
+                label="Hot" active={item.is_hot} color={Colors.rose} Icon={Flame}
                 onPress={() => flagsMutation.mutate({ id: item.id, hot: !item.is_hot })}
                 testID={`listing-hot-${item.id}`}
               />
@@ -934,43 +1143,7 @@ function ListingsSection() {
   );
 }
 
-function ToggleChip({
-  label,
-  active,
-  color,
-  Icon,
-  onPress,
-  testID,
-}: {
-  label: string;
-  active: boolean;
-  color: string;
-  Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
-  onPress: () => void;
-  testID?: string;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.toggleChip, active ? { backgroundColor: color, borderColor: color } : { borderColor: `${color}55` }]}
-      testID={testID}
-    >
-      <Icon color={active ? Colors.ink : color} size={11} strokeWidth={2.8} />
-      <Text style={[styles.toggleChipText, active ? { color: Colors.ink } : { color }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.metric}>
-      <Text style={styles.metricKey}>{label}</Text>
-      <Text style={styles.metricVal}>{value}</Text>
-    </View>
-  );
-}
-
-const fmtUsd = sharedFmtUsd;
+/* ---------------------------- TICKETS ---------------------------- */
 
 function TicketsSection() {
   const qc = useQueryClient();
@@ -996,10 +1169,7 @@ function TicketsSection() {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "tickets"] });
-      qc.invalidateQueries({ queryKey: ["admin", "dashboard-stats"] });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
     onError: (e: Error) => Alert.alert("Update failed", e.message),
   });
 
@@ -1024,11 +1194,9 @@ function TicketsSection() {
             <Text style={styles.rowSub}>{new Date(item.created_at).toLocaleDateString()}</Text>
           </View>
           <Text style={styles.ticketSubject}>{item.subject}</Text>
-          <Text style={styles.ticketBody} numberOfLines={3}>
-            {item.body}
-          </Text>
+          <Text style={styles.ticketBody} numberOfLines={3}>{item.body}</Text>
           <View style={styles.ticketActions}>
-            {(["open", "in_progress", "resolved", "closed"] as const).map((s) => (
+            {(["open", "pending", "resolved", "closed"] as const).map((s) => (
               <Pressable
                 key={s}
                 onPress={() => updateMutation.mutate({ id: item.id, status: s })}
@@ -1039,7 +1207,7 @@ function TicketsSection() {
                 testID={`ticket-${item.id}-${s}`}
               >
                 <Text style={[styles.ticketBtnText, item.status === s && { color: Colors.ink }]}>
-                  {s.replace("_", " ")}
+                  {s}
                 </Text>
               </Pressable>
             ))}
@@ -1052,20 +1220,297 @@ function TicketsSection() {
 
 function ticketStatusColor(s: string): string {
   if (s === "open") return "rgba(255,93,143,0.22)";
-  if (s === "in_progress") return "rgba(255,184,76,0.22)";
+  if (s === "pending") return "rgba(255,184,76,0.22)";
   if (s === "resolved") return "rgba(85,245,178,0.22)";
   return "rgba(141,167,164,0.22)";
 }
+
+/* --------------------------- BROADCASTS -------------------------- */
+
+function BroadcastsSection() {
+  const qc = useQueryClient();
+  const [composeOpen, setComposeOpen] = useState<boolean>(false);
+  const [title, setTitle] = useState<string>("");
+  const [body, setBody] = useState<string>("");
+  const [severity, setSeverity] = useState<AnnouncementRow["severity"]>("info");
+  const [audience, setAudience] = useState<AnnouncementRow["audience"]>("all");
+
+  const announcementsQuery = useQuery<AnnouncementRow[]>({
+    queryKey: ["admin", "announcements"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("announcements")
+        .select("id,title,body,severity,audience,created_by,created_at,expires_at")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return (data ?? []) as AnnouncementRow[];
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc("admin_announcement_create", {
+        in_title: title.trim(),
+        in_body: body.trim(),
+        in_severity: severity,
+        in_audience: audience,
+        in_expires_at: null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setComposeOpen(false);
+      setTitle("");
+      setBody("");
+      setSeverity("info");
+      setAudience("all");
+      qc.invalidateQueries({ queryKey: ["admin"] });
+    },
+    onError: (e: Error) => Alert.alert("Couldn't broadcast", e.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc("admin_announcement_delete", { announcement_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
+    onError: (e: Error) => Alert.alert("Couldn't delete", e.message),
+  });
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.actionRow}>
+        <PrimaryButton onPress={() => setComposeOpen(true)} Icon={Megaphone} label="Compose broadcast" testID="broadcast-new" />
+      </View>
+
+      <FlatList
+        data={announcementsQuery.data ?? []}
+        keyExtractor={(it) => it.id}
+        contentContainerStyle={styles.listPad}
+        ListEmptyComponent={
+          announcementsQuery.isLoading ? (
+            <ActivityIndicator color={Colors.mint} style={{ marginTop: 24 }} />
+          ) : (
+            <Text style={styles.empty}>No broadcasts yet. Send your first one above.</Text>
+          )
+        }
+        renderItem={({ item }) => {
+          const tint = severityColor(item.severity);
+          return (
+            <View style={[styles.announceCard, { borderColor: `${tint}44` }]} testID={`announce-${item.id}`}>
+              <View style={styles.listingHeader}>
+                <View style={[styles.avatar, { backgroundColor: `${tint}1F` }]}>
+                  <Bell color={tint} size={14} strokeWidth={2.6} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
+                  <Text style={styles.rowSub} numberOfLines={1}>
+                    {item.severity.toUpperCase()} · {item.audience} · {relTime(item.created_at)} ago
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() =>
+                    Alert.alert("Delete broadcast?", item.title, [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(item.id) },
+                    ])
+                  }
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.dangerBtn, pressed && styles.pressed]}
+                  testID={`announce-delete-${item.id}`}
+                >
+                  <Trash2 color={Colors.rose} size={14} strokeWidth={2.6} />
+                </Pressable>
+              </View>
+              <Text style={styles.announceBody}>{item.body}</Text>
+            </View>
+          );
+        }}
+      />
+
+      <Modal visible={composeOpen} transparent animationType="slide" onRequestClose={() => setComposeOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setComposeOpen(false)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>New broadcast</Text>
+              <Pressable onPress={() => setComposeOpen(false)} hitSlop={8}>
+                <X color={Colors.muted} size={18} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+            <Text style={styles.modalLabel}>TITLE</Text>
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Heads up traders…"
+              placeholderTextColor={Colors.muted}
+              style={styles.modalInput}
+              maxLength={80}
+              testID="broadcast-title"
+            />
+            <Text style={styles.modalLabel}>MESSAGE</Text>
+            <TextInput
+              value={body}
+              onChangeText={setBody}
+              placeholder="What's the news?"
+              placeholderTextColor={Colors.muted}
+              style={[styles.modalInput, { minHeight: 90, textAlignVertical: "top" }]}
+              multiline
+              maxLength={500}
+              testID="broadcast-body"
+            />
+            <Text style={styles.modalLabel}>SEVERITY</Text>
+            <View style={styles.roleGrid}>
+              {(["info", "success", "warning", "critical"] as const).map((s) => {
+                const active = severity === s;
+                const tint = severityColor(s);
+                return (
+                  <Pressable
+                    key={s}
+                    onPress={() => setSeverity(s)}
+                    style={[
+                      styles.roleChip,
+                      active && { backgroundColor: tint, borderColor: tint },
+                    ]}
+                  >
+                    <Text style={[styles.roleChipText, active && { color: Colors.ink }]}>{s}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.modalLabel}>AUDIENCE</Text>
+            <View style={styles.roleGrid}>
+              {(["all", "traders", "admins"] as const).map((a) => {
+                const active = audience === a;
+                return (
+                  <Pressable
+                    key={a}
+                    onPress={() => setAudience(a)}
+                    style={[
+                      styles.roleChip,
+                      active && { backgroundColor: Colors.mint, borderColor: Colors.mint },
+                    ]}
+                  >
+                    <Text style={[styles.roleChipText, active && { color: Colors.ink }]}>{a}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <PrimaryButton
+              onPress={() => createMutation.mutate()}
+              disabled={!title.trim() || !body.trim() || createMutation.isPending}
+              label={createMutation.isPending ? "Sending…" : "Send broadcast"}
+              testID="broadcast-send"
+              style={{ marginTop: 18 }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+/* ---------------------------- SETTINGS --------------------------- */
+
+function SettingsSection() {
+  const qc = useQueryClient();
+  const settingsQuery = useQuery<SettingRow[]>({
+    queryKey: ["admin", "settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_settings_all");
+      if (error) throw error;
+      return (data ?? []) as SettingRow[];
+    },
+  });
+
+  const setMutation = useMutation({
+    mutationFn: async (input: { key: string; value: unknown }) => {
+      const { error } = await supabase.rpc("admin_setting_set", {
+        in_key: input.key,
+        in_value: input.value,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
+    onError: (e: Error) => Alert.alert("Update failed", e.message),
+  });
+
+  const flagKeys = ["signups_open", "listings_open", "maintenance_mode"];
+  const settings = settingsQuery.data ?? [];
+  const flagFor = (k: string) => settings.find((s) => s.key === k);
+
+  return (
+    <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <View style={[styles.cardWrap, { padding: 0 }]}>
+        {flagKeys.map((k, i) => {
+          const row = flagFor(k);
+          const value = row?.value === true;
+          return (
+            <View key={k} style={[styles.settingRow, i < flagKeys.length - 1 && styles.settingDivider]}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{titleForKey(k)}</Text>
+                <Text style={styles.rowSub}>{descForKey(k)}</Text>
+              </View>
+              <Switch
+                value={value}
+                onValueChange={(v) => setMutation.mutate({ key: k, value: v })}
+                trackColor={{ true: Colors.mint, false: "rgba(255,255,255,0.12)" }}
+                thumbColor={value ? Colors.ink : Colors.muted}
+                testID={`setting-${k}`}
+              />
+            </View>
+          );
+        })}
+      </View>
+
+      <Text style={styles.sectionLabel}>OTHER KEYS</Text>
+      <View style={styles.cardWrap}>
+        {settings.filter((s) => !flagKeys.includes(s.key)).map((s) => (
+          <View key={s.key} style={styles.miniRow}>
+            <View style={[styles.avatar, { backgroundColor: "rgba(56,215,255,0.16)" }]}>
+              <SettingsIcon color={Colors.cyan} size={13} strokeWidth={2.6} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>{s.key}</Text>
+              <Text style={styles.rowSub} numberOfLines={1}>{JSON.stringify(s.value)}</Text>
+            </View>
+          </View>
+        ))}
+        {settings.length === 0 ? (
+          settingsQuery.isLoading ? (
+            <ActivityIndicator color={Colors.mint} style={{ padding: 20 }} />
+          ) : (
+            <Text style={styles.empty}>No settings yet.</Text>
+          )
+        ) : null}
+      </View>
+    </ScrollView>
+  );
+}
+
+function titleForKey(k: string): string {
+  if (k === "signups_open") return "Sign-ups open";
+  if (k === "listings_open") return "Token listings open";
+  if (k === "maintenance_mode") return "Maintenance mode";
+  return k;
+}
+
+function descForKey(k: string): string {
+  if (k === "signups_open") return "Allow new accounts to be created from auth.";
+  if (k === "listings_open") return "Allow traders to submit new launches to the launchpad.";
+  if (k === "maintenance_mode") return "Show a maintenance banner across the app.";
+  return "Platform setting.";
+}
+
+/* ----------------------------- AUDIT ----------------------------- */
 
 function AuditSection() {
   const auditQuery = useQuery<AuditRow[]>({
     queryKey: ["admin", "audit"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("admin_audit_log")
-        .select("id,admin_id,action,target_type,target_id,meta,created_at")
-        .order("created_at", { ascending: false })
-        .limit(200);
+      const { data, error } = await supabase.rpc("admin_recent_activity", { max_rows: 100 });
       if (error) throw error;
       return (data ?? []) as AuditRow[];
     },
@@ -1090,224 +1535,274 @@ function AuditSection() {
             <Shield color={Colors.mint} size={13} strokeWidth={2.6} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.rowTitle}>{item.action}</Text>
+            <Text style={styles.rowTitle}>{item.action.replace(/_/g, " ")}</Text>
             <Text style={styles.rowSub} numberOfLines={1}>
-              {item.target_type ?? "—"} · {item.target_id?.slice(0, 12) ?? "—"}
+              {item.admin_username ?? "system"} · {item.target_type ?? "—"} · {item.target_id?.slice(0, 12) ?? "—"}
             </Text>
           </View>
-          <Text style={styles.rowSub}>{new Date(item.created_at).toLocaleTimeString()}</Text>
+          <Text style={styles.rowSub}>{relTime(item.created_at)}</Text>
         </View>
       )}
     />
   );
 }
 
+/* ---------------------------- SHARED UI -------------------------- */
+
+function ToggleChip({
+  label, active, color, Icon, onPress, testID,
+}: {
+  label: string; active: boolean; color: string;
+  Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+  onPress: () => void; testID?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.toggleChip,
+        active ? { backgroundColor: color, borderColor: color } : { borderColor: `${color}55` },
+        pressed && styles.pressed,
+      ]}
+      testID={testID}
+    >
+      <Icon color={active ? Colors.ink : color} size={11} strokeWidth={2.8} />
+      <Text style={[styles.toggleChipText, active ? { color: Colors.ink } : { color }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function PrimaryButton({
+  onPress, label, Icon, disabled, style, testID,
+}: {
+  onPress: () => void;
+  label: string;
+  Icon?: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+  disabled?: boolean;
+  style?: object;
+  testID?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      testID={testID}
+      style={({ pressed }) => [
+        styles.primaryBtn,
+        disabled && { opacity: 0.45 },
+        pressed && !disabled && styles.pressedDeep,
+        style,
+      ]}
+    >
+      <LinearGradient
+        colors={["#55F5B2", "#38D7FF"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.primaryGradient}
+      />
+      {Icon ? <Icon color={Colors.ink} size={14} strokeWidth={3} /> : null}
+      <Text style={styles.primaryBtnText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.metric}>
+      <Text style={styles.metricKey}>{label}</Text>
+      <Text style={styles.metricVal}>{value}</Text>
+    </View>
+  );
+}
+
+/* ----------------------------- STYLES ---------------------------- */
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
+  bgGlow: { position: "absolute", top: 0, left: 0, right: 0, height: 320 },
   safe: { flex: 1 },
+  pressed: { opacity: 0.7 },
+  pressedDeep: { transform: [{ scale: 0.97 }], opacity: 0.92 },
+
   gateRoot: { flex: 1, backgroundColor: Colors.ink, justifyContent: "center", alignItems: "center", padding: 28, gap: 12 },
   gateTitle: { color: Colors.text, fontSize: 22, fontWeight: "900" },
   gateBody: { color: Colors.muted, fontSize: 14, textAlign: "center", lineHeight: 20 },
   gateBtn: { marginTop: 8, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: Colors.mint, borderRadius: 14 },
   gateBtnText: { color: Colors.ink, fontWeight: "900", fontSize: 14 },
-  headerRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingTop: 6, paddingBottom: 12, gap: 12 },
+
+  headerRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingTop: 6, paddingBottom: 12, gap: 10 },
   iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 36, height: 36, borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.06)",
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
   },
-  headerEyebrow: {
-    color: Colors.mint,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
-  },
+  headerEyebrow: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.4, textTransform: "uppercase" },
   headerTitle: { color: Colors.text, fontSize: 22, fontWeight: "900", marginTop: 2 },
   rolePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderWidth: 1.5,
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    flexDirection: "row", alignItems: "center", gap: 5,
+    borderWidth: 1.5, borderRadius: 999,
+    paddingHorizontal: 9, paddingVertical: 5,
   },
   rolePillText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+
   tabsRow: { paddingHorizontal: 14, gap: 8, paddingBottom: 8 },
   tabBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
   },
   tabBtnActive: { backgroundColor: Colors.mint, borderColor: Colors.mint },
   tabText: { color: Colors.text, fontSize: 12, fontWeight: "800", letterSpacing: 0.4 },
   tabTextActive: { color: Colors.ink },
-  scroll: { padding: 18, paddingBottom: 60, gap: 16 },
+
+  scroll: { padding: 18, paddingBottom: 80, gap: 14 },
+  sectionLabel: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.6, marginTop: 8 },
+
   heroCard: { borderRadius: 22, padding: 20, gap: 8 },
-  heroTitle: { color: Colors.ink, fontSize: 20, fontWeight: "900" },
+  heroBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start",
+    backgroundColor: "rgba(3,7,8,0.18)", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+  },
+  heroBadgeText: { color: Colors.ink, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  heroTitle: { color: Colors.ink, fontSize: 26, fontWeight: "900", marginTop: 2 },
   heroBody: { color: "rgba(3,7,8,0.78)", fontSize: 13, lineHeight: 19 },
+  heroMetricsRow: { flexDirection: "row", gap: 14, marginTop: 14 },
+  heroMetric: {
+    flex: 1, backgroundColor: "rgba(3,7,8,0.18)",
+    borderRadius: 14, padding: 12, gap: 4,
+  },
+  heroMetricVal: { color: Colors.ink, fontSize: 18, fontWeight: "900" },
+  heroMetricKey: { color: "rgba(3,7,8,0.65)", fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+
+  quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  quickCard: {
+    flexBasis: "31%", flexGrow: 1, gap: 6,
+    backgroundColor: Colors.card, borderRadius: 16, padding: 12,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+  },
+  quickIcon: {
+    width: 32, height: 32, borderRadius: 10,
+    alignItems: "center", justifyContent: "center", borderWidth: 1,
+  },
+  quickLabel: { color: Colors.text, fontSize: 13, fontWeight: "900", marginTop: 2 },
+  quickSub: { color: Colors.muted, fontSize: 10, fontWeight: "700" },
+
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   statCard: {
-    flexBasis: "47%",
-    flexGrow: 1,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 14,
-    gap: 8,
+    flexBasis: "47%", flexGrow: 1,
+    borderWidth: 1, borderRadius: 16, padding: 14, gap: 6,
     backgroundColor: Colors.card,
   },
   statIcon: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   statNum: { color: Colors.text, fontSize: 22, fontWeight: "900" },
   statKey: { color: Colors.muted, fontSize: 10, fontWeight: "800", letterSpacing: 1 },
-  errorText: { color: Colors.rose, fontSize: 12, marginTop: 12 },
-  actionRow: { paddingHorizontal: 18, paddingBottom: 8 },
-  primaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: Colors.mint,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 14,
+
+  cardWrap: {
+    backgroundColor: Colors.card, borderRadius: 16, padding: 8,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", gap: 4,
   },
+  miniRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 8, paddingVertical: 10,
+  },
+  miniPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  miniPillText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+
+  errorText: { color: Colors.rose, fontSize: 12, marginTop: 12 },
+  actionRow: { paddingHorizontal: 18, paddingBottom: 8, paddingTop: 4 },
+
+  primaryBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    paddingHorizontal: 18, paddingVertical: 13, borderRadius: 14,
+    overflow: "hidden",
+  },
+  primaryGradient: { ...StyleSheet.absoluteFillObject },
   primaryBtnText: { color: Colors.ink, fontWeight: "900", fontSize: 13, letterSpacing: 0.4 },
   notice: { color: Colors.muted, fontSize: 12, paddingHorizontal: 18, paddingBottom: 8 },
-  listPad: { paddingHorizontal: 18, paddingBottom: 60, gap: 10 },
+
+  listPad: { paddingHorizontal: 18, paddingBottom: 80, gap: 10 },
   row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: Colors.card, borderRadius: 16, padding: 12,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
   avatar: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   rowTitle: { color: Colors.text, fontSize: 14, fontWeight: "800" },
   rowMuted: { color: Colors.muted, fontWeight: "600" },
   rowSub: { color: Colors.muted, fontSize: 11, marginTop: 2 },
   dangerBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 32, height: 32, borderRadius: 10,
     backgroundColor: "rgba(255,93,143,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(255,93,143,0.25)",
   },
-  empty: { color: Colors.muted, textAlign: "center", marginTop: 32, fontSize: 13 },
+
+  empty: { color: Colors.muted, textAlign: "center", marginTop: 32, marginBottom: 32, fontSize: 13, paddingHorizontal: 18 },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: Colors.panel,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    padding: 18,
-    paddingBottom: 32,
-    gap: 6,
+    borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    padding: 18, paddingBottom: 32, gap: 6,
   },
   sheetHandle: {
-    alignSelf: "center",
-    width: 36,
-    height: 4,
-    borderRadius: 4,
-    backgroundColor: Colors.muted,
-    opacity: 0.5,
-    marginBottom: 8,
+    alignSelf: "center", width: 36, height: 4, borderRadius: 4,
+    backgroundColor: Colors.muted, opacity: 0.5, marginBottom: 8,
   },
   sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   sheetTitle: { color: Colors.text, fontSize: 18, fontWeight: "900" },
   modalLabel: { color: Colors.muted, fontSize: 10, letterSpacing: 1.2, fontWeight: "800", marginTop: 14, marginBottom: 6 },
   modalInput: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: Colors.text,
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    backgroundColor: Colors.card, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12,
+    color: Colors.text, fontSize: 14,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
   roleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   roleChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999,
+    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.1)",
   },
   roleChipText: { color: Colors.text, fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.6 },
+
   searchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: Colors.card,
-    marginHorizontal: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    marginHorizontal: 18, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
   searchInput: { flex: 1, color: Colors.text, fontSize: 13, paddingVertical: 0 },
+
   filterRow: { paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
   filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
   },
   filterChipActive: { backgroundColor: Colors.mint, borderColor: Colors.mint },
   filterChipText: { color: Colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+
   listingCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
-    gap: 12,
+    backgroundColor: Colors.card, borderRadius: 16, padding: 14,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", gap: 12,
   },
   listingHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   listingMetrics: { flexDirection: "row", gap: 10 },
-  metric: {
-    flex: 1,
-    backgroundColor: Colors.cardSoft,
-    borderRadius: 12,
-    padding: 10,
-    gap: 4,
-  },
+  metric: { flex: 1, backgroundColor: Colors.cardSoft, borderRadius: 12, padding: 10, gap: 4 },
   metricKey: { color: Colors.muted, fontSize: 9, fontWeight: "800", letterSpacing: 1 },
   metricVal: { color: Colors.text, fontSize: 13, fontWeight: "900" },
+
   toggleRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   toggleChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1.5,
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5,
   },
   toggleChipText: { fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
+
   ticketCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
-    gap: 8,
+    backgroundColor: Colors.card, borderRadius: 16, padding: 14,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", gap: 8,
   },
   ticketHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   statusPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
@@ -1316,41 +1811,38 @@ const styles = StyleSheet.create({
   ticketBody: { color: Colors.muted, fontSize: 12, lineHeight: 17 },
   ticketActions: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
   ticketBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
   },
   ticketBtnText: { color: Colors.text, fontSize: 10, fontWeight: "800", textTransform: "capitalize" },
+
   auditRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: Colors.card, borderRadius: 14, padding: 12,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
+
   userCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
-    gap: 10,
+    backgroundColor: Colors.card, borderRadius: 16, padding: 14,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", gap: 10,
   },
   userBadgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   userBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 1,
   },
   userBadgeText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
   colorSwatch: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+
+  announceCard: {
+    backgroundColor: Colors.card, borderRadius: 16, padding: 14,
+    borderWidth: 1, gap: 10,
+  },
+  announceBody: { color: Colors.muted, fontSize: 13, lineHeight: 19 },
+
+  settingRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 14, paddingVertical: 14,
+  },
+  settingDivider: { borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
 });
