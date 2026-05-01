@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import { supabase } from "@/lib/supabase";
+import { clearAllUserCache } from "@/lib/user-cache";
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const qc = useQueryClient();
@@ -28,9 +29,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       console.log("[auth] event", event, s?.user?.email ?? "(none)");
+      const prevId = user?.id ?? null;
+      const nextId = s?.user?.id ?? null;
       setSession(s ?? null);
       setUser(s?.user ?? null);
-      qc.invalidateQueries();
+      // If the signed-in user changed, drop every cached query so the
+      // previous account's data can't bleed into the new session.
+      if (prevId !== nextId) {
+        qc.removeQueries();
+      } else {
+        qc.invalidateQueries();
+      }
     });
     return () => {
       mounted = false;
@@ -81,6 +90,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     mutationFn: async () => {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      // Clear local AsyncStorage so the next account doesn't inherit
+      // this user's profile / watchlist / posts cache.
+      await clearAllUserCache();
     },
     onSuccess: () => {
       qc.clear();

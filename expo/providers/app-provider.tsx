@@ -8,13 +8,9 @@ import { uploadPostImage } from "@/lib/upload";
 import type { CustomBadge } from "@/providers/profile-provider";
 import { useAuth } from "@/providers/auth-provider";
 
-const POSTS_KEY = "soltools.posts.v1";
-const WATCH_KEY = "soltools.watchlist.v1";
-const ALERTS_KEY = "soltools.alerts.v1";
-const WALLETS_KEY = "soltools.wallets.v1";
-const PROFILE_KEY = "soltools.profile.v2";
-const PREFS_KEY = "soltools.prefs.v1";
-const FOLLOWS_KEY = "soltools.follows.v1";
+import { userKeys } from "@/lib/user-cache";
+
+export { clearAllUserCache } from "@/lib/user-cache";
 
 export interface UserPost {
   id: string;
@@ -100,9 +96,9 @@ export interface UserPrefs {
 }
 
 const DEFAULT_PROFILE: UserProfile = {
-  handle: "@degen",
-  displayName: "Sol Tools Trader",
-  bio: "Hunting Solana alpha · 24/7 · DM for collabs",
+  handle: "",
+  displayName: "",
+  bio: "",
   avatarColor: "#55F5B2",
   bannerFrom: "#FF5D8F",
   bannerTo: "#38D7FF",
@@ -110,7 +106,7 @@ const DEFAULT_PROFILE: UserProfile = {
   twitterHandle: "",
   website: "",
   location: "",
-  verified: true,
+  verified: false,
   joinedAt: Date.now(),
   xp: 0,
   trades: 0,
@@ -175,6 +171,14 @@ const condToAlertType: Record<string, AlertItem["type"]> = {
 export const [AppProvider, useApp] = createContextHook(() => {
   const qc = useQueryClient();
   const { userId, isAuthenticated } = useAuth();
+  const scope = userId ?? "guest";
+  const K = userKeys(scope);
+  const POSTS_KEY = K.posts;
+  const WATCH_KEY = K.watch;
+  const ALERTS_KEY = K.alerts;
+  const WALLETS_KEY = K.wallets;
+  const PROFILE_KEY = K.profile;
+  const PREFS_KEY = K.prefs;
 
   const postsQ = useQuery<UserPost[]>({
     queryKey: ["app", "posts", userId ?? "guest"],
@@ -753,15 +757,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   );
 
   const resetAllData = useCallback(async () => {
-    await Promise.all([
-      AsyncStorage.removeItem(POSTS_KEY),
-      AsyncStorage.removeItem(WATCH_KEY),
-      AsyncStorage.removeItem(ALERTS_KEY),
-      AsyncStorage.removeItem(WALLETS_KEY),
-      AsyncStorage.removeItem(PROFILE_KEY),
-      AsyncStorage.removeItem(PREFS_KEY),
-      AsyncStorage.removeItem(FOLLOWS_KEY),
-    ]);
+    await clearAllUserCache();
     qc.invalidateQueries({ queryKey: ["app"] });
   }, [qc]);
 
