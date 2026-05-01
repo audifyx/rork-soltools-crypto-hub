@@ -1,3 +1,4 @@
+import { getTokenOverview } from "@/lib/api/birdeye";
 import { getPrice, rpcCall } from "@/lib/api/jupiter";
 import { SOL_MINT } from "@/lib/api/market";
 
@@ -25,6 +26,28 @@ export interface WalletTransaction {
   description?: string;
   fee?: number;
   status?: "success" | "failed";
+}
+
+export interface WalletStats {
+  totalTxs: number;
+  successCount: number;
+  failedCount: number;
+  successRate: number;
+  totalFeesSol: number;
+  totalFeesUsd: number;
+  firstSeen: number;
+  lastSeen: number;
+  activeDays: number;
+  avgTxPerDay: number;
+}
+
+export interface WalletPortfolio {
+  address: string;
+  balance: WalletBalance;
+  tokens: WalletTokenHolding[];
+  transactions: WalletTransaction[];
+  stats: WalletStats;
+  solPrice: number;
 }
 
 const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -204,21 +227,156 @@ export async function fetchWalletTransactions(
   return fetchSignatures(address, limit);
 }
 
-export async function fetchWalletPortfolio(address: string): Promise<{
-  balance: WalletBalance;
-  tokens: WalletTokenHolding[];
-  transactions: WalletTransaction[];
-}> {
-  if (!isValidSolanaAddress(address)) {
-    return { balance: { sol: 0, usd: 0 }, tokens: [], transactions: [] };
-  }
-  const [balance, transactions] = await Promise.all([
-    fetchWalletBalance(address),
-    fetchWalletTransactions(address, 25),
-  ]);
+/**
+ * Fetch fee + status detail for the recent N signatures.
+ * Uses getTransaction in parallel with a hard cap to avoid blasting RPC.
+ */
+async function enrichTransactions(
+  txs: WalletTransaction[],
+  cap: number = 20,
+): Promise<WalletTransaction[]> {
+  const target = txs.slice(0, cap);
+  const enriched = await Promise.all(
+    target.map(async (t) => {
+      try {
+        const res = await rpcCall<{
+          meta?: { fee?: number; err?: unknown } | null;
+          transaction?: { message?: { instructions?: unknown[] } };
+        } | null>("getTransaction", [
+          t.signature,
+          { maxSupportedTransactionVersion: 0, commitment: "confirmed" },
+        ]);
+        const fee = Number(res?.meta?.fee ?? 0) / 1e9;
+        return { ...t, fee };
+      } catch (e) {
+        console.log("[wallet] getTransaction error", e);
+        return t;
+      }
+    }),
+  );
+  // Append any signatures we did not enrich.
+  const tail = txs.slice(cap);
+  return [...enriched, ...tail];
+}
+
+function computeStats(txs: WalletTransaction[], solPrice: number): WalletStats {
+  const totalTxs = txs.length;
+  const successCount = txs.filter((t) => t.status !== "failed").length;
+  const failedCount = totalTxs - successCount;
+  const successRate = totalTxs > 0 ? (successCount / totalTxs) * 100 : 0;
+  const totalFeesSol = txs.reduce((acc, t) => acc + (t.fee ?? 0), 0);
+  const totalFeesUsd = totalFeesSol * solPrice;
+  const times = txs.map((t) => t.blockTime).filter((t) => t > 0);
+  const firstSeen = times.length ? Math.min(...times) : 0;
+  const lastSeen = times.length ? Math.max(...times) : 0;
+  const activeDays =
+    firstSeen && lastSeen
+      ? Math.max(1, Math.ceil((lastSeen - firstSeen) / 86400))
+      : 0;
+  const avgTxPerDay = activeDays > 0 ? totalTxs / activeDays : totalTxs;
   return {
-    balance,
-    tokens: balance.tokens ?? [],
-    transactions,
+    totalTxs,
+    successCount,
+    failedCount,
+    successRate,
+    totalFeesSol,
+    totalFeesUsd,
+    firstSeen,
+    lastSeen,
+    activeDays,
+    avgTxPerDay,
+  };
+}
+
+/**
+ * Best-effort metadata enrichment for the top N holdings using Birdeye.
+ * Adds symbol/name/logo and updates usdValue with overview price when missing.
+ */
+async function enrichHoldingsMeta(
+  holdings: WalletTokenHolding[],
+  cap: number = 12,
+): Promise<WalletTokenHolding[]> {
+  const top = holdings.slice(0, cap);
+  const rest = holdings.slice(cap);
+  const enriched = await Promise.all(
+    top.map(async (h) => {
+      try {
+        const o = await getTokenOverview(h.mint);
+        const price = Number(o?.price ?? 0);
+        const next: WalletTokenHolding = {
+          ...h,
+          symbol: o?.symbol ?? h.symbol,
+          name: o?.name ?? h.name,
+          logo: o?.logoURI ?? h.logo,
+        };
+        if ((next.usdValue ?? 0) <= 0 && price > 0) {
+          next.usdValue = h.uiAmount * price;
+        }
+        return next;
+      } catch (e) {
+        console.log("[wallet] meta enrich error", h.mint, e);
+        return h;
+      }
+    }),
+  );
+  return [...enriched, ...rest];
+}
+
+export async function fetchWalletPortfolio(
+  address: string,
+): Promise<WalletPortfolio> {
+  const empty: WalletPortfolio = {
+    address,
+    balance: { sol: 0, usd: 0 },
+    tokens: [],
+    transactions: [],
+    stats: {
+      totalTxs: 0,
+      successCount: 0,
+      failedCount: 0,
+      successRate: 0,
+      totalFeesSol: 0,
+      totalFeesUsd: 0,
+      firstSeen: 0,
+      lastSeen: 0,
+      activeDays: 0,
+      avgTxPerDay: 0,
+    },
+    solPrice: 0,
+  };
+  if (!isValidSolanaAddress(address)) return empty;
+
+  const [balance, baseTxs, solPriceMap] = await Promise.all([
+    fetchWalletBalance(address),
+    fetchWalletTransactions(address, 50),
+    priceMap([SOL_MINT]),
+  ]);
+  const solPrice = solPriceMap[SOL_MINT] ?? 0;
+
+  const [enrichedTxs, enrichedTokens] = await Promise.all([
+    enrichTransactions(baseTxs, 20),
+    enrichHoldingsMeta(balance.tokens ?? [], 12),
+  ]);
+
+  // Recompute portfolio USD with enriched values.
+  let usd = balance.sol * solPrice;
+  enrichedTokens.forEach((t) => {
+    if (t.usdValue && t.usdValue > 0) usd += t.usdValue;
+  });
+  const finalBalance: WalletBalance = {
+    sol: balance.sol,
+    usd,
+    tokens: enrichedTokens,
+  };
+
+  const stats = computeStats(enrichedTxs, solPrice);
+
+  return {
+    address,
+    balance: finalBalance,
+    tokens: enrichedTokens,
+    transactions: enrichedTxs,
+    stats,
+    solPrice,
   };
 }
