@@ -2,6 +2,12 @@ import { LaunchToken, LaunchVenue } from "@/types/launchpad";
 
 const JUP_LITE = "https://lite-api.jup.ag";
 
+/**
+ * Tokens with at least this much 24h volume (USD) are retained on the launchpad
+ * across daily refresh cycles. Anything below drops off as new pairs come in.
+ */
+export const MIN_RETAIN_VOLUME_USD = 300_000;
+
 type JupTokenV2 = {
   id: string;
   name: string;
@@ -107,13 +113,20 @@ export async function fetchTopTraded(): Promise<LaunchToken[]> {
 }
 
 /**
- * Top organic-score tokens. Marked as featured.
+ * Top organic-score tokens. Used for ranking signal only — featured flag is
+ * NEVER set automatically; that is reserved for admin-curated tokens.
  */
 export async function fetchTopOrganic(): Promise<LaunchToken[]> {
   const items = await fetchList("/tokens/v2/toporganicscore/24h");
-  return items.slice(0, 30).map((t) => toLaunchToken(t, { featured: true }));
+  return items.slice(0, 30).map((t) => toLaunchToken(t, {}));
 }
 
+/**
+ * Live launchpad feed: today's brand-new pairs + every token still doing
+ * MIN_RETAIN_VOLUME_USD or more in 24h volume. Refreshes 24/7 — anything
+ * that drops below the threshold falls off the list automatically.
+ * Featured flag is intentionally never set here.
+ */
 export async function fetchLivePairs(): Promise<LaunchToken[]> {
   const [newp, top, organic] = await Promise.all([
     fetchNewPairs(),
@@ -121,18 +134,22 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
     fetchTopOrganic(),
   ]);
   const map = new Map<string, LaunchToken>();
-  // Order matters: organic + top first (richer data), then new pairs fill in
-  [...organic, ...top, ...newp].forEach((t) => {
+  // High-volume retained pool (300k+ daily vol) + top organic, then today's new pairs
+  const retained = [...top, ...organic].filter(
+    (t) => (t.volume24hUsd ?? 0) >= MIN_RETAIN_VOLUME_USD,
+  );
+  [...retained, ...newp].forEach((t) => {
     if (!t.contract) return;
     const existing = map.get(t.contract);
     if (existing) {
       map.set(t.contract, {
         ...existing,
         hot: existing.hot || t.hot,
-        featured: existing.featured || t.featured,
+        // never auto-promote to featured
+        featured: false,
       });
     } else {
-      map.set(t.contract, t);
+      map.set(t.contract, { ...t, featured: false });
     }
   });
   return Array.from(map.values());
