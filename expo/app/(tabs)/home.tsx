@@ -40,7 +40,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import TokenAvatar from "@/components/TokenAvatar";
 import Colors from "@/constants/colors";
 import { fmtPrice } from "@/utils/format";
-import { FEED_POSTS, FeedPost, TRENDING_TOPICS } from "@/constants/feed";
+
 import {
   BONK_MINT,
   JUP_MINT,
@@ -71,7 +71,6 @@ type WhaleFeedEvent = {
 
 type FeedItem =
   | { kind: "user"; data: UserPost }
-  | { kind: "sample"; data: FeedPost }
   | { kind: "token"; data: LaunchToken }
   | { kind: "whale"; data: WhaleFeedEvent };
 
@@ -227,9 +226,7 @@ export default function HomeFeedScreen() {
         .slice(0, 30)
         .map((t): FeedItem => ({ kind: "token", data: t }));
     }
-    const userItems: FeedItem[] = userPosts.map((p) => ({ kind: "user", data: p }));
-    const sampleItems: FeedItem[] = FEED_POSTS.map((p) => ({ kind: "sample", data: p }));
-    return [...userItems, ...sampleItems];
+    return userPosts.map((p): FeedItem => ({ kind: "user", data: p }));
   }, [filter, userPosts, followingPostsQ.data, listings, trendingTokens, whalesQ.data]);
 
   const openCompose = useCallback(() => {
@@ -266,7 +263,7 @@ export default function HomeFeedScreen() {
           />
         );
       }
-      return <PostCard post={item.data} />;
+      return null;
     },
     [profile, togglePostLike, deletePost, router],
   );
@@ -675,30 +672,12 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
 }
 
 function TrendingTopics() {
-  const hasTopics = TRENDING_TOPICS.length > 0;
   return (
     <View style={styles.topicsWrap}>
       <Text style={styles.sectionLabel}>Trending</Text>
-      {hasTopics ? (
-        <View style={styles.topicsList}>
-          {TRENDING_TOPICS.map((t, i) => (
-            <Pressable key={t.id} style={styles.topicRow} testID={`topic-${t.id}`}>
-              <View style={styles.topicLeft}>
-                <Text style={styles.topicRank}>{i + 1}</Text>
-                <View>
-                  <Text style={[styles.topicTag, { color: t.tone }]}>{t.tag}</Text>
-                  <Text style={styles.topicCount}>{t.count}</Text>
-                </View>
-              </View>
-              <ArrowUpRight color={Colors.muted} size={16} strokeWidth={2.4} />
-            </Pressable>
-          ))}
-        </View>
-      ) : (
-        <Text style={styles.topicsEmpty}>
-          Trending tags will appear here once the social feed comes online.
-        </Text>
-      )}
+      <Text style={styles.topicsEmpty}>
+        Trending tags will appear here once the social feed comes online.
+      </Text>
     </View>
   );
 }
@@ -908,60 +887,6 @@ function TokenFeedRow({ token, onPress }: { token: LaunchToken; onPress: () => v
         </View>
       ) : null}
     </Pressable>
-  );
-}
-
-function PostCard({ post }: { post: FeedPost }) {
-  const [liked, setLiked] = useState<boolean>(false);
-  const onLike = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setLiked((v) => !v);
-  }, []);
-
-  return (
-    <View style={styles.post} testID={`post-${post.id}`}>
-      <View style={[styles.postAvatar, { backgroundColor: post.avatarColor }]}>
-        <Text style={styles.postAvatarText}>{post.name.slice(0, 1).toUpperCase()}</Text>
-      </View>
-      <View style={styles.postBody}>
-        <View style={styles.postHeaderRow}>
-          <Text style={styles.postName} numberOfLines={1}>
-            {post.name}
-          </Text>
-          {post.verified ? <BadgeCheck color={Colors.cyan} size={14} strokeWidth={2.6} /> : null}
-          <Text style={styles.postHandle}>{post.handle}</Text>
-          <Text style={styles.postDot}>·</Text>
-          <Text style={styles.postTime}>{post.time}</Text>
-        </View>
-        <Text style={styles.postText}>{post.text}</Text>
-
-        {post.pair ? <PostPairCard pair={post.pair} /> : null}
-
-        <View style={styles.actionsRow}>
-          <ActionItem
-            icon={<MessageCircle color={Colors.muted} size={16} strokeWidth={2.2} />}
-            label={formatCount(post.comments)}
-          />
-          <ActionItem
-            icon={<Repeat2 color={Colors.muted} size={17} strokeWidth={2.2} />}
-            label={formatCount(post.reposts)}
-          />
-          <Pressable style={styles.actionBtn} onPress={onLike} hitSlop={6} testID={`like-${post.id}`}>
-            <Heart
-              color={liked ? Colors.rose : Colors.muted}
-              size={16}
-              strokeWidth={2.2}
-              fill={liked ? Colors.rose : "transparent"}
-            />
-            <Text style={[styles.actionLabel, liked ? { color: Colors.rose } : null]}>
-              {formatCount(post.likes + (liked ? 1 : 0))}
-            </Text>
-          </Pressable>
-          <ActionItem icon={<Bookmark color={Colors.muted} size={15} strokeWidth={2.2} />} label={post.views} />
-          <ActionItem icon={<Share2 color={Colors.muted} size={15} strokeWidth={2.2} />} label="" />
-        </View>
-      </View>
-    </View>
   );
 }
 
