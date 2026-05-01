@@ -42,6 +42,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { useAuth } from "@/providers/auth-provider";
 
 const SOLTOOLS_BUILD = "onboarding-v5";
 
@@ -130,7 +131,15 @@ const SLIDES: Slide[] = [
 const { width: WINDOW_WIDTH } = Dimensions.get("window");
 
 export default function SolToolsWelcomeScreen() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [showSplash, setShowSplash] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      console.log("[index] already authenticated, jumping to home");
+      router.replace("/(tabs)/home");
+    }
+  }, [authLoading, isAuthenticated]);
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const scrollRef = useRef<ScrollView | null>(null);
   const scrollX = useRef<Animated.Value>(new Animated.Value(0)).current;
@@ -211,15 +220,15 @@ export default function SolToolsWelcomeScreen() {
   const goNext = useCallback(() => {
     const next = Math.min(activeIndex + 1, SLIDES.length - 1);
     if (next === activeIndex) {
-      console.log("SolTools onboarding finished, entering app");
+      console.log("SolTools onboarding finished, routing to auth");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      router.replace("/home");
+      router.replace(isAuthenticated ? "/(tabs)/home" : "/auth");
       return;
     }
     Haptics.selectionAsync().catch(() => {});
     scrollRef.current?.scrollTo({ x: next * WINDOW_WIDTH, y: 0, animated: true });
     setActiveIndex(next);
-  }, [activeIndex]);
+  }, [activeIndex, isAuthenticated]);
 
   const handleCtaPressIn = useCallback(() => {
     Animated.spring(ctaScale, { toValue: 0.96, friction: 6, tension: 120, useNativeDriver: true }).start();
@@ -321,7 +330,7 @@ export default function SolToolsWelcomeScreen() {
                     end={{ x: 1, y: 0.5 }}
                     style={styles.ctaGradient}
                   >
-                    <Text style={styles.ctaText}>{isLast ? "Enter SolTools" : "Next"}</Text>
+                    <Text style={styles.ctaText}>{isLast ? (isAuthenticated ? "Enter SolTools" : "Sign In / Sign Up") : "Next"}</Text>
                     <ArrowRight color={Colors.ink} size={20} strokeWidth={3} />
                   </LinearGradient>
                 </Pressable>
