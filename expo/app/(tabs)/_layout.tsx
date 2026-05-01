@@ -1,4 +1,5 @@
 import { Tabs } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { Compass, Home, Rocket, User, Users, Wrench } from "lucide-react-native";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
@@ -15,7 +16,18 @@ export default function TabsLayout() {
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.label,
         tabBarStyle: styles.bar,
-        tabBarBackground: () => <View style={styles.barBg} />,
+        tabBarItemStyle: styles.item,
+        tabBarBackground: () => (
+          <View style={styles.barBgWrap} pointerEvents="none">
+            <View style={styles.barBg} />
+            <LinearGradient
+              colors={["rgba(184,140,255,0.22)", "rgba(85,245,178,0.10)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </View>
+        ),
       }}
     >
       <Tabs.Screen
@@ -67,16 +79,35 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   bar: {
     position: "absolute",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(85, 245, 178, 0.12)",
+    left: 12,
+    right: 12,
+    bottom: Platform.OS === "ios" ? 22 : 14,
+    borderTopWidth: 0,
+    borderWidth: 1.5,
+    borderColor: "rgba(184,140,255,0.55)",
     backgroundColor: "transparent",
     elevation: 0,
-    height: Platform.OS === "ios" ? 86 : 68,
+    height: 68,
     paddingTop: 8,
+    paddingBottom: 8,
+    borderRadius: 28,
+    overflow: "hidden",
+    shadowColor: "#B88CFF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 18,
+  },
+  item: {
+    paddingTop: 4,
+  },
+  barBgWrap: {
+    flex: 1,
+    overflow: "hidden",
+    borderRadius: 28,
   },
   barBg: {
-    flex: 1,
-    backgroundColor: "rgba(3, 7, 8, 0.94)",
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(11, 8, 24, 0.88)",
   },
   label: {
     fontSize: 10,
