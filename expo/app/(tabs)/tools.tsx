@@ -9,6 +9,7 @@ import {
   ChevronRight,
   MessageCircle,
   Search,
+  ScanLine,
   Sparkles,
   Wallet,
   Wrench,
@@ -47,6 +48,19 @@ type Tool = {
 };
 
 const TOOLS: Tool[] = [
+  {
+    id: "token-lookup",
+    route: "/tool/token-lookup",
+    name: "Token Lookup",
+    tagline: "Paste a contract, see everything",
+    description:
+      "Drop any Solana contract address to view a full token snapshot — price, market cap, liquidity, holders — and a live DEX chart underneath.",
+    Icon: ScanLine,
+    accent: Colors.cyan,
+    glow: "rgba(56,215,255,0.22)",
+    tags: ["Live", "Chart", "On-chain"],
+    status: "LIVE",
+  },
   {
     id: "wallet-tracker",
     route: "/tool/wallet-tracker",
