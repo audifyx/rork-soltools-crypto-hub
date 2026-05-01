@@ -23,11 +23,22 @@ function formatUsd(n: number | null | undefined): string {
   return `$${n.toFixed(2)}`;
 }
 
-function formatPrice(n: number | null | undefined): string {
-  if (n == null) return "Loading...";
-  if (n < 0.0001) return `$${n.toExponential(4)}`;
-  if (n < 1) return `$${n.toFixed(6)}`;
-  return `$${n.toFixed(4)}`;
+function formatTokenPrice(n: number | null | undefined): string {
+  if (n == null) return "N/A";
+  if (n === 0) return "$0";
+  if (n < 0.000001) return `${n.toExponential(2)}`;
+  if (n < 0.01) return `${n.toFixed(6)}`;
+  if (n < 1) return `${n.toFixed(4)}`;
+  return `${n.toFixed(2)}`;
+}
+
+function formatCompactUsd(n: number | null | undefined): string {
+  if (n == null || n === 0) return "N/A";
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  if (n >= 1) return `${n.toFixed(2)}`;
+  return `${n.toFixed(4)}`;
 }
 
 function TokenCardImpl({ token, onPress, onChart }: Props) {
@@ -107,19 +118,19 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
 
       <View style={styles.priceBlock}>
         <View style={styles.priceLabelRow}>
-          <Text style={styles.priceLabel}>CURRENT PRICE</Text>
+          <Text style={styles.priceLabel}>MARKET CAP</Text>
           <View style={styles.venuePill}>
             {token.status === "live" ? <View style={styles.liveDot} /> : null}
             {token.status === "live" ? <Text style={styles.liveText}>LIVE</Text> : null}
             <Text style={styles.venueText}>{token.venue}</Text>
           </View>
         </View>
-        <Text style={[styles.price, token.price == null && styles.priceMuted]}>{formatPrice(token.price)}</Text>
+        <Text style={[styles.price, token.marketCapUsd == null && styles.priceMuted]}>{formatCompactUsd(token.marketCapUsd)}</Text>
       </View>
 
       <View style={styles.statsRow}>
         <Stat label="LIQUIDITY" value={formatUsd(token.liquidityUsd)} tint="rgba(56,215,255,0.14)" color={Colors.cyan} />
-        <Stat label="MCAP" value={formatUsd(token.marketCapUsd)} tint="rgba(184,140,255,0.14)" color="#B88CFF" />
+        <Stat label="PRICE" value={formatTokenPrice(token.price)} tint="rgba(184,140,255,0.14)" color="#B88CFF" />
         <Stat label="VOLUME" value={formatUsd(token.volume24hUsd)} tint="rgba(85,245,178,0.14)" color={Colors.mint} />
       </View>
 
