@@ -7,45 +7,57 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowLeft,
-  ArrowRight,
   ArrowUp,
+  ArrowUpRight,
   Bell,
+  BellOff,
   BellPlus,
   Bot,
   Brain,
   ChartCandlestick,
   ChartLine,
-  Check,
   CheckCircle2,
   ChevronRight,
+  Circle,
+  ClipboardPaste,
   Copy,
   Crosshair,
   Eye,
+  Filter,
   Flame,
   Gauge,
+  Globe,
+  Hash,
   Loader2,
+  Lock,
   Mic,
   MicOff,
+  Minus,
   Plus,
+  Power,
   Radar,
   Rocket,
   Scan,
   Search,
   Send,
   Shield,
+  ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Target,
+  Timer,
   TrendingUp,
   Users,
-  Waves,
+  UserPlus,
+  Volume2,
   Wallet,
+  Waves,
   X,
   Zap,
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -310,7 +322,15 @@ function ToolBody({ meta }: { meta: ToolMeta }) {
   }
 }
 
-function SectionHead({ title, accent, action }: { title: string; accent: string; action?: React.ReactNode }) {
+function SectionHead({
+  title,
+  accent,
+  action,
+}: {
+  title: string;
+  accent: string;
+  action?: React.ReactNode;
+}) {
   return (
     <View style={styles.sectionHead}>
       <View style={[styles.sectionDot, { backgroundColor: accent }]} />
@@ -320,10 +340,44 @@ function SectionHead({ title, accent, action }: { title: string; accent: string;
   );
 }
 
+function StatTile({
+  label,
+  value,
+  accent,
+  Icon,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+  Icon: LucideIcon;
+}) {
+  return (
+    <View style={styles.statTile}>
+      <View style={[styles.statTileIcon, { backgroundColor: `${accent}1A` }]}>
+        <Icon color={accent} size={13} strokeWidth={2.6} />
+      </View>
+      <Text style={styles.statTileLabel}>{label}</Text>
+      <Text style={styles.statTileValue}>{value}</Text>
+    </View>
+  );
+}
+
 function WalletTrackerTool({ accent }: { accent: string }) {
   const { wallets, addWallet, removeWallet } = useApp();
   const [address, setAddress] = useState<string>("");
   const [label, setLabel] = useState<string>("");
+
+  const onPaste = useCallback(async () => {
+    try {
+      const txt = await Clipboard.getStringAsync();
+      if (txt) {
+        setAddress(txt.trim());
+        Haptics.selectionAsync().catch(() => {});
+      }
+    } catch (e) {
+      console.log("[wallet] paste failed", e);
+    }
+  }, []);
 
   const onAdd = useCallback(async () => {
     const a = address.trim();
@@ -337,21 +391,38 @@ function WalletTrackerTool({ accent }: { accent: string }) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
   }, [address, label, addWallet]);
 
+  const onCopy = useCallback(async (addr: string) => {
+    await Clipboard.setStringAsync(addr);
+    Haptics.selectionAsync().catch(() => {});
+    Alert.alert("Copied", "Address copied to clipboard.");
+  }, []);
+
   return (
     <View>
+      <View style={styles.statRow}>
+        <StatTile label="Tracked" value={`${wallets.length}`} accent={accent} Icon={Wallet} />
+        <StatTile label="PnL 24h" value="—" accent={accent} Icon={TrendingUp} />
+        <StatTile label="Alerts" value="—" accent={accent} Icon={Bell} />
+      </View>
+
       <SectionHead title="Track a wallet" accent={accent} />
       <View style={styles.formCard}>
         <Text style={styles.label}>Address</Text>
-        <TextInput
-          value={address}
-          onChangeText={setAddress}
-          placeholder="So11111111111111111111111111111111111111112"
-          placeholderTextColor={Colors.muted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={styles.input}
-          testID="wallet-input-address"
-        />
+        <View style={styles.inputWithAction}>
+          <TextInput
+            value={address}
+            onChangeText={setAddress}
+            placeholder="So111111…"
+            placeholderTextColor={Colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.input, styles.inputFlex]}
+            testID="wallet-input-address"
+          />
+          <Pressable onPress={onPaste} style={styles.iconAction} hitSlop={6}>
+            <ClipboardPaste color={accent} size={15} strokeWidth={2.6} />
+          </Pressable>
+        </View>
         <Text style={styles.label}>Label (optional)</Text>
         <TextInput
           value={label}
@@ -361,7 +432,11 @@ function WalletTrackerTool({ accent }: { accent: string }) {
           style={styles.input}
           testID="wallet-input-label"
         />
-        <Pressable onPress={onAdd} style={[styles.primaryBtn, { backgroundColor: accent }]} testID="wallet-add">
+        <Pressable
+          onPress={onAdd}
+          style={[styles.primaryBtn, { backgroundColor: accent }]}
+          testID="wallet-add"
+        >
           <Plus color={Colors.ink} size={15} strokeWidth={3} />
           <Text style={styles.primaryBtnText}>Track wallet</Text>
         </Pressable>
@@ -388,10 +463,9 @@ function WalletTrackerTool({ accent }: { accent: string }) {
                   {w.address.slice(0, 8)}…{w.address.slice(-6)}
                 </Text>
               </View>
-              <View style={styles.rowMetric}>
-                <Text style={styles.rowMetricLabel}>PNL</Text>
-                <Text style={styles.rowMetricValue}>—</Text>
-              </View>
+              <Pressable onPress={() => onCopy(w.address)} style={styles.rowAction} hitSlop={6}>
+                <Copy color={Colors.muted} size={13} strokeWidth={2.6} />
+              </Pressable>
               <Pressable onPress={() => removeWallet(w.id)} style={styles.rowAction} hitSlop={6}>
                 <X color={Colors.muted} size={14} strokeWidth={2.6} />
               </Pressable>
@@ -403,26 +477,46 @@ function WalletTrackerTool({ accent }: { accent: string }) {
   );
 }
 
+interface ScanRecord {
+  id: string;
+  contract: string;
+  at: number;
+  status: "pending" | "ready";
+}
+
 function ContractScanTool({ accent, kind }: { accent: string; kind: string }) {
   const [contract, setContract] = useState<string>("");
   const [scanning, setScanning] = useState<boolean>(false);
-  const [result, setResult] = useState<null | { score: number; flags: string[] }>(null);
+  const [history, setHistory] = useState<ScanRecord[]>([]);
+  const [scanned, setScanned] = useState<boolean>(false);
 
-  const onScan = useCallback(async () => {
+  const onPaste = useCallback(async () => {
+    try {
+      const txt = await Clipboard.getStringAsync();
+      if (txt) setContract(txt.trim());
+    } catch (e) {
+      console.log("[scan] paste failed", e);
+    }
+  }, []);
+
+  const onScan = useCallback(() => {
     if (contract.trim().length < 32) {
       Alert.alert("Invalid contract", "Paste a Solana token contract address.");
       return;
     }
     setScanning(true);
-    setResult(null);
+    setScanned(false);
     Haptics.selectionAsync().catch(() => {});
     setTimeout(() => {
       setScanning(false);
-      setResult(null);
-      Alert.alert(
-        "Backend offline",
-        "Connect a scanner provider to enable real-time contract analysis. The UI is wired and ready.",
-      );
+      setScanned(true);
+      const rec: ScanRecord = {
+        id: `${Date.now()}`,
+        contract: contract.trim(),
+        at: Date.now(),
+        status: "pending",
+      };
+      setHistory((h) => [rec, ...h].slice(0, 8));
     }, 900);
   }, [contract]);
 
@@ -432,21 +526,57 @@ function ContractScanTool({ accent, kind }: { accent: string; kind: string }) {
     "holder-scan": "Holder X-Ray",
   };
 
+  const checks: { label: string; Icon: LucideIcon }[] = useMemo(() => {
+    if (kind === "honeypot") {
+      return [
+        { label: "Buy simulation", Icon: ArrowDown },
+        { label: "Sell simulation", Icon: ArrowUp },
+        { label: "Buy tax", Icon: Activity },
+        { label: "Sell tax", Icon: Activity },
+        { label: "Transfer restrictions", Icon: AlertTriangle },
+        { label: "Blacklist functions", Icon: ShieldAlert },
+      ];
+    }
+    if (kind === "holder-scan") {
+      return [
+        { label: "Top 10 concentration", Icon: Users },
+        { label: "Top 50 concentration", Icon: Users },
+        { label: "Insider clusters", Icon: Scan },
+        { label: "Bundled buys", Icon: Waves },
+        { label: "Dev wallet activity", Icon: Activity },
+        { label: "Sniper bots count", Icon: Crosshair },
+      ];
+    }
+    return [
+      { label: "Mint authority renounced", Icon: ShieldCheck },
+      { label: "LP locked / burned", Icon: Lock },
+      { label: "Top 10 holder concentration", Icon: Users },
+      { label: "Tax & blacklist functions", Icon: AlertTriangle },
+      { label: "Insider clusters", Icon: Scan },
+      { label: "Buy/sell simulation", Icon: Activity },
+    ];
+  }, [kind]);
+
   return (
     <View>
       <SectionHead title={titleByKind[kind] ?? "Scan"} accent={accent} />
       <View style={styles.formCard}>
         <Text style={styles.label}>Contract address</Text>
-        <TextInput
-          value={contract}
-          onChangeText={setContract}
-          placeholder="Paste Solana contract address..."
-          placeholderTextColor={Colors.muted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={styles.input}
-          testID="scan-input"
-        />
+        <View style={styles.inputWithAction}>
+          <TextInput
+            value={contract}
+            onChangeText={setContract}
+            placeholder="Paste Solana contract..."
+            placeholderTextColor={Colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.input, styles.inputFlex]}
+            testID="scan-input"
+          />
+          <Pressable onPress={onPaste} style={styles.iconAction} hitSlop={6}>
+            <ClipboardPaste color={accent} size={15} strokeWidth={2.6} />
+          </Pressable>
+        </View>
         <Pressable
           onPress={onScan}
           style={[styles.primaryBtn, { backgroundColor: accent }, scanning && { opacity: 0.6 }]}
@@ -458,20 +588,43 @@ function ContractScanTool({ accent, kind }: { accent: string; kind: string }) {
           ) : (
             <Scan color={Colors.ink} size={15} strokeWidth={3} />
           )}
-          <Text style={styles.primaryBtnText}>{scanning ? "Scanning..." : "Run scan"}</Text>
+          <Text style={styles.primaryBtnText}>{scanning ? "Scanning…" : "Run scan"}</Text>
         </Pressable>
       </View>
 
+      {scanned && (
+        <View style={[styles.resultCard, { borderColor: `${accent}33` }]}>
+          <View style={styles.resultHead}>
+            <Text style={styles.resultEyebrow}>RISK SCORE</Text>
+            <View style={[styles.resultPending, { borderColor: `${accent}55` }]}>
+              <Loader2 color={accent} size={11} strokeWidth={2.6} />
+              <Text style={[styles.resultPendingText, { color: accent }]}>AWAITING DATA</Text>
+            </View>
+          </View>
+          <Text style={styles.resultScore}>—/100</Text>
+          <Text style={styles.resultBody}>
+            Risk evaluation is queued. Plug in a scanner provider (RugCheck, Birdeye, Helius) to
+            populate live results.
+          </Text>
+          <View style={styles.resultGrid}>
+            {checks.map((c) => (
+              <View key={c.label} style={styles.resultGridItem}>
+                <View style={[styles.checkIcon, { backgroundColor: `${accent}1A` }]}>
+                  <c.Icon color={accent} size={12} strokeWidth={2.6} />
+                </View>
+                <Text style={styles.resultGridLabel} numberOfLines={2}>
+                  {c.label}
+                </Text>
+                <Text style={styles.resultGridValue}>—</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
       <SectionHead title="What we check" accent={accent} />
       <View style={styles.checksList}>
-        {[
-          { label: "Mint authority renounced", Icon: Shield },
-          { label: "LP locked / burned", Icon: CheckCircle2 },
-          { label: "Top 10 holder concentration", Icon: Users },
-          { label: "Tax & blacklist functions", Icon: AlertTriangle },
-          { label: "Insider clusters", Icon: Scan },
-          { label: "Buy/sell simulation", Icon: Activity },
-        ].map((c) => (
+        {checks.map((c) => (
           <View key={c.label} style={styles.checkRow}>
             <View style={[styles.checkIcon, { backgroundColor: `${accent}1A` }]}>
               <c.Icon color={accent} size={12} strokeWidth={2.6} />
@@ -481,9 +634,30 @@ function ContractScanTool({ accent, kind }: { accent: string; kind: string }) {
         ))}
       </View>
 
-      {result == null ? null : (
-        <View style={styles.resultCard}>
-          <Text style={styles.resultScore}>{result.score}/100</Text>
+      <SectionHead title={`Recent · ${history.length}`} accent={accent} />
+      {history.length === 0 ? (
+        <EmptyState
+          accent={accent}
+          Icon={Timer}
+          title="No scans yet"
+          body="Your scan history appears here. Tap any to re-run."
+        />
+      ) : (
+        <View style={styles.list}>
+          {history.map((h) => (
+            <Pressable key={h.id} onPress={() => setContract(h.contract)} style={styles.rowCard}>
+              <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
+                <Hash color={accent} size={14} strokeWidth={2.6} />
+              </View>
+              <View style={styles.rowMid}>
+                <Text style={styles.rowTitle} numberOfLines={1}>
+                  {h.contract.slice(0, 10)}…{h.contract.slice(-6)}
+                </Text>
+                <Text style={styles.rowSub}>{timeAgo(h.at)}</Text>
+              </View>
+              <ChevronRight color={Colors.muted} size={14} strokeWidth={2.4} />
+            </Pressable>
+          ))}
         </View>
       )}
     </View>
@@ -495,6 +669,7 @@ function AiAnalystTool({ accent }: { accent: string }) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState<string>("");
   const [thinking, setThinking] = useState<boolean>(false);
+  const [model, setModel] = useState<"gemini" | "gpt" | "claude">("gemini");
 
   const onSend = useCallback(() => {
     const text = input.trim();
@@ -508,30 +683,72 @@ function AiAnalystTool({ accent }: { accent: string }) {
       const a: Msg = {
         id: `a${Date.now()}`,
         role: "assistant",
-        text: "Connect an AI provider to enable live analysis. Your prompt is queued.",
+        text: "Connect an AI provider to enable live analysis. Your prompt is queued and ready.",
       };
       setMessages((m) => [...m, a]);
       setThinking(false);
     }, 800);
   }, [input]);
 
+  const onClear = useCallback(() => {
+    setMessages([]);
+    Haptics.selectionAsync().catch(() => {});
+  }, []);
+
   const SUGGESTIONS = [
     "Analyze $WIF chart structure",
     "Top whale rotations last 24h",
     "Is this contract risky?",
     "Find breakouts on Solana",
+    "Compare $BONK vs $WIF",
+    "Narrative plays right now",
+  ];
+
+  const MODELS: { key: "gemini" | "gpt" | "claude"; label: string }[] = [
+    { key: "gemini", label: "Gemini 2.0" },
+    { key: "gpt", label: "GPT-4o" },
+    { key: "claude", label: "Claude 3.5" },
   ];
 
   return (
     <View>
-      <SectionHead title="Ask the AI Analyst" accent={accent} />
+      <SectionHead
+        title="Ask the AI Analyst"
+        accent={accent}
+        action={
+          messages.length > 0 ? (
+            <Pressable onPress={onClear} hitSlop={6}>
+              <Text style={[styles.linkText, { color: accent }]}>Clear</Text>
+            </Pressable>
+          ) : null
+        }
+      />
+
+      <View style={styles.modelRow}>
+        {MODELS.map((m) => {
+          const active = m.key === model;
+          return (
+            <Pressable
+              key={m.key}
+              onPress={() => setModel(m.key)}
+              style={[styles.typeChip, active && { backgroundColor: accent, borderColor: accent }]}
+            >
+              <Sparkles color={active ? Colors.ink : Colors.text} size={11} strokeWidth={2.6} />
+              <Text style={[styles.typeText, active && { color: Colors.ink }]}>{m.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <View style={styles.chatBox}>
         {messages.length === 0 ? (
           <View style={styles.chatEmpty}>
             <View style={[styles.chatEmptyIcon, { backgroundColor: `${accent}1A` }]}>
               <Brain color={accent} size={22} strokeWidth={2.4} />
             </View>
-            <Text style={styles.chatEmptyText}>Ask anything about Solana tokens, wallets, or charts.</Text>
+            <Text style={styles.chatEmptyText}>
+              Ask anything about Solana tokens, wallets, or charts.
+            </Text>
           </View>
         ) : (
           messages.map((m) => (
@@ -549,7 +766,7 @@ function AiAnalystTool({ accent }: { accent: string }) {
         )}
         {thinking ? (
           <View style={[styles.bubble, styles.bubbleAi]}>
-            <Text style={styles.bubbleText}>Thinking...</Text>
+            <Text style={styles.bubbleText}>Thinking…</Text>
           </View>
         ) : null}
       </View>
@@ -567,7 +784,7 @@ function AiAnalystTool({ accent }: { accent: string }) {
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder="Ask the AI..."
+          placeholder="Ask the AI…"
           placeholderTextColor={Colors.muted}
           style={styles.chatInput}
           multiline
@@ -615,8 +832,16 @@ function AlertsTool({ accent }: { accent: string }) {
     { key: "whale-buy", label: "Whale", Icon: Users },
   ];
 
+  const enabledCount = alerts.filter((a) => a.enabled).length;
+
   return (
     <View>
+      <View style={styles.statRow}>
+        <StatTile label="Total" value={`${alerts.length}`} accent={accent} Icon={Bell} />
+        <StatTile label="Active" value={`${enabledCount}`} accent={accent} Icon={Zap} />
+        <StatTile label="Fired 24h" value="—" accent={accent} Icon={Activity} />
+      </View>
+
       <SectionHead title="New alert" accent={accent} />
       <View style={styles.formCard}>
         <Text style={styles.label}>Ticker</Text>
@@ -637,7 +862,10 @@ function AlertsTool({ accent }: { accent: string }) {
               <Pressable
                 key={t.key}
                 onPress={() => setType(t.key)}
-                style={[styles.typeChip, active && { backgroundColor: accent, borderColor: accent }]}
+                style={[
+                  styles.typeChip,
+                  active && { backgroundColor: accent, borderColor: accent },
+                ]}
                 testID={`alert-type-${t.key}`}
               >
                 <t.Icon color={active ? Colors.ink : Colors.text} size={12} strokeWidth={2.6} />
@@ -656,7 +884,11 @@ function AlertsTool({ accent }: { accent: string }) {
           style={styles.input}
           testID="alert-value"
         />
-        <Pressable onPress={onAdd} style={[styles.primaryBtn, { backgroundColor: accent }]} testID="alert-create">
+        <Pressable
+          onPress={onAdd}
+          style={[styles.primaryBtn, { backgroundColor: accent }]}
+          testID="alert-create"
+        >
           <BellPlus color={Colors.ink} size={15} strokeWidth={3} />
           <Text style={styles.primaryBtnText}>Create alert</Text>
         </Pressable>
@@ -664,13 +896,22 @@ function AlertsTool({ accent }: { accent: string }) {
 
       <SectionHead title={`Active · ${alerts.length}`} accent={accent} />
       {alerts.length === 0 ? (
-        <EmptyState accent={accent} Icon={Bell} title="No alerts yet" body="Set price, volume or whale-buy triggers." />
+        <EmptyState
+          accent={accent}
+          Icon={Bell}
+          title="No alerts yet"
+          body="Set price, volume or whale-buy triggers."
+        />
       ) : (
         <View style={styles.list}>
           {alerts.map((a) => (
             <View key={a.id} style={styles.rowCard}>
               <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
-                <Bell color={accent} size={14} strokeWidth={2.6} />
+                {a.enabled ? (
+                  <Bell color={accent} size={14} strokeWidth={2.6} />
+                ) : (
+                  <BellOff color={Colors.muted} size={14} strokeWidth={2.6} />
+                )}
               </View>
               <View style={styles.rowMid}>
                 <Text style={styles.rowTitle}>${a.ticker}</Text>
@@ -702,6 +943,7 @@ function WatchlistTool({ accent }: { accent: string }) {
   const { watchlist, addWatch, removeWatch } = useApp();
   const [ticker, setTicker] = useState<string>("");
   const [contract, setContract] = useState<string>("");
+  const [sort, setSort] = useState<"recent" | "alpha">("recent");
 
   const onAdd = useCallback(async () => {
     if (!ticker.trim() || contract.trim().length < 8) {
@@ -713,6 +955,13 @@ function WatchlistTool({ accent }: { accent: string }) {
     setContract("");
     Haptics.selectionAsync().catch(() => {});
   }, [ticker, contract, addWatch]);
+
+  const sorted = useMemo(() => {
+    const arr = [...watchlist];
+    if (sort === "alpha") arr.sort((a, b) => a.ticker.localeCompare(b.ticker));
+    else arr.sort((a, b) => b.addedAt - a.addedAt);
+    return arr;
+  }, [watchlist, sort]);
 
   return (
     <View>
@@ -743,12 +992,50 @@ function WatchlistTool({ accent }: { accent: string }) {
         </Pressable>
       </View>
 
-      <SectionHead title={`Watching · ${watchlist.length}`} accent={accent} />
-      {watchlist.length === 0 ? (
-        <EmptyState accent={accent} Icon={Eye} title="No watched tokens" body="Build your shortlist and track changes." />
+      <SectionHead
+        title={`Watching · ${watchlist.length}`}
+        accent={accent}
+        action={
+          <View style={styles.miniSegment}>
+            <Pressable
+              onPress={() => setSort("recent")}
+              style={[styles.miniSegItem, sort === "recent" && { backgroundColor: `${accent}26` }]}
+            >
+              <Text
+                style={[
+                  styles.miniSegText,
+                  sort === "recent" && { color: accent },
+                ]}
+              >
+                Recent
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setSort("alpha")}
+              style={[styles.miniSegItem, sort === "alpha" && { backgroundColor: `${accent}26` }]}
+            >
+              <Text
+                style={[
+                  styles.miniSegText,
+                  sort === "alpha" && { color: accent },
+                ]}
+              >
+                A-Z
+              </Text>
+            </Pressable>
+          </View>
+        }
+      />
+      {sorted.length === 0 ? (
+        <EmptyState
+          accent={accent}
+          Icon={Eye}
+          title="No watched tokens"
+          body="Build your shortlist and track changes."
+        />
       ) : (
         <View style={styles.list}>
-          {watchlist.map((w) => (
+          {sorted.map((w) => (
             <View key={w.id} style={styles.rowCard}>
               <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
                 <Text style={[styles.rowIconText, { color: accent }]}>
@@ -761,6 +1048,10 @@ function WatchlistTool({ accent }: { accent: string }) {
                   {w.contract.slice(0, 8)}…{w.contract.slice(-6)}
                 </Text>
               </View>
+              <View style={styles.rowMetric}>
+                <Text style={styles.rowMetricLabel}>24H</Text>
+                <Text style={styles.rowMetricValue}>—</Text>
+              </View>
               <Pressable onPress={() => removeWatch(w.id)} style={styles.rowAction} hitSlop={6}>
                 <X color={Colors.muted} size={14} strokeWidth={2.6} />
               </Pressable>
@@ -772,10 +1063,19 @@ function WatchlistTool({ accent }: { accent: string }) {
   );
 }
 
+interface LobbyMember {
+  id: string;
+  handle: string;
+  speaking: boolean;
+  muted: boolean;
+}
+
 function VoiceLobbyTool({ accent }: { accent: string }) {
   const [muted, setMuted] = useState<boolean>(true);
   const [inLobby, setInLobby] = useState<boolean>(false);
   const [lobbyName, setLobbyName] = useState<string>("");
+  const [privateRoom, setPrivateRoom] = useState<boolean>(false);
+  const [members, setMembers] = useState<LobbyMember[]>([]);
 
   const onJoin = useCallback(() => {
     if (!lobbyName.trim()) {
@@ -783,53 +1083,100 @@ function VoiceLobbyTool({ accent }: { accent: string }) {
       return;
     }
     setInLobby(true);
+    setMembers([{ id: "me", handle: "you", speaking: false, muted: true }]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
   }, [lobbyName]);
+
+  const onLeave = useCallback(() => {
+    setInLobby(false);
+    setMembers([]);
+    Haptics.selectionAsync().catch(() => {});
+  }, []);
 
   return (
     <View>
       {inLobby ? (
-        <View style={[styles.lobbyCard, { borderColor: `${accent}55` }]}>
-          <View style={styles.lobbyHead}>
-            <View style={[styles.lobbyAvatar, { backgroundColor: accent }]}>
-              <Mic color={Colors.ink} size={16} strokeWidth={3} />
+        <>
+          <View style={[styles.lobbyCard, { borderColor: `${accent}55` }]}>
+            <View style={styles.lobbyHead}>
+              <View style={[styles.lobbyAvatar, { backgroundColor: accent }]}>
+                <Mic color={Colors.ink} size={16} strokeWidth={3} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.lobbyTitle}>{lobbyName}</Text>
+                <Text style={styles.lobbySub}>
+                  Connected · {members.length} in room {privateRoom ? "· Private" : "· Public"}
+                </Text>
+              </View>
+              <View style={styles.lobbyLive}>
+                <View style={[styles.lobbyLiveDot, { backgroundColor: accent }]} />
+                <Text style={[styles.lobbyLiveText, { color: accent }]}>LIVE</Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.lobbyTitle}>{lobbyName}</Text>
-              <Text style={styles.lobbySub}>Connected · 1 in room</Text>
-            </View>
-            <View style={styles.lobbyLive}>
-              <View style={[styles.lobbyLiveDot, { backgroundColor: accent }]} />
-              <Text style={[styles.lobbyLiveText, { color: accent }]}>LIVE</Text>
+
+            <View style={styles.lobbyControls}>
+              <Pressable
+                onPress={() => setMuted((m) => !m)}
+                style={[styles.lobbyCtrl, !muted && { backgroundColor: accent }]}
+              >
+                {muted ? (
+                  <MicOff color={Colors.text} size={16} strokeWidth={2.6} />
+                ) : (
+                  <Mic color={Colors.ink} size={16} strokeWidth={2.6} />
+                )}
+                <Text style={[styles.lobbyCtrlText, !muted && { color: Colors.ink }]}>
+                  {muted ? "Unmute" : "Live"}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  Alert.alert("Share chart", "Pick a chart to drop into the lobby.")
+                }
+                style={styles.lobbyCtrl}
+              >
+                <ChartLine color={Colors.text} size={16} strokeWidth={2.6} />
+                <Text style={styles.lobbyCtrlText}>Share</Text>
+              </Pressable>
+              <Pressable
+                onPress={onLeave}
+                style={[styles.lobbyCtrl, { backgroundColor: "rgba(255,93,143,0.16)" }]}
+              >
+                <X color={Colors.rose} size={16} strokeWidth={2.6} />
+                <Text style={[styles.lobbyCtrlText, { color: Colors.rose }]}>Leave</Text>
+              </Pressable>
             </View>
           </View>
 
-          <View style={styles.lobbyControls}>
-            <Pressable
-              onPress={() => setMuted((m) => !m)}
-              style={[styles.lobbyCtrl, !muted && { backgroundColor: accent }]}
-            >
-              {muted ? (
-                <MicOff color={Colors.text} size={16} strokeWidth={2.6} />
-              ) : (
-                <Mic color={Colors.ink} size={16} strokeWidth={2.6} />
-              )}
-              <Text style={[styles.lobbyCtrlText, !muted && { color: Colors.ink }]}>
-                {muted ? "Unmute" : "Live"}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setInLobby(false)}
-              style={[styles.lobbyCtrl, { backgroundColor: "rgba(255,93,143,0.16)" }]}
-            >
-              <X color={Colors.rose} size={16} strokeWidth={2.6} />
-              <Text style={[styles.lobbyCtrlText, { color: Colors.rose }]}>Leave</Text>
-            </Pressable>
+          <SectionHead title={`In room · ${members.length}`} accent={accent} />
+          <View style={styles.list}>
+            {members.map((m) => (
+              <View key={m.id} style={styles.rowCard}>
+                <View
+                  style={[
+                    styles.lobbyMemberAvatar,
+                    { backgroundColor: `${accent}1A`, borderColor: `${accent}55` },
+                  ]}
+                >
+                  <Text style={[styles.lobbyMemberInitial, { color: accent }]}>
+                    {m.handle.slice(0, 2).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.rowMid}>
+                  <Text style={styles.rowTitle}>@{m.handle}</Text>
+                  <Text style={styles.rowSub}>{m.muted ? "Muted" : "Speaking"}</Text>
+                </View>
+                {m.muted ? (
+                  <MicOff color={Colors.muted} size={14} strokeWidth={2.6} />
+                ) : (
+                  <Volume2 color={accent} size={14} strokeWidth={2.6} />
+                )}
+              </View>
+            ))}
           </View>
-        </View>
+        </>
       ) : (
         <>
-          <SectionHead title="Join a lobby" accent={accent} />
+          <SectionHead title="Create or join" accent={accent} />
           <View style={styles.formCard}>
             <Text style={styles.label}>Lobby name</Text>
             <TextInput
@@ -840,9 +1187,21 @@ function VoiceLobbyTool({ accent }: { accent: string }) {
               autoCapitalize="none"
               style={styles.input}
             />
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.toggleTitle}>Private room</Text>
+                <Text style={styles.toggleSub}>Invite only · hidden from public list</Text>
+              </View>
+              <Switch
+                value={privateRoom}
+                onValueChange={setPrivateRoom}
+                trackColor={{ false: "rgba(255,255,255,0.1)", true: accent }}
+                thumbColor={privateRoom ? Colors.ink : Colors.muted}
+              />
+            </View>
             <Pressable onPress={onJoin} style={[styles.primaryBtn, { backgroundColor: accent }]}>
               <Mic color={Colors.ink} size={15} strokeWidth={3} />
-              <Text style={styles.primaryBtnText}>Join lobby</Text>
+              <Text style={styles.primaryBtnText}>Open lobby</Text>
             </Pressable>
           </View>
           <SectionHead title="Public rooms" accent={accent} />
@@ -858,14 +1217,76 @@ function VoiceLobbyTool({ accent }: { accent: string }) {
   );
 }
 
+interface SniperLog {
+  id: string;
+  at: number;
+  pair: string;
+  result: "queued" | "filled" | "missed";
+}
+
 function SniperTool({ accent }: { accent: string }) {
   const [armed, setArmed] = useState<boolean>(false);
   const [budget, setBudget] = useState<string>("0.5");
   const [slippage, setSlippage] = useState<string>("15");
   const [minLiq, setMinLiq] = useState<string>("5");
+  const [autoSell, setAutoSell] = useState<boolean>(true);
+  const [tp, setTp] = useState<string>("100");
+  const [sl, setSl] = useState<string>("30");
+  const [logs, setLogs] = useState<SniperLog[]>([]);
+
+  const PRESETS = [
+    { key: "safe", label: "Conservative", b: "0.25", sl: "10", l: "10" },
+    { key: "balanced", label: "Balanced", b: "0.5", sl: "15", l: "5" },
+    { key: "aggro", label: "Aggressive", b: "1.0", sl: "30", l: "2" },
+  ] as const;
+
+  const applyPreset = useCallback((p: (typeof PRESETS)[number]) => {
+    setBudget(p.b);
+    setSlippage(p.sl);
+    setMinLiq(p.l);
+    Haptics.selectionAsync().catch(() => {});
+  }, []);
+
+  const toggleArm = useCallback(() => {
+    setArmed((v) => {
+      const next = !v;
+      if (next) {
+        const log: SniperLog = {
+          id: `${Date.now()}`,
+          at: Date.now(),
+          pair: "—",
+          result: "queued",
+        };
+        setLogs((l) => [log, ...l]);
+      }
+      return next;
+    });
+    Haptics.notificationAsync(
+      armed ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success,
+    ).catch(() => {});
+  }, [armed]);
 
   return (
     <View>
+      {armed && (
+        <View style={[styles.armedBanner, { borderColor: `${accent}55` }]}>
+          <View style={[styles.armedDot, { backgroundColor: accent }]} />
+          <Text style={[styles.armedText, { color: accent }]}>SNIPER ARMED · WATCHING NEW LPs</Text>
+        </View>
+      )}
+
+      <SectionHead title="Presets" accent={accent} />
+      <View style={styles.presetRow}>
+        {PRESETS.map((p) => (
+          <Pressable key={p.key} onPress={() => applyPreset(p)} style={styles.presetCard}>
+            <Text style={[styles.presetLabel, { color: accent }]}>{p.label}</Text>
+            <Text style={styles.presetSub}>
+              {p.b} SOL · {p.sl}% slip · ≥{p.l} LP
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
       <SectionHead title="Sniper config" accent={accent} />
       <View style={styles.formCard}>
         <Text style={styles.label}>Budget per snipe (SOL)</Text>
@@ -892,59 +1313,265 @@ function SniperTool({ accent }: { accent: string }) {
           style={styles.input}
           placeholderTextColor={Colors.muted}
         />
+
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleTitle}>Auto-sell on TP/SL</Text>
+            <Text style={styles.toggleSub}>Exit automatically at thresholds</Text>
+          </View>
+          <Switch
+            value={autoSell}
+            onValueChange={setAutoSell}
+            trackColor={{ false: "rgba(255,255,255,0.1)", true: accent }}
+            thumbColor={autoSell ? Colors.ink : Colors.muted}
+          />
+        </View>
+
+        {autoSell && (
+          <View style={styles.tpslRow}>
+            <View style={styles.tpslCol}>
+              <Text style={styles.label}>Take profit %</Text>
+              <TextInput
+                value={tp}
+                onChangeText={setTp}
+                keyboardType="decimal-pad"
+                style={styles.input}
+                placeholderTextColor={Colors.muted}
+              />
+            </View>
+            <View style={styles.tpslCol}>
+              <Text style={styles.label}>Stop loss %</Text>
+              <TextInput
+                value={sl}
+                onChangeText={setSl}
+                keyboardType="decimal-pad"
+                style={styles.input}
+                placeholderTextColor={Colors.muted}
+              />
+            </View>
+          </View>
+        )}
+
         <Pressable
-          onPress={() => {
-            setArmed((v) => !v);
-            Haptics.notificationAsync(
-              armed ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success,
-            ).catch(() => {});
-          }}
+          onPress={toggleArm}
           style={[styles.primaryBtn, { backgroundColor: armed ? Colors.rose : accent }]}
         >
-          <Target color={Colors.ink} size={15} strokeWidth={3} />
+          <Power color={Colors.ink} size={15} strokeWidth={3} />
           <Text style={styles.primaryBtnText}>{armed ? "Disarm sniper" : "Arm sniper"}</Text>
         </Pressable>
       </View>
 
-      <SectionHead title="Recent snipes" accent={accent} />
-      <EmptyState
-        accent={accent}
-        Icon={Crosshair}
-        title="No snipes yet"
-        body="Once armed, executions appear here in real-time."
-      />
+      <SectionHead title={`Snipes · ${logs.length}`} accent={accent} />
+      {logs.length === 0 ? (
+        <EmptyState
+          accent={accent}
+          Icon={Crosshair}
+          title="No snipes yet"
+          body="Once armed, executions appear here in real-time."
+        />
+      ) : (
+        <View style={styles.list}>
+          {logs.map((l) => (
+            <View key={l.id} style={styles.rowCard}>
+              <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
+                <Crosshair color={accent} size={14} strokeWidth={2.6} />
+              </View>
+              <View style={styles.rowMid}>
+                <Text style={styles.rowTitle}>{l.pair === "—" ? "Awaiting fill" : l.pair}</Text>
+                <Text style={styles.rowSub}>{timeAgo(l.at)}</Text>
+              </View>
+              <View
+                style={[
+                  styles.statusPill,
+                  l.result === "filled" && { backgroundColor: `${Colors.mint}26` },
+                  l.result === "queued" && { backgroundColor: `${accent}26` },
+                  l.result === "missed" && { backgroundColor: `${Colors.rose}26` },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    l.result === "filled" && { color: Colors.mint },
+                    l.result === "queued" && { color: accent },
+                    l.result === "missed" && { color: Colors.rose },
+                  ]}
+                >
+                  {l.result.toUpperCase()}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
 
+interface WatchedWhale {
+  id: string;
+  address: string;
+  label: string;
+}
+
 function WhaleRadarTool({ accent }: { accent: string }) {
+  const [threshold, setThreshold] = useState<number>(10000);
+  const [whaleAddr, setWhaleAddr] = useState<string>("");
+  const [whaleLabel, setWhaleLabel] = useState<string>("");
+  const [whales, setWhales] = useState<WatchedWhale[]>([]);
+  const [activePreset, setActivePreset] = useState<string>("");
+
+  const PRESETS = [
+    "Buys ≥ $10k",
+    "Top 100 wallets",
+    "Smart money picks",
+    "Same wallet 3+ buys",
+    "Insider clusters",
+    "Dev sells",
+  ];
+
+  const adjustThresh = useCallback((delta: number) => {
+    setThreshold((v) => Math.max(500, v + delta));
+    Haptics.selectionAsync().catch(() => {});
+  }, []);
+
+  const onAddWhale = useCallback(() => {
+    if (whaleAddr.trim().length < 32) {
+      Alert.alert("Invalid address", "Enter a valid Solana wallet.");
+      return;
+    }
+    const w: WatchedWhale = {
+      id: `${Date.now()}`,
+      address: whaleAddr.trim(),
+      label: whaleLabel.trim() || `${whaleAddr.slice(0, 4)}…${whaleAddr.slice(-4)}`,
+    };
+    setWhales((p) => [w, ...p]);
+    setWhaleAddr("");
+    setWhaleLabel("");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }, [whaleAddr, whaleLabel]);
+
+  const removeWhale = useCallback((id: string) => {
+    setWhales((p) => p.filter((w) => w.id !== id));
+  }, []);
+
   return (
     <View>
-      <SectionHead title="Smart money flow" accent={accent} />
-      <EmptyState
-        accent={accent}
-        Icon={Radar}
-        title="Radar idle"
-        body="Connect a whale tracker provider to stream big buys, rotations, and accumulation in real-time."
-      />
+      <View style={styles.statRow}>
+        <StatTile label="Tracked" value={`${whales.length}`} accent={accent} Icon={Users} />
+        <StatTile
+          label="Threshold"
+          value={`$${(threshold / 1000).toFixed(1)}k`}
+          accent={accent}
+          Icon={Filter}
+        />
+        <StatTile label="Hits 24h" value="—" accent={accent} Icon={Activity} />
+      </View>
+
+      <SectionHead title="Min buy threshold" accent={accent} />
+      <View style={styles.thresholdCard}>
+        <Pressable onPress={() => adjustThresh(-1000)} style={styles.thresholdBtn}>
+          <Minus color={Colors.text} size={16} strokeWidth={2.6} />
+        </Pressable>
+        <Text style={[styles.thresholdValue, { color: accent }]}>
+          ${threshold.toLocaleString()}
+        </Text>
+        <Pressable onPress={() => adjustThresh(1000)} style={styles.thresholdBtn}>
+          <Plus color={Colors.text} size={16} strokeWidth={2.6} />
+        </Pressable>
+      </View>
+
       <SectionHead title="Filter presets" accent={accent} />
       <View style={styles.list}>
-        {["Buys ≥ $10k", "Top 100 wallets", "Smart money picks", "Same wallet 3+ buys"].map((p) => (
-          <Pressable key={p} style={styles.rowCard}>
-            <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
-              <Waves color={accent} size={14} strokeWidth={2.6} />
-            </View>
-            <Text style={[styles.rowTitle, { flex: 1 }]}>{p}</Text>
-            <ChevronRight color={Colors.muted} size={14} strokeWidth={2.4} />
-          </Pressable>
-        ))}
+        {PRESETS.map((p) => {
+          const active = p === activePreset;
+          return (
+            <Pressable
+              key={p}
+              onPress={() => setActivePreset(active ? "" : p)}
+              style={[
+                styles.rowCard,
+                active && { borderColor: `${accent}55`, backgroundColor: `${accent}10` },
+              ]}
+            >
+              <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
+                <Waves color={accent} size={14} strokeWidth={2.6} />
+              </View>
+              <Text style={[styles.rowTitle, { flex: 1 }]}>{p}</Text>
+              {active ? (
+                <CheckCircle2 color={accent} size={16} strokeWidth={2.6} />
+              ) : (
+                <ChevronRight color={Colors.muted} size={14} strokeWidth={2.4} />
+              )}
+            </Pressable>
+          );
+        })}
       </View>
+
+      <SectionHead title="Track a whale wallet" accent={accent} />
+      <View style={styles.formCard}>
+        <Text style={styles.label}>Wallet address</Text>
+        <TextInput
+          value={whaleAddr}
+          onChangeText={setWhaleAddr}
+          placeholder="So111…"
+          placeholderTextColor={Colors.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.input}
+        />
+        <Text style={styles.label}>Label</Text>
+        <TextInput
+          value={whaleLabel}
+          onChangeText={setWhaleLabel}
+          placeholder="GiantWhale"
+          placeholderTextColor={Colors.muted}
+          style={styles.input}
+        />
+        <Pressable
+          onPress={onAddWhale}
+          style={[styles.primaryBtn, { backgroundColor: accent }]}
+        >
+          <UserPlus color={Colors.ink} size={15} strokeWidth={3} />
+          <Text style={styles.primaryBtnText}>Track wallet</Text>
+        </Pressable>
+      </View>
+
+      <SectionHead title={`Watched whales · ${whales.length}`} accent={accent} />
+      {whales.length === 0 ? (
+        <EmptyState
+          accent={accent}
+          Icon={Radar}
+          title="Radar idle"
+          body="Add wallets or enable presets to start streaming smart-money flow."
+        />
+      ) : (
+        <View style={styles.list}>
+          {whales.map((w) => (
+            <View key={w.id} style={styles.rowCard}>
+              <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
+                <Wallet color={accent} size={14} strokeWidth={2.6} />
+              </View>
+              <View style={styles.rowMid}>
+                <Text style={styles.rowTitle}>{w.label}</Text>
+                <Text style={styles.rowSub} numberOfLines={1}>
+                  {w.address.slice(0, 8)}…{w.address.slice(-6)}
+                </Text>
+              </View>
+              <Pressable onPress={() => removeWhale(w.id)} style={styles.rowAction} hitSlop={6}>
+                <X color={Colors.muted} size={14} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
 
 function TokenStreamTool({ accent, kind }: { accent: string; kind: string }) {
   const { listings } = useLaunchpad();
+  const [tf, setTf] = useState<"1h" | "24h" | "7d">("24h");
+
   const items = useMemo(() => {
     const sorted = [...listings];
     if (kind === "new-pairs") sorted.sort((a, b) => b.createdAt - a.createdAt);
@@ -954,7 +1581,30 @@ function TokenStreamTool({ accent, kind }: { accent: string; kind: string }) {
 
   return (
     <View>
-      <SectionHead title={kind === "new-pairs" ? "Live stream" : "Trending now"} accent={accent} />
+      <SectionHead
+        title={kind === "new-pairs" ? "Live stream" : "Trending now"}
+        accent={accent}
+        action={
+          <View style={styles.miniSegment}>
+            {(["1h", "24h", "7d"] as const).map((t) => (
+              <Pressable
+                key={t}
+                onPress={() => setTf(t)}
+                style={[styles.miniSegItem, tf === t && { backgroundColor: `${accent}26` }]}
+              >
+                <Text
+                  style={[
+                    styles.miniSegText,
+                    tf === t && { color: accent },
+                  ]}
+                >
+                  {t}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        }
+      />
       {items.length === 0 ? (
         <EmptyState
           accent={accent}
@@ -974,10 +1624,17 @@ function TokenStreamTool({ accent, kind }: { accent: string; kind: string }) {
               </View>
               <View style={styles.rowMid}>
                 <Text style={styles.rowTitle}>{t.name}</Text>
-                <Text style={styles.rowSub}>${t.ticker.replace("$", "")} · {t.venue}</Text>
+                <Text style={styles.rowSub}>
+                  ${t.ticker.replace("$", "")} · {t.venue}
+                </Text>
               </View>
               {t.change24hPct != null ? (
-                <Text style={[styles.rowChange, { color: t.change24hPct >= 0 ? Colors.mint : Colors.rose }]}>
+                <Text
+                  style={[
+                    styles.rowChange,
+                    { color: t.change24hPct >= 0 ? Colors.mint : Colors.rose },
+                  ]}
+                >
                   {t.change24hPct >= 0 ? "+" : ""}
                   {t.change24hPct.toFixed(1)}%
                 </Text>
@@ -992,32 +1649,58 @@ function TokenStreamTool({ accent, kind }: { accent: string; kind: string }) {
   );
 }
 
+interface CopyConfig {
+  id: string;
+  address: string;
+  riskPct: number;
+  enabled: boolean;
+}
+
 function CopyTradeTool({ accent }: { accent: string }) {
   const [enabled, setEnabled] = useState<boolean>(false);
   const [riskPct, setRiskPct] = useState<string>("10");
+  const [maxSize, setMaxSize] = useState<string>("0.5");
+  const [address, setAddress] = useState<string>("");
+  const [followOnSell, setFollowOnSell] = useState<boolean>(true);
+  const [configs, setConfigs] = useState<CopyConfig[]>([]);
+
+  const onAddConfig = useCallback(() => {
+    if (address.trim().length < 32) {
+      Alert.alert("Invalid wallet", "Enter a valid Solana wallet to mirror.");
+      return;
+    }
+    const v = parseFloat(riskPct);
+    if (Number.isNaN(v) || v <= 0) {
+      Alert.alert("Invalid risk", "Set a numeric risk %.");
+      return;
+    }
+    const c: CopyConfig = {
+      id: `${Date.now()}`,
+      address: address.trim(),
+      riskPct: v,
+      enabled: true,
+    };
+    setConfigs((p) => [c, ...p]);
+    setAddress("");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }, [address, riskPct]);
+
+  const toggleCfg = useCallback((id: string) => {
+    setConfigs((p) => p.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c)));
+  }, []);
+
+  const removeCfg = useCallback((id: string) => {
+    setConfigs((p) => p.filter((c) => c.id !== id));
+  }, []);
+
   return (
     <View>
-      <SectionHead title="Copy trader" accent={accent} />
+      <SectionHead title="Master switch" accent={accent} />
       <View style={styles.formCard}>
-        <Text style={styles.label}>Wallet to mirror</Text>
-        <TextInput
-          placeholder="Top trader address"
-          placeholderTextColor={Colors.muted}
-          autoCapitalize="none"
-          style={styles.input}
-        />
-        <Text style={styles.label}>Risk % per trade</Text>
-        <TextInput
-          value={riskPct}
-          onChangeText={setRiskPct}
-          keyboardType="decimal-pad"
-          style={styles.input}
-          placeholderTextColor={Colors.muted}
-        />
-        <View style={styles.toggleRow}>
+        <View style={[styles.toggleRow, { paddingTop: 0 }]}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.toggleTitle}>Enable copy trade</Text>
-            <Text style={styles.toggleSub}>Mirror every buy / sell</Text>
+            <Text style={styles.toggleTitle}>Copy trading enabled</Text>
+            <Text style={styles.toggleSub}>Mirror buys / sells across all configs</Text>
           </View>
           <Switch
             value={enabled}
@@ -1027,64 +1710,295 @@ function CopyTradeTool({ accent }: { accent: string }) {
           />
         </View>
       </View>
+
+      <SectionHead title="Add wallet" accent={accent} />
+      <View style={styles.formCard}>
+        <Text style={styles.label}>Wallet to mirror</Text>
+        <TextInput
+          value={address}
+          onChangeText={setAddress}
+          placeholder="Top trader address"
+          placeholderTextColor={Colors.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.input}
+        />
+        <View style={styles.tpslRow}>
+          <View style={styles.tpslCol}>
+            <Text style={styles.label}>Risk % per trade</Text>
+            <TextInput
+              value={riskPct}
+              onChangeText={setRiskPct}
+              keyboardType="decimal-pad"
+              style={styles.input}
+              placeholderTextColor={Colors.muted}
+            />
+          </View>
+          <View style={styles.tpslCol}>
+            <Text style={styles.label}>Max size (SOL)</Text>
+            <TextInput
+              value={maxSize}
+              onChangeText={setMaxSize}
+              keyboardType="decimal-pad"
+              style={styles.input}
+              placeholderTextColor={Colors.muted}
+            />
+          </View>
+        </View>
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleTitle}>Mirror sells</Text>
+            <Text style={styles.toggleSub}>Exit when source wallet exits</Text>
+          </View>
+          <Switch
+            value={followOnSell}
+            onValueChange={setFollowOnSell}
+            trackColor={{ false: "rgba(255,255,255,0.1)", true: accent }}
+            thumbColor={followOnSell ? Colors.ink : Colors.muted}
+          />
+        </View>
+        <Pressable
+          onPress={onAddConfig}
+          style={[styles.primaryBtn, { backgroundColor: accent }]}
+        >
+          <Plus color={Colors.ink} size={15} strokeWidth={3} />
+          <Text style={styles.primaryBtnText}>Add copy config</Text>
+        </Pressable>
+      </View>
+
+      <SectionHead title={`Active configs · ${configs.length}`} accent={accent} />
+      {configs.length === 0 ? (
+        <EmptyState
+          accent={accent}
+          Icon={Users}
+          title="No mirrored wallets"
+          body="Pick a top performing wallet to start mirroring its trades."
+        />
+      ) : (
+        <View style={styles.list}>
+          {configs.map((c) => (
+            <View key={c.id} style={styles.rowCard}>
+              <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
+                <Users color={accent} size={14} strokeWidth={2.6} />
+              </View>
+              <View style={styles.rowMid}>
+                <Text style={styles.rowTitle} numberOfLines={1}>
+                  {c.address.slice(0, 6)}…{c.address.slice(-4)}
+                </Text>
+                <Text style={styles.rowSub}>Risk {c.riskPct}% · Max {maxSize} SOL</Text>
+              </View>
+              <Switch
+                value={c.enabled}
+                onValueChange={() => toggleCfg(c.id)}
+                trackColor={{ false: "rgba(255,255,255,0.1)", true: accent }}
+                thumbColor={c.enabled ? Colors.ink : Colors.muted}
+              />
+              <Pressable onPress={() => removeCfg(c.id)} style={styles.rowAction} hitSlop={6}>
+                <X color={Colors.muted} size={14} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+
       <SectionHead title="Top performing wallets" accent={accent} />
-      <EmptyState accent={accent} Icon={Users} title="Backend offline" body="Live wallet leaderboard streams here once the data provider connects." />
+      <EmptyState
+        accent={accent}
+        Icon={TrendingUp}
+        title="Leaderboard offline"
+        body="Live wallet leaderboard streams here once the data provider connects."
+      />
     </View>
   );
 }
 
 function AlphaBotTool({ accent }: { accent: string }) {
+  const [sources, setSources] = useState<{ x: boolean; tg: boolean; chain: boolean }>({
+    x: true,
+    tg: true,
+    chain: true,
+  });
+  const [topics, setTopics] = useState<string[]>(["meme"]);
+
+  const TOPICS = ["meme", "ai", "defi", "gaming", "depin", "rwa", "L2", "stables"];
+
+  const toggleTopic = useCallback((t: string) => {
+    setTopics((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]));
+    Haptics.selectionAsync().catch(() => {});
+  }, []);
+
   return (
     <View>
+      <SectionHead title="Sources" accent={accent} />
+      <View style={styles.formCard}>
+        {[
+          { key: "x" as const, label: "X / Twitter", Icon: Globe },
+          { key: "tg" as const, label: "Telegram channels", Icon: Send },
+          { key: "chain" as const, label: "On-chain whales", Icon: Waves },
+        ].map((s, idx) => (
+          <View
+            key={s.key}
+            style={[styles.toggleRow, idx === 0 && { paddingTop: 0 }]}
+          >
+            <View style={[styles.rowIcon, { backgroundColor: `${accent}1A`, marginRight: 10 }]}>
+              <s.Icon color={accent} size={14} strokeWidth={2.6} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleTitle}>{s.label}</Text>
+              <Text style={styles.toggleSub}>{sources[s.key] ? "Streaming" : "Paused"}</Text>
+            </View>
+            <Switch
+              value={sources[s.key]}
+              onValueChange={(v) => setSources((p) => ({ ...p, [s.key]: v }))}
+              trackColor={{ false: "rgba(255,255,255,0.1)", true: accent }}
+              thumbColor={sources[s.key] ? Colors.ink : Colors.muted}
+            />
+          </View>
+        ))}
+      </View>
+
+      <SectionHead title="Topic filters" accent={accent} />
+      <View style={styles.topicWrap}>
+        {TOPICS.map((t) => {
+          const active = topics.includes(t);
+          return (
+            <Pressable
+              key={t}
+              onPress={() => toggleTopic(t)}
+              style={[
+                styles.typeChip,
+                active && { backgroundColor: accent, borderColor: accent },
+              ]}
+            >
+              <Hash color={active ? Colors.ink : Colors.text} size={11} strokeWidth={2.6} />
+              <Text style={[styles.typeText, active && { color: Colors.ink }]}>{t}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <SectionHead title="Alpha feed" accent={accent} />
       <EmptyState
         accent={accent}
         Icon={Bot}
         title="No alpha yet"
-        body="AI-curated alpha from X, Telegram and on-chain will stream here."
+        body="AI-curated alpha will stream here once your sources connect."
       />
-      <SectionHead title="Sources" accent={accent} />
-      <View style={styles.list}>
-        {[
-          { label: "X / Twitter", Icon: Sparkles },
-          { label: "Telegram channels", Icon: Send },
-          { label: "On-chain whales", Icon: Waves },
-        ].map((s) => (
-          <View key={s.label} style={styles.rowCard}>
-            <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
-              <s.Icon color={accent} size={14} strokeWidth={2.6} />
-            </View>
-            <Text style={[styles.rowTitle, { flex: 1 }]}>{s.label}</Text>
-            <View style={styles.statusDotMuted} />
-          </View>
-        ))}
-      </View>
     </View>
   );
 }
 
 function ChartTool({ accent, kind }: { accent: string; kind: string }) {
+  const [token, setToken] = useState<string>("");
+  const [tf, setTf] = useState<string>("1h");
+  const [pattern, setPattern] = useState<string>("Bullish breakout");
+  const [scanning, setScanning] = useState<boolean>(false);
+
+  const TFS = ["1m", "5m", "15m", "1h", "4h", "1d"];
+  const PATTERNS = ["Bullish breakout", "Bull flag", "Cup & handle", "Reversal hammer", "Double bottom"];
+
+  const runScan = useCallback(() => {
+    setScanning(true);
+    Haptics.selectionAsync().catch(() => {});
+    setTimeout(() => {
+      setScanning(false);
+      Alert.alert("Scan queued", "Connect Birdeye / GeckoTerminal to enable live results.");
+    }, 700);
+  }, []);
+
   return (
     <View>
       <SectionHead title={kind === "candle-scanner" ? "Pattern scanner" : "Chart sharing"} accent={accent} />
+      <View style={styles.formCard}>
+        <Text style={styles.label}>Token</Text>
+        <TextInput
+          value={token}
+          onChangeText={(v) => setToken(v.replace("$", "").toUpperCase())}
+          placeholder="WIF"
+          placeholderTextColor={Colors.muted}
+          autoCapitalize="characters"
+          style={styles.input}
+        />
+        <Text style={styles.label}>Timeframe</Text>
+        <View style={styles.typeRow}>
+          {TFS.map((t) => {
+            const active = tf === t;
+            return (
+              <Pressable
+                key={t}
+                onPress={() => setTf(t)}
+                style={[
+                  styles.typeChip,
+                  active && { backgroundColor: accent, borderColor: accent },
+                ]}
+              >
+                <Text style={[styles.typeText, active && { color: Colors.ink }]}>{t}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {kind === "candle-scanner" && (
+          <>
+            <Text style={styles.label}>Pattern</Text>
+            <View style={styles.typeRow}>
+              {PATTERNS.map((p) => {
+                const active = pattern === p;
+                return (
+                  <Pressable
+                    key={p}
+                    onPress={() => setPattern(p)}
+                    style={[
+                      styles.typeChip,
+                      active && { backgroundColor: accent, borderColor: accent },
+                    ]}
+                  >
+                    <Text style={[styles.typeText, active && { color: Colors.ink }]}>{p}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
+
+        <Pressable
+          onPress={runScan}
+          disabled={scanning}
+          style={[styles.primaryBtn, { backgroundColor: accent }, scanning && { opacity: 0.6 }]}
+        >
+          {scanning ? (
+            <Loader2 color={Colors.ink} size={15} strokeWidth={3} />
+          ) : kind === "candle-scanner" ? (
+            <Search color={Colors.ink} size={15} strokeWidth={3} />
+          ) : (
+            <ArrowUpRight color={Colors.ink} size={15} strokeWidth={3} />
+          )}
+          <Text style={styles.primaryBtnText}>
+            {kind === "candle-scanner" ? "Scan markets" : "Build chart"}
+          </Text>
+        </Pressable>
+      </View>
+
+      <SectionHead title="Live chart" accent={accent} />
       <View style={styles.chartPlaceholder}>
         <ChartCandlestick color={accent} size={32} strokeWidth={2.4} />
-        <Text style={styles.chartPlaceholderTitle}>Live charts pending data feed</Text>
+        <Text style={styles.chartPlaceholderTitle}>Awaiting data feed</Text>
         <Text style={styles.chartPlaceholderBody}>
-          The UI is fully wired. Hook up Birdeye, GeckoTerminal or your preferred provider to power charts.
+          Hook up Birdeye, GeckoTerminal or your preferred provider to power charts.
         </Text>
       </View>
-      <View style={styles.list}>
-        {["Bullish breakout", "Bull flag", "Cup & handle", "Reversal hammer"].map((p) => (
-          <Pressable key={p} style={styles.rowCard}>
-            <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
-              <TrendingUp color={accent} size={14} strokeWidth={2.6} />
-            </View>
-            <Text style={[styles.rowTitle, { flex: 1 }]}>{p}</Text>
-            <ChevronRight color={Colors.muted} size={14} strokeWidth={2.4} />
-          </Pressable>
-        ))}
-      </View>
+
+      <SectionHead title={kind === "candle-scanner" ? "Pattern matches" : "Recent shares"} accent={accent} />
+      <EmptyState
+        accent={accent}
+        Icon={kind === "candle-scanner" ? TrendingUp : ChartLine}
+        title={kind === "candle-scanner" ? "No matches yet" : "Nothing shared yet"}
+        body={
+          kind === "candle-scanner"
+            ? "Scan results will populate here once the data provider connects."
+            : "Drop a chart into a lobby or DM to see it here."
+        }
+      />
     </View>
   );
 }
@@ -1121,6 +2035,20 @@ function EmptyState({
     </View>
   );
 }
+
+function timeAgo(ts: number): string {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+const _unused = Circle;
+void _unused;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
@@ -1194,6 +2122,36 @@ const styles = StyleSheet.create({
   sectionTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: 0.2 },
   sectionAction: { marginLeft: "auto" },
 
+  statRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  statTile: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  statTileIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statTileLabel: {
+    color: Colors.muted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginTop: 8,
+  },
+  statTileValue: { color: Colors.text, fontSize: 15, fontWeight: "900", marginTop: 2 },
+
   formCard: {
     marginHorizontal: 16,
     padding: 14,
@@ -1215,6 +2173,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
   },
+  inputWithAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  inputFlex: { flex: 1 },
+  iconAction: {
+    marginTop: 6,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Colors.cardSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
   primaryBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1225,6 +2200,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   primaryBtnText: { color: Colors.ink, fontSize: 13, fontWeight: "900", letterSpacing: 0.3 },
+  linkText: { fontSize: 12, fontWeight: "900", letterSpacing: 0.3 },
 
   list: { marginHorizontal: 16, gap: 8 },
   rowCard: {
@@ -1284,11 +2260,47 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 14,
     padding: 18,
-    borderRadius: 16,
+    borderRadius: 18,
     backgroundColor: Colors.card,
-    alignItems: "center",
+    borderWidth: 1,
   },
-  resultScore: { color: Colors.text, fontSize: 32, fontWeight: "900" },
+  resultHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  resultEyebrow: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
+  resultPending: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  resultPendingText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  resultScore: { color: Colors.text, fontSize: 32, fontWeight: "900", marginTop: 6 },
+  resultBody: { color: Colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 17, marginTop: 6 },
+  resultGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 14,
+  },
+  resultGridItem: {
+    width: "48%",
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.cardSoft,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
+  },
+  resultGridLabel: {
+    color: Colors.muted,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    marginTop: 6,
+    minHeight: 28,
+  },
+  resultGridValue: { color: Colors.text, fontSize: 14, fontWeight: "900", marginTop: 4 },
 
   chatBox: {
     marginHorizontal: 16,
@@ -1334,6 +2346,8 @@ const styles = StyleSheet.create({
   },
   suggestionText: { color: Colors.text, fontSize: 11, fontWeight: "800" },
 
+  modelRow: { flexDirection: "row", gap: 6, marginHorizontal: 16, marginBottom: 8, flexWrap: "wrap" },
+
   chatInputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -1371,6 +2385,21 @@ const styles = StyleSheet.create({
   },
   typeText: { color: Colors.text, fontSize: 11, fontWeight: "800" },
 
+  miniSegment: {
+    flexDirection: "row",
+    backgroundColor: Colors.card,
+    borderRadius: 999,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  miniSegItem: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  miniSegText: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
+
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1379,6 +2408,66 @@ const styles = StyleSheet.create({
   },
   toggleTitle: { color: Colors.text, fontSize: 13, fontWeight: "900" },
   toggleSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+
+  tpslRow: { flexDirection: "row", gap: 10 },
+  tpslCol: { flex: 1 },
+
+  armedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+  },
+  armedDot: { width: 8, height: 8, borderRadius: 4 },
+  armedText: { fontSize: 11, fontWeight: "900", letterSpacing: 1.2 },
+
+  presetRow: { flexDirection: "row", gap: 8, marginHorizontal: 16 },
+  presetCard: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  presetLabel: { fontSize: 11, fontWeight: "900", letterSpacing: 0.5 },
+  presetSub: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 4, lineHeight: 14 },
+
+  thresholdCard: {
+    marginHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  thresholdBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: Colors.cardSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thresholdValue: { fontSize: 22, fontWeight: "900", letterSpacing: -0.4 },
+
+  topicWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginHorizontal: 16 },
+
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusPillText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
 
   lobbyCard: {
     marginHorizontal: 16,
@@ -1415,6 +2504,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.05)",
   },
   lobbyCtrlText: { color: Colors.text, fontSize: 12, fontWeight: "900" },
+  lobbyMemberAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  lobbyMemberInitial: { fontSize: 11, fontWeight: "900" },
 
   chartPlaceholder: {
     marginHorizontal: 16,
@@ -1435,8 +2533,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 6,
   },
-
-  statusDotMuted: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.muted },
 
   notFound: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   notFoundTitle: { color: Colors.text, fontSize: 18, fontWeight: "900" },
