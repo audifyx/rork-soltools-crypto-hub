@@ -4,29 +4,13 @@ import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   Activity,
-  AlertTriangle,
   ArrowRight,
-  Bell,
-  Bot,
   Brain,
-  ChartCandlestick,
-  ChartLine,
-  Crosshair,
-  Eye,
-  Flame,
-  Gauge,
-  Mic,
-  Radar,
-  Rocket,
-  Scan,
+  ChevronRight,
+  MessageCircle,
   Search,
-  Shield,
   Sparkles,
-  Target,
-  TrendingUp,
-  Users,
   Wallet,
-  Waves,
   Wrench,
   Zap,
 } from "lucide-react-native";
@@ -49,170 +33,83 @@ type LucideIcon = React.ComponentType<{
   strokeWidth?: number;
 }>;
 
-type ToolCategory = "all" | "trade" | "scan" | "ai" | "social";
-
 type Tool = {
   id: string;
+  route: string;
   name: string;
   tagline: string;
+  description: string;
   Icon: LucideIcon;
   accent: string;
-  category: Exclude<ToolCategory, "all">;
-  badge?: "NEW" | "PRO" | "BETA" | "HOT";
+  glow: string;
+  tags: string[];
+  status: "LIVE" | "BETA";
 };
 
 const TOOLS: Tool[] = [
   {
     id: "wallet-tracker",
+    route: "/tool/wallet-tracker",
     name: "Wallet Tracker",
-    tagline: "Live PnL on any address",
+    tagline: "Live PnL on any Solana address",
+    description:
+      "Paste any wallet to see holdings, realized PnL, top trades, and live on-chain activity streamed via Helius RPC.",
     Icon: Wallet,
     accent: Colors.mint,
-    category: "trade",
+    glow: "rgba(85,245,178,0.22)",
+    tags: ["Helius", "PnL", "Live"],
+    status: "LIVE",
   },
   {
-    id: "rug-scanner",
-    name: "Rug Scanner",
-    tagline: "AI risk score in seconds",
-    Icon: Shield,
-    accent: Colors.rose,
-    category: "ai",
-    badge: "PRO",
-  },
-  {
-    id: "whale-radar",
-    name: "Whale Radar",
-    tagline: "Smart money in real-time",
-    Icon: Radar,
-    accent: Colors.cyan,
-    category: "scan",
-  },
-  {
-    id: "ai-analyst",
-    name: "AI Analyst",
-    tagline: "Gemini deep dive on any token",
+    id: "ai-analysis",
+    route: "/tool/ai-analysis",
+    name: "AI Analysis",
+    tagline: "Deep-dive any token in seconds",
+    description:
+      "Holder clusters, LP locks, tax behavior, smart-money flow and a risk score — generated on demand by our AI engine.",
     Icon: Brain,
     accent: Colors.cyan,
-    category: "ai",
-    badge: "NEW",
+    glow: "rgba(56,215,255,0.22)",
+    tags: ["AI", "Risk", "On-chain"],
+    status: "LIVE",
   },
   {
-    id: "trending",
-    name: "Trending Hub",
-    tagline: "What's pumping right now",
-    Icon: Flame,
+    id: "ai-chat",
+    route: "/tool/ai-chat",
+    name: "Chat with AI",
+    tagline: "Ask anything about a token or wallet",
+    description:
+      "Conversational AI with live Helius + RPC blockchain context. Ask about flows, history, narratives, and risk in plain English.",
+    Icon: MessageCircle,
     accent: Colors.orange,
-    category: "scan",
+    glow: "rgba(255,184,76,0.22)",
+    tags: ["GPT", "RPC", "Context"],
+    status: "BETA",
   },
-  {
-    id: "alerts",
-    name: "Smart Alerts",
-    tagline: "Price + on-chain triggers",
-    Icon: Bell,
-    accent: Colors.mint,
-    category: "trade",
-  },
-  {
-    id: "voice-lobby",
-    name: "Voice Lobbies",
-    tagline: "Trade with your crew live",
-    Icon: Mic,
-    accent: Colors.rose,
-    category: "social",
-    badge: "BETA",
-  },
-  {
-    id: "watchlist",
-    name: "Watchlists",
-    tagline: "Track your shortlist",
-    Icon: Eye,
-    accent: Colors.mint,
-    category: "trade",
-  },
-  {
-    id: "chart-share",
-    name: "Chart Share",
-    tagline: "Drop charts into chat",
-    Icon: ChartLine,
-    accent: Colors.cyan,
-    category: "social",
-  },
-  {
-    id: "copy-trade",
-    name: "Copy Trade",
-    tagline: "Mirror top wallets",
-    Icon: Users,
-    accent: Colors.orange,
-    category: "trade",
-    badge: "PRO",
-  },
-  {
-    id: "honeypot",
-    name: "Honeypot Check",
-    tagline: "Buy/sell tax + lock detect",
-    Icon: AlertTriangle,
-    accent: Colors.rose,
-    category: "ai",
-  },
-  {
-    id: "holder-scan",
-    name: "Holder X-Ray",
-    tagline: "Cluster + insider mapping",
-    Icon: Scan,
-    accent: Colors.cyan,
-    category: "scan",
-  },
-  {
-    id: "alpha-bot",
-    name: "Alpha Bot",
-    tagline: "Telegram-style alpha feed",
-    Icon: Bot,
-    accent: Colors.mint,
-    category: "ai",
-  },
-  {
-    id: "candle-scanner",
-    name: "Candle Scanner",
-    tagline: "Pattern + breakout finder",
-    Icon: ChartCandlestick,
-    accent: Colors.orange,
-    category: "scan",
-  },
-];
-
-const FILTERS: { id: ToolCategory; label: string; Icon: LucideIcon }[] = [
-  { id: "all", label: "All", Icon: Sparkles },
-  { id: "trade", label: "Trade", Icon: Target },
-  { id: "scan", label: "Scan", Icon: Radar },
-  { id: "ai", label: "AI", Icon: Brain },
-  { id: "social", label: "Social", Icon: Users },
 ];
 
 export default function ToolsScreen() {
   const router = useRouter();
-  const [active, setActive] = useState<ToolCategory>("all");
   const [query, setQuery] = useState<string>("");
 
-  const onOpenTool = useCallback((id: string) => {
-    Haptics.selectionAsync().catch(() => {});
-    if (id === "new-pairs" || id === "lp-sniper") {
-      router.push("/(tabs)/discover");
-      return;
-    }
-    router.push({ pathname: "/tool/[id]", params: { id } });
-  }, [router]);
+  const onOpen = useCallback(
+    (route: string) => {
+      Haptics.selectionAsync().catch(() => {});
+      router.push(route as never);
+    },
+    [router]
+  );
 
   const filtered = useMemo<Tool[]>(() => {
     const q = query.trim().toLowerCase();
-    return TOOLS.filter((t) => {
-      const inCat = active === "all" || t.category === active;
-      const inQuery =
-        !q ||
+    if (!q) return TOOLS;
+    return TOOLS.filter(
+      (t) =>
         t.name.toLowerCase().includes(q) ||
-        t.tagline.toLowerCase().includes(q);
-      return inCat && inQuery;
-    });
-  }, [active, query]);
+        t.tagline.toLowerCase().includes(q) ||
+        t.tags.some((tag) => tag.toLowerCase().includes(q))
+    );
+  }, [query]);
 
   return (
     <View style={styles.root} testID="tools-screen">
@@ -223,14 +120,14 @@ export default function ToolsScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.headerRow}>
-            <View style={styles.headerLeft}>
+            <View style={{ flex: 1 }}>
               <View style={styles.headerBadge}>
                 <Wrench color={Colors.mint} size={14} strokeWidth={2.6} />
                 <Text style={styles.headerBadgeText}>TOOL DECK</Text>
               </View>
               <Text style={styles.headerTitle}>Tools</Text>
               <Text style={styles.headerSub}>
-                Every edge, one tap away.
+                Live on-chain intelligence, one tap away.
               </Text>
             </View>
             <View style={styles.countPill}>
@@ -253,60 +150,14 @@ export default function ToolsScreen() {
             />
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filtersRow}
-          >
-            {FILTERS.map((f) => {
-              const isActive = f.id === active;
-              return (
-                <Pressable
-                  key={f.id}
-                  testID={`filter-${f.id}`}
-                  onPress={() => setActive(f.id)}
-                  style={[
-                    styles.filterChip,
-                    isActive && styles.filterChipActive,
-                  ]}
-                >
-                  <f.Icon
-                    color={isActive ? Colors.ink : Colors.text}
-                    size={14}
-                    strokeWidth={2.6}
-                  />
-                  <Text
-                    style={[
-                      styles.filterText,
-                      isActive && styles.filterTextActive,
-                    ]}
-                  >
-                    {f.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <FeaturedCard onPress={() => onOpenTool("rug-scanner")} />
-
-          <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>
-              {active === "all" ? "All tools" : `${labelFor(active)} tools`}
-            </Text>
-            <Text style={styles.sectionCount}>{filtered.length}</Text>
-          </View>
-
-          <View style={styles.grid}>
+          <View style={styles.list}>
             {filtered.map((t) => (
-              <ToolCard key={t.id} tool={t} onPress={() => onOpenTool(t.id)} />
+              <ToolRow key={t.id} tool={t} onPress={() => onOpen(t.route)} />
             ))}
             {filtered.length === 0 && (
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>No tools match</Text>
-                <Text style={styles.emptyBody}>
-                  Try a different filter or keyword.
-                </Text>
+                <Text style={styles.emptyBody}>Try a different keyword.</Text>
               </View>
             )}
           </View>
@@ -314,7 +165,7 @@ export default function ToolsScreen() {
           <View style={styles.footerNote}>
             <Zap color={Colors.mint} size={14} strokeWidth={2.6} />
             <Text style={styles.footerText}>
-              More tools shipping weekly. Vote in the Discord.
+              More tools shipping soon. Powered by Helius + RPC.
             </Text>
           </View>
         </ScrollView>
@@ -323,148 +174,108 @@ export default function ToolsScreen() {
   );
 }
 
-function labelFor(id: ToolCategory): string {
-  const f = FILTERS.find((x) => x.id === id);
-  return f?.label ?? "All";
-}
-
-function FeaturedCard({ onPress }: { onPress: () => void }) {
-  return (
-    <Pressable testID="featured-tool" onPress={onPress} style={styles.featured}>
-      <LinearGradient
-        colors={["rgba(85,245,178,0.18)", "rgba(56,215,255,0.06)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.featuredGrad}
-      >
-        <View style={styles.featuredTop}>
-          <View style={styles.featuredBadge}>
-            <Sparkles color={Colors.mint} size={12} strokeWidth={2.6} />
-            <Text style={styles.featuredBadgeText}>FEATURED</Text>
-          </View>
-          <View style={styles.featuredLive}>
-            <View style={styles.featuredDot} />
-            <Text style={styles.featuredLiveText}>LIVE</Text>
-          </View>
-        </View>
-
-        <Text style={styles.featuredTitle}>AI Rug Scanner</Text>
-        <Text style={styles.featuredBody}>
-          Paste a contract. Get holder clusters, LP locks, tax behavior, and a
-          risk score in under 3 seconds.
-        </Text>
-
-        <View style={styles.featuredStatsRow}>
-          <FeaturedStat Icon={Gauge} label="Risk" value="Live" />
-          <FeaturedStat Icon={Activity} label="Speed" value="<3s" />
-          <FeaturedStat Icon={Waves} label="On-chain" value="Deep" />
-        </View>
-
-        <View style={styles.featuredCta}>
-          <Text style={styles.featuredCtaText}>Open Scanner</Text>
-          <ArrowRight color={Colors.ink} size={16} strokeWidth={3} />
-        </View>
-      </LinearGradient>
-    </Pressable>
-  );
-}
-
-function FeaturedStat({
-  Icon,
-  label,
-  value,
-}: {
-  Icon: LucideIcon;
-  label: string;
-  value: string;
-}) {
-  return (
-    <View style={styles.featStat}>
-      <Icon color={Colors.mint} size={14} strokeWidth={2.6} />
-      <View style={styles.featStatText}>
-        <Text style={styles.featStatVal}>{value}</Text>
-        <Text style={styles.featStatLabel}>{label}</Text>
-      </View>
-    </View>
-  );
-}
-
-function ToolCard({ tool, onPress }: { tool: Tool; onPress: () => void }) {
+function ToolRow({ tool, onPress }: { tool: Tool; onPress: () => void }) {
   return (
     <Pressable
       testID={`tool-${tool.id}`}
       onPress={onPress}
       style={({ pressed }) => [
-        styles.toolCard,
+        styles.row,
         { borderColor: `${tool.accent}33` },
-        pressed && styles.toolCardPressed,
+        pressed && styles.rowPressed,
       ]}
     >
+      <LinearGradient
+        colors={[tool.glow, "rgba(3,7,8,0.0)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
       <View
         style={[
-          styles.toolIconWrap,
+          styles.iconWrap,
           {
             backgroundColor: `${tool.accent}1A`,
-            borderColor: `${tool.accent}33`,
+            borderColor: `${tool.accent}55`,
           },
         ]}
       >
-        <tool.Icon color={tool.accent} size={20} strokeWidth={2.4} />
+        <tool.Icon color={tool.accent} size={26} strokeWidth={2.4} />
       </View>
 
-      {tool.badge && (
-        <View
-          style={[
-            styles.toolBadge,
-            { backgroundColor: badgeBg(tool.badge), borderColor: `${tool.accent}55` },
-          ]}
-        >
-          <Text style={[styles.toolBadgeText, { color: badgeColor(tool.badge) }]}>
-            {tool.badge}
+      <View style={styles.rowMid}>
+        <View style={styles.rowTitleLine}>
+          <Text style={styles.rowName} numberOfLines={1}>
+            {tool.name}
           </Text>
+          <View
+            style={[
+              styles.statusPill,
+              {
+                backgroundColor:
+                  tool.status === "LIVE"
+                    ? "rgba(85,245,178,0.14)"
+                    : "rgba(255,184,76,0.16)",
+                borderColor:
+                  tool.status === "LIVE"
+                    ? "rgba(85,245,178,0.4)"
+                    : "rgba(255,184,76,0.4)",
+              },
+            ]}
+          >
+            {tool.status === "LIVE" ? (
+              <Activity color={Colors.mint} size={10} strokeWidth={3} />
+            ) : (
+              <Sparkles color={Colors.orange} size={10} strokeWidth={3} />
+            )}
+            <Text
+              style={[
+                styles.statusText,
+                {
+                  color: tool.status === "LIVE" ? Colors.mint : Colors.orange,
+                },
+              ]}
+            >
+              {tool.status}
+            </Text>
+          </View>
         </View>
-      )}
 
-      <Text style={styles.toolName} numberOfLines={1}>
-        {tool.name}
-      </Text>
-      <Text style={styles.toolTag} numberOfLines={2}>
-        {tool.tagline}
-      </Text>
+        <Text style={styles.rowTag} numberOfLines={1}>
+          {tool.tagline}
+        </Text>
+        <Text style={styles.rowDesc} numberOfLines={2}>
+          {tool.description}
+        </Text>
 
-      <View style={styles.toolFooter}>
-        <View style={[styles.toolDot, { backgroundColor: tool.accent }]} />
-        <Text style={[styles.toolOpen, { color: tool.accent }]}>Open</Text>
-        <ArrowRight color={tool.accent} size={12} strokeWidth={3} />
+        <View style={styles.tagsRow}>
+          {tool.tags.map((tag) => (
+            <View
+              key={tag}
+              style={[
+                styles.tagChip,
+                { borderColor: `${tool.accent}33` },
+              ]}
+            >
+              <Text style={[styles.tagText, { color: tool.accent }]}>
+                {tag}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.openRow}>
+          <Text style={[styles.openText, { color: tool.accent }]}>
+            Open tool
+          </Text>
+          <ArrowRight color={tool.accent} size={14} strokeWidth={3} />
+        </View>
       </View>
+
+      <ChevronRight color={Colors.muted} size={20} strokeWidth={2.4} />
     </Pressable>
   );
-}
-
-function badgeBg(badge: NonNullable<Tool["badge"]>): string {
-  switch (badge) {
-    case "NEW":
-      return "rgba(85,245,178,0.16)";
-    case "PRO":
-      return "rgba(56,215,255,0.16)";
-    case "HOT":
-      return "rgba(255,184,76,0.18)";
-    case "BETA":
-      return "rgba(255,93,143,0.16)";
-  }
-}
-
-function badgeColor(badge: NonNullable<Tool["badge"]>): string {
-  switch (badge) {
-    case "NEW":
-      return Colors.mint;
-    case "PRO":
-      return Colors.cyan;
-    case "HOT":
-      return Colors.orange;
-    case "BETA":
-      return Colors.rose;
-  }
 }
 
 const styles = StyleSheet.create({
@@ -478,7 +289,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 8,
   },
-  headerLeft: { flex: 1 },
   headerBadge: {
     alignSelf: "flex-start",
     flexDirection: "row",
@@ -554,227 +364,96 @@ const styles = StyleSheet.create({
     padding: 0,
   },
 
-  filtersRow: { gap: 8, paddingVertical: 14, paddingRight: 12 },
-  filterChip: {
+  list: { marginTop: 20, gap: 14 },
+  row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Colors.line,
-    backgroundColor: Colors.card,
-  },
-  filterChipActive: {
-    backgroundColor: Colors.mint,
-    borderColor: Colors.mint,
-  },
-  filterText: {
-    color: Colors.text,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-  },
-  filterTextActive: { color: Colors.ink },
-
-  featured: {
+    gap: 14,
+    padding: 16,
     borderRadius: 22,
+    borderWidth: 1,
+    backgroundColor: Colors.card,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.3)",
-    marginTop: 4,
   },
-  featuredGrad: { padding: 18 },
-  featuredTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  featuredBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(3,7,8,0.6)",
-    borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.35)",
-  },
-  featuredBadgeText: {
-    color: Colors.mint,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  featuredLive: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(3,7,8,0.6)",
-    borderWidth: 1,
-    borderColor: "rgba(255,93,143,0.45)",
-  },
-  featuredDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.rose,
-  },
-  featuredLiveText: {
-    color: Colors.rose,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  featuredTitle: {
-    color: Colors.text,
-    fontSize: 26,
-    fontWeight: "900",
-    letterSpacing: -0.8,
-    marginTop: 14,
-  },
-  featuredBody: {
-    color: Colors.muted,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 19,
-    marginTop: 6,
-  },
-  featuredStatsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 16,
-  },
-  featStat: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.2)",
-    backgroundColor: "rgba(3,7,8,0.45)",
-  },
-  featStatText: {},
-  featStatVal: {
-    color: Colors.text,
-    fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: -0.2,
-  },
-  featStatLabel: {
-    color: Colors.muted,
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  featuredCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 16,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: Colors.mint,
-  },
-  featuredCtaText: {
-    color: Colors.ink,
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: 0.4,
-  },
+  rowPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
 
-  sectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 28,
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    color: Colors.text,
-    fontSize: 18,
-    fontWeight: "900",
-    letterSpacing: -0.4,
-  },
-  sectionCount: {
-    color: Colors.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-  },
-
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  toolCard: {
-    width: "48%",
-    minHeight: 148,
-    padding: 14,
+  iconWrap: {
+    width: 56,
+    height: 56,
     borderRadius: 18,
     borderWidth: 1,
-    backgroundColor: Colors.card,
-    justifyContent: "space-between",
-  },
-  toolCardPressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
-  toolIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  toolBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
+
+  rowMid: { flex: 1, gap: 4 },
+  rowTitleLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  rowName: {
+    color: Colors.text,
+    fontSize: 17,
+    fontWeight: "900",
+    letterSpacing: -0.4,
+    flexShrink: 1,
+  },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 999,
     borderWidth: 1,
   },
-  toolBadgeText: {
+  statusText: {
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 1,
   },
-  toolName: {
+  rowTag: {
     color: Colors.text,
-    fontSize: 15,
-    fontWeight: "900",
-    letterSpacing: -0.3,
-    marginTop: 14,
+    fontSize: 13,
+    fontWeight: "700",
+    opacity: 0.9,
   },
-  toolTag: {
+  rowDesc: {
     color: Colors.muted,
     fontSize: 12,
     fontWeight: "600",
-    lineHeight: 16,
-    marginTop: 4,
+    lineHeight: 17,
+    marginTop: 2,
   },
-  toolFooter: {
+  tagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 8,
+  },
+  tagChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: "rgba(3,7,8,0.5)",
+  },
+  tagText: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  openRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     marginTop: 10,
   },
-  toolDot: { width: 5, height: 5, borderRadius: 3 },
-  toolOpen: {
+  openText: {
     fontSize: 11,
     fontWeight: "900",
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
   },
 
   empty: {
@@ -782,11 +461,7 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     alignItems: "center",
   },
-  emptyTitle: {
-    color: Colors.text,
-    fontSize: 16,
-    fontWeight: "900",
-  },
+  emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: "900" },
   emptyBody: {
     color: Colors.muted,
     fontSize: 13,
@@ -814,6 +489,3 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-
-const _trend = TrendingUp;
-void _trend;
