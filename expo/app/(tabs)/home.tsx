@@ -3,6 +3,7 @@ import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
   BadgeCheck,
@@ -20,6 +21,8 @@ import {
   Sparkles,
   TrendingDown,
   TrendingUp,
+  Waves,
+  Zap,
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -44,6 +47,8 @@ import {
   useJupiterPrices,
   useTrendingTokens,
 } from "@/lib/api/market";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchToken } from "@/types/launchpad";
 import { UserPost, useApp } from "@/providers/app-provider";
@@ -51,9 +56,17 @@ import { UserPost, useApp } from "@/providers/app-provider";
 const FILTERS = ["For You", "Following", "Trending", "New Pairs", "Whales"] as const;
 type Filter = (typeof FILTERS)[number];
 
+type FeedItem =
+  | { kind: "user"; data: UserPost }
+  | { kind: "sample"; data: FeedPost }
+  | { kind: "token"; data: LaunchToken };
+
 export default function HomeFeedScreen() {
   const router = useRouter();
   const { posts: userPosts, togglePostLike, deletePost, profile } = useApp();
+  const { listings } = useLaunchpad();
+  const { data: trendingTokens } = useTrendingTokens(20);
+  const { userId, isAuthenticated } = useAuth();
   const [filter, setFilter] = useState<Filter>("For You");
 
   const onSelectFilter = useCallback((next: Filter) => {
@@ -61,35 +74,134 @@ export default function HomeFeedScreen() {
     setFilter(next);
   }, []);
 
-  const combined = useMemo<(UserPost | FeedPost)[]>(() => {
-    if (filter === "Following") return userPosts;
-    return [...userPosts, ...FEED_POSTS];
-  }, [filter, userPosts]);
+  const followingPostsQ = useQuery<UserPost[]>({
+    queryKey: ["home", "following-feed", userId ?? "guest"],
+    enabled: isAuthenticated && !!userId && filter === "Following",
+    queryFn: async () => {
+      if (!userId) return [];
+      try {
+        const { data: follows } = await supabase
+          .from("followers")
+          .select("following_id")
+          .eq("follower_id", userId);
+        const ids = (follows ?? []).map((r) => r.following_id as string);
+        if (ids.length === 0) return [];
+        const { data } = await supabase
+          .from("community_posts")
+          .select("id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
+          .in("user_id", ids)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        return (data ?? []).map((row): UserPost => ({
+          id: row.id as string,
+          text: (row.content as string) ?? "",
+          ticker: (row.ticker as string) ?? undefined,
+          changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
+          images: row.image_url ? [row.image_url as string] : undefined,
+          createdAt: new Date(row.created_at as string).getTime(),
+          likes: (row.likes_count as number) ?? 0,
+          reposts: (row.reposts_count as number) ?? 0,
+          comments: (row.comments_count as number) ?? 0,
+          liked: false,
+        }));
+      } catch (e) {
+        console.log("[home] following feed failed", e);
+        return [];
+      }
+    },
+    staleTime: 30_000,
+  });
+
+  const combined = useMemo<FeedItem[]>(() => {
+    if (filter === "Following") {
+      const remote = followingPostsQ.data ?? [];
+      return remote.map((p): FeedItem => ({ kind: "user", data: p }));
+    }
+    if (filter === "Trending") {
+      const tokens =
+        (trendingTokens ?? [])
+          .map((t, i): LaunchToken => ({
+            id: t.address,
+            name: t.name ?? t.symbol ?? "Token",
+            ticker: (t.symbol ?? "").toUpperCase(),
+            description: "",
+            logoUrl: t.logoURI ?? null,
+            bannerUrl: null,
+            contract: t.address,
+            venue: "other",
+            status: "live",
+            tags: [],
+            featured: false,
+            hot: (t.priceChange24h ?? 0) > 20,
+            verified: false,
+            createdAt: Date.now() - i * 60_000,
+            submittedBy: "system",
+            price: t.price ?? null,
+            change24hPct: t.priceChange24h ?? null,
+            liquidityUsd: t.liquidity ?? null,
+            marketCapUsd: t.marketCap ?? null,
+            volume24hUsd: null,
+            holders: t.holder ?? null,
+            upvotes: 0,
+            watchers: 0,
+          }));
+      const fallback = listings.slice().sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0));
+      return (tokens.length > 0 ? tokens : fallback).map((t): FeedItem => ({ kind: "token", data: t }));
+    }
+    if (filter === "New Pairs") {
+      return listings
+        .slice()
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 30)
+        .map((t): FeedItem => ({ kind: "token", data: t }));
+    }
+    if (filter === "Whales") {
+      return listings
+        .slice()
+        .filter((t) => (t.holders ?? 0) > 100 || (t.volume24hUsd ?? 0) > 50_000 || (t.liquidityUsd ?? 0) > 100_000)
+        .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0))
+        .slice(0, 30)
+        .map((t): FeedItem => ({ kind: "token", data: t }));
+    }
+    const userItems: FeedItem[] = userPosts.map((p) => ({ kind: "user", data: p }));
+    const sampleItems: FeedItem[] = FEED_POSTS.map((p) => ({ kind: "sample", data: p }));
+    return [...userItems, ...sampleItems];
+  }, [filter, userPosts, followingPostsQ.data, listings, trendingTokens]);
 
   const openCompose = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     router.push("/compose");
   }, [router]);
 
-  const renderPost: ListRenderItem<UserPost | FeedPost> = useCallback(
+  const renderPost: ListRenderItem<FeedItem> = useCallback(
     ({ item }) => {
-      if ("createdAt" in item) {
+      if (item.kind === "token") {
+        return (
+          <TokenFeedRow
+            token={item.data}
+            onPress={() =>
+              router.push({ pathname: "/launch/[id]", params: { id: item.data.id } })
+            }
+          />
+        );
+      }
+      if (item.kind === "user") {
         return (
           <UserPostCard
-            post={item}
+            post={item.data}
             displayName={profile.displayName}
             handle={profile.handle}
             avatarColor={profile.avatarColor}
             avatarUrl={profile.avatarUrl}
             verified={profile.verified}
-            onLike={() => togglePostLike(item.id)}
-            onDelete={() => deletePost(item.id)}
+            onLike={() => togglePostLike(item.data.id)}
+            onDelete={() => deletePost(item.data.id)}
           />
         );
       }
-      return <PostCard post={item} />;
+      return <PostCard post={item.data} />;
     },
-    [profile, togglePostLike, deletePost],
+    [profile, togglePostLike, deletePost, router],
   );
 
   return (
@@ -159,7 +271,7 @@ export default function HomeFeedScreen() {
 
         <FlatList
           data={combined}
-          keyExtractor={(p) => p.id}
+          keyExtractor={(p) => `${p.kind}-${p.data.id}`}
           renderItem={renderPost}
           ListHeaderComponent={
             <FeedHeader
@@ -170,7 +282,7 @@ export default function HomeFeedScreen() {
               onCompose={openCompose}
             />
           }
-          ListEmptyComponent={<FeedEmpty onCompose={openCompose} />}
+          ListEmptyComponent={<FeedEmpty filter={filter} onCompose={openCompose} />}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -221,7 +333,17 @@ function FeedHeader({
         onPress={onCompose}
       />
       <View style={styles.feedTitleRow}>
-        <Text style={styles.feedTitle}>{filter === "Following" ? "Following" : "Live feed"}</Text>
+        <Text style={styles.feedTitle}>
+          {filter === "Following"
+            ? "Following"
+            : filter === "Trending"
+              ? "Trending tokens"
+              : filter === "New Pairs"
+                ? "New pairs"
+                : filter === "Whales"
+                  ? "Whale activity"
+                  : "Live feed"}
+        </Text>
         <View style={styles.livePill}>
           <View style={styles.liveDot} />
           <Text style={styles.liveText}>LIVE</Text>
@@ -659,16 +781,22 @@ function UserPostCard({
   );
 }
 
-function FeedEmpty({ onCompose }: { onCompose: () => void }) {
+function FeedEmpty({ filter, onCompose }: { filter: Filter; onCompose: () => void }) {
+  const titles: Record<Filter, { title: string; body: string; Icon: typeof Inbox }> = {
+    "For You": { title: "The feed is quiet", body: "Be the first to drop alpha. Share a chart, a token call, or a hot take.", Icon: Inbox },
+    Following: { title: "No following yet", body: "Follow traders to see their posts here. Tap a profile to follow.", Icon: Heart },
+    Trending: { title: "No trending tokens", body: "Trending tokens will appear once live market data loads.", Icon: Flame },
+    "New Pairs": { title: "No new pairs", body: "Newly launched Solana pairs will surface here in real time.", Icon: Zap },
+    Whales: { title: "No whale moves", body: "Large holder & high-volume tokens will appear here.", Icon: Waves },
+  };
+  const c = titles[filter];
   return (
     <View style={styles.feedEmpty} testID="feed-empty">
       <View style={styles.feedEmptyIcon}>
-        <Inbox color={Colors.mint} size={26} strokeWidth={2.2} />
+        <c.Icon color={Colors.mint} size={26} strokeWidth={2.2} />
       </View>
-      <Text style={styles.feedEmptyTitle}>The feed is quiet</Text>
-      <Text style={styles.feedEmptyBody}>
-        Be the first to drop alpha. Share a chart, a token call, or a hot take.
-      </Text>
+      <Text style={styles.feedEmptyTitle}>{c.title}</Text>
+      <Text style={styles.feedEmptyBody}>{c.body}</Text>
       <Pressable onPress={onCompose} style={styles.feedEmptyBtn} testID="empty-compose">
         <LinearGradient
           colors={[Colors.mint, Colors.cyan]}
@@ -681,6 +809,43 @@ function FeedEmpty({ onCompose }: { onCompose: () => void }) {
         </LinearGradient>
       </Pressable>
     </View>
+  );
+}
+
+function TokenFeedRow({ token, onPress }: { token: LaunchToken; onPress: () => void }) {
+  const change = token.change24hPct ?? 0;
+  const positive = change >= 0;
+  const accent = positive ? Colors.mint : Colors.rose;
+  const ageMin = Math.max(1, Math.floor((Date.now() - token.createdAt) / 60_000));
+  return (
+    <Pressable onPress={onPress} style={styles.tokenRow} testID={`token-row-${token.id}`}>
+      <TokenAvatar uri={token.logoUrl} ticker={token.ticker} size={44} radius={14} />
+      <View style={styles.tokenMid}>
+        <View style={styles.tokenTopRow}>
+          <Text style={styles.tokenTicker} numberOfLines={1}>${token.ticker.replace("$", "")}</Text>
+          {token.hot ? <Flame color={Colors.orange} size={11} strokeWidth={3} /> : null}
+          <Text style={styles.tokenName} numberOfLines={1}>{token.name}</Text>
+        </View>
+        <Text style={styles.tokenStats} numberOfLines={1}>
+          {token.price && token.price > 0
+            ? `${token.price < 0.01 ? token.price.toFixed(6) : token.price.toFixed(token.price < 1 ? 4 : 2)} · `
+            : ""}
+          MC {formatCompactUsd(token.marketCapUsd ?? undefined)} · LIQ {formatCompactUsd(token.liquidityUsd ?? undefined)} · {ageMin}m
+        </Text>
+      </View>
+      {change !== 0 || token.change24hPct != null ? (
+        <View style={[styles.tokenChange, { backgroundColor: `${accent}1A`, borderColor: `${accent}55` }]}>
+          {positive ? (
+            <TrendingUp color={accent} size={12} strokeWidth={3} />
+          ) : (
+            <TrendingDown color={accent} size={12} strokeWidth={3} />
+          )}
+          <Text style={[styles.tokenChangeText, { color: accent }]}>
+            {positive ? "+" : ""}{change.toFixed(1)}%
+          </Text>
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -1413,6 +1578,28 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  tokenRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  tokenMid: { flex: 1 },
+  tokenTopRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  tokenTicker: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.3 },
+  tokenName: { color: Colors.muted, fontSize: 12, fontWeight: "700", flexShrink: 1 },
+  tokenStats: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 4 },
+  tokenChange: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  tokenChangeText: { fontSize: 12, fontWeight: "900" },
   fab: {
     position: "absolute",
     right: 18,
