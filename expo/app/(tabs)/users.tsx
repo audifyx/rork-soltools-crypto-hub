@@ -29,6 +29,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import LeaderboardCard from "@/components/users/LeaderboardCard";
 import { useAuth } from "@/providers/auth-provider";
 import {
   useProfileProvider,
@@ -179,6 +180,8 @@ export default function UsersScreen() {
             />
           }
         >
+          <LeaderboardCard />
+
           {list.isLoading ? (
             <View style={styles.loading}>
               <ActivityIndicator color={Colors.mint} />

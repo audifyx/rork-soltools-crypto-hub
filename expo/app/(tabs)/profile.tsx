@@ -73,6 +73,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import PortfolioCard from "@/components/profile/PortfolioCard";
 import { useAdmin } from "@/providers/admin-provider";
 import { useApp, type Currency, type Language, type ThemeMode, type UserPrefs } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
@@ -758,6 +759,8 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
+
+          <PortfolioCard />
 
           <View style={styles.statsGrid}>
             <StatCard label="WATCHING" value={stats.watching} accent={Colors.mint} Icon={Eye} />

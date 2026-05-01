@@ -52,6 +52,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import TokenAvatar from "@/components/TokenAvatar";
+import AlphaInsightsCard from "@/components/discover/AlphaInsightsCard";
 import Colors from "@/constants/colors";
 import { fmtUsd, fmtPrice } from "@/utils/format";
 import { useApp } from "@/providers/app-provider";
@@ -488,6 +489,8 @@ function DiscoverHeader({
           Icon={Sparkles}
         />
       </View>
+
+      <AlphaInsightsCard />
 
       {featuredSpotlight.length > 0 ? (
         <View style={styles.spotlightWrap}>

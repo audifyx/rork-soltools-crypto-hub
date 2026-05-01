@@ -38,6 +38,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import TokenAvatar from "@/components/TokenAvatar";
+import LiveTicker from "@/components/ui/LiveTicker";
+import StoriesRail from "@/components/home/StoriesRail";
+import VoiceRoomsRail from "@/components/home/VoiceRoomsRail";
 import Colors from "@/constants/colors";
 import { fmtPrice } from "@/utils/format";
 
@@ -381,11 +384,20 @@ function FeedHeader({
   avatarUrl?: string;
   onCompose: () => void;
 }) {
+  const router = useRouter();
   return (
     <View style={styles.headerStack}>
       {filter === "For You" ? (
         <>
+          <View style={styles.tickerWrap}>
+            <LiveTicker />
+          </View>
+          <StoriesRail
+            onCompose={onCompose}
+            onOpenUser={(handle) => router.push({ pathname: "/u/[handle]", params: { handle } })}
+          />
           <MarketStrip />
+          <VoiceRoomsRail />
           <TrendingPairsRail />
           <TrendingTopics />
         </>
@@ -1112,6 +1124,15 @@ const styles = StyleSheet.create({
 
   headerStack: {
     paddingTop: 14,
+  },
+  tickerWrap: {
+    marginHorizontal: 14,
+    marginBottom: 6,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(8,12,16,0.65)",
   },
 
   composer: {
