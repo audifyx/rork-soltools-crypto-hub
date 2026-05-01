@@ -30,6 +30,7 @@ import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { useTokenOverview } from "@/lib/api/market";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 
 function shortAddress(addr: string): string {
@@ -53,6 +54,12 @@ export default function LaunchDetailScreen() {
   const [watching, setWatching] = useState<boolean>(false);
 
   const token = id ? getById(id) : null;
+  const { data: overview } = useTokenOverview(token?.contract ?? null);
+  const livePrice = overview?.price ?? token?.price ?? null;
+  const liveChange = overview?.priceChange24h ?? token?.change24hPct ?? null;
+  const liveLiq = overview?.liquidity ?? token?.liquidityUsd ?? null;
+  const liveMc = overview?.marketCap ?? token?.marketCapUsd ?? null;
+  const liveHolders = overview?.holder ?? token?.holders ?? null;
 
   const onCopy = useCallback(async () => {
     if (!token) return;
@@ -97,7 +104,7 @@ export default function LaunchDetailScreen() {
     toggleUpvote(token.id);
   }, [token, toggleUpvote]);
 
-  const positive = useMemo(() => (token?.change24hPct ?? 0) >= 0, [token]);
+  const positive = useMemo(() => (liveChange ?? 0) >= 0, [liveChange]);
   const accent = positive ? Colors.mint : Colors.rose;
 
   if (!token) {
@@ -228,9 +235,11 @@ export default function LaunchDetailScreen() {
             <Text style={styles.priceLabel}>Current price</Text>
             <View style={styles.priceRow}>
               <Text style={styles.priceValue}>
-                {token.price != null ? `$${token.price.toFixed(token.price < 1 ? 6 : 4)}` : "—"}
+                {livePrice != null && livePrice > 0
+                  ? `${livePrice.toFixed(livePrice < 1 ? 6 : 4)}`
+                  : "—"}
               </Text>
-              {token.change24hPct != null ? (
+              {liveChange != null ? (
                 <View style={[styles.changeBadge, { backgroundColor: `${accent}1A`, borderColor: `${accent}55` }]}>
                   {positive ? (
                     <TrendingUp color={accent} size={12} strokeWidth={3} />
@@ -239,21 +248,25 @@ export default function LaunchDetailScreen() {
                   )}
                   <Text style={[styles.changeText, { color: accent }]}>
                     {positive ? "+" : ""}
-                    {token.change24hPct.toFixed(2)}%
+                    {liveChange.toFixed(2)}%
                   </Text>
                 </View>
               ) : null}
             </View>
-            <View style={styles.chartPlaceholder}>
-              <Text style={styles.chartPlaceholderText}>Live chart connects when backend is online</Text>
-            </View>
+            <Pressable
+              onPress={() => openLink(`https://birdeye.so/token/${token.contract}?chain=solana`)}
+              style={styles.chartPlaceholder}
+              testID="open-birdeye"
+            >
+              <Text style={styles.chartPlaceholderText}>Open live chart on Birdeye →</Text>
+            </Pressable>
           </View>
 
           <View style={styles.metricsGrid}>
-            <Metric label="Liquidity" value={formatUsd(token.liquidityUsd)} />
-            <Metric label="Market cap" value={formatUsd(token.marketCapUsd)} />
+            <Metric label="Liquidity" value={formatUsd(liveLiq)} />
+            <Metric label="Market cap" value={formatUsd(liveMc)} />
             <Metric label="24h volume" value={formatUsd(token.volume24hUsd)} />
-            <Metric label="Holders" value={token.holders ? token.holders.toLocaleString() : "—"} />
+            <Metric label="Holders" value={liveHolders ? liveHolders.toLocaleString() : "—"} />
           </View>
 
           <View style={styles.actionRow}>

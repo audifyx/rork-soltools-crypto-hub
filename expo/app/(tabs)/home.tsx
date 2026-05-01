@@ -32,7 +32,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import { FEED_POSTS, FeedPost, TRENDING_PAIRS, TRENDING_TOPICS, TrendingPair } from "@/constants/feed";
+import { FEED_POSTS, FeedPost, TRENDING_TOPICS, TrendingPair } from "@/constants/feed";
+import { BONK_MINT, JUP_MINT, SOL_MINT, useJupiterPrices, useTrendingTokens } from "@/lib/api/market";
 import { UserPost, useApp } from "@/providers/app-provider";
 
 const FILTERS = ["For You", "Trending", "New Pairs", "Whales", "Following"] as const;
@@ -164,6 +165,10 @@ function FeedHeader() {
 }
 
 function MarketStrip() {
+  const { data, isLoading } = useJupiterPrices([SOL_MINT, BONK_MINT, JUP_MINT]);
+  const sol = data?.[SOL_MINT]?.price;
+  const bonk = data?.[BONK_MINT]?.price;
+  const jup = data?.[JUP_MINT]?.price;
   return (
     <View style={styles.marketCard}>
       <LinearGradient
@@ -173,31 +178,78 @@ function MarketStrip() {
         style={styles.marketGradient}
       >
         <View style={styles.marketRow}>
-          <MarketTile label="SOL" />
+          <MarketTile label="SOL" price={sol} loading={isLoading} />
           <View style={styles.marketDivider} />
-          <MarketTile label="MEME IDX" />
+          <MarketTile label="BONK" price={bonk} loading={isLoading} digits={8} />
           <View style={styles.marketDivider} />
-          <MarketTile label="GAS" />
+          <MarketTile label="JUP" price={jup} loading={isLoading} />
         </View>
       </LinearGradient>
     </View>
   );
 }
 
-function MarketTile({ label }: { label: string }) {
+function MarketTile({
+  label,
+  price,
+  loading,
+  digits = 2,
+}: {
+  label: string;
+  price?: number;
+  loading?: boolean;
+  digits?: number;
+}) {
+  const display =
+    price != null && price > 0
+      ? `${price < 1 ? price.toFixed(digits) : price.toFixed(2)}`
+      : loading
+        ? "…"
+        : "—";
   return (
     <View style={styles.marketTile}>
       <Text style={styles.marketLabel}>{label}</Text>
-      <Text style={styles.marketValue}>—</Text>
+      <Text style={styles.marketValue}>{display}</Text>
       <View style={styles.marketChangeRow}>
-        <Text style={[styles.marketChange, { color: Colors.muted }]}>awaiting data</Text>
+        <Text style={[styles.marketChange, { color: price ? Colors.mint : Colors.muted }]}>
+          {price ? "live" : loading ? "loading" : "awaiting data"}
+        </Text>
       </View>
     </View>
   );
 }
 
 function TrendingPairsRail() {
-  const hasPairs = TRENDING_PAIRS.length > 0;
+  const { data: trending } = useTrendingTokens(10);
+  const pairs: TrendingPair[] = (trending ?? []).slice(0, 10).map((t, i) => ({
+    id: t.address,
+    ticker: `${(t.symbol ?? "").toUpperCase()}`,
+    name: t.name ?? t.symbol ?? "Token",
+    mc: formatCompactUsd(t.marketCap),
+    liq: formatCompactUsd(t.liquidity),
+    changePct: t.priceChange24h ?? 0,
+    ageMin: i + 1,
+    holders: t.holder ?? 0,
+    avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length],
+    hot: (t.priceChange24h ?? 0) > 20,
+  }));
+  const hasPairs = pairs.length > 0;
+  return (
+    <TrendingPairsRailInner pairs={pairs} hasPairs={hasPairs} />
+  );
+}
+
+const AVATAR_COLORS = [Colors.mint, Colors.cyan, Colors.orange, Colors.rose, "#FFB84C"];
+
+function formatCompactUsd(n?: number): string {
+  if (!n || n === 0) return "—";
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return `${n.toFixed(0)}`;
+}
+
+function TrendingPairsRailInner({ pairs, hasPairs }: { pairs: TrendingPair[]; hasPairs: boolean }) {
   return (
     <View style={styles.railWrap}>
       <View style={styles.railHeader}>
@@ -215,7 +267,7 @@ function TrendingPairsRail() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.railContent}
         >
-          {TRENDING_PAIRS.map((p) => (
+          {pairs.map((p) => (
             <PairCard key={p.id} pair={p} />
           ))}
         </ScrollView>

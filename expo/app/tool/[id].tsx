@@ -70,7 +70,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { getTokenOverview, getTokenSecurity } from "@/lib/api/birdeye";
+import { getLiveKitToken } from "@/lib/api/livekit";
+import { useTrendingTokens } from "@/lib/api/market";
 import { AlertItem, useApp } from "@/providers/app-provider";
+import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
@@ -484,11 +488,42 @@ interface ScanRecord {
   status: "pending" | "ready";
 }
 
+type ScanResult = {
+  riskScore: number;
+  isHoneypot: boolean;
+  buyTax?: number;
+  sellTax?: number;
+  lpLocked?: boolean;
+  topHoldersPct?: number;
+  symbol?: string;
+  name?: string;
+  price?: number;
+  liquidity?: number;
+  marketCap?: number;
+  holders?: number;
+};
+
+function labelForCheck(label: string, r: ScanResult | null): string {
+  if (!r) return "—";
+  const l = label.toLowerCase();
+  if (l.includes("buy") && l.includes("tax")) return r.buyTax != null ? `${r.buyTax}%` : "—";
+  if (l.includes("sell") && l.includes("tax")) return r.sellTax != null ? `${r.sellTax}%` : "—";
+  if (l.includes("lp")) return r.lpLocked == null ? "—" : r.lpLocked ? "LOCKED" : "OPEN";
+  if (l.includes("top 10") || l.includes("top holder"))
+    return r.topHoldersPct != null ? `${r.topHoldersPct.toFixed(1)}%` : "—";
+  if (l.includes("buy/sell simulation") || l.includes("buy simulation") || l.includes("sell simulation"))
+    return r.isHoneypot ? "FAIL" : "PASS";
+  if (l.includes("holder")) return r.holders ? r.holders.toLocaleString() : "—";
+  return "—";
+}
+
 function ContractScanTool({ accent, kind }: { accent: string; kind: string }) {
   const [contract, setContract] = useState<string>("");
   const [scanning, setScanning] = useState<boolean>(false);
   const [history, setHistory] = useState<ScanRecord[]>([]);
   const [scanned, setScanned] = useState<boolean>(false);
+  const [result, setResult] = useState<ScanResult | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   const onPaste = useCallback(async () => {
     try {
@@ -499,25 +534,57 @@ function ContractScanTool({ accent, kind }: { accent: string; kind: string }) {
     }
   }, []);
 
-  const onScan = useCallback(() => {
-    if (contract.trim().length < 32) {
+  const onScan = useCallback(async () => {
+    const c = contract.trim();
+    if (c.length < 32) {
       Alert.alert("Invalid contract", "Paste a Solana token contract address.");
       return;
     }
     setScanning(true);
     setScanned(false);
+    setScanError(null);
     Haptics.selectionAsync().catch(() => {});
-    setTimeout(() => {
-      setScanning(false);
+    try {
+      const [security, overview] = await Promise.all([
+        getTokenSecurity(c).catch((e) => {
+          console.log("[scan] security err", e);
+          return null;
+        }),
+        getTokenOverview(c).catch((e) => {
+          console.log("[scan] overview err", e);
+          return null;
+        }),
+      ]);
+      const merged: ScanResult = {
+        riskScore: security?.riskScore ?? 0,
+        isHoneypot: security?.isHoneypot ?? false,
+        buyTax: security?.buyTax,
+        sellTax: security?.sellTax,
+        lpLocked: security?.lpLocked,
+        topHoldersPct: security?.topHoldersPct,
+        symbol: overview?.symbol,
+        name: overview?.name,
+        price: overview?.price,
+        liquidity: overview?.liquidity,
+        marketCap: overview?.marketCap,
+        holders: overview?.holder,
+      };
+      setResult(merged);
       setScanned(true);
       const rec: ScanRecord = {
         id: `${Date.now()}`,
-        contract: contract.trim(),
+        contract: c,
         at: Date.now(),
-        status: "pending",
+        status: "ready",
       };
       setHistory((h) => [rec, ...h].slice(0, 8));
-    }, 900);
+    } catch (e) {
+      console.log("[scan] failed", e);
+      setScanError(e instanceof Error ? e.message : "Scan failed");
+      setScanned(true);
+    } finally {
+      setScanning(false);
+    }
   }, [contract]);
 
   const titleByKind: Record<string, string> = {
@@ -596,28 +663,43 @@ function ContractScanTool({ accent, kind }: { accent: string; kind: string }) {
         <View style={[styles.resultCard, { borderColor: `${accent}33` }]}>
           <View style={styles.resultHead}>
             <Text style={styles.resultEyebrow}>RISK SCORE</Text>
-            <View style={[styles.resultPending, { borderColor: `${accent}55` }]}>
-              <Loader2 color={accent} size={11} strokeWidth={2.6} />
-              <Text style={[styles.resultPendingText, { color: accent }]}>AWAITING DATA</Text>
-            </View>
+            {scanError ? (
+              <View style={[styles.resultPending, { borderColor: `${Colors.rose}55` }]}>
+                <AlertTriangle color={Colors.rose} size={11} strokeWidth={2.6} />
+                <Text style={[styles.resultPendingText, { color: Colors.rose }]}>ERROR</Text>
+              </View>
+            ) : result ? (
+              <View style={[styles.resultPending, { borderColor: `${accent}55` }]}>
+                <CheckCircle2 color={accent} size={11} strokeWidth={2.6} />
+                <Text style={[styles.resultPendingText, { color: accent }]}>LIVE</Text>
+              </View>
+            ) : null}
           </View>
-          <Text style={styles.resultScore}>—/100</Text>
+          <Text style={styles.resultScore}>
+            {result ? `${Math.round(result.riskScore)}/100` : "—/100"}
+          </Text>
           <Text style={styles.resultBody}>
-            Risk evaluation is queued. Plug in a scanner provider (RugCheck, Birdeye, Helius) to
-            populate live results.
+            {scanError
+              ? scanError
+              : result?.symbol
+                ? `${result.name ?? result.symbol} · ${result.symbol}`
+                : "Scan complete."}
           </Text>
           <View style={styles.resultGrid}>
-            {checks.map((c) => (
-              <View key={c.label} style={styles.resultGridItem}>
-                <View style={[styles.checkIcon, { backgroundColor: `${accent}1A` }]}>
-                  <c.Icon color={accent} size={12} strokeWidth={2.6} />
+            {checks.map((c) => {
+              const value = labelForCheck(c.label, result);
+              return (
+                <View key={c.label} style={styles.resultGridItem}>
+                  <View style={[styles.checkIcon, { backgroundColor: `${accent}1A` }]}>
+                    <c.Icon color={accent} size={12} strokeWidth={2.6} />
+                  </View>
+                  <Text style={styles.resultGridLabel} numberOfLines={2}>
+                    {c.label}
+                  </Text>
+                  <Text style={styles.resultGridValue}>{value}</Text>
                 </View>
-                <Text style={styles.resultGridLabel} numberOfLines={2}>
-                  {c.label}
-                </Text>
-                <Text style={styles.resultGridValue}>—</Text>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </View>
       )}
@@ -671,24 +753,48 @@ function AiAnalystTool({ accent }: { accent: string }) {
   const [thinking, setThinking] = useState<boolean>(false);
   const [model, setModel] = useState<"gemini" | "gpt" | "claude">("gemini");
 
-  const onSend = useCallback(() => {
+  const onSend = useCallback(async () => {
     const text = input.trim();
     if (!text) return;
     const u: Msg = { id: `u${Date.now()}`, role: "user", text };
-    setMessages((m) => [...m, u]);
+    const history = [...messages, u];
+    setMessages(history);
     setInput("");
     setThinking(true);
     Haptics.selectionAsync().catch(() => {});
-    setTimeout(() => {
+    try {
+      const base = process.env.EXPO_PUBLIC_TOOLKIT_URL ?? "https://toolkit.rork.com";
+      const res = await fetch(`${base}/text/llm/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are SolTools AI Analyst, an expert on Solana DeFi, memecoins, on-chain analysis, charting, and tokenomics. Be sharp, concise, actionable.",
+            },
+            ...history.map((m) => ({ role: m.role, content: m.text })),
+          ],
+        }),
+      });
+      if (!res.ok) throw new Error(`LLM ${res.status}`);
+      const json = (await res.json()) as { completion?: string };
+      const reply = json.completion ?? "No response.";
+      const a: Msg = { id: `a${Date.now()}`, role: "assistant", text: reply };
+      setMessages((m) => [...m, a]);
+    } catch (e) {
+      console.log("[ai] failed", e);
       const a: Msg = {
         id: `a${Date.now()}`,
         role: "assistant",
-        text: "Connect an AI provider to enable live analysis. Your prompt is queued and ready.",
+        text: e instanceof Error ? `Error: ${e.message}` : "AI request failed.",
       };
       setMessages((m) => [...m, a]);
+    } finally {
       setThinking(false);
-    }, 800);
-  }, [input]);
+    }
+  }, [input, messages]);
 
   const onClear = useCallback(() => {
     setMessages([]);
@@ -1076,20 +1182,39 @@ function VoiceLobbyTool({ accent }: { accent: string }) {
   const [lobbyName, setLobbyName] = useState<string>("");
   const [privateRoom, setPrivateRoom] = useState<boolean>(false);
   const [members, setMembers] = useState<LobbyMember[]>([]);
+  const [lobbyToken, setLobbyToken] = useState<string | null>(null);
+  const [joining, setJoining] = useState<boolean>(false);
+  const { user, email } = useAuth();
 
-  const onJoin = useCallback(() => {
+  const onJoin = useCallback(async () => {
     if (!lobbyName.trim()) {
       Alert.alert("Lobby name", "Pick a lobby to join.");
       return;
     }
-    setInLobby(true);
-    setMembers([{ id: "me", handle: "you", speaking: false, muted: true }]);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-  }, [lobbyName]);
+    const handle = (email ?? "you").split("@")[0];
+    setJoining(true);
+    try {
+      const tok = await getLiveKitToken({
+        room: lobbyName.trim(),
+        identity: user?.id ?? handle,
+        name: handle,
+      });
+      setLobbyToken(tok.token);
+      setInLobby(true);
+      setMembers([{ id: user?.id ?? "me", handle, speaking: false, muted: true }]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch (e) {
+      console.log("[lobby] token failed", e);
+      Alert.alert("Lobby unavailable", e instanceof Error ? e.message : "Could not connect.");
+    } finally {
+      setJoining(false);
+    }
+  }, [lobbyName, user, email]);
 
   const onLeave = useCallback(() => {
     setInLobby(false);
     setMembers([]);
+    setLobbyToken(null);
     Haptics.selectionAsync().catch(() => {});
   }, []);
 
@@ -1199,9 +1324,17 @@ function VoiceLobbyTool({ accent }: { accent: string }) {
                 thumbColor={privateRoom ? Colors.ink : Colors.muted}
               />
             </View>
-            <Pressable onPress={onJoin} style={[styles.primaryBtn, { backgroundColor: accent }]}>
-              <Mic color={Colors.ink} size={15} strokeWidth={3} />
-              <Text style={styles.primaryBtnText}>Open lobby</Text>
+            <Pressable
+              onPress={onJoin}
+              disabled={joining}
+              style={[styles.primaryBtn, { backgroundColor: accent }, joining && { opacity: 0.6 }]}
+            >
+              {joining ? (
+                <Loader2 color={Colors.ink} size={15} strokeWidth={3} />
+              ) : (
+                <Mic color={Colors.ink} size={15} strokeWidth={3} />
+              )}
+              <Text style={styles.primaryBtnText}>{joining ? "Connecting…" : "Open lobby"}</Text>
             </Pressable>
           </View>
           <SectionHead title="Public rooms" accent={accent} />
@@ -1570,14 +1703,30 @@ function WhaleRadarTool({ accent }: { accent: string }) {
 
 function TokenStreamTool({ accent, kind }: { accent: string; kind: string }) {
   const { listings } = useLaunchpad();
+  const { data: trending } = useTrendingTokens(30);
   const [tf, setTf] = useState<"1h" | "24h" | "7d">("24h");
 
   const items = useMemo(() => {
+    if (kind === "trending" && trending && trending.length > 0) {
+      return trending.map((t) => ({
+        id: t.address,
+        name: t.name ?? t.symbol ?? "Token",
+        ticker: (t.symbol ?? "").toUpperCase(),
+        venue: "birdeye",
+        change24hPct: t.priceChange24h ?? null,
+      }));
+    }
     const sorted = [...listings];
     if (kind === "new-pairs") sorted.sort((a, b) => b.createdAt - a.createdAt);
     if (kind === "trending") sorted.sort((a, b) => b.upvotes - a.upvotes);
-    return sorted.slice(0, 30);
-  }, [listings, kind]);
+    return sorted.slice(0, 30).map((t) => ({
+      id: t.id,
+      name: t.name,
+      ticker: t.ticker,
+      venue: t.venue,
+      change24hPct: t.change24hPct,
+    }));
+  }, [listings, kind, trending]);
 
   return (
     <View>
