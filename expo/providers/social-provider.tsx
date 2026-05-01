@@ -220,6 +220,7 @@ function rowToSpace(row: SpaceRow, hostHandle: string, hostName: string): Space 
 
 const KEY_FOLLOW_SPACES = "soltools.social.followspaces.v1";
 const KEY_JOINED_GUEST = "soltools.social.joined.guest.v1";
+const KEY_LOCAL_COMMUNITIES = "soltools.social.communities.local.v1";
 
 async function loadJson<T>(key: string, fallback: T): Promise<T> {
   try {
@@ -247,17 +248,20 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
 
   const [followingSpaces, setFollowingSpaces] = useState<string[]>([]);
   const [guestJoined, setGuestJoined] = useState<string[]>([]);
+  const [localCommunities, setLocalCommunities] = useState<Community[]>([]);
 
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [f, gj] = await Promise.all([
+      const [f, gj, lc] = await Promise.all([
         loadJson<string[]>(followKey, []),
         loadJson<string[]>(KEY_JOINED_GUEST, []),
+        loadJson<Community[]>(KEY_LOCAL_COMMUNITIES, []),
       ]);
       if (!alive) return;
       setFollowingSpaces(f);
       setGuestJoined(gj);
+      setLocalCommunities(lc);
     })();
     return () => {
       alive = false;
@@ -368,7 +372,13 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     staleTime: 15_000,
   });
 
-  const communities = communitiesQ.data ?? [];
+  const remoteCommunities = communitiesQ.data ?? [];
+  const communities = useMemo<Community[]>(() => {
+    if (localCommunities.length === 0) return remoteCommunities;
+    const seen = new Set(remoteCommunities.map((c) => c.id));
+    const fresh = localCommunities.filter((c) => !seen.has(c.id));
+    return [...fresh, ...remoteCommunities];
+  }, [remoteCommunities, localCommunities]);
   const spaces = spacesQ.data ?? [];
   const joined = myMembershipsQ.data ?? [];
 
@@ -616,6 +626,93 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     [qc],
   );
 
+  const createCommunity = useCallback(
+    async (input: {
+      name: string;
+      handle: string;
+      description: string;
+      category: Community["category"];
+      iconEmoji: string;
+      accent: [string, string];
+      tags: string[];
+      rules: string[];
+      isPrivate?: boolean;
+      ownerHandle?: string;
+    }): Promise<Community> => {
+      const slug = input.handle.replace(/^@/, "").toLowerCase();
+      const id = `local-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 7)}`;
+      const community: Community = {
+        id,
+        name: input.name.trim(),
+        handle: slug,
+        description: input.description.trim(),
+        category: input.category,
+        members: 1,
+        posts: 0,
+        online: 1,
+        verified: false,
+        trending: false,
+        accent: input.accent,
+        iconEmoji: input.iconEmoji,
+        bannerSeed: slug || id,
+        ownerHandle: input.ownerHandle ?? "",
+        createdAt: Date.now(),
+        rules: input.rules.filter((r) => r.trim().length > 0),
+        tags: input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean),
+      };
+
+      // Try persisting to Supabase if authenticated; ignore errors.
+      if (isAuthenticated && userId) {
+        try {
+          const { data } = await supabase
+            .from("communities")
+            .insert({
+              name: community.name,
+              slug: community.handle,
+              description: community.description,
+              owner_id: userId,
+              category: community.category,
+              icon_emoji: community.iconEmoji,
+              accent_a: community.accent[0],
+              accent_b: community.accent[1],
+              rules: community.rules,
+              tags: community.tags,
+              is_private: !!input.isPrivate,
+            })
+            .select("id")
+            .single();
+          if (data?.id) community.id = data.id as string;
+          // Auto-join owner.
+          await supabase
+            .from("community_members")
+            .insert({ community_id: community.id, user_id: userId });
+        } catch (e) {
+          console.log("[social] createCommunity remote insert failed", e);
+        }
+      }
+
+      // Persist locally so it appears immediately.
+      const next = [community, ...localCommunities];
+      setLocalCommunities(next);
+      await saveJson(KEY_LOCAL_COMMUNITIES, next);
+
+      // Optimistically mark joined.
+      const nextJoined = [community.id, ...joined];
+      qc.setQueryData(["social", "memberships", userId ?? "guest"], nextJoined);
+      if (!isAuthenticated) {
+        const gj = [community.id, ...guestJoined];
+        setGuestJoined(gj);
+        await saveJson(KEY_JOINED_GUEST, gj);
+      }
+
+      qc.invalidateQueries({ queryKey: ["social", "communities"] });
+      return community;
+    },
+    [isAuthenticated, userId, localCommunities, joined, guestJoined, qc],
+  );
+
   const joinedCommunities = useMemo(
     () => communities.filter((c) => joined.includes(c.id)),
     [communities, joined],
@@ -646,6 +743,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       isJoined,
       toggleJoin,
       getCommunity,
+      createCommunity,
       postsByCommunity,
       usePostsForCommunity,
       addCommunityPost,
@@ -665,6 +763,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       isJoined,
       toggleJoin,
       getCommunity,
+      createCommunity,
       postsByCommunity,
       usePostsForCommunity,
       addCommunityPost,

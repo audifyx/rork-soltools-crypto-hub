@@ -91,6 +91,7 @@ export default function CommunitiesScreen() {
                 <Pressable
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    router.push("/community/create");
                   }}
                   style={styles.createBtn}
                   testID="create-community"

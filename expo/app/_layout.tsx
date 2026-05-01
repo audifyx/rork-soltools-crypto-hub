@@ -49,6 +49,7 @@ function RootLayoutNav() {
       <Stack.Screen name="admin" />
       <Stack.Screen name="communities" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="community/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="community/create" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="spaces" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="space/[id]" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="messages" options={{ animation: "slide_from_right" }} />
