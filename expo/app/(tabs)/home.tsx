@@ -563,6 +563,10 @@ function TrendingPairsRail() {
   const router = useRouter();
   const { data: trending } = useTrendingTokens(10);
   const { listings } = useLaunchpad();
+  const goAll = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    router.push("/(tabs)/launches");
+  }, [router]);
 
   const pairs: LaunchToken[] = useMemo(() => {
     const fromBird = (trending ?? []).slice(0, 10).map((t, i): LaunchToken => ({
@@ -603,6 +607,7 @@ function TrendingPairsRail() {
       pairs={pairs}
       hasPairs={hasPairs}
       onOpen={(id) => router.push({ pathname: "/launch/[id]", params: { id } })}
+      onSeeAll={goAll}
     />
   );
 }
@@ -619,10 +624,12 @@ function TrendingPairsRailInner({
   pairs,
   hasPairs,
   onOpen,
+  onSeeAll,
 }: {
   pairs: LaunchToken[];
   hasPairs: boolean;
   onOpen: (id: string) => void;
+  onSeeAll: () => void;
 }) {
   return (
     <View style={styles.railWrap}>
@@ -631,7 +638,7 @@ function TrendingPairsRailInner({
           <Flame color={Colors.orange} size={16} strokeWidth={2.6} />
           <Text style={styles.railTitle}>New pairs trending</Text>
         </View>
-        <Pressable hitSlop={8} testID="see-all-pairs">
+        <Pressable hitSlop={8} onPress={onSeeAll} testID="see-all-pairs">
           <Text style={styles.railLink}>See all</Text>
         </Pressable>
       </View>
@@ -750,12 +757,129 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
 }
 
 function TrendingTopics() {
+  const router = useRouter();
+  const { listings } = useLaunchpad();
+  const { data: trending } = useTrendingTokens(15);
+
+  const topMovers = useMemo(() => {
+    const fromTrending = (trending ?? [])
+      .filter((t) => t.symbol)
+      .map((t) => ({
+        id: t.address,
+        ticker: (t.symbol ?? "").toUpperCase(),
+        change: t.priceChange24h ?? 0,
+        volume: t.liquidity ?? t.marketCap ?? 0,
+      }));
+    if (fromTrending.length > 0) return fromTrending.slice(0, 6);
+    return listings
+      .slice()
+      .sort((a, b) => Math.abs(b.change24hPct ?? 0) - Math.abs(a.change24hPct ?? 0))
+      .slice(0, 6)
+      .map((t) => ({
+        id: t.id,
+        ticker: t.ticker.replace("$", ""),
+        change: t.change24hPct ?? 0,
+        volume: t.volume24hUsd ?? 0,
+      }));
+  }, [trending, listings]);
+
+  const topTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    listings.forEach((t) => t.tags.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1)));
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([tag, count]) => ({ tag, count }));
+  }, [listings]);
+
+  if (topMovers.length === 0 && topTags.length === 0) {
+    return (
+      <View style={styles.topicsWrap}>
+        <Text style={styles.sectionLabel}>Trending</Text>
+        <Text style={styles.topicsEmpty}>
+          Trending tickers and tags will appear here once live market data loads.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.topicsWrap}>
-      <Text style={styles.sectionLabel}>Trending</Text>
-      <Text style={styles.topicsEmpty}>
-        Trending tags will appear here once the social feed comes online.
-      </Text>
+      <View style={styles.topicsHeadRow}>
+        <Text style={styles.sectionLabel}>Trending tickers</Text>
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => {});
+            router.push("/(tabs)/discover");
+          }}
+          hitSlop={8}
+          testID="topics-see-all"
+        >
+          <Text style={styles.railLink}>See all</Text>
+        </Pressable>
+      </View>
+      {topMovers.map((m, i) => {
+        const positive = m.change >= 0;
+        const accent = positive ? Colors.mint : Colors.rose;
+        return (
+          <Pressable
+            key={m.id}
+            style={styles.topicRow}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              router.push({ pathname: "/launch/[id]", params: { id: m.id } });
+            }}
+            testID={`topic-${m.id}`}
+          >
+            <View style={styles.topicLeft}>
+              <Text style={styles.topicRank}>{i + 1}</Text>
+              <View>
+                <Text style={[styles.topicTag, { color: Colors.text }]} numberOfLines={1}>
+                  ${m.ticker}
+                </Text>
+                <Text style={styles.topicCount}>Vol {formatCompactUsd(m.volume)}</Text>
+              </View>
+            </View>
+            <View
+              style={[
+                styles.topicChange,
+                { backgroundColor: `${accent}1A`, borderColor: `${accent}55` },
+              ]}
+            >
+              {positive ? (
+                <TrendingUp color={accent} size={11} strokeWidth={3} />
+              ) : (
+                <TrendingDown color={accent} size={11} strokeWidth={3} />
+              )}
+              <Text style={[styles.topicChangeText, { color: accent }]}>
+                {positive ? "+" : ""}{m.change.toFixed(1)}%
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+
+      {topTags.length > 0 ? (
+        <View style={styles.tagSection}>
+          <Text style={styles.sectionLabel}>Trending tags</Text>
+          <View style={styles.tagsRow}>
+            {topTags.map(({ tag, count }) => (
+              <Pressable
+                key={tag}
+                style={styles.tagChip}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  router.push("/(tabs)/discover");
+                }}
+                testID={`tag-${tag}`}
+              >
+                <Text style={styles.tagText}>#{tag}</Text>
+                <Text style={styles.tagCount}>{count}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1626,6 +1750,36 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 1,
   },
+  topicsHeadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  topicChange: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  topicChangeText: { fontSize: 11, fontWeight: "900" },
+  tagSection: { marginTop: 14 },
+  tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  tagChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  tagText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
+  tagCount: { color: Colors.muted, fontSize: 10, fontWeight: "800" },
 
   feedTitleRow: {
     flexDirection: "row",

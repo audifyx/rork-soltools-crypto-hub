@@ -587,7 +587,16 @@ function DiscoverHeader({
                 <Text style={styles.aiBadgeText}>BETA</Text>
               </View>
             </View>
-            <Text style={styles.seeAll}>See all</Text>
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setSection("ai");
+              }}
+              hitSlop={8}
+              testID="see-all-ai"
+            >
+              <Text style={styles.seeAll}>See all</Text>
+            </Pressable>
           </View>
           <View style={styles.aiList}>
             {aiPicks.map((t, i) => (
@@ -609,7 +618,16 @@ function DiscoverHeader({
               <Zap color={Colors.orange} size={15} strokeWidth={2.6} />
               <Text style={styles.sectionTitle}>New Launches</Text>
             </View>
-            <Text style={styles.seeAll}>See all</Text>
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setSection("new");
+              }}
+              hitSlop={8}
+              testID="see-all-new"
+            >
+              <Text style={styles.seeAll}>See all</Text>
+            </Pressable>
           </View>
           <ScrollView
             horizontal
