@@ -56,10 +56,23 @@ import { UserPost, useApp } from "@/providers/app-provider";
 const FILTERS = ["For You", "Following", "Trending", "New Pairs", "Whales"] as const;
 type Filter = (typeof FILTERS)[number];
 
+type WhaleFeedEvent = {
+  id: string;
+  wallet_address: string;
+  token_address: string | null;
+  symbol: string | null;
+  side: "buy" | "sell" | "transfer";
+  amount_usd: number | null;
+  amount_token: number | null;
+  tx_signature: string | null;
+  created_at: string;
+};
+
 type FeedItem =
   | { kind: "user"; data: UserPost }
   | { kind: "sample"; data: FeedPost }
-  | { kind: "token"; data: LaunchToken };
+  | { kind: "token"; data: LaunchToken }
+  | { kind: "whale"; data: WhaleFeedEvent };
 
 export default function HomeFeedScreen() {
   const router = useRouter();
@@ -80,36 +93,82 @@ export default function HomeFeedScreen() {
     queryFn: async () => {
       if (!userId) return [];
       try {
-        const { data: follows } = await supabase
-          .from("followers")
-          .select("following_id")
-          .eq("follower_id", userId);
-        const ids = (follows ?? []).map((r) => r.following_id as string);
-        if (ids.length === 0) return [];
-        const { data } = await supabase
-          .from("community_posts")
-          .select("id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
-          .in("user_id", ids)
-          .order("created_at", { ascending: false })
-          .limit(50);
-        return (data ?? []).map((row): UserPost => ({
-          id: row.id as string,
-          text: (row.content as string) ?? "",
-          ticker: (row.ticker as string) ?? undefined,
+        const { data, error } = await supabase.rpc("get_following_feed", { max_rows: 50 });
+        if (error) throw error;
+        const rows = (data ?? []) as Array<{
+          id: string;
+          user_id: string;
+          content: string | null;
+          image_url: string | null;
+          ticker: string | null;
+          change_pct: number | null;
+          likes_count: number | null;
+          reposts_count: number | null;
+          comments_count: number | null;
+          created_at: string;
+        }>;
+        const posts = rows.map((row): UserPost => ({
+          id: row.id,
+          text: row.content ?? "",
+          ticker: row.ticker ?? undefined,
           changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
-          images: row.image_url ? [row.image_url as string] : undefined,
-          createdAt: new Date(row.created_at as string).getTime(),
-          likes: (row.likes_count as number) ?? 0,
-          reposts: (row.reposts_count as number) ?? 0,
-          comments: (row.comments_count as number) ?? 0,
+          images: row.image_url ? [row.image_url] : undefined,
+          createdAt: new Date(row.created_at).getTime(),
+          likes: row.likes_count ?? 0,
+          reposts: row.reposts_count ?? 0,
+          comments: row.comments_count ?? 0,
           liked: false,
         }));
+        // mark liked state for caller
+        if (posts.length > 0) {
+          const ids = posts.map((p) => p.id);
+          const { data: likes } = await supabase
+            .from("post_likes")
+            .select("post_id")
+            .eq("user_id", userId)
+            .in("post_id", ids);
+          const likedSet = new Set((likes ?? []).map((r) => r.post_id as string));
+          return posts.map((p) => ({ ...p, liked: likedSet.has(p.id) }));
+        }
+        return posts;
       } catch (e) {
         console.log("[home] following feed failed", e);
         return [];
       }
     },
     staleTime: 30_000,
+  });
+
+  type WhaleEvent = {
+    id: string;
+    wallet_address: string;
+    token_address: string | null;
+    symbol: string | null;
+    side: "buy" | "sell" | "transfer";
+    amount_usd: number | null;
+    amount_token: number | null;
+    tx_signature: string | null;
+    created_at: string;
+  };
+  const whalesQ = useQuery<WhaleEvent[]>({
+    queryKey: ["home", "whales"],
+    enabled: filter === "Whales",
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from("whale_events")
+          .select("id,wallet_address,token_address,symbol,side,amount_usd,amount_token,tx_signature,created_at")
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (error) throw error;
+        return (data ?? []) as WhaleEvent[];
+      } catch (e) {
+        console.log("[home] whales failed", e);
+        return [];
+      }
+    },
+    staleTime: 15_000,
+    refetchInterval: filter === "Whales" ? 30_000 : false,
   });
 
   const combined = useMemo<FeedItem[]>(() => {
@@ -156,6 +215,10 @@ export default function HomeFeedScreen() {
         .map((t): FeedItem => ({ kind: "token", data: t }));
     }
     if (filter === "Whales") {
+      const events = whalesQ.data ?? [];
+      if (events.length > 0) {
+        return events.map((e): FeedItem => ({ kind: "whale", data: e }));
+      }
       return listings
         .slice()
         .filter((t) => (t.holders ?? 0) > 100 || (t.volume24hUsd ?? 0) > 50_000 || (t.liquidityUsd ?? 0) > 100_000)
@@ -166,7 +229,7 @@ export default function HomeFeedScreen() {
     const userItems: FeedItem[] = userPosts.map((p) => ({ kind: "user", data: p }));
     const sampleItems: FeedItem[] = FEED_POSTS.map((p) => ({ kind: "sample", data: p }));
     return [...userItems, ...sampleItems];
-  }, [filter, userPosts, followingPostsQ.data, listings, trendingTokens]);
+  }, [filter, userPosts, followingPostsQ.data, listings, trendingTokens, whalesQ.data]);
 
   const openCompose = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -184,6 +247,9 @@ export default function HomeFeedScreen() {
             }
           />
         );
+      }
+      if (item.kind === "whale") {
+        return <WhaleEventCard event={item.data} />;
       }
       if (item.kind === "user") {
         return (
@@ -898,6 +964,56 @@ function PostCard({ post }: { post: FeedPost }) {
           <ActionItem icon={<Bookmark color={Colors.muted} size={15} strokeWidth={2.2} />} label={post.views} />
           <ActionItem icon={<Share2 color={Colors.muted} size={15} strokeWidth={2.2} />} label="" />
         </View>
+      </View>
+    </View>
+  );
+}
+
+function WhaleEventCard({ event }: { event: WhaleFeedEvent }) {
+  const isBuy = event.side === "buy";
+  const isSell = event.side === "sell";
+  const accent = isBuy ? Colors.mint : isSell ? Colors.rose : Colors.cyan;
+  const sideLabel = event.side.toUpperCase();
+  const amount = event.amount_usd ?? 0;
+  const ageMin = Math.max(1, Math.floor((Date.now() - new Date(event.created_at).getTime()) / 60_000));
+  const wallet = event.wallet_address;
+  const short = wallet ? `${wallet.slice(0, 4)}…${wallet.slice(-4)}` : "";
+  return (
+    <View style={styles.tokenRow} testID={`whale-${event.id}`}>
+      <View
+        style={[
+          styles.postAvatar,
+          { backgroundColor: `${accent}22`, alignItems: "center", justifyContent: "center" },
+        ]}
+      >
+        <Waves color={accent} size={20} strokeWidth={2.4} />
+      </View>
+      <View style={styles.tokenMid}>
+        <View style={styles.tokenTopRow}>
+          <Text style={[styles.tokenTicker, { color: accent }]} numberOfLines={1}>
+            {sideLabel}
+          </Text>
+          {event.symbol ? (
+            <Text style={styles.tokenName} numberOfLines={1}>
+              ${event.symbol.replace("$", "")}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={styles.tokenStats} numberOfLines={1}>
+          {short} · {formatCompactUsd(amount)} · {ageMin}m
+        </Text>
+      </View>
+      <View style={[styles.tokenChange, { backgroundColor: `${accent}1A`, borderColor: `${accent}55` }]}>
+        {isBuy ? (
+          <TrendingUp color={accent} size={12} strokeWidth={3} />
+        ) : isSell ? (
+          <TrendingDown color={accent} size={12} strokeWidth={3} />
+        ) : (
+          <ArrowUpRight color={accent} size={12} strokeWidth={3} />
+        )}
+        <Text style={[styles.tokenChangeText, { color: accent }]}>
+          {formatCompactUsd(amount)}
+        </Text>
       </View>
     </View>
   );

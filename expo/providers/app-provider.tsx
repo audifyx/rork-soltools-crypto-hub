@@ -436,17 +436,22 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const togglePostLike = useCallback(
     async (id: string) => {
       const next = posts.map((p) =>
-        p.id === id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p,
+        p.id === id ? { ...p, liked: !p.liked, likes: Math.max(0, p.likes + (p.liked ? -1 : 1)) } : p,
       );
       qc.setQueryData(["app", "posts", userId ?? "guest"], next);
-      if (isAuthenticated) {
+      if (isAuthenticated && userId) {
         try {
-          const target = next.find((p) => p.id === id);
-          if (target) {
-            await supabase
-              .from("community_posts")
-              .update({ likes_count: target.likes })
-              .eq("id", id);
+          const { data, error } = await supabase.rpc("toggle_post_like", {
+            target_post_id: id,
+          });
+          if (error) throw error;
+          const row = Array.isArray(data) ? (data[0] as { liked: boolean; likes_count: number } | undefined) : undefined;
+          if (row) {
+            const synced = next.map((p) =>
+              p.id === id ? { ...p, liked: !!row.liked, likes: Number(row.likes_count ?? p.likes) } : p,
+            );
+            qc.setQueryData(["app", "posts", userId], synced);
+            qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
           }
         } catch (e) {
           console.log("[app] post like sync failed", e);
