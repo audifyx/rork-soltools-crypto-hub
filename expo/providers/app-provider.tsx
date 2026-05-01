@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
 import { supabase } from "@/lib/supabase";
+import { uploadPostImage } from "@/lib/upload";
 import type { CustomBadge } from "@/providers/profile-provider";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -182,7 +183,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         try {
           const { data, error } = await supabase
             .from("community_posts")
-            .select("id,user_id,content,image_url,likes_count,created_at")
+            .select("id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
             .eq("user_id", userId)
             .order("created_at", { ascending: false })
             .limit(200);
@@ -190,10 +191,13 @@ export const [AppProvider, useApp] = createContextHook(() => {
           return (data ?? []).map((row): UserPost => ({
             id: row.id as string,
             text: (row.content as string) ?? "",
+            ticker: (row.ticker as string) ?? undefined,
+            changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
+            images: row.image_url ? [row.image_url as string] : undefined,
             createdAt: new Date(row.created_at as string).getTime(),
             likes: (row.likes_count as number) ?? 0,
-            reposts: 0,
-            comments: 0,
+            reposts: (row.reposts_count as number) ?? 0,
+            comments: (row.comments_count as number) ?? 0,
             liked: false,
           }));
         } catch (e) {
@@ -375,22 +379,37 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const addPost = useMutation({
     mutationFn: async (input: { text: string; ticker?: string; changePct?: number; images?: string[] }) => {
       if (isAuthenticated && userId) {
+        let uploadedUrl: string | undefined;
+        const firstImage = input.images?.[0];
+        if (firstImage) {
+          try {
+            uploadedUrl = await uploadPostImage(userId, firstImage);
+          } catch (e) {
+            console.log("[app] post image upload failed", e);
+          }
+        }
         const { data, error } = await supabase
           .from("community_posts")
-          .insert({ user_id: userId, content: input.text })
-          .select("id,user_id,content,image_url,likes_count,created_at")
+          .insert({
+            user_id: userId,
+            content: input.text,
+            image_url: uploadedUrl ?? null,
+            ticker: input.ticker ?? null,
+            change_pct: input.changePct ?? null,
+          })
+          .select("id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
           .single();
         if (error) throw error;
         const post: UserPost = {
           id: data.id as string,
           text: (data.content as string) ?? input.text,
-          ticker: input.ticker,
-          changePct: input.changePct,
-          images: input.images,
+          ticker: (data.ticker as string) ?? input.ticker,
+          changePct: data.change_pct != null ? Number(data.change_pct) : input.changePct,
+          images: data.image_url ? [data.image_url as string] : input.images,
           createdAt: new Date(data.created_at as string).getTime(),
           likes: (data.likes_count as number) ?? 0,
-          reposts: 0,
-          comments: 0,
+          reposts: (data.reposts_count as number) ?? 0,
+          comments: (data.comments_count as number) ?? 0,
           liked: false,
         };
         return [post, ...posts];
