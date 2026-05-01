@@ -571,47 +571,47 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <View style={styles.heroCard}>
-            <Pressable onPress={onPickBanner} style={styles.banner} testID="pick-banner">
-              {profile.bannerUrl ? (
-                <Image
-                  source={{ uri: profile.bannerUrl }}
-                  style={StyleSheet.absoluteFillObject}
-                  contentFit="cover"
-                />
-              ) : (
-                <LinearGradient
-                  colors={[profile.bannerFrom, profile.bannerTo]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFillObject}
-                />
-              )}
-              <LinearGradient
-                colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.35)", "rgba(11,24,26,0.95)"]}
-                locations={[0, 0.55, 1]}
+          <Pressable onPress={onPickBanner} style={styles.bannerCard} testID="pick-banner">
+            {profile.bannerUrl ? (
+              <Image
+                source={{ uri: profile.bannerUrl }}
                 style={StyleSheet.absoluteFillObject}
-                pointerEvents="none"
+                contentFit="cover"
               />
-              <View style={styles.bannerEditBtn}>
-                <Camera color={Colors.text} size={12} strokeWidth={2.8} />
-                <Text style={styles.bannerEditText}>EDIT</Text>
+            ) : (
+              <LinearGradient
+                colors={[profile.bannerFrom, profile.bannerTo]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+            )}
+            <LinearGradient
+              colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.18)", "rgba(3,7,8,0.55)"]}
+              locations={[0, 0.5, 1]}
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
+            />
+            <View style={styles.bannerEditBtn}>
+              <Camera color={Colors.text} size={12} strokeWidth={2.8} />
+              <Text style={styles.bannerEditText}>EDIT</Text>
+            </View>
+            <View style={styles.bannerBadgeRow}>
+              <View style={[styles.rankBadge, { borderColor: `${rank.color}88` }]}>
+                <rank.Icon color={rank.color} size={11} strokeWidth={3} />
+                <Text style={[styles.rankBadgeText, { color: rank.color }]}>
+                  LVL {rank.level} · {rank.name.toUpperCase()}
+                </Text>
               </View>
-              <View style={styles.bannerBadgeRow}>
-                <View style={[styles.rankBadge, { borderColor: `${rank.color}88` }]}>
-                  <rank.Icon color={rank.color} size={11} strokeWidth={3} />
-                  <Text style={[styles.rankBadgeText, { color: rank.color }]}>
-                    LVL {rank.level} · {rank.name.toUpperCase()}
-                  </Text>
-                </View>
+            </View>
+            {isUploading ? (
+              <View style={[styles.bannerOverlay, styles.bannerUploadingBox]}>
+                <Text style={styles.bannerUploading}>Uploading…</Text>
               </View>
-              {isUploading ? (
-                <View style={[styles.bannerOverlay, styles.bannerUploadingBox]}>
-                  <Text style={styles.bannerUploading}>Uploading…</Text>
-                </View>
-              ) : null}
-            </Pressable>
+            ) : null}
+          </Pressable>
 
+          <View style={styles.profileCard}>
             <View style={styles.heroBody}>
               <Pressable onPress={onPickAvatar} style={styles.avatarWrap} testID="pick-avatar">
                 <Animated.View style={[styles.avatarRingOuter, { opacity: ringOpacity }]}>
@@ -2131,6 +2131,23 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
     backgroundColor: Colors.card,
   },
+  bannerCard: {
+    marginTop: 14,
+    height: 156,
+    borderRadius: 24,
+    overflow: "hidden",
+    position: "relative",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Colors.card,
+  },
+  profileCard: {
+    marginTop: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Colors.card,
+  },
   banner: { height: 148, position: "relative" },
   bannerOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -2155,21 +2172,23 @@ const styles = StyleSheet.create({
   rankBadgeText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
 
   heroBody: { padding: 16, paddingTop: 0 },
-  avatarWrap: { marginTop: -46, width: 92, height: 92 },
+  avatarWrap: { marginTop: -56, width: 96, height: 96 },
   avatarRingOuter: {
     position: "absolute",
     inset: 0,
-    width: 92,
-    height: 92,
-    borderRadius: 28,
+    width: 96,
+    height: 96,
+    borderRadius: 30,
     overflow: "hidden",
   },
   avatarRing: {
-    width: 92,
-    height: 92,
-    borderRadius: 28,
-    padding: 4,
-    backgroundColor: "transparent",
+    width: 96,
+    height: 96,
+    borderRadius: 30,
+    padding: 5,
+    backgroundColor: Colors.card,
+    borderWidth: 4,
+    borderColor: Colors.card,
   },
   avatar: {
     flex: 1,
