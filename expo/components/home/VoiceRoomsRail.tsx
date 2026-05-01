@@ -86,7 +86,7 @@ export default function VoiceRoomsRail() {
         <Pressable
           onPress={() => {
             Haptics.selectionAsync().catch(() => {});
-            router.push({ pathname: "/tool/[id]", params: { id: "voice-lobby" } });
+            router.push("/spaces");
           }}
           hitSlop={8}
         >
@@ -104,7 +104,7 @@ export default function VoiceRoomsRail() {
             key={r.id}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              router.push({ pathname: "/tool/[id]", params: { id: "voice-lobby" } });
+              router.push({ pathname: "/space/[id]", params: { id: r.id === "alpha-call" ? "live-alpha" : r.id === "chill" ? "chart-vibes" : r.id } });
             }}
             style={[styles.card, { shadowColor: r.accent[0] }]}
             testID={`voice-room-${r.id}`}

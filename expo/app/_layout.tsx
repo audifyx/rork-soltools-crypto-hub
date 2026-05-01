@@ -11,6 +11,7 @@ import { AppProvider } from "@/providers/app-provider";
 import { AuthProvider } from "@/providers/auth-provider";
 import { LaunchpadProvider } from "@/providers/launchpad-provider";
 import { ProfileProvider } from "@/providers/profile-provider";
+import { SocialProvider } from "@/providers/social-provider";
 
 SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
   console.log("SolTools splash hold skipped during boot", error);
@@ -45,6 +46,10 @@ function RootLayoutNav() {
       <Stack.Screen name="tool/[id]" />
       <Stack.Screen name="u/[handle]" />
       <Stack.Screen name="admin" />
+      <Stack.Screen name="communities" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="community/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="spaces" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="space/[id]" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="notifications" options={{ presentation: "card", animation: "slide_from_right" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
@@ -65,9 +70,11 @@ export default function RootLayout() {
           <ProfileProvider>
             <AppProvider>
               <LaunchpadProvider>
-                <GestureHandlerRootView style={styles.gestureRoot}>
-                  <RootLayoutNav />
-                </GestureHandlerRootView>
+                <SocialProvider>
+                  <GestureHandlerRootView style={styles.gestureRoot}>
+                    <RootLayoutNav />
+                  </GestureHandlerRootView>
+                </SocialProvider>
               </LaunchpadProvider>
             </AppProvider>
           </ProfileProvider>

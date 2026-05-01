@@ -42,6 +42,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import TokenAvatar from "@/components/TokenAvatar";
 import LiveTicker from "@/components/ui/LiveTicker";
+import CommunitiesRail from "@/components/home/CommunitiesRail";
 import StoriesRail from "@/components/home/StoriesRail";
 import VoiceRoomsRail from "@/components/home/VoiceRoomsRail";
 import Colors from "@/constants/colors";
@@ -413,6 +414,7 @@ function FeedHeader({
           />
           <MarketStrip />
           <VoiceRoomsRail />
+          <CommunitiesRail />
           <TrendingPairsRail />
           <TrendingTopics />
         </>
