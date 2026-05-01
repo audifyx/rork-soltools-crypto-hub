@@ -51,12 +51,32 @@ const INTERVALS: { key: string; label: string }[] = [
 function fmtUsd(n?: number): string {
   if (n == null || !isFinite(n)) return "—";
   if (n === 0) return "$0";
-  if (n < 0.0001) return `$${n.toExponential(2)}`;
-  if (n < 1) return `$${n.toFixed(6)}`;
-  if (n < 1000) return `$${n.toFixed(4)}`;
-  if (n < 1_000_000) return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-  if (n < 1_000_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  return `$${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n < 1000) return fmtSmallPrice(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 2 : 1)}K`;
+  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(n < 10_000_000 ? 2 : 1)}M`;
+  if (n < 1_000_000_000_000) return `${(n / 1_000_000_000).toFixed(n < 10_000_000_000 ? 2 : 1)}B`;
+  return `${(n / 1_000_000_000_000).toFixed(2)}T`;
+}
+
+/**
+ * Pretty-print sub-dollar prices without ugly scientific notation.
+ * For very small numbers, uses the leading-zero subscript convention
+ * (e.g. 0.0₅3012 means 5 zeros after the decimal, then "3012").
+ */
+function fmtSmallPrice(n: number): string {
+  if (n >= 1) return `${n.toFixed(n < 10 ? 4 : 2)}`;
+  if (n >= 0.01) return `${n.toFixed(4)}`;
+  if (n >= 0.0001) return `${n.toFixed(6)}`;
+  const s = n.toFixed(20);
+  const m = s.match(/^0\.(0+)(\d+)/);
+  if (!m) return `${n.toPrecision(4)}`;
+  const zeros = m[1].length;
+  const digits = m[2].slice(0, 4);
+  const sub = String(zeros)
+    .split("")
+    .map((d) => "₀₁₂₃₄₅₆₇₈₉"[Number(d)])
+    .join("");
+  return `$0.0${sub}${digits}`;
 }
 
 function fmtNum(n?: number): string {
@@ -140,9 +160,9 @@ export default function TokenLookupScreen() {
 
   const stats = useMemo(() => {
     return [
-      { label: "Market Cap", value: fmtUsd(overview?.marketCap), Icon: Coins },
       { label: "Liquidity", value: fmtUsd(overview?.liquidity), Icon: Droplets },
       { label: "Holders", value: fmtNum(overview?.holder), Icon: Users },
+      { label: "Price", value: fmtUsd(overview?.price), Icon: Coins },
       { label: "24h Change", value: change != null ? `${isUp ? "+" : ""}${change.toFixed(2)}%` : "—", Icon: isUp ? TrendingUp : TrendingDown },
     ];
   }, [overview, change, isUp]);
@@ -263,7 +283,11 @@ export default function TokenLookupScreen() {
                 </View>
 
                 <View style={styles.priceRow}>
-                  <Text style={styles.price}>{fmtUsd(overview?.price)}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.priceLabel}>MARKET CAP</Text>
+                    <Text style={styles.price}>{fmtUsd(overview?.marketCap)}</Text>
+                    <Text style={styles.priceSub}>Price {fmtUsd(overview?.price)}</Text>
+                  </View>
                   {change != null ? (
                     <View style={[styles.changePill, { backgroundColor: `${accent}1F`, borderColor: `${accent}55` }]}>
                       {isUp ? (
@@ -555,11 +579,25 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 14,
   },
+  priceLabel: {
+    color: Colors.muted,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    marginBottom: 2,
+  },
   price: {
     color: Colors.text,
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: "900",
     letterSpacing: -1,
+  },
+  priceSub: {
+    color: Colors.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 4,
+    letterSpacing: 0.2,
   },
   changePill: {
     flexDirection: "row",
