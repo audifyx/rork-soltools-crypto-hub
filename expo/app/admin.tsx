@@ -241,6 +241,7 @@ export default function AdminDashboard() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.tabsScroll}
           contentContainerStyle={styles.tabsRow}
         >
           {(
@@ -263,8 +264,8 @@ export default function AdminDashboard() {
                 style={({ pressed }) => [styles.tabBtn, active && styles.tabBtnActive, pressed && styles.pressed]}
                 testID={`admin-tab-${t.id}`}
               >
-                <t.Icon color={active ? Colors.ink : Colors.text} size={13} strokeWidth={2.6} />
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
+                <t.Icon color={active ? Colors.ink : Colors.muted} size={13} strokeWidth={2.6} />
+                <Text style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1}>{t.label}</Text>
               </Pressable>
             );
           })}
@@ -1646,15 +1647,23 @@ const styles = StyleSheet.create({
   },
   rolePillText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
 
-  tabsRow: { paddingHorizontal: 14, gap: 8, paddingBottom: 8 },
+  tabsScroll: { flexGrow: 0, maxHeight: 48, marginBottom: 4 },
+  tabsRow: { paddingHorizontal: 14, gap: 8, alignItems: "center" },
   tabBtn: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    paddingHorizontal: 13, height: 34, borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
   },
-  tabBtnActive: { backgroundColor: Colors.mint, borderColor: Colors.mint },
-  tabText: { color: Colors.text, fontSize: 12, fontWeight: "800", letterSpacing: 0.4 },
+  tabBtnActive: {
+    backgroundColor: Colors.mint,
+    borderColor: Colors.mint,
+    shadowColor: Colors.mint,
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  tabText: { color: Colors.text, fontSize: 12, fontWeight: "800", letterSpacing: 0.3 },
   tabTextActive: { color: Colors.ink },
 
   scroll: { padding: 18, paddingBottom: 80, gap: 14 },
