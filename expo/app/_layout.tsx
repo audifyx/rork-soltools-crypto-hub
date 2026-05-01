@@ -10,6 +10,7 @@ import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
 import { AuthProvider } from "@/providers/auth-provider";
 import { LaunchpadProvider } from "@/providers/launchpad-provider";
+import { MessagesProvider } from "@/providers/messages-provider";
 import { ProfileProvider } from "@/providers/profile-provider";
 import { SocialProvider } from "@/providers/social-provider";
 
@@ -50,6 +51,8 @@ function RootLayoutNav() {
       <Stack.Screen name="community/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="spaces" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="space/[id]" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+      <Stack.Screen name="messages" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="dm/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="notifications" options={{ presentation: "card", animation: "slide_from_right" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
@@ -71,9 +74,11 @@ export default function RootLayout() {
             <AppProvider>
               <LaunchpadProvider>
                 <SocialProvider>
-                  <GestureHandlerRootView style={styles.gestureRoot}>
-                    <RootLayoutNav />
-                  </GestureHandlerRootView>
+                  <MessagesProvider>
+                    <GestureHandlerRootView style={styles.gestureRoot}>
+                      <RootLayoutNav />
+                    </GestureHandlerRootView>
+                  </MessagesProvider>
                 </SocialProvider>
               </LaunchpadProvider>
             </AppProvider>

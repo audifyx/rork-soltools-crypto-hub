@@ -60,6 +60,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchToken } from "@/types/launchpad";
 import { UserPost, useApp } from "@/providers/app-provider";
+import { useMessages } from "@/providers/messages-provider";
 
 const FILTERS = ["For You", "Following", "Trending", "New Pairs", "Whales"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -87,6 +88,7 @@ export default function HomeFeedScreen() {
   const { listings } = useLaunchpad();
   const { data: trendingTokens } = useTrendingTokens(20);
   const { userId, isAuthenticated } = useAuth();
+  const { totalUnread: dmUnread } = useMessages();
   const [filter, setFilter] = useState<Filter>("For You");
 
   const onSelectFilter = useCallback((next: Filter) => {
@@ -314,6 +316,23 @@ export default function HomeFeedScreen() {
               testID="search-btn"
             >
               <Search color={Colors.text} size={18} strokeWidth={2.4} />
+            </Pressable>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                router.push("/messages");
+              }}
+              testID="messages-btn"
+            >
+              <Inbox color={Colors.text} size={18} strokeWidth={2.4} />
+              {dmUnread > 0 ? (
+                <View style={styles.inboxBadge} pointerEvents="none">
+                  <Text style={styles.inboxBadgeText}>
+                    {dmUnread > 9 ? "9+" : dmUnread}
+                  </Text>
+                </View>
+              ) : null}
             </Pressable>
             <Pressable
               style={styles.iconBtn}
@@ -1209,6 +1228,21 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.ink,
   },
+  inboxBadge: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: Colors.cyan,
+    borderWidth: 1.5,
+    borderColor: Colors.ink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inboxBadgeText: { color: Colors.ink, fontSize: 9, fontWeight: "900" },
 
   filterWrap: {
     borderBottomWidth: 1,
