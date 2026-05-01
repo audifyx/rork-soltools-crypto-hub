@@ -1,23 +1,22 @@
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
-  Activity,
-  ArrowDown,
   ArrowLeft,
-  ArrowUp,
   ArrowUpRight,
   ClipboardPaste,
-  Copy,
   Eye,
+  RefreshCw,
   Search,
-  TrendingUp,
   Wallet,
   Zap,
 } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,52 +25,96 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
+import {
+  fetchWalletPortfolio,
+  isValidSolanaAddress,
+  type WalletTokenHolding,
+  type WalletTransaction,
+} from "@/lib/api/wallet";
 
-type Holding = {
-  symbol: string;
-  name: string;
-  amount: string;
-  value: string;
-  change: number;
-};
+function shorten(addr: string): string {
+  if (addr.length <= 10) return addr;
+  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
+}
 
-type Activity = {
-  type: "BUY" | "SELL" | "SWAP";
-  token: string;
-  amount: string;
-  time: string;
-};
+function formatUsd(n: number): string {
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
 
-const MOCK_HOLDINGS: Holding[] = [
-  { symbol: "SOL", name: "Solana", amount: "142.81", value: "$24,318", change: 4.21 },
-  { symbol: "JUP", name: "Jupiter", amount: "12,400", value: "$8,432", change: -1.84 },
-  { symbol: "BONK", name: "Bonk", amount: "84.2M", value: "$2,118", change: 12.4 },
-  { symbol: "WIF", name: "dogwifhat", amount: "1,820", value: "$3,940", change: -3.2 },
-];
+function formatAmount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+  if (n >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
 
-const MOCK_ACTIVITY: Activity[] = [
-  { type: "BUY", token: "JUP", amount: "+1,200", time: "2m ago" },
-  { type: "SWAP", token: "SOL → USDC", amount: "12.4 SOL", time: "8m ago" },
-  { type: "SELL", token: "BONK", amount: "-12M", time: "21m ago" },
-  { type: "BUY", token: "WIF", amount: "+420", time: "1h ago" },
-];
+function timeAgo(ts: number): string {
+  if (!ts) return "";
+  const diff = Date.now() / 1000 - ts;
+  if (diff < 60) return `${Math.max(1, Math.floor(diff))}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
 
 export default function WalletTrackerScreen() {
   const router = useRouter();
   const [address, setAddress] = useState<string>("");
-  const [tracking, setTracking] = useState<boolean>(false);
+  const [tracked, setTracked] = useState<string>("");
+
+  const valid = useMemo<boolean>(() => isValidSolanaAddress(address), [address]);
+
+  const portfolio = useQuery({
+    queryKey: ["wallet", "portfolio", tracked] as const,
+    queryFn: () => fetchWalletPortfolio(tracked),
+    enabled: tracked.length > 0,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
 
   const onTrack = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
-    if (address.trim().length > 0) setTracking(true);
-  }, [address]);
+    if (!valid) return;
+    setTracked(address.trim());
+  }, [address, valid]);
 
   const onClear = useCallback(() => {
     setAddress("");
-    setTracking(false);
+    setTracked("");
   }, []);
+
+  const onPaste = useCallback(async () => {
+    try {
+      const v = await Clipboard.getStringAsync();
+      if (v) setAddress(v.trim());
+    } catch (e) {
+      console.log("[wallet-tracker] paste error", e);
+    }
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    portfolio.refetch();
+  }, [portfolio]);
+
+  const onOpenSig = useCallback((sig: string) => {
+    Linking.openURL(`https://solscan.io/tx/${sig}`).catch(() => {});
+  }, []);
+
+  const data = portfolio.data;
+  const holdings: WalletTokenHolding[] = useMemo(() => {
+    const tokens = data?.tokens ?? [];
+    return tokens
+      .slice()
+      .sort((a, b) => (b.usdValue ?? 0) - (a.usdValue ?? 0))
+      .slice(0, 25);
+  }, [data?.tokens]);
+  const txs: WalletTransaction[] = data?.transactions ?? [];
+  const sol = data?.balance?.sol ?? 0;
+  const usd = data?.balance?.usd ?? 0;
 
   return (
     <View style={styles.root}>
@@ -107,7 +150,7 @@ export default function WalletTrackerScreen() {
             </View>
             <Text style={styles.heroTitle}>Track any Solana wallet</Text>
             <Text style={styles.heroSub}>
-              Holdings, PnL, swaps and live on-chain activity in real time.
+              Holdings, balances and on-chain activity in real time.
             </Text>
           </LinearGradient>
 
@@ -128,133 +171,168 @@ export default function WalletTrackerScreen() {
                 <Text style={styles.clearText}>Clear</Text>
               </Pressable>
             ) : (
-              <Pressable hitSlop={10}>
+              <Pressable hitSlop={10} onPress={onPaste}>
                 <ClipboardPaste color={Colors.mint} size={18} strokeWidth={2.4} />
               </Pressable>
             )}
           </View>
 
-          <Pressable onPress={onTrack} style={styles.trackBtn} testID="track">
-            <Zap color={Colors.ink} size={16} strokeWidth={3} />
+          {address.length > 0 && !valid && (
+            <Text style={styles.invalid}>Not a valid Solana address.</Text>
+          )}
+
+          <Pressable
+            onPress={tracked ? onRefresh : onTrack}
+            style={[styles.trackBtn, !valid && !tracked && styles.trackBtnDisabled]}
+            disabled={!valid && !tracked}
+            testID="track"
+          >
+            {portfolio.isFetching ? (
+              <ActivityIndicator size="small" color={Colors.ink} />
+            ) : tracked ? (
+              <RefreshCw color={Colors.ink} size={16} strokeWidth={3} />
+            ) : (
+              <Zap color={Colors.ink} size={16} strokeWidth={3} />
+            )}
             <Text style={styles.trackText}>
-              {tracking ? "Refresh" : "Track Wallet"}
+              {tracked ? "Refresh" : "Track Wallet"}
             </Text>
           </Pressable>
 
-          {tracking && (
+          {tracked.length > 0 && (
             <>
               <View style={styles.statsRow}>
-                <StatCard label="Net Worth" value="$38,808" tone="mint" />
-                <StatCard label="24h PnL" value="+$1,284" tone="mint" />
-                <StatCard label="Trades" value="142" tone="cyan" />
+                <StatCard label="Net Worth" value={formatUsd(usd)} tone="mint" />
+                <StatCard
+                  label="SOL"
+                  value={sol.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                  tone="mint"
+                />
+                <StatCard label="Tokens" value={`${holdings.length}`} tone="cyan" />
               </View>
 
-              <SectionHeader title="Holdings" right={`${MOCK_HOLDINGS.length}`} />
-              <View style={styles.card}>
-                {MOCK_HOLDINGS.map((h, i) => (
-                  <View
-                    key={h.symbol}
-                    style={[
-                      styles.holdingRow,
-                      i !== MOCK_HOLDINGS.length - 1 && styles.divider,
-                    ]}
-                  >
-                    <View style={styles.tokenIcon}>
-                      <Text style={styles.tokenIconText}>
-                        {h.symbol.slice(0, 2)}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.holdingSym}>{h.symbol}</Text>
-                      <Text style={styles.holdingName}>{h.name}</Text>
-                    </View>
-                    <View style={{ alignItems: "flex-end" }}>
-                      <Text style={styles.holdingValue}>{h.value}</Text>
-                      <View style={styles.changeRow}>
-                        {h.change >= 0 ? (
-                          <ArrowUp color={Colors.mint} size={11} strokeWidth={3} />
-                        ) : (
-                          <ArrowDown color={Colors.rose} size={11} strokeWidth={3} />
-                        )}
-                        <Text
-                          style={[
-                            styles.changeText,
-                            { color: h.change >= 0 ? Colors.mint : Colors.rose },
-                          ]}
-                        >
-                          {Math.abs(h.change).toFixed(2)}%
+              <View style={styles.addrRow}>
+                <Text style={styles.addrLabel}>Tracking</Text>
+                <Text style={styles.addrValue}>{shorten(tracked)}</Text>
+              </View>
+
+              <SectionHeader title="Holdings" right={`${holdings.length}`} />
+              {portfolio.isLoading ? (
+                <View style={styles.loading}>
+                  <ActivityIndicator color={Colors.mint} />
+                  <Text style={styles.loadingText}>Fetching live holdings…</Text>
+                </View>
+              ) : holdings.length === 0 ? (
+                <View style={styles.empty}>
+                  <Text style={styles.emptyText}>No tokens detected.</Text>
+                </View>
+              ) : (
+                <View style={styles.card}>
+                  {holdings.map((h, i) => (
+                    <View
+                      key={h.mint}
+                      style={[
+                        styles.holdingRow,
+                        i !== holdings.length - 1 && styles.divider,
+                      ]}
+                    >
+                      <View style={styles.tokenIcon}>
+                        <Text style={styles.tokenIconText}>
+                          {(h.symbol ?? h.mint).slice(0, 2).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.holdingSym}>
+                          {h.symbol ?? shorten(h.mint)}
+                        </Text>
+                        <Text style={styles.holdingName}>
+                          {formatAmount(h.uiAmount)}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={styles.holdingValue}>
+                          {h.usdValue && h.usdValue > 0 ? formatUsd(h.usdValue) : "—"}
                         </Text>
                       </View>
                     </View>
-                  </View>
-                ))}
-              </View>
+                  ))}
+                </View>
+              )}
 
               <SectionHeader title="Live Activity" right="Helius" />
-              <View style={styles.card}>
-                {MOCK_ACTIVITY.map((a, i) => (
-                  <View
-                    key={`${a.type}-${i}`}
-                    style={[
-                      styles.activityRow,
-                      i !== MOCK_ACTIVITY.length - 1 && styles.divider,
-                    ]}
-                  >
-                    <View
+              {portfolio.isLoading ? (
+                <View style={styles.loading}>
+                  <ActivityIndicator color={Colors.mint} />
+                  <Text style={styles.loadingText}>Loading recent signatures…</Text>
+                </View>
+              ) : txs.length === 0 ? (
+                <View style={styles.empty}>
+                  <Text style={styles.emptyText}>No recent transactions.</Text>
+                </View>
+              ) : (
+                <View style={styles.card}>
+                  {txs.slice(0, 20).map((t, i) => (
+                    <Pressable
+                      key={t.signature}
+                      onPress={() => onOpenSig(t.signature)}
                       style={[
-                        styles.activityBadge,
-                        {
-                          backgroundColor:
-                            a.type === "BUY"
-                              ? "rgba(85,245,178,0.16)"
-                              : a.type === "SELL"
-                              ? "rgba(255,93,143,0.16)"
-                              : "rgba(56,215,255,0.16)",
-                          borderColor:
-                            a.type === "BUY"
-                              ? "rgba(85,245,178,0.4)"
-                              : a.type === "SELL"
-                              ? "rgba(255,93,143,0.4)"
-                              : "rgba(56,215,255,0.4)",
-                        },
+                        styles.activityRow,
+                        i !== Math.min(txs.length, 20) - 1 && styles.divider,
                       ]}
+                      testID={`tx-${i}`}
                     >
-                      <Text
+                      <View
                         style={[
-                          styles.activityBadgeText,
+                          styles.activityBadge,
                           {
-                            color:
-                              a.type === "BUY"
-                                ? Colors.mint
-                                : a.type === "SELL"
-                                ? Colors.rose
-                                : Colors.cyan,
+                            backgroundColor:
+                              t.status === "failed"
+                                ? "rgba(255,93,143,0.16)"
+                                : "rgba(85,245,178,0.16)",
+                            borderColor:
+                              t.status === "failed"
+                                ? "rgba(255,93,143,0.4)"
+                                : "rgba(85,245,178,0.4)",
                           },
                         ]}
                       >
-                        {a.type}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.activityToken}>{a.token}</Text>
-                      <Text style={styles.activityTime}>{a.time}</Text>
-                    </View>
-                    <Text style={styles.activityAmount}>{a.amount}</Text>
-                  </View>
-                ))}
-              </View>
+                        <Text
+                          style={[
+                            styles.activityBadgeText,
+                            {
+                              color:
+                                t.status === "failed" ? Colors.rose : Colors.mint,
+                            },
+                          ]}
+                        >
+                          {t.status === "failed" ? "FAIL" : "TX"}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.activityToken}>
+                          {shorten(t.signature)}
+                        </Text>
+                        <Text style={styles.activityTime}>
+                          {timeAgo(t.blockTime)}
+                        </Text>
+                      </View>
+                      <ArrowUpRight color={Colors.muted} size={14} strokeWidth={2.6} />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
             </>
           )}
 
-          {!tracking && (
+          {!tracked && (
             <View style={styles.placeholder}>
               <View style={styles.placeholderIcon}>
                 <Eye color={Colors.mint} size={28} strokeWidth={2.4} />
               </View>
               <Text style={styles.placeholderTitle}>No wallet tracked yet</Text>
               <Text style={styles.placeholderBody}>
-                Paste any Solana address above to see live holdings, PnL and on-chain
-                activity.
+                Paste any Solana address above to see live holdings, balances and
+                on-chain activity.
               </Text>
             </View>
           )}
@@ -324,12 +402,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  topTitle: {
-    color: Colors.text,
-    fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: -0.3,
-  },
+  topTitle: { color: Colors.text, fontSize: 16, fontWeight: "900", letterSpacing: -0.3 },
 
   hero: {
     borderRadius: 22,
@@ -351,26 +424,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(85,245,178,0.4)",
   },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.mint },
-  heroLiveText: {
-    color: Colors.mint,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  heroTitle: {
-    color: Colors.text,
-    fontSize: 26,
-    fontWeight: "900",
-    letterSpacing: -0.8,
-    marginTop: 12,
-  },
-  heroSub: {
-    color: Colors.muted,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 19,
-    marginTop: 6,
-  },
+  heroLiveText: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  heroTitle: { color: Colors.text, fontSize: 26, fontWeight: "900", letterSpacing: -0.8, marginTop: 12 },
+  heroSub: { color: Colors.muted, fontSize: 13, fontWeight: "600", lineHeight: 19, marginTop: 6 },
 
   inputCard: {
     flexDirection: "row",
@@ -384,18 +440,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     marginTop: 16,
   },
-  input: {
-    flex: 1,
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: "700",
-    padding: 0,
-  },
-  clearText: {
-    color: Colors.muted,
-    fontSize: 12,
-    fontWeight: "800",
-  },
+  input: { flex: 1, color: Colors.text, fontSize: 14, fontWeight: "700", padding: 0 },
+  clearText: { color: Colors.muted, fontSize: 12, fontWeight: "800" },
+  invalid: { color: Colors.rose, fontSize: 12, fontWeight: "700", marginTop: 8, marginLeft: 4 },
 
   trackBtn: {
     flexDirection: "row",
@@ -407,21 +454,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.mint,
     marginTop: 12,
   },
-  trackText: {
-    color: Colors.ink,
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: 0.4,
-  },
+  trackBtnDisabled: { opacity: 0.4 },
+  trackText: { color: Colors.ink, fontSize: 14, fontWeight: "900", letterSpacing: 0.4 },
 
   statsRow: { flexDirection: "row", gap: 10, marginTop: 22 },
-  statCard: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    backgroundColor: Colors.card,
-  },
+  statCard: { flex: 1, padding: 14, borderRadius: 14, borderWidth: 1, backgroundColor: Colors.card },
   statValue: { fontSize: 18, fontWeight: "900", letterSpacing: -0.5 },
   statLabel: {
     color: Colors.muted,
@@ -432,6 +469,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  addrRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  addrLabel: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
+  addrValue: { color: Colors.text, fontSize: 13, fontWeight: "800" },
+
   sectionRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -439,35 +491,12 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 12,
   },
-  sectionTitle: {
-    color: Colors.text,
-    fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: -0.3,
-  },
-  sectionRight: {
-    color: Colors.muted,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-  },
+  sectionTitle: { color: Colors.text, fontSize: 16, fontWeight: "900", letterSpacing: -0.3 },
+  sectionRight: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
 
-  card: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Colors.line,
-    backgroundColor: Colors.card,
-    overflow: "hidden",
-  },
+  card: { borderRadius: 18, borderWidth: 1, borderColor: Colors.line, backgroundColor: Colors.card, overflow: "hidden" },
   divider: { borderBottomWidth: 1, borderBottomColor: Colors.line },
-  holdingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
+  holdingRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 14 },
   tokenIcon: {
     width: 38,
     height: 38,
@@ -478,52 +507,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  tokenIconText: {
-    color: Colors.mint,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 0.4,
-  },
+  tokenIconText: { color: Colors.mint, fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
   holdingSym: { color: Colors.text, fontSize: 14, fontWeight: "900" },
   holdingName: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
-  holdingValue: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: -0.2,
-  },
-  changeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    marginTop: 2,
-  },
-  changeText: { fontSize: 11, fontWeight: "900" },
+  holdingValue: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2 },
 
-  activityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  activityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
+  activityRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 14 },
+  activityBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
   activityBadgeText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
   activityToken: { color: Colors.text, fontSize: 13, fontWeight: "800" },
   activityTime: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
-  activityAmount: { color: Colors.text, fontSize: 13, fontWeight: "900" },
 
-  placeholder: {
+  loading: { paddingVertical: 24, alignItems: "center", gap: 8 },
+  loadingText: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  empty: {
+    paddingVertical: 24,
     alignItems: "center",
-    paddingVertical: 50,
-    paddingHorizontal: 30,
-    marginTop: 20,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: Colors.line,
   },
+  emptyText: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+
+  placeholder: { alignItems: "center", paddingVertical: 50, paddingHorizontal: 30, marginTop: 20 },
   placeholderIcon: {
     width: 64,
     height: 64,
@@ -534,21 +541,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  placeholderTitle: {
-    color: Colors.text,
-    fontSize: 16,
-    fontWeight: "900",
-    marginTop: 14,
-  },
-  placeholderBody: {
-    color: Colors.muted,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 19,
-    textAlign: "center",
-    marginTop: 6,
-  },
+  placeholderTitle: { color: Colors.text, fontSize: 16, fontWeight: "900", marginTop: 14 },
+  placeholderBody: { color: Colors.muted, fontSize: 13, fontWeight: "600", lineHeight: 19, textAlign: "center", marginTop: 6 },
 });
-
-const _unused = [Activity, ArrowUpRight, Copy, TrendingUp];
-void _unused;
