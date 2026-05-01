@@ -1,95 +1,121 @@
 import { LinearGradient } from "expo-linear-gradient";
 import {
   Activity,
-  ArrowDownRight,
-  ArrowUpRight,
   Eye,
   EyeOff,
+  RefreshCw,
   Sparkles,
+  Target,
   TrendingDown,
   TrendingUp,
   Wallet,
 } from "lucide-react-native";
-import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Stop } from "react-native-svg";
+import React, { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useQueries } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
+import { fetchWalletPortfolio, type WalletTokenHolding } from "@/lib/api/wallet";
 import { useApp } from "@/providers/app-provider";
-import { useLaunchpad } from "@/providers/launchpad-provider";
 
-type Range = "1D" | "1W" | "1M" | "3M" | "ALL";
+const PALETTE = [Colors.mint, Colors.cyan, Colors.orange, Colors.violet, Colors.rose];
 
-const RANGES: Range[] = ["1D", "1W", "1M", "3M", "ALL"];
-
-function genSparkline(seed: number, points: number, drift: number): number[] {
-  const out: number[] = [];
-  let v = 50;
-  let s = seed;
-  for (let i = 0; i < points; i++) {
-    s = (s * 9301 + 49297) % 233280;
-    const r = (s / 233280) - 0.5;
-    v += r * 6 + drift;
-    out.push(Math.max(5, Math.min(100, v)));
-  }
-  return out;
-}
-
-function buildPath(values: number[], width: number, height: number): { line: string; area: string } {
-  if (values.length < 2) return { line: "", area: "" };
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(0.001, max - min);
-  const stepX = width / (values.length - 1);
-  const points = values.map((v, i) => {
-    const x = i * stepX;
-    const y = height - ((v - min) / range) * (height - 6) - 3;
-    return [x, y];
-  });
-  const line = points.map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`).join(" ");
-  const area = `${line} L ${width} ${height} L 0 ${height} Z`;
-  return { line, area };
+interface Allocation {
+  label: string;
+  color: string;
+  pct: number;
+  usd: number;
 }
 
 export default function PortfolioCard() {
-  const { watchlist, wallets } = useApp();
-  const { listings } = useLaunchpad();
-  const [range, setRange] = useState<Range>("1W");
+  const { wallets, profile } = useApp();
   const [hidden, setHidden] = useState<boolean>(false);
 
-  const stats = useMemo(() => {
-    const seed = (watchlist.length + 1) * 17 + (wallets.length + 1) * 11 + listings.length;
-    const drift = range === "1D" ? 0.05 : range === "1W" ? 0.15 : range === "1M" ? 0.3 : range === "3M" ? 0.4 : 0.6;
-    const points = range === "1D" ? 24 : range === "1W" ? 32 : range === "1M" ? 30 : range === "3M" ? 36 : 48;
-    const series = genSparkline(seed, points, drift);
-    const start = series[0] ?? 50;
-    const end = series[series.length - 1] ?? 50;
-    const balance = 4280 + (seed % 8400) + watchlist.length * 38 + wallets.length * 120;
-    const change = ((end - start) / Math.max(1, start)) * 100;
-    return { series, balance, change, drift };
-  }, [watchlist.length, wallets.length, listings.length, range]);
+  const addresses = useMemo<string[]>(() => {
+    const set = new Set<string>();
+    if (profile.walletAddress) set.add(profile.walletAddress);
+    wallets.forEach((w) => {
+      if (w.address) set.add(w.address);
+    });
+    return Array.from(set);
+  }, [profile.walletAddress, wallets]);
 
-  const positive = stats.change >= 0;
+  const portfolios = useQueries({
+    queries: addresses.map((address) => ({
+      queryKey: ["profile", "portfolio", address] as const,
+      queryFn: () => fetchWalletPortfolio(address),
+      staleTime: 60_000,
+      refetchInterval: 90_000,
+    })),
+  });
+
+  const isLoading = portfolios.some((q) => q.isLoading);
+  const isFetching = portfolios.some((q) => q.isFetching);
+
+  const refetchAll = useCallback(() => {
+    portfolios.forEach((q) => q.refetch());
+  }, [portfolios]);
+
+  const aggregate = useMemo(() => {
+    let solTotal = 0;
+    let usdTotal = 0;
+    const tokenMap = new Map<string, WalletTokenHolding>();
+    portfolios.forEach((q) => {
+      const data = q.data;
+      if (!data) return;
+      solTotal += Number(data.balance?.sol ?? 0);
+      usdTotal += Number(data.balance?.usd ?? 0);
+      (data.tokens ?? []).forEach((t) => {
+        const key = t.mint;
+        const existing = tokenMap.get(key);
+        if (existing) {
+          existing.uiAmount = (existing.uiAmount ?? 0) + (t.uiAmount ?? 0);
+          existing.usdValue = (existing.usdValue ?? 0) + (t.usdValue ?? 0);
+        } else {
+          tokenMap.set(key, { ...t });
+        }
+      });
+    });
+    const tokens = Array.from(tokenMap.values()).sort(
+      (a, b) => (b.usdValue ?? 0) - (a.usdValue ?? 0),
+    );
+    return { solTotal, usdTotal, tokens };
+  }, [portfolios]);
+
+  const allocations = useMemo<Allocation[]>(() => {
+    const total = aggregate.usdTotal;
+    if (total <= 0) return [];
+    const top = aggregate.tokens.slice(0, 4);
+    const topSum = top.reduce((s, t) => s + (t.usdValue ?? 0), 0);
+    const out: Allocation[] = top.map((t, i) => ({
+      label: (t.symbol ?? t.mint.slice(0, 4)).toUpperCase(),
+      color: PALETTE[i % PALETTE.length],
+      pct: Math.round(((t.usdValue ?? 0) / total) * 100),
+      usd: t.usdValue ?? 0,
+    }));
+    const rest = total - topSum;
+    if (rest > total * 0.01) {
+      out.push({
+        label: "OTHER",
+        color: PALETTE[4],
+        pct: Math.max(0, 100 - out.reduce((s, a) => s + a.pct, 0)),
+        usd: rest,
+      });
+    }
+    return out;
+  }, [aggregate]);
+
+  const positive = profile.pnlPct >= 0;
   const accent = positive ? Colors.mint : Colors.rose;
-  const stroke = positive ? Colors.mint : Colors.rose;
 
-  const W = 280;
-  const H = 80;
-  const path = useMemo(() => buildPath(stats.series, W, H), [stats.series]);
+  const balanceText = hidden
+    ? "•••••••"
+    : `$${aggregate.usdTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  const solText = hidden
+    ? "•••"
+    : `${aggregate.solTotal.toLocaleString(undefined, { maximumFractionDigits: 4 })} SOL`;
 
-  const balanceText = hidden ? "•••••••" : `$${stats.balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-  const changeText = `${positive ? "+" : ""}${stats.change.toFixed(2)}%`;
-  const changeUsd = `${positive ? "+" : "-"}$${Math.abs((stats.balance * stats.change) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-
-  const allocations = useMemo(
-    () => [
-      { label: "SOL", color: Colors.mint, pct: 38 },
-      { label: "JUP", color: Colors.cyan, pct: 22 },
-      { label: "BONK", color: Colors.orange, pct: 18 },
-      { label: "OTHER", color: Colors.violet, pct: 22 },
-    ],
-    [],
-  );
+  const hasWallets = addresses.length > 0;
 
   return (
     <View style={styles.wrap} testID="portfolio-card">
@@ -106,17 +132,27 @@ export default function PortfolioCard() {
             <Wallet color={accent} size={14} strokeWidth={2.6} />
           </View>
           <View>
-            <Text style={styles.eyebrow}>PORTFOLIO P&L</Text>
+            <Text style={styles.eyebrow}>PORTFOLIO · LIVE</Text>
             <Text style={styles.balance}>{balanceText}</Text>
+            <Text style={styles.subBalance}>{solText} · {addresses.length} wallet{addresses.length === 1 ? "" : "s"}</Text>
           </View>
         </View>
-        <Pressable onPress={() => setHidden((h) => !h)} hitSlop={8} style={styles.eyeBtn}>
-          {hidden ? (
-            <EyeOff color={Colors.muted} size={14} strokeWidth={2.6} />
-          ) : (
-            <Eye color={Colors.muted} size={14} strokeWidth={2.6} />
-          )}
-        </Pressable>
+        <View style={styles.headRight}>
+          <Pressable onPress={refetchAll} hitSlop={8} style={styles.eyeBtn} disabled={isFetching} testID="pf-refresh">
+            {isFetching ? (
+              <ActivityIndicator size="small" color={Colors.muted} />
+            ) : (
+              <RefreshCw color={Colors.muted} size={14} strokeWidth={2.6} />
+            )}
+          </Pressable>
+          <Pressable onPress={() => setHidden((h) => !h)} hitSlop={8} style={styles.eyeBtn} testID="pf-hide">
+            {hidden ? (
+              <EyeOff color={Colors.muted} size={14} strokeWidth={2.6} />
+            ) : (
+              <Eye color={Colors.muted} size={14} strokeWidth={2.6} />
+            )}
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.changeRow}>
@@ -126,76 +162,85 @@ export default function PortfolioCard() {
           ) : (
             <TrendingDown color={accent} size={12} strokeWidth={3} />
           )}
-          <Text style={[styles.changeText, { color: accent }]}>{changeText}</Text>
+          <Text style={[styles.changeText, { color: accent }]}>
+            {positive ? "+" : ""}
+            {profile.pnlPct.toFixed(2)}%
+          </Text>
         </View>
-        <Text style={[styles.changeUsd, { color: accent }]}>{changeUsd}</Text>
-        <Text style={styles.changeSub}>· {range}</Text>
+        <Text style={styles.changeSub}>30D realized PnL</Text>
       </View>
 
-      <View style={styles.chartWrap}>
-        <Svg width={W} height={H} style={{ alignSelf: "stretch" }} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-          <Defs>
-            <SvgLinearGradient id="pf-area" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={stroke} stopOpacity="0.45" />
-              <Stop offset="1" stopColor={stroke} stopOpacity="0" />
-            </SvgLinearGradient>
-          </Defs>
-          {path.area ? <Path d={path.area} fill="url(#pf-area)" /> : null}
-          {path.line ? (
-            <Path d={path.line} stroke={stroke} strokeWidth={2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-          ) : null}
-        </Svg>
-      </View>
-
-      <View style={styles.rangesRow}>
-        {RANGES.map((r) => {
-          const active = r === range;
-          return (
-            <Pressable
-              key={r}
-              onPress={() => setRange(r)}
-              style={[styles.rangeChip, active && { backgroundColor: `${accent}26` }]}
-              testID={`pf-range-${r}`}
-            >
-              <Text style={[styles.rangeText, active && { color: accent }]}>{r}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View style={styles.allocWrap}>
-        <View style={styles.allocBar}>
-          {allocations.map((a, i) => (
-            <View
-              key={a.label}
-              style={{
-                width: `${a.pct}%`,
-                backgroundColor: a.color,
-                height: "100%",
-                borderTopLeftRadius: i === 0 ? 6 : 0,
-                borderBottomLeftRadius: i === 0 ? 6 : 0,
-                borderTopRightRadius: i === allocations.length - 1 ? 6 : 0,
-                borderBottomRightRadius: i === allocations.length - 1 ? 6 : 0,
-              }}
-            />
-          ))}
+      {!hasWallets ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>No wallets connected</Text>
+          <Text style={styles.emptyBody}>
+            Add your Solana address in Edit profile or track wallets to see live holdings.
+          </Text>
         </View>
-        <View style={styles.allocLegend}>
-          {allocations.map((a) => (
-            <View key={a.label} style={styles.allocItem}>
-              <View style={[styles.allocDot, { backgroundColor: a.color }]} />
-              <Text style={styles.allocLabel}>{a.label}</Text>
-              <Text style={styles.allocPct}>{a.pct}%</Text>
-            </View>
-          ))}
+      ) : isLoading && aggregate.usdTotal === 0 ? (
+        <View style={styles.empty}>
+          <ActivityIndicator color={Colors.mint} />
+          <Text style={styles.emptyBody}>Fetching live on-chain balances…</Text>
         </View>
-      </View>
+      ) : allocations.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyBody}>No tokens detected for connected wallets.</Text>
+        </View>
+      ) : (
+        <View style={styles.allocWrap}>
+          <View style={styles.allocBar}>
+            {allocations.map((a, i) => (
+              <View
+                key={a.label}
+                style={{
+                  width: `${Math.max(2, a.pct)}%`,
+                  backgroundColor: a.color,
+                  height: "100%",
+                  borderTopLeftRadius: i === 0 ? 6 : 0,
+                  borderBottomLeftRadius: i === 0 ? 6 : 0,
+                  borderTopRightRadius: i === allocations.length - 1 ? 6 : 0,
+                  borderBottomRightRadius: i === allocations.length - 1 ? 6 : 0,
+                }}
+              />
+            ))}
+          </View>
+          <View style={styles.allocLegend}>
+            {allocations.map((a) => (
+              <View key={a.label} style={styles.allocItem}>
+                <View style={[styles.allocDot, { backgroundColor: a.color }]} />
+                <Text style={styles.allocLabel}>{a.label}</Text>
+                <Text style={styles.allocPct}>{a.pct}%</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       <View style={styles.statsRow}>
-        <StatCell label="BEST" value="+38.2%" Icon={ArrowUpRight} color={Colors.mint} />
-        <StatCell label="WORST" value="-12.4%" Icon={ArrowDownRight} color={Colors.rose} />
-        <StatCell label="TRADES" value="142" Icon={Activity} color={Colors.cyan} />
-        <StatCell label="ALPHA" value="A+" Icon={Sparkles} color={Colors.violet} />
+        <StatCell
+          label="WIN RATE"
+          value={`${profile.winRate.toFixed(0)}%`}
+          Icon={Target}
+          color={Colors.cyan}
+        />
+        <StatCell
+          label="TRADES"
+          value={`${profile.trades}`}
+          Icon={Activity}
+          color={Colors.mint}
+        />
+        <StatCell
+          label="HOLDINGS"
+          value={`${aggregate.tokens.length}`}
+          Icon={Wallet}
+          color={Colors.orange}
+        />
+        <StatCell
+          label="XP"
+          value={`${profile.xp}`}
+          Icon={Sparkles}
+          color={Colors.violet}
+        />
       </View>
     </View>
   );
@@ -236,15 +281,10 @@ const styles = StyleSheet.create({
     shadowRadius: 22,
     shadowOffset: { width: 0, height: 0 },
   },
-  bgGrad: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  head: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  bgGrad: { ...StyleSheet.absoluteFillObject },
+  head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  headLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  headRight: { flexDirection: "row", alignItems: "center", gap: 6 },
   iconBox: {
     width: 32,
     height: 32,
@@ -252,19 +292,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  eyebrow: {
-    color: Colors.muted,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  balance: {
-    color: Colors.text,
-    fontSize: 26,
-    fontWeight: "900",
-    letterSpacing: -0.7,
-    marginTop: 2,
-  },
+  eyebrow: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.4 },
+  balance: { color: Colors.text, fontSize: 26, fontWeight: "900", letterSpacing: -0.7, marginTop: 2 },
+  subBalance: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
   eyeBtn: {
     width: 32,
     height: 32,
@@ -273,7 +303,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  changeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
+  changeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
   changePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -284,33 +314,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   changeText: { fontSize: 12, fontWeight: "900" },
-  changeUsd: { fontSize: 13, fontWeight: "900" },
   changeSub: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
-  chartWrap: {
-    marginTop: 12,
-    height: 80,
-    overflow: "hidden",
-  },
-  rangesRow: {
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 10,
-    padding: 4,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-  rangeChip: {
-    flex: 1,
-    paddingVertical: 6,
-    borderRadius: 9,
+  empty: {
+    marginTop: 14,
+    paddingVertical: 18,
     alignItems: "center",
+    gap: 6,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.03)",
   },
-  rangeText: {
-    color: Colors.muted,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 0.4,
-  },
+  emptyTitle: { color: Colors.text, fontSize: 13, fontWeight: "800" },
+  emptyBody: { color: Colors.muted, fontSize: 11, fontWeight: "600", textAlign: "center", paddingHorizontal: 16 },
   allocWrap: { marginTop: 14, gap: 8 },
   allocBar: {
     flexDirection: "row",
@@ -319,20 +333,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "rgba(255,255,255,0.06)",
   },
-  allocLegend: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
+  allocLegend: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   allocItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   allocDot: { width: 8, height: 8, borderRadius: 4 },
   allocLabel: { color: Colors.text, fontSize: 11, fontWeight: "800" },
   allocPct: { color: Colors.muted, fontSize: 10, fontWeight: "700" },
-  statsRow: {
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 14,
-  },
+  statsRow: { flexDirection: "row", gap: 6, marginTop: 14 },
   statCell: {
     flex: 1,
     padding: 8,
@@ -343,10 +349,5 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.02)",
   },
   statValue: { fontSize: 13, fontWeight: "900", letterSpacing: -0.2 },
-  statLabel: {
-    color: Colors.muted,
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
+  statLabel: { color: Colors.muted, fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
 });

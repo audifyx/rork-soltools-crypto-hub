@@ -358,16 +358,7 @@ export default function ProfileScreen() {
     [listings],
   );
 
-  const computedXp = useMemo(() => {
-    return (
-      watchlist.length * 12 +
-      wallets.length * 18 +
-      alerts.length * 8 +
-      posts.length * 25 +
-      myListings.length * 60 +
-      profile.xp
-    );
-  }, [watchlist.length, wallets.length, alerts.length, posts.length, myListings.length, profile.xp]);
+  const computedXp = useMemo(() => profile.xp, [profile.xp]);
 
   const rank = useMemo(() => computeRank(computedXp), [computedXp]);
 
