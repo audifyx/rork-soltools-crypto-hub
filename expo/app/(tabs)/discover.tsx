@@ -51,6 +51,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import TokenAvatar from "@/components/TokenAvatar";
 import Colors from "@/constants/colors";
 import { useApp } from "@/providers/app-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
@@ -735,16 +736,13 @@ function SpotlightCard({
         </View>
 
         <View style={styles.spotlightBody}>
-          <LinearGradient
-            colors={grad}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.spotlightAvatar}
-          >
-            <Text style={styles.spotlightAvatarText}>
-              {token.ticker.replace("$", "").slice(0, 2)}
-            </Text>
-          </LinearGradient>
+          <TokenAvatar
+            uri={token.logoUrl}
+            ticker={token.ticker}
+            size={52}
+            radius={16}
+            gradient={grad}
+          />
           <Text style={styles.spotlightTicker} numberOfLines={1}>
             ${token.ticker.replace("$", "")}
           </Text>
@@ -884,14 +882,13 @@ function AiPickRow({
       <View style={styles.aiRank}>
         <Text style={styles.aiRankText}>{rank}</Text>
       </View>
-      <LinearGradient
-        colors={[Colors.cyan, "#7B5BFF"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.aiAvatar}
-      >
-        <Text style={styles.aiAvatarText}>{token.ticker.replace("$", "").slice(0, 2)}</Text>
-      </LinearGradient>
+      <TokenAvatar
+        uri={token.logoUrl}
+        ticker={token.ticker}
+        size={36}
+        radius={12}
+        gradient={[Colors.cyan, "#7B5BFF"]}
+      />
       <View style={styles.aiMid}>
         <View style={styles.aiTopRow}>
           <Text style={styles.aiTicker}>${token.ticker.replace("$", "")}</Text>
@@ -929,14 +926,13 @@ function NewLaunchCard({
   return (
     <Pressable onPress={onPress} style={styles.newCard} testID={`new-${token.id}`}>
       <View style={styles.newTopRow}>
-        <LinearGradient
-          colors={[Colors.orange, Colors.rose]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.newAvatar}
-        >
-          <Text style={styles.newAvatarText}>{token.ticker.replace("$", "").slice(0, 2)}</Text>
-        </LinearGradient>
+        <TokenAvatar
+          uri={token.logoUrl}
+          ticker={token.ticker}
+          size={36}
+          radius={12}
+          gradient={[Colors.orange, Colors.rose]}
+        />
         <Pressable
           onPress={onWatch}
           hitSlop={6}
@@ -995,16 +991,13 @@ function DiscoverRow({
   return (
     <Pressable onPress={onPress} style={styles.row} testID={`discover-row-${token.id}`}>
       <Text style={styles.rank}>{rank}</Text>
-      <View style={styles.rowAvatar}>
-        <LinearGradient
-          colors={[Colors.mint, Colors.cyan]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.rowAvatarGrad}
-        >
-          <Text style={styles.rowAvatarText}>{token.ticker.replace("$", "").slice(0, 2)}</Text>
-        </LinearGradient>
-      </View>
+      <TokenAvatar
+        uri={token.logoUrl}
+        ticker={token.ticker}
+        size={40}
+        radius={12}
+        style={styles.rowAvatar}
+      />
       <View style={styles.rowMid}>
         <View style={styles.rowNameRow}>
           <Text style={styles.rowName} numberOfLines={1}>
@@ -1025,7 +1018,12 @@ function DiscoverRow({
             </>
           ) : null}
         </View>
-        <Text style={styles.rowMc}>MC {formatUsd(token.marketCapUsd)} · VOL {formatUsd(token.volume24hUsd)}</Text>
+        <Text style={styles.rowMc}>
+          {token.price != null && token.price > 0
+            ? `${token.price < 0.01 ? token.price.toFixed(6) : token.price.toFixed(token.price < 1 ? 4 : 2)} · `
+            : ""}
+          MC {formatUsd(token.marketCapUsd)} · VOL {formatUsd(token.volume24hUsd)}
+        </Text>
       </View>
       <View style={styles.rowRight}>
         {token.change24hPct != null ? (

@@ -135,6 +135,19 @@ export default function LaunchDetailScreen() {
           <View style={styles.bannerWrap}>
             {token.bannerUrl ? (
               <Image source={{ uri: token.bannerUrl }} style={styles.banner} contentFit="cover" />
+            ) : token.logoUrl ? (
+              <>
+                <Image
+                  source={{ uri: token.logoUrl }}
+                  style={styles.banner}
+                  contentFit="cover"
+                  blurRadius={Platform.OS === "web" ? 30 : 24}
+                />
+                <LinearGradient
+                  colors={["rgba(3,7,8,0.55)", "rgba(3,7,8,0.25)"]}
+                  style={styles.banner}
+                />
+              </>
             ) : (
               <LinearGradient
                 colors={["rgba(85,245,178,0.32)", "rgba(56,215,255,0.05)"]}
@@ -253,13 +266,36 @@ export default function LaunchDetailScreen() {
                 </View>
               ) : null}
             </View>
-            <Pressable
-              onPress={() => openLink(`https://birdeye.so/token/${token.contract}?chain=solana`)}
-              style={styles.chartPlaceholder}
-              testID="open-birdeye"
-            >
-              <Text style={styles.chartPlaceholderText}>Open live chart on Birdeye →</Text>
-            </Pressable>
+            <View style={styles.chartEmbed} testID="chart-embed">
+              <Image
+                source={{
+                  uri: `https://dd.dexscreener.com/ds-data/tokens/solana/${token.contract}.png?key=trending&theme=dark`,
+                }}
+                style={styles.chartImg}
+                contentFit="cover"
+                transition={150}
+              />
+              <LinearGradient
+                colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.5)"]}
+                style={styles.chartFade}
+              />
+              <View style={styles.chartCtaRow}>
+                <Pressable
+                  onPress={() => openLink(`https://dexscreener.com/solana/${token.contract}`)}
+                  style={styles.chartCta}
+                  testID="open-dexscreener"
+                >
+                  <Text style={styles.chartCtaText}>DexScreener →</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => openLink(`https://birdeye.so/token/${token.contract}?chain=solana`)}
+                  style={styles.chartCta}
+                  testID="open-birdeye"
+                >
+                  <Text style={styles.chartCtaText}>Birdeye →</Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
 
           <View style={styles.metricsGrid}>
@@ -511,17 +547,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   changeText: { fontSize: 12, fontWeight: "900" },
-  chartPlaceholder: {
+  chartEmbed: {
     marginTop: 14,
-    height: 110,
-    borderRadius: 12,
+    height: 150,
+    borderRadius: 14,
+    overflow: "hidden",
     borderWidth: 1,
-    borderStyle: "dashed",
     borderColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.02)",
+    position: "relative",
   },
-  chartPlaceholderText: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+  chartImg: { ...StyleSheet.absoluteFillObject },
+  chartFade: { ...StyleSheet.absoluteFillObject },
+  chartCtaRow: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+  chartCta: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+  },
+  chartCtaText: { color: Colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
 
   metricsGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 12, gap: 8, marginTop: 12 },
   metric: {

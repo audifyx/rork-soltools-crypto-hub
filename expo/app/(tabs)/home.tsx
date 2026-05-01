@@ -31,9 +31,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import TokenAvatar from "@/components/TokenAvatar";
 import Colors from "@/constants/colors";
-import { FEED_POSTS, FeedPost, TRENDING_TOPICS, TrendingPair } from "@/constants/feed";
+import { FEED_POSTS, FeedPost, TRENDING_TOPICS } from "@/constants/feed";
 import { BONK_MINT, JUP_MINT, SOL_MINT, useJupiterPrices, useTrendingTokens } from "@/lib/api/market";
+import { useLaunchpad } from "@/providers/launchpad-provider";
+import { LaunchToken } from "@/types/launchpad";
 import { UserPost, useApp } from "@/providers/app-provider";
 
 const FILTERS = ["For You", "Trending", "New Pairs", "Whales", "Following"] as const;
@@ -220,26 +223,47 @@ function MarketTile({
 }
 
 function TrendingPairsRail() {
+  const router = useRouter();
   const { data: trending } = useTrendingTokens(10);
-  const pairs: TrendingPair[] = (trending ?? []).slice(0, 10).map((t, i) => ({
-    id: t.address,
-    ticker: `${(t.symbol ?? "").toUpperCase()}`,
-    name: t.name ?? t.symbol ?? "Token",
-    mc: formatCompactUsd(t.marketCap),
-    liq: formatCompactUsd(t.liquidity),
-    changePct: t.priceChange24h ?? 0,
-    ageMin: i + 1,
-    holders: t.holder ?? 0,
-    avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length],
-    hot: (t.priceChange24h ?? 0) > 20,
-  }));
-  const hasPairs = pairs.length > 0;
-  return (
-    <TrendingPairsRailInner pairs={pairs} hasPairs={hasPairs} />
-  );
-}
+  const { listings } = useLaunchpad();
 
-const AVATAR_COLORS = [Colors.mint, Colors.cyan, Colors.orange, Colors.rose, "#FFB84C"];
+  const pairs: LaunchToken[] = useMemo(() => {
+    const fromBird = (trending ?? []).slice(0, 10).map((t, i): LaunchToken => ({
+      id: t.address,
+      name: t.name ?? t.symbol ?? "Token",
+      ticker: (t.symbol ?? "").toUpperCase(),
+      description: "",
+      logoUrl: t.logoURI ?? null,
+      bannerUrl: null,
+      contract: t.address,
+      venue: "other",
+      status: "live",
+      tags: [],
+      featured: false,
+      hot: (t.priceChange24h ?? 0) > 20,
+      verified: false,
+      createdAt: Date.now() - i * 60_000,
+      submittedBy: "system",
+      price: t.price ?? null,
+      change24hPct: t.priceChange24h ?? null,
+      liquidityUsd: t.liquidity ?? null,
+      marketCapUsd: t.marketCap ?? null,
+      volume24hUsd: null,
+      holders: t.holder ?? null,
+      upvotes: 0,
+      watchers: 0,
+    }));
+    if (fromBird.length > 0) return fromBird;
+    // Fallback to launchpad listings (Jupiter live data) so the rail is never empty
+    return listings
+      .slice()
+      .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0))
+      .slice(0, 12);
+  }, [trending, listings]);
+
+  const hasPairs = pairs.length > 0;
+  return <TrendingPairsRailInner pairs={pairs} hasPairs={hasPairs} onOpen={(id) => router.push({ pathname: "/launch/[id]", params: { id } })} />;
+}
 
 function formatCompactUsd(n?: number): string {
   if (!n || n === 0) return "—";
@@ -249,7 +273,7 @@ function formatCompactUsd(n?: number): string {
   return `${n.toFixed(0)}`;
 }
 
-function TrendingPairsRailInner({ pairs, hasPairs }: { pairs: TrendingPair[]; hasPairs: boolean }) {
+function TrendingPairsRailInner({ pairs, hasPairs, onOpen }: { pairs: LaunchToken[]; hasPairs: boolean; onOpen: (id: string) => void }) {
   return (
     <View style={styles.railWrap}>
       <View style={styles.railHeader}>
@@ -268,14 +292,14 @@ function TrendingPairsRailInner({ pairs, hasPairs }: { pairs: TrendingPair[]; ha
           contentContainerStyle={styles.railContent}
         >
           {pairs.map((p) => (
-            <PairCard key={p.id} pair={p} />
+            <PairCard key={p.id} pair={p} onPress={() => onOpen(p.id)} />
           ))}
         </ScrollView>
       ) : (
         <View style={styles.railEmpty} testID="pairs-empty">
           <Text style={styles.railEmptyTitle}>No pairs yet</Text>
           <Text style={styles.railEmptyBody}>
-            Connect a data source to start tracking new Solana launches in real time.
+            Live Solana pairs will surface here as soon as they hit the market.
           </Text>
         </View>
       )}
@@ -283,15 +307,16 @@ function TrendingPairsRailInner({ pairs, hasPairs }: { pairs: TrendingPair[]; ha
   );
 }
 
-function PairCard({ pair }: { pair: TrendingPair }) {
-  const positive = pair.changePct >= 0;
+function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void }) {
+  const change = pair.change24hPct ?? 0;
+  const positive = change >= 0;
   const accent = positive ? Colors.mint : Colors.rose;
+  const ageMin = Math.max(1, Math.floor((Date.now() - pair.createdAt) / 60_000));
+  const price = pair.price;
   return (
-    <Pressable style={styles.pairCard} testID={`pair-${pair.id}`}>
+    <Pressable style={styles.pairCard} onPress={onPress} testID={`pair-${pair.id}`}>
       <View style={styles.pairTopRow}>
-        <View style={[styles.pairAvatar, { backgroundColor: pair.avatarColor }]}>
-          <Text style={styles.pairAvatarText}>{pair.ticker.replace("$", "").slice(0, 2)}</Text>
-        </View>
+        <TokenAvatar uri={pair.logoUrl} ticker={pair.ticker} size={36} radius={12} />
         {pair.hot ? (
           <View style={styles.hotBadge}>
             <Flame color={Colors.orange} size={10} strokeWidth={3} />
@@ -299,23 +324,28 @@ function PairCard({ pair }: { pair: TrendingPair }) {
           </View>
         ) : (
           <View style={styles.agePill}>
-            <Text style={styles.ageText}>{pair.ageMin}m</Text>
+            <Text style={styles.ageText}>{ageMin}m</Text>
           </View>
         )}
       </View>
-      <Text style={styles.pairTicker}>{pair.ticker}</Text>
+      <Text style={styles.pairTicker} numberOfLines={1}>${pair.ticker.replace("$", "")}</Text>
       <Text style={styles.pairName} numberOfLines={1}>
         {pair.name}
       </Text>
+      {price != null && price > 0 ? (
+        <Text style={styles.pairPrice} numberOfLines={1}>
+          ${price < 0.01 ? price.toFixed(6) : price.toFixed(price < 1 ? 4 : 2)}
+        </Text>
+      ) : null}
 
       <View style={styles.pairStatsRow}>
         <View style={styles.pairStatBox}>
           <Text style={styles.pairStatLabel}>MC</Text>
-          <Text style={styles.pairStatValue}>{pair.mc}</Text>
+          <Text style={styles.pairStatValue}>{formatCompactUsd(pair.marketCapUsd ?? undefined)}</Text>
         </View>
         <View style={styles.pairStatBox}>
           <Text style={styles.pairStatLabel}>LIQ</Text>
-          <Text style={styles.pairStatValue}>{pair.liq}</Text>
+          <Text style={styles.pairStatValue}>{formatCompactUsd(pair.liquidityUsd ?? undefined)}</Text>
         </View>
       </View>
 
@@ -327,7 +357,7 @@ function PairCard({ pair }: { pair: TrendingPair }) {
         )}
         <Text style={[styles.pairChangeText, { color: accent }]}>
           {positive ? "+" : ""}
-          {pair.changePct.toFixed(1)}%
+          {change.toFixed(1)}%
         </Text>
       </View>
     </Pressable>
@@ -781,6 +811,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     marginTop: 2,
+  },
+  pairPrice: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "900",
+    marginTop: 6,
+    letterSpacing: -0.2,
   },
   pairStatsRow: {
     flexDirection: "row",
