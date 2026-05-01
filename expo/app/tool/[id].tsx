@@ -1,4 +1,5 @@
 import * as Clipboard from "expo-clipboard";
+import { useQueries } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -73,6 +74,7 @@ import Colors from "@/constants/colors";
 import { getTokenOverview, getTokenSecurity } from "@/lib/api/birdeye";
 import { getLiveKitToken } from "@/lib/api/livekit";
 import { useTrendingTokens } from "@/lib/api/market";
+import { fetchWalletBalance, type WalletBalance } from "@/lib/api/wallet";
 import { AlertItem, useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
@@ -371,6 +373,23 @@ function WalletTrackerTool({ accent }: { accent: string }) {
   const [address, setAddress] = useState<string>("");
   const [label, setLabel] = useState<string>("");
 
+  const balanceQueries = useQueries({
+    queries: wallets.map((w) => ({
+      queryKey: ["wallet", "balance", w.address],
+      queryFn: () => fetchWalletBalance(w.address),
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+      enabled: w.address.length >= 32,
+    })),
+  });
+
+  const totalUsd = useMemo(() => {
+    return balanceQueries.reduce((acc, q) => {
+      const data = q.data as WalletBalance | undefined;
+      return acc + (data?.usd ?? 0);
+    }, 0);
+  }, [balanceQueries]);
+
   const onPaste = useCallback(async () => {
     try {
       const txt = await Clipboard.getStringAsync();
@@ -405,7 +424,12 @@ function WalletTrackerTool({ accent }: { accent: string }) {
     <View>
       <View style={styles.statRow}>
         <StatTile label="Tracked" value={`${wallets.length}`} accent={accent} Icon={Wallet} />
-        <StatTile label="PnL 24h" value="—" accent={accent} Icon={TrendingUp} />
+        <StatTile
+          label="Total USD"
+          value={totalUsd > 0 ? `${totalUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
+          accent={accent}
+          Icon={TrendingUp}
+        />
         <StatTile label="Alerts" value="—" accent={accent} Icon={Bell} />
       </View>
 
@@ -456,25 +480,37 @@ function WalletTrackerTool({ accent }: { accent: string }) {
         />
       ) : (
         <View style={styles.list}>
-          {wallets.map((w) => (
-            <View key={w.id} style={styles.rowCard} testID={`tracked-wallet-${w.id}`}>
-              <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
-                <Wallet color={accent} size={15} strokeWidth={2.6} />
+          {wallets.map((w, idx) => {
+            const bq = balanceQueries[idx];
+            const bal = bq?.data as WalletBalance | undefined;
+            const sol = bal?.sol ?? 0;
+            const usd = bal?.usd ?? 0;
+            const loading = bq?.isLoading ?? false;
+            return (
+              <View key={w.id} style={styles.rowCard} testID={`tracked-wallet-${w.id}`}>
+                <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
+                  <Wallet color={accent} size={15} strokeWidth={2.6} />
+                </View>
+                <View style={styles.rowMid}>
+                  <Text style={styles.rowTitle}>{w.label || "Wallet"}</Text>
+                  <Text style={styles.rowSub} numberOfLines={1}>
+                    {w.address.slice(0, 8)}…{w.address.slice(-6)}
+                  </Text>
+                  <Text style={[styles.rowSub, { color: accent, marginTop: 2 }]} numberOfLines={1}>
+                    {loading
+                      ? "Loading…"
+                      : `${sol.toLocaleString(undefined, { maximumFractionDigits: 4 })} SOL · ${usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                  </Text>
+                </View>
+                <Pressable onPress={() => onCopy(w.address)} style={styles.rowAction} hitSlop={6}>
+                  <Copy color={Colors.muted} size={13} strokeWidth={2.6} />
+                </Pressable>
+                <Pressable onPress={() => removeWallet(w.id)} style={styles.rowAction} hitSlop={6}>
+                  <X color={Colors.muted} size={14} strokeWidth={2.6} />
+                </Pressable>
               </View>
-              <View style={styles.rowMid}>
-                <Text style={styles.rowTitle}>{w.label}</Text>
-                <Text style={styles.rowSub} numberOfLines={1}>
-                  {w.address.slice(0, 8)}…{w.address.slice(-6)}
-                </Text>
-              </View>
-              <Pressable onPress={() => onCopy(w.address)} style={styles.rowAction} hitSlop={6}>
-                <Copy color={Colors.muted} size={13} strokeWidth={2.6} />
-              </Pressable>
-              <Pressable onPress={() => removeWallet(w.id)} style={styles.rowAction} hitSlop={6}>
-                <X color={Colors.muted} size={14} strokeWidth={2.6} />
-              </Pressable>
-            </View>
-          ))}
+            );
+          })}
         </View>
       )}
     </View>
