@@ -39,6 +39,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import TokenAvatar from "@/components/TokenAvatar";
 import Colors from "@/constants/colors";
+import { fmtPrice } from "@/utils/format";
 import { FEED_POSTS, FeedPost, TRENDING_TOPICS } from "@/constants/feed";
 import {
   BONK_MINT,
@@ -640,7 +641,7 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
       </Text>
       {price != null && price > 0 ? (
         <Text style={styles.pairPrice} numberOfLines={1}>
-          ${price < 0.01 ? price.toFixed(6) : price.toFixed(price < 1 ? 4 : 2)}
+          {fmtPrice(price)}
         </Text>
       ) : null}
 
@@ -894,7 +895,7 @@ function TokenFeedRow({ token, onPress }: { token: LaunchToken; onPress: () => v
         </View>
         <Text style={styles.tokenStats} numberOfLines={1}>
           {token.price && token.price > 0
-            ? `${token.price < 0.01 ? token.price.toFixed(6) : token.price.toFixed(token.price < 1 ? 4 : 2)} · `
+            ? `${fmtPrice(token.price)} · `
             : ""}
           MC {formatCompactUsd(token.marketCapUsd ?? undefined)} · LIQ {formatCompactUsd(token.liquidityUsd ?? undefined)} · {ageMin}m
         </Text>

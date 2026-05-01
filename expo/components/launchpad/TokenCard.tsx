@@ -8,6 +8,7 @@ import * as Haptics from "expo-haptics";
 
 import Colors from "@/constants/colors";
 import { LaunchToken } from "@/types/launchpad";
+import { fmtUsd, fmtPrice } from "@/utils/format";
 
 interface Props {
   token: LaunchToken;
@@ -15,31 +16,9 @@ interface Props {
   onChart: () => void;
 }
 
-function formatUsd(n: number | null | undefined): string {
-  if (n == null || n === 0) return "N/A";
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(2)}K`;
-  return `$${n.toFixed(2)}`;
-}
-
-function formatTokenPrice(n: number | null | undefined): string {
-  if (n == null) return "N/A";
-  if (n === 0) return "$0";
-  if (n < 0.000001) return `${n.toExponential(2)}`;
-  if (n < 0.01) return `${n.toFixed(6)}`;
-  if (n < 1) return `${n.toFixed(4)}`;
-  return `${n.toFixed(2)}`;
-}
-
-function formatCompactUsd(n: number | null | undefined): string {
-  if (n == null || n === 0) return "N/A";
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  if (n >= 1) return `${n.toFixed(2)}`;
-  return `${n.toFixed(4)}`;
-}
+const formatUsd = fmtUsd;
+const formatTokenPrice = fmtPrice;
+const formatCompactUsd = fmtUsd;
 
 function TokenCardImpl({ token, onPress, onChart }: Props) {
   const positive = (token.change24hPct ?? 0) >= 0;

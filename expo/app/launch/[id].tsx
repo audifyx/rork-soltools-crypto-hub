@@ -33,19 +33,14 @@ import Colors from "@/constants/colors";
 import DexChart from "@/components/DexChart";
 import { useTokenOverview } from "@/lib/api/market";
 import { useLaunchpad } from "@/providers/launchpad-provider";
+import { fmtUsd } from "@/utils/format";
 
 function shortAddress(addr: string): string {
   if (addr.length <= 10) return addr;
   return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 
-function formatUsd(n: number | null | undefined): string {
-  if (n == null || n === 0) return "—";
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(2)}K`;
-  return `$${n.toFixed(2)}`;
-}
+const formatUsd = fmtUsd;
 
 export default function LaunchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

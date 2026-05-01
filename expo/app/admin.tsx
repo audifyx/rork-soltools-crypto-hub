@@ -39,6 +39,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { fmtUsd as sharedFmtUsd } from "@/utils/format";
 import { useAdmin, type AdminRole } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -969,12 +970,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function fmtUsd(v: number | null | undefined): string {
-  if (v === null || v === undefined || Number.isNaN(v)) return "—";
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
-  return `$${v.toFixed(0)}`;
-}
+const fmtUsd = sharedFmtUsd;
 
 function TicketsSection() {
   const qc = useQueryClient();

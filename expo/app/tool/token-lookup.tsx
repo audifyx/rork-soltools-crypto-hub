@@ -39,6 +39,7 @@ import { useQuery } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
 import DexChart from "@/components/DexChart";
 import { getTokenOverview, type TokenOverview } from "@/lib/api/birdeye";
+import { fmtUsd, fmtNum } from "@/utils/format";
 
 const INTERVALS: { key: string; label: string }[] = [
   { key: "5", label: "5m" },
@@ -47,45 +48,6 @@ const INTERVALS: { key: string; label: string }[] = [
   { key: "240", label: "4h" },
   { key: "1D", label: "1D" },
 ];
-
-function fmtUsd(n?: number): string {
-  if (n == null || !isFinite(n)) return "—";
-  if (n === 0) return "$0";
-  if (n < 1000) return fmtSmallPrice(n);
-  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 2 : 1)}K`;
-  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(n < 10_000_000 ? 2 : 1)}M`;
-  if (n < 1_000_000_000_000) return `${(n / 1_000_000_000).toFixed(n < 10_000_000_000 ? 2 : 1)}B`;
-  return `${(n / 1_000_000_000_000).toFixed(2)}T`;
-}
-
-/**
- * Pretty-print sub-dollar prices without ugly scientific notation.
- * For very small numbers, uses the leading-zero subscript convention
- * (e.g. 0.0₅3012 means 5 zeros after the decimal, then "3012").
- */
-function fmtSmallPrice(n: number): string {
-  if (n >= 1) return `${n.toFixed(n < 10 ? 4 : 2)}`;
-  if (n >= 0.01) return `${n.toFixed(4)}`;
-  if (n >= 0.0001) return `${n.toFixed(6)}`;
-  const s = n.toFixed(20);
-  const m = s.match(/^0\.(0+)(\d+)/);
-  if (!m) return `${n.toPrecision(4)}`;
-  const zeros = m[1].length;
-  const digits = m[2].slice(0, 4);
-  const sub = String(zeros)
-    .split("")
-    .map((d) => "₀₁₂₃₄₅₆₇₈₉"[Number(d)])
-    .join("");
-  return `$0.0${sub}${digits}`;
-}
-
-function fmtNum(n?: number): string {
-  if (n == null || !isFinite(n)) return "—";
-  if (n < 1000) return n.toLocaleString();
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
-  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  return `${(n / 1_000_000_000).toFixed(2)}B`;
-}
 
 export default function TokenLookupScreen() {
   const router = useRouter();

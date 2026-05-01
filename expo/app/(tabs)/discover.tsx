@@ -53,6 +53,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import TokenAvatar from "@/components/TokenAvatar";
 import Colors from "@/constants/colors";
+import { fmtUsd, fmtPrice } from "@/utils/format";
 import { useApp } from "@/providers/app-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchToken } from "@/types/launchpad";
@@ -1029,7 +1030,7 @@ function DiscoverRow({
         </View>
         <Text style={styles.rowMc}>
           {token.price != null && token.price > 0
-            ? `${token.price < 0.01 ? token.price.toFixed(6) : token.price.toFixed(token.price < 1 ? 4 : 2)} · `
+            ? `${fmtPrice(token.price)} · `
             : ""}
           MC {formatUsd(token.marketCapUsd)} · VOL {formatUsd(token.volume24hUsd)}
         </Text>
@@ -1112,13 +1113,7 @@ function SearchEmpty({ query }: { query: string }) {
   );
 }
 
-function formatUsd(n?: number | null): string {
-  if (n == null || n === 0) return "—";
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(0)}`;
-}
+const formatUsd = fmtUsd;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
