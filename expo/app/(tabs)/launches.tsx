@@ -161,8 +161,8 @@ export default function LaunchpadScreen() {
                       testID={`launch-tab-${key}`}
                     >
                       <Icon
-                        color={active ? Colors.ink : Colors.muted}
-                        size={13}
+                        color={active ? Colors.mint : Colors.muted}
+                        size={14}
                         strokeWidth={2.6}
                       />
                       <Text style={[styles.filterTabText, active && styles.filterTabTextActive]}>
@@ -894,27 +894,32 @@ const styles = StyleSheet.create({
 
   filterTabsRow: {
     flexDirection: "row",
-    gap: 6,
+    gap: 8,
     paddingHorizontal: 14,
     marginTop: 22,
   },
   filterTabBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.03)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
   },
   filterTabBtnActive: {
-    backgroundColor: Colors.mint,
-    borderColor: Colors.mint,
+    backgroundColor: "rgba(85,245,178,0.14)",
+    borderColor: "rgba(85,245,178,0.7)",
+    shadowColor: Colors.mint,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  filterTabText: { color: Colors.muted, fontSize: 12, fontWeight: "800" },
-  filterTabTextActive: { color: Colors.ink, fontWeight: "900" },
+  filterTabText: { color: Colors.muted, fontSize: 13, fontWeight: "800" },
+  filterTabTextActive: { color: Colors.mint, fontWeight: "900" },
 
   searchBar: {
     flexDirection: "row",

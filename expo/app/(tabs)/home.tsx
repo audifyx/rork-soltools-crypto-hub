@@ -613,59 +613,89 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
   const change = pair.change24hPct ?? 0;
   const positive = change >= 0;
   const accent = positive ? Colors.mint : Colors.rose;
+  const ringColor = pair.hot ? Colors.orange : positive ? Colors.mint : "#B88CFF";
   const ageMin = Math.max(1, Math.floor((Date.now() - pair.createdAt) / 60_000));
   const price = pair.price;
   return (
-    <Pressable style={styles.pairCard} onPress={onPress} testID={`pair-${pair.id}`}>
-      <View style={styles.pairTopRow}>
-        <TokenAvatar uri={pair.logoUrl} ticker={pair.ticker} size={36} radius={12} />
-        {pair.hot ? (
-          <View style={styles.hotBadge}>
-            <Flame color={Colors.orange} size={10} strokeWidth={3} />
-            <Text style={styles.hotText}>HOT</Text>
-          </View>
-        ) : (
-          <View style={styles.agePill}>
-            <Text style={styles.ageText}>{ageMin}m</Text>
-          </View>
-        )}
-      </View>
-      <Text style={styles.pairTicker} numberOfLines={1}>
-        ${pair.ticker.replace("$", "")}
-      </Text>
-      <Text style={styles.pairName} numberOfLines={1}>
-        {pair.name}
-      </Text>
-      <Text style={styles.pairPrice} numberOfLines={1}>
-        MC ${formatCompactUsd(pair.marketCapUsd ?? undefined)}
-      </Text>
-
-      <View style={styles.pairStatsRow}>
-        <View style={styles.pairStatBox}>
-          <Text style={styles.pairStatLabel}>LIQ</Text>
-          <Text style={styles.pairStatValue}>{formatCompactUsd(pair.liquidityUsd ?? undefined)}</Text>
-        </View>
-        <View style={styles.pairStatBox}>
-          <Text style={styles.pairStatLabel}>PRICE</Text>
-          <Text style={styles.pairStatValue}>{price != null && price > 0 ? fmtPrice(price) : "—"}</Text>
-        </View>
-      </View>
-
+    <Pressable
+      style={[styles.pairCard, { shadowColor: ringColor }]}
+      onPress={onPress}
+      testID={`pair-${pair.id}`}
+    >
       <View
-        style={[
-          styles.pairChangePill,
-          { borderColor: `${accent}55`, backgroundColor: `${accent}14` },
-        ]}
-      >
-        {positive ? (
-          <TrendingUp color={accent} size={12} strokeWidth={3} />
-        ) : (
-          <TrendingDown color={accent} size={12} strokeWidth={3} />
-        )}
-        <Text style={[styles.pairChangeText, { color: accent }]}>
-          {positive ? "+" : ""}
-          {change.toFixed(1)}%
+        style={[styles.pairHalo, { borderColor: ringColor, shadowColor: ringColor }]}
+        pointerEvents="none"
+      />
+      <View style={styles.pairInner}>
+        <LinearGradient
+          colors={[`${ringColor}22`, "rgba(0,0,0,0)", `${ringColor}11`]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[styles.pairGlowBlob, { backgroundColor: `${ringColor}33` }]} />
+
+        <View style={styles.pairTopRow}>
+          <TokenAvatar uri={pair.logoUrl} ticker={pair.ticker} size={40} radius={14} />
+          {pair.hot ? (
+            <View style={styles.hotBadge}>
+              <Flame color={Colors.orange} size={10} strokeWidth={3} />
+              <Text style={styles.hotText}>HOT</Text>
+            </View>
+          ) : (
+            <View style={styles.agePill}>
+              <Text style={styles.ageText}>{ageMin}m</Text>
+            </View>
+          )}
+        </View>
+        <Text
+          style={[styles.pairTicker, { color: ringColor, textShadowColor: `${ringColor}AA` }]}
+          numberOfLines={1}
+        >
+          ${pair.ticker.replace("$", "")}
         </Text>
+        <Text style={styles.pairName} numberOfLines={1}>
+          {pair.name}
+        </Text>
+        <Text style={styles.pairPrice} numberOfLines={1}>
+          MC ${formatCompactUsd(pair.marketCapUsd ?? undefined)}
+        </Text>
+
+        <View style={styles.pairStatsRow}>
+          <View style={[styles.pairStatBox, styles.pairStatLiq]}>
+            <Text style={styles.pairStatLabel}>LIQ</Text>
+            <Text style={[styles.pairStatValue, { color: Colors.cyan }]}>
+              {formatCompactUsd(pair.liquidityUsd ?? undefined)}
+            </Text>
+          </View>
+          <View style={[styles.pairStatBox, styles.pairStatPrice]}>
+            <Text style={styles.pairStatLabel}>PRICE</Text>
+            <Text style={[styles.pairStatValue, { color: Colors.neon }]}>
+              {price != null && price > 0 ? fmtPrice(price) : "—"}
+            </Text>
+          </View>
+        </View>
+
+        <View
+          style={[
+            styles.pairChangePill,
+            {
+              borderColor: `${accent}88`,
+              backgroundColor: `${accent}1A`,
+              shadowColor: accent,
+            },
+          ]}
+        >
+          {positive ? (
+            <TrendingUp color={accent} size={12} strokeWidth={3} />
+          ) : (
+            <TrendingDown color={accent} size={12} strokeWidth={3} />
+          )}
+          <Text style={[styles.pairChangeText, { color: accent }]}>
+            {positive ? "+" : ""}
+            {change.toFixed(1)}%
+          </Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -1056,6 +1086,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
   filterText: {
     color: Colors.muted,
@@ -1231,12 +1262,36 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   pairCard: {
-    width: 168,
+    width: 178,
+    borderRadius: 24,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  pairHalo: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 24,
+    borderWidth: 1.4,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.85,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  pairInner: {
     padding: 14,
-    borderRadius: 18,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderRadius: 24,
+    backgroundColor: "rgba(8, 14, 18, 0.86)",
+    overflow: "hidden",
+  },
+  pairGlowBlob: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    top: -50,
+    right: -50,
+    opacity: 0.55,
   },
   pairTopRow: {
     flexDirection: "row",
@@ -1272,11 +1327,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   pairTicker: {
-    color: Colors.text,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "900",
     marginTop: 12,
     letterSpacing: -0.4,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
   },
   pairName: {
     color: Colors.muted,
@@ -1298,22 +1354,30 @@ const styles = StyleSheet.create({
   },
   pairStatBox: {
     flex: 1,
-    paddingVertical: 7,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingVertical: 8,
+    paddingHorizontal: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  pairStatLiq: {
+    backgroundColor: "rgba(56,215,255,0.16)",
+    borderColor: "rgba(56,215,255,0.45)",
+  },
+  pairStatPrice: {
+    backgroundColor: "rgba(217,70,255,0.14)",
+    borderColor: "rgba(217,70,255,0.45)",
   },
   pairStatLabel: {
     color: Colors.muted,
     fontSize: 9,
-    fontWeight: "800",
+    fontWeight: "900",
     letterSpacing: 0.8,
   },
   pairStatValue: {
-    color: Colors.text,
     fontSize: 12,
-    fontWeight: "800",
-    marginTop: 2,
+    fontWeight: "900",
+    marginTop: 3,
+    letterSpacing: -0.2,
   },
   pairChangePill: {
     flexDirection: "row",
@@ -1321,9 +1385,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     marginTop: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1.2,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
+    elevation: 4,
   },
   pairChangeText: {
     fontSize: 12,
