@@ -11,6 +11,8 @@
 import { useQuery } from "@tanstack/react-query";
 
 const BASE = "https://api.dexscreener.com/latest/dex";
+const PROFILES_URL = "https://api.dexscreener.com/token-profiles/latest/v1";
+const BOOSTS_URL = "https://api.dexscreener.com/token-boosts/latest/v1";
 
 export interface DexPair {
   chainId: string;
@@ -113,6 +115,48 @@ export async function fetchDexTokenBatch(
     }),
   );
   return out;
+}
+
+interface DexProfileEntry {
+  url?: string;
+  chainId?: string;
+  tokenAddress?: string;
+}
+
+/**
+ * Fetches the freshest Solana pairs from DexScreener: combines the latest
+ * token profiles + boosts feeds, then enriches with /tokens to get price,
+ * liquidity, MC, and pairCreatedAt. Sorted youngest pair first.
+ */
+export async function getNewSolanaPairs(limit: number = 20): Promise<DexPair[]> {
+  const addresses = new Set<string>();
+  await Promise.all(
+    [PROFILES_URL, BOOSTS_URL].map(async (url) => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const json = (await res.json()) as DexProfileEntry[] | { data?: DexProfileEntry[] };
+        const list = Array.isArray(json) ? json : (json.data ?? []);
+        for (const e of list) {
+          if (e?.chainId === "solana" && e.tokenAddress) addresses.add(e.tokenAddress);
+        }
+      } catch (e) {
+        console.log("[dexscreener] profiles fetch failed", e);
+      }
+    }),
+  );
+  const addrList = Array.from(addresses).slice(0, 60);
+  if (addrList.length === 0) return [];
+  const snapshots = await fetchDexTokenBatch(addrList);
+  const pairs: DexPair[] = [];
+  for (const a of addrList) {
+    const snap = snapshots[a];
+    if (snap?.pair && snap.pair.chainId === "solana") {
+      pairs.push(snap.pair);
+    }
+  }
+  pairs.sort((a, b) => (b.pairCreatedAt ?? 0) - (a.pairCreatedAt ?? 0));
+  return pairs.slice(0, limit);
 }
 
 /**

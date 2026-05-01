@@ -54,6 +54,7 @@ import {
   SOL_MINT,
   useJupiterPrices,
   useTrendingTokens,
+  useNewSolanaPairs,
 } from "@/lib/api/market";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
@@ -561,7 +562,7 @@ function MarketTile({
 
 function TrendingPairsRail() {
   const router = useRouter();
-  const { data: trending } = useTrendingTokens(10);
+  const { data: newPairs } = useNewSolanaPairs(12);
   const { listings } = useLaunchpad();
   const goAll = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
@@ -569,37 +570,43 @@ function TrendingPairsRail() {
   }, [router]);
 
   const pairs: LaunchToken[] = useMemo(() => {
-    const fromBird = (trending ?? []).slice(0, 10).map((t, i): LaunchToken => ({
-      id: t.address,
-      name: t.name ?? t.symbol ?? "Token",
-      ticker: (t.symbol ?? "").toUpperCase(),
-      description: "",
-      logoUrl: t.logoURI ?? null,
-      bannerUrl: null,
-      contract: t.address,
-      venue: "other",
-      status: "live",
-      tags: [],
-      featured: false,
-      hot: (t.priceChange24h ?? 0) > 20,
-      verified: false,
-      createdAt: Date.now() - i * 60_000,
-      submittedBy: "system",
-      price: t.price ?? null,
-      change24hPct: t.priceChange24h ?? null,
-      liquidityUsd: t.liquidity ?? null,
-      marketCapUsd: t.marketCap ?? null,
-      volume24hUsd: null,
-      holders: t.holder ?? null,
-      upvotes: 0,
-      watchers: 0,
-    }));
-    if (fromBird.length > 0) return fromBird;
+    const fromDex = (newPairs ?? []).map((p): LaunchToken => {
+      const created = p.pairCreatedAt ?? Date.now();
+      const ageMs = Date.now() - created;
+      const ageHours = ageMs / 3_600_000;
+      const change = p.priceChange?.h24 ?? null;
+      return {
+        id: p.baseToken.address,
+        name: p.baseToken.name ?? p.baseToken.symbol ?? "Token",
+        ticker: (p.baseToken.symbol ?? "").toUpperCase(),
+        description: "",
+        logoUrl: p.info?.imageUrl ?? null,
+        bannerUrl: null,
+        contract: p.baseToken.address,
+        venue: "other",
+        status: "live",
+        tags: [],
+        featured: false,
+        hot: ageHours < 24 || (change ?? 0) > 50,
+        verified: false,
+        createdAt: created,
+        submittedBy: "system",
+        price: p.priceUsd ? Number(p.priceUsd) : null,
+        change24hPct: change,
+        liquidityUsd: p.liquidity?.usd ?? null,
+        marketCapUsd: p.marketCap ?? p.fdv ?? null,
+        volume24hUsd: p.volume?.h24 ?? null,
+        holders: null,
+        upvotes: 0,
+        watchers: 0,
+      };
+    });
+    if (fromDex.length > 0) return fromDex;
     return listings
       .slice()
-      .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0))
+      .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 12);
-  }, [trending, listings]);
+  }, [newPairs, listings]);
 
   const hasPairs = pairs.length > 0;
   return (
@@ -669,7 +676,15 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
   const positive = change >= 0;
   const accent = positive ? Colors.mint : Colors.rose;
   const ringColor = pair.hot ? Colors.orange : positive ? Colors.mint : "#B88CFF";
-  const ageMin = Math.max(1, Math.floor((Date.now() - pair.createdAt) / 60_000));
+  const ageMs = Math.max(0, Date.now() - pair.createdAt);
+  const ageLabel =
+    ageMs < 60_000
+      ? `${Math.max(1, Math.floor(ageMs / 1000))}s`
+      : ageMs < 3_600_000
+        ? `${Math.floor(ageMs / 60_000)}m`
+        : ageMs < 86_400_000
+          ? `${Math.floor(ageMs / 3_600_000)}h`
+          : `${Math.floor(ageMs / 86_400_000)}d`;
   const price = pair.price;
   return (
     <Pressable
@@ -692,16 +707,15 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
 
         <View style={styles.pairTopRow}>
           <TokenAvatar uri={pair.logoUrl} ticker={pair.ticker} size={40} radius={14} />
+          <View style={styles.agePill}>
+            <Text style={styles.ageText}>{ageLabel}</Text>
+          </View>
           {pair.hot ? (
             <View style={styles.hotBadge}>
               <Flame color={Colors.orange} size={10} strokeWidth={3} />
-              <Text style={styles.hotText}>HOT</Text>
+              <Text style={styles.hotText}>NEW</Text>
             </View>
-          ) : (
-            <View style={styles.agePill}>
-              <Text style={styles.ageText}>{ageMin}m</Text>
-            </View>
-          )}
+          ) : null}
         </View>
         <Text
           style={[styles.pairTicker, { color: ringColor, textShadowColor: `${ringColor}AA` }]}

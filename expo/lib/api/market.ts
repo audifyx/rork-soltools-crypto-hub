@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { getPrice, JupiterPrice } from "@/lib/api/jupiter";
 import { getTokenOverview, getTrending, TokenOverview } from "@/lib/api/birdeye";
+import { getNewSolanaPairs, DexPair } from "@/lib/api/dexscreener";
 
 export const SOL_MINT = "So11111111111111111111111111111111111111112";
 export const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -33,6 +34,22 @@ export function useTrendingTokens(limit: number = 20) {
         return await getTrending(limit);
       } catch (e) {
         console.log("[market] trending fetch failed", e);
+        return [];
+      }
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+}
+
+export function useNewSolanaPairs(limit: number = 20) {
+  return useQuery<DexPair[]>({
+    queryKey: ["dexscreener", "new-pairs", limit],
+    queryFn: async () => {
+      try {
+        return await getNewSolanaPairs(limit);
+      } catch (e) {
+        console.log("[market] new pairs fetch failed", e);
         return [];
       }
     },
