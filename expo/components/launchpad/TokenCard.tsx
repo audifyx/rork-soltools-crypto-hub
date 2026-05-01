@@ -135,15 +135,15 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
               {positive ? (
                 <TrendingUp
                   color={accent}
-                  size={36}
-                  strokeWidth={3.4}
+                  size={48}
+                  strokeWidth={3.6}
                   style={styles.arrowIcon}
                 />
               ) : (
                 <TrendingDown
                   color={accent}
-                  size={36}
-                  strokeWidth={3.4}
+                  size={48}
+                  strokeWidth={3.6}
                   style={styles.arrowIcon}
                 />
               )}
@@ -166,9 +166,15 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
             {tickerText}
           </Text>
           {token.hot ? (
-            <View style={styles.hotPill}>
+            <View style={styles.hotPillWrap}>
+              <LinearGradient
+                colors={[Colors.mint, Colors.orange, Colors.neon, Colors.cyan]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
               <View style={styles.hotInner}>
-                <Flame color={Colors.orange} size={11} strokeWidth={3} />
+                <Flame color={Colors.orange} size={12} strokeWidth={3} />
                 <Text style={styles.hotText}>HOT</Text>
               </View>
             </View>
@@ -333,7 +339,7 @@ const styles = StyleSheet.create({
   },
   arrowIcon: { marginBottom: 2, marginRight: -2 },
   changePct: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "900",
     letterSpacing: -0.4,
     textShadowOffset: { width: 0, height: 0 },
@@ -363,26 +369,24 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 18,
   },
-  hotPill: {
+  hotPillWrap: {
     borderRadius: 999,
+    overflow: "hidden",
     padding: 1.5,
-    backgroundColor: "transparent",
-    borderWidth: 1.4,
-    borderColor: "rgba(255,184,76,0.85)",
     shadowColor: Colors.orange,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowRadius: 12,
+    elevation: 6,
   },
   hotInner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "#08080F",
   },
   hotText: {
     color: Colors.orange,
