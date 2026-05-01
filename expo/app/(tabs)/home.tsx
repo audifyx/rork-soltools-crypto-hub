@@ -497,7 +497,7 @@ function MarketTile({
 }) {
   const display =
     price != null && price > 0
-      ? `${price < 1 ? price.toFixed(digits) : price.toFixed(2)}`
+      ? fmtPrice(price)
       : loading
         ? "…"
         : "—";
@@ -639,20 +639,18 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
       <Text style={styles.pairName} numberOfLines={1}>
         {pair.name}
       </Text>
-      {price != null && price > 0 ? (
-        <Text style={styles.pairPrice} numberOfLines={1}>
-          {fmtPrice(price)}
-        </Text>
-      ) : null}
+      <Text style={styles.pairPrice} numberOfLines={1}>
+        MC ${formatCompactUsd(pair.marketCapUsd ?? undefined)}
+      </Text>
 
       <View style={styles.pairStatsRow}>
         <View style={styles.pairStatBox}>
-          <Text style={styles.pairStatLabel}>MC</Text>
-          <Text style={styles.pairStatValue}>{formatCompactUsd(pair.marketCapUsd ?? undefined)}</Text>
-        </View>
-        <View style={styles.pairStatBox}>
           <Text style={styles.pairStatLabel}>LIQ</Text>
           <Text style={styles.pairStatValue}>{formatCompactUsd(pair.liquidityUsd ?? undefined)}</Text>
+        </View>
+        <View style={styles.pairStatBox}>
+          <Text style={styles.pairStatLabel}>PRICE</Text>
+          <Text style={styles.pairStatValue}>{price != null && price > 0 ? fmtPrice(price) : "—"}</Text>
         </View>
       </View>
 
@@ -894,10 +892,7 @@ function TokenFeedRow({ token, onPress }: { token: LaunchToken; onPress: () => v
           <Text style={styles.tokenName} numberOfLines={1}>{token.name}</Text>
         </View>
         <Text style={styles.tokenStats} numberOfLines={1}>
-          {token.price && token.price > 0
-            ? `${fmtPrice(token.price)} · `
-            : ""}
-          MC {formatCompactUsd(token.marketCapUsd ?? undefined)} · LIQ {formatCompactUsd(token.liquidityUsd ?? undefined)} · {ageMin}m
+          MC ${formatCompactUsd(token.marketCapUsd ?? undefined)} · LIQ ${formatCompactUsd(token.liquidityUsd ?? undefined)} · {ageMin}m
         </Text>
       </View>
       {change !== 0 || token.change24hPct != null ? (

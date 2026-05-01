@@ -1029,9 +1029,6 @@ function DiscoverRow({
           ) : null}
         </View>
         <Text style={styles.rowMc}>
-          {token.price != null && token.price > 0
-            ? `${fmtPrice(token.price)} · `
-            : ""}
           MC {formatUsd(token.marketCapUsd)} · VOL {formatUsd(token.volume24hUsd)}
         </Text>
       </View>

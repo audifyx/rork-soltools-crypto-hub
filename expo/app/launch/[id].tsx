@@ -241,12 +241,10 @@ export default function LaunchDetailScreen() {
           </View>
 
           <View style={styles.priceCard}>
-            <Text style={styles.priceLabel}>Current price</Text>
+            <Text style={styles.priceLabel}>Market cap</Text>
             <View style={styles.priceRow}>
               <Text style={styles.priceValue}>
-                {livePrice != null && livePrice > 0
-                  ? `${livePrice.toFixed(livePrice < 1 ? 6 : 4)}`
-                  : "—"}
+                {liveMc != null && liveMc > 0 ? formatUsd(liveMc) : "—"}
               </Text>
               {liveChange != null ? (
                 <View style={[styles.changeBadge, { backgroundColor: `${accent}1A`, borderColor: `${accent}55` }]}>
@@ -262,6 +260,10 @@ export default function LaunchDetailScreen() {
                 </View>
               ) : null}
             </View>
+            <Text style={styles.priceSubLine}>
+              Price {livePrice != null && livePrice > 0 ? formatUsd(livePrice) : "—"}
+              {liveLiq != null && liveLiq > 0 ? `  ·  Liq ${formatUsd(liveLiq)}` : ""}
+            </Text>
             <View style={styles.chartEmbed} testID="chart-embed">
               <DexChart contract={token.contract} height={320} />
             </View>
@@ -522,6 +524,7 @@ const styles = StyleSheet.create({
   priceLabel: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1.2, textTransform: "uppercase" },
   priceRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 },
   priceValue: { color: Colors.text, fontSize: 28, fontWeight: "900", letterSpacing: -0.6 },
+  priceSubLine: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 6, letterSpacing: 0.2 },
   changeBadge: {
     flexDirection: "row",
     alignItems: "center",
