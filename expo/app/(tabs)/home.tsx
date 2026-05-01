@@ -772,11 +772,17 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
 }
 
 type TickerTab = "trending" | "gainers" | "losers" | "volume";
+type TickerTimeframe = "1h" | "24h" | "7d";
 const TICKER_TABS: { key: TickerTab; label: string }[] = [
   { key: "trending", label: "Trending" },
   { key: "gainers", label: "Gainers" },
   { key: "losers", label: "Losers" },
   { key: "volume", label: "Volume" },
+];
+const TICKER_TIMEFRAMES: { key: TickerTimeframe; label: string }[] = [
+  { key: "1h", label: "1H" },
+  { key: "24h", label: "24H" },
+  { key: "7d", label: "7D" },
 ];
 
 function tokenOverviewToPair(t: {
@@ -820,34 +826,79 @@ function tokenOverviewToPair(t: {
 function TrendingTickersRail() {
   const router = useRouter();
   const { listings } = useLaunchpad();
-  const { data: trending } = useTrendingTokens(30);
   const [tab, setTab] = useState<TickerTab>("trending");
+  const [timeframe, setTimeframe] = useState<TickerTimeframe>("24h");
+
+  const sortBy = useMemo<"rank" | "volume24hUSD" | "liquidity" | "priceChangePercent">(() => {
+    switch (tab) {
+      case "volume":
+        return "volume24hUSD";
+      case "gainers":
+      case "losers":
+        return "priceChangePercent";
+      case "trending":
+      default:
+        return "rank";
+    }
+  }, [tab]);
+  const sortType = tab === "losers" ? ("asc" as const) : ("desc" as const);
+
+  const { data: trending } = useTrendingTokens({
+    limit: 30,
+    sort_by: sortBy,
+    sort_type: sortType,
+    timeframe,
+  });
+
+  const pickChange = useCallback(
+    (t: { priceChange1h?: number; priceChange24h?: number; priceChange7d?: number }): number | null => {
+      const v =
+        timeframe === "1h"
+          ? t.priceChange1h
+          : timeframe === "7d"
+          ? t.priceChange7d
+          : t.priceChange24h;
+      return v ?? null;
+    },
+    [timeframe]
+  );
 
   const pairs = useMemo<LaunchToken[]>(() => {
     const fromTrending = (trending ?? [])
       .filter((t) => !!t.symbol)
-      .map((t, i) => tokenOverviewToPair(t, i));
-    const base: LaunchToken[] = fromTrending.length > 0
-      ? fromTrending
-      : listings.slice();
+      .map((t, i) => {
+        const pair = tokenOverviewToPair(t, i);
+        const change = pickChange(t);
+        return {
+          ...pair,
+          change24hPct: change,
+          volume24hUsd: t.volume24hUSD ?? pair.volume24hUsd,
+        };
+      });
+    const base: LaunchToken[] = fromTrending.length > 0 ? fromTrending : listings.slice();
     const arr = base.slice();
-    switch (tab) {
-      case "gainers":
-        arr.sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0));
-        break;
-      case "losers":
-        arr.sort((a, b) => (a.change24hPct ?? 0) - (b.change24hPct ?? 0));
-        break;
-      case "volume":
-        arr.sort((a, b) => (b.volume24hUsd ?? b.liquidityUsd ?? 0) - (a.volume24hUsd ?? a.liquidityUsd ?? 0));
-        break;
-      case "trending":
-      default:
-        arr.sort((a, b) => Math.abs(b.change24hPct ?? 0) - Math.abs(a.change24hPct ?? 0));
-        break;
+    if (fromTrending.length === 0) {
+      switch (tab) {
+        case "gainers":
+          arr.sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0));
+          break;
+        case "losers":
+          arr.sort((a, b) => (a.change24hPct ?? 0) - (b.change24hPct ?? 0));
+          break;
+        case "volume":
+          arr.sort(
+            (a, b) =>
+              (b.volume24hUsd ?? b.liquidityUsd ?? 0) - (a.volume24hUsd ?? a.liquidityUsd ?? 0)
+          );
+          break;
+        case "trending":
+        default:
+          arr.sort((a, b) => Math.abs(b.change24hPct ?? 0) - Math.abs(a.change24hPct ?? 0));
+          break;
+      }
     }
     return arr.slice(0, 12);
-  }, [trending, listings, tab]);
+  }, [trending, listings, tab, pickChange]);
 
   const onOpen = useCallback(
     (id: string) => router.push({ pathname: "/launch/[id]", params: { id } }),
@@ -896,6 +947,31 @@ function TrendingTickersRail() {
           );
         })}
       </ScrollView>
+      <View style={styles.timeframeRow}>
+        {TICKER_TIMEFRAMES.map((tf) => {
+          const active = timeframe === tf.key;
+          return (
+            <Pressable
+              key={tf.key}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setTimeframe(tf.key);
+              }}
+              style={[styles.timeframeChip, active ? styles.timeframeChipActive : null]}
+              testID={`ticker-timeframe-${tf.key}`}
+            >
+              <Text
+                style={[
+                  styles.timeframeChipText,
+                  active ? styles.timeframeChipTextActive : null,
+                ]}
+              >
+                {tf.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
       {pairs.length > 0 ? (
         <ScrollView
           horizontal
@@ -1776,7 +1852,35 @@ const styles = StyleSheet.create({
   tickerTabsRow: {
     paddingHorizontal: 14,
     gap: 8,
+    marginBottom: 8,
+  },
+  timeframeRow: {
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 14,
     marginBottom: 12,
+  },
+  timeframeChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.02)",
+  },
+  timeframeChipActive: {
+    borderColor: `${Colors.mint}66`,
+    backgroundColor: `${Colors.mint}14`,
+  },
+  timeframeChipText: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  timeframeChipTextActive: {
+    color: Colors.mint,
+    fontWeight: "900",
   },
   tickerTab: {
     paddingHorizontal: 14,

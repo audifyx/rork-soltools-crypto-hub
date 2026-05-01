@@ -1,7 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { getPrice, JupiterPrice } from "@/lib/api/jupiter";
-import { getTokenOverview, getTrending, TokenOverview } from "@/lib/api/birdeye";
+import {
+  getTokenOverview,
+  getTrending,
+  TokenOverview,
+  TrendingOpts,
+} from "@/lib/api/birdeye";
 import { getNewSolanaPairs, DexPair } from "@/lib/api/dexscreener";
 
 export const SOL_MINT = "So11111111111111111111111111111111111111112";
@@ -26,12 +31,20 @@ export function useJupiterPrices(mints: string[]) {
   });
 }
 
-export function useTrendingTokens(limit: number = 20) {
+export function useTrendingTokens(
+  limitOrOpts: number | TrendingOpts = 20,
+) {
+  const opts: TrendingOpts =
+    typeof limitOrOpts === "number" ? { limit: limitOrOpts } : limitOrOpts;
+  const limit = opts.limit ?? 20;
+  const sortBy = opts.sort_by ?? "rank";
+  const sortType = opts.sort_type ?? "desc";
+  const timeframe = opts.timeframe ?? "24h";
   return useQuery<TokenOverview[]>({
-    queryKey: ["birdeye", "trending", limit],
+    queryKey: ["birdeye", "trending", limit, sortBy, sortType, timeframe],
     queryFn: async () => {
       try {
-        return await getTrending(limit);
+        return await getTrending({ limit, sort_by: sortBy, sort_type: sortType, timeframe });
       } catch (e) {
         console.log("[market] trending fetch failed", e);
         return [];

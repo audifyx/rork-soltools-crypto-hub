@@ -34,19 +34,44 @@ export type TokenOverview = {
   name: string;
   decimals: number;
   price: number;
+  priceChange1h?: number;
   priceChange24h?: number;
+  priceChange7d?: number;
   liquidity?: number;
   marketCap?: number;
+  volume24hUSD?: number;
   holder?: number;
+  rank?: number;
   logoURI?: string;
+};
+
+export type TrendingTimeframe = "1h" | "24h" | "7d";
+export type TrendingSortBy = "rank" | "volume24hUSD" | "liquidity" | "priceChangePercent";
+export type TrendingSortType = "asc" | "desc";
+
+export type TrendingOpts = {
+  limit?: number;
+  sort_by?: TrendingSortBy;
+  sort_type?: TrendingSortType;
+  timeframe?: TrendingTimeframe;
 };
 
 export async function getTokenOverview(address: string): Promise<TokenOverview> {
   return call<TokenOverview>("birdeye-token", { address });
 }
 
-export async function getTrending(limit: number = 20): Promise<TokenOverview[]> {
-  const res = await call<{ data: TokenOverview[] }>("birdeye-trending", { limit });
+export async function getTrending(
+  optsOrLimit: TrendingOpts | number = 20,
+): Promise<TokenOverview[]> {
+  const opts: TrendingOpts =
+    typeof optsOrLimit === "number" ? { limit: optsOrLimit } : optsOrLimit;
+  const body = {
+    limit: opts.limit ?? 20,
+    sort_by: opts.sort_by ?? "rank",
+    sort_type: opts.sort_type ?? "desc",
+    timeframe: opts.timeframe ?? "24h",
+  } as const;
+  const res = await call<{ data: TokenOverview[] }>("birdeye-trending", body);
   return res.data ?? [];
 }
 
