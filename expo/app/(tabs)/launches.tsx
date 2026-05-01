@@ -505,22 +505,45 @@ function FeaturedSection({ tokens, onPress }: { tokens: LaunchToken[]; onPress: 
 }
 
 function FeaturedCard({ token, onPress }: { token: LaunchToken; onPress: () => void }) {
+  const positive = (token.change24hPct ?? 0) >= 0;
+  const accent = positive ? Colors.mint : Colors.rose;
   return (
     <Pressable onPress={onPress} style={styles.featuredCard} testID={`featured-${token.id}`}>
-      <LinearGradient
-        colors={["rgba(255,184,76,0.32)", "rgba(184,140,255,0.18)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.featuredBanner}
-      >
+      <View style={styles.featuredBanner}>
         {token.bannerUrl ? (
           <Image source={{ uri: token.bannerUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
-        ) : null}
-        <View style={styles.featuredBadge}>
-          <Star color={Colors.orange} size={11} strokeWidth={3} fill={Colors.orange} />
-          <Text style={styles.featuredBadgeText}>Featured</Text>
+        ) : (
+          <LinearGradient
+            colors={["rgba(255,184,76,0.45)", "rgba(184,140,255,0.28)", "rgba(56,215,255,0.18)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
+        <LinearGradient
+          colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.55)", "rgba(3,7,8,0.95)"]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.featuredBannerTop}>
+          <View style={styles.featuredBadge}>
+            <Star color={Colors.orange} size={11} strokeWidth={3} fill={Colors.orange} />
+            <Text style={styles.featuredBadgeText}>Featured</Text>
+          </View>
+          {token.change24hPct != null ? (
+            <View style={[styles.featuredChange, { backgroundColor: `${accent}26`, borderColor: `${accent}66` }]}>
+              {positive ? (
+                <TrendingUp color={accent} size={10} strokeWidth={3} />
+              ) : (
+                <TrendingDown color={accent} size={10} strokeWidth={3} />
+              )}
+              <Text style={[styles.featuredChangeText, { color: accent }]}>
+                {positive ? "+" : ""}
+                {token.change24hPct.toFixed(1)}%
+              </Text>
+            </View>
+          ) : null}
         </View>
-      </LinearGradient>
+      </View>
       <View style={styles.featuredFoot}>
         {token.logoUrl ? (
           <Image source={{ uri: token.logoUrl }} style={styles.featuredLogo} contentFit="cover" />
@@ -652,13 +675,13 @@ const styles = StyleSheet.create({
     borderColor: "rgba(85,245,178,0.22)",
     backgroundColor: Colors.card,
   },
-  heroGradient: { padding: 16 },
+  heroGradient: { padding: 18, paddingVertical: 20 },
   heroTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   heroIconBox: { borderRadius: 16, overflow: "hidden" },
-  heroIconGradient: { width: 52, height: 52, alignItems: "center", justifyContent: "center" },
+  heroIconGradient: { width: 56, height: 56, alignItems: "center", justifyContent: "center" },
   heroTitleCol: { flex: 1, minWidth: 0 },
   heroTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  heroTitle: { color: Colors.text, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
+  heroTitle: { color: Colors.text, fontSize: 22, fontWeight: "900", letterSpacing: -0.5 },
   livePillTop: {
     flexDirection: "row",
     alignItems: "center",
@@ -671,7 +694,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(85,245,178,0.4)",
   },
   livePillTopText: { color: Colors.mint, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  heroSub: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 4 },
+  heroSub: { color: Colors.muted, fontSize: 13, fontWeight: "700", marginTop: 6, lineHeight: 18 },
 
   heroActions: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14 },
   miniLive: {
@@ -704,9 +727,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 11,
+    paddingVertical: 13,
   },
-  listTokenText: { color: Colors.ink, fontSize: 13, fontWeight: "900", letterSpacing: 0.2 },
+  listTokenText: { color: Colors.ink, fontSize: 14, fontWeight: "900", letterSpacing: 0.2 },
 
   statsGrid: {
     flexDirection: "row",
@@ -815,14 +838,33 @@ const styles = StyleSheet.create({
   featuredEmptyTitle: { color: Colors.text, fontSize: 13, fontWeight: "900" },
   featuredEmptyBody: { color: Colors.muted, fontSize: 12, fontWeight: "600", marginTop: 4, lineHeight: 17 },
   featuredCard: {
-    width: 280,
-    borderRadius: 18,
+    width: 300,
+    borderRadius: 20,
     overflow: "hidden",
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: "rgba(255,184,76,0.25)",
+    borderColor: "rgba(255,184,76,0.28)",
   },
-  featuredBanner: { height: 90, padding: 10, alignItems: "flex-end" },
+  featuredBanner: { height: 150, position: "relative", overflow: "hidden" },
+  featuredBannerTop: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  featuredChange: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  featuredChangeText: { fontSize: 10, fontWeight: "900" },
   featuredBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -835,8 +877,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,184,76,0.45)",
   },
   featuredBadgeText: { color: Colors.orange, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
-  featuredFoot: { padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
-  featuredLogo: { width: 38, height: 38, borderRadius: 12 },
+  featuredFoot: { padding: 14, flexDirection: "row", alignItems: "center", gap: 12, marginTop: -22 },
+  featuredLogo: { width: 48, height: 48, borderRadius: 14, borderWidth: 3, borderColor: Colors.card },
   featuredInfo: { flex: 1 },
   featuredName: { color: Colors.text, fontSize: 14, fontWeight: "900" },
   featuredMetaRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
