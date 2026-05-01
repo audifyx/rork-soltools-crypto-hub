@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
 import { supabase } from "@/lib/supabase";
+import type { CustomBadge } from "@/providers/profile-provider";
 import { useAuth } from "@/providers/auth-provider";
 
 const POSTS_KEY = "soltools.posts.v1";
@@ -70,6 +71,8 @@ export interface UserProfile {
   followers: number;
   following: number;
   avatarUrl?: string;
+  bannerUrl?: string;
+  customBadges: CustomBadge[];
 }
 
 export type Currency = "USD" | "EUR" | "GBP" | "SOL";
@@ -114,6 +117,7 @@ const DEFAULT_PROFILE: UserProfile = {
   rank: "Recruit",
   followers: 0,
   following: 0,
+  customBadges: [],
 };
 
 const DEFAULT_PREFS: UserPrefs = {
@@ -290,26 +294,53 @@ export const [AppProvider, useApp] = createContextHook(() => {
           const { data, error } = await supabase
             .from("profiles")
             .select(
-              "id,user_id,username,bio,avatar_url,wallet_address,twitter_handle,website,followers_count,following_count,badge,trades_count,win_rate,created_at",
+              "id,user_id,username,display_name,bio,avatar_url,banner_url,avatar_color,banner_from,banner_to,wallet_address,twitter_handle,website,location,followers_count,following_count,badge,verified,custom_badges,trades_count,win_rate,pnl_pct,xp,created_at",
             )
             .eq("id", userId)
             .maybeSingle();
           if (error) throw error;
           if (data) {
+            const rawBadges = (data as { custom_badges?: unknown }).custom_badges;
+            const customBadges: CustomBadge[] = Array.isArray(rawBadges)
+              ? (rawBadges as Record<string, unknown>[])
+                  .map((b) => {
+                    const id = String(b?.id ?? "").trim();
+                    const label = String(b?.label ?? "").trim();
+                    if (!id || !label) return null;
+                    return {
+                      id,
+                      label,
+                      color: typeof b?.color === "string" ? (b.color as string) : undefined,
+                      icon: typeof b?.icon === "string" ? (b.icon as string) : undefined,
+                      granted_at:
+                        typeof b?.granted_at === "string" ? (b.granted_at as string) : undefined,
+                    } as CustomBadge;
+                  })
+                  .filter((b): b is CustomBadge => b !== null)
+              : [];
             return {
               ...base,
               handle: data.username ? `@${data.username}` : base.handle,
-              displayName: (data.username as string) ?? base.displayName,
+              displayName: ((data.display_name as string) || (data.username as string)) ?? base.displayName,
               bio: (data.bio as string) ?? base.bio,
               avatarUrl: (data.avatar_url as string) ?? base.avatarUrl,
+              bannerUrl: (data.banner_url as string) ?? base.bannerUrl,
+              avatarColor: (data.avatar_color as string) ?? base.avatarColor,
+              bannerFrom: (data.banner_from as string) ?? base.bannerFrom,
+              bannerTo: (data.banner_to as string) ?? base.bannerTo,
               walletAddress: (data.wallet_address as string) ?? base.walletAddress,
               twitterHandle: (data.twitter_handle as string) ?? base.twitterHandle,
               website: (data.website as string) ?? base.website,
+              location: (data.location as string) ?? base.location,
               followers: Number(data.followers_count ?? base.followers),
               following: Number(data.following_count ?? base.following),
               trades: Number(data.trades_count ?? base.trades),
               winRate: Number(data.win_rate ?? base.winRate),
+              pnlPct: Number(data.pnl_pct ?? base.pnlPct),
+              xp: Number(data.xp ?? base.xp),
+              verified: !!data.verified,
               rank: (data.badge as string) ?? base.rank,
+              customBadges,
               joinedAt: data.created_at
                 ? new Date(data.created_at as string).getTime()
                 : base.joinedAt,
@@ -642,11 +673,17 @@ export const [AppProvider, useApp] = createContextHook(() => {
               id: userId,
               user_id: userId,
               username: handleVal || null,
+              display_name: next.displayName || null,
               bio: next.bio || null,
               avatar_url: next.avatarUrl ?? null,
+              banner_url: next.bannerUrl ?? null,
+              avatar_color: next.avatarColor || null,
+              banner_from: next.bannerFrom || null,
+              banner_to: next.bannerTo || null,
               wallet_address: next.walletAddress || null,
               twitter_handle: next.twitterHandle || null,
               website: next.website || null,
+              location: next.location || null,
             },
             { onConflict: "id" },
           );

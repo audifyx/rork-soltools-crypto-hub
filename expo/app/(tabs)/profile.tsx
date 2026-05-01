@@ -1,3 +1,5 @@
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -71,6 +73,13 @@ import { useAdmin } from "@/providers/admin-provider";
 import { useApp, type Currency, type Language, type ThemeMode, type UserPrefs } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
+import {
+  useFollowList,
+  useProfileProvider,
+  useSearchProfiles,
+  type CustomBadge,
+  type ProfileSummary,
+} from "@/providers/profile-provider";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
 
@@ -271,11 +280,14 @@ export default function ProfileScreen() {
     deletePost,
   } = useApp();
   const { listings } = useLaunchpad();
-  const { isAuthenticated, email: authEmail, signOut } = useAuth();
+  const { isAuthenticated, email: authEmail, signOut, userId } = useAuth();
   const { isAdmin, role: adminRole } = useAdmin();
+  const { uploadMedia, isUploading } = useProfileProvider();
   const [tab, setTab] = useState<Tab>("overview");
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [followersOpen, setFollowersOpen] = useState<"followers" | "following" | null>(null);
+  const [searchOpen, setSearchOpen] = useState<boolean>(false);
 
   const myListings = useMemo(
     () => listings.filter((l) => l.submittedBy === "user"),
@@ -406,6 +418,46 @@ export default function ProfileScreen() {
     }
   }, [profile.displayName, profile.handle]);
 
+  const onPickAvatar = useCallback(async () => {
+    if (!isAuthenticated) {
+      Alert.alert("Sign in", "Sign in to upload a profile picture.");
+      return;
+    }
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+      if (res.canceled || !res.assets[0]?.uri) return;
+      const url = await uploadMedia({ kind: "avatar", uri: res.assets[0].uri });
+      await updateProfile({ avatarUrl: url });
+    } catch (e) {
+      Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");
+    }
+  }, [isAuthenticated, uploadMedia, updateProfile]);
+
+  const onPickBanner = useCallback(async () => {
+    if (!isAuthenticated) {
+      Alert.alert("Sign in", "Sign in to upload a banner.");
+      return;
+    }
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+        allowsEditing: true,
+        aspect: [3, 1],
+      });
+      if (res.canceled || !res.assets[0]?.uri) return;
+      const url = await uploadMedia({ kind: "banner", uri: res.assets[0].uri });
+      await updateProfile({ bannerUrl: url });
+    } catch (e) {
+      Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");
+    }
+  }, [isAuthenticated, uploadMedia, updateProfile]);
+
   const onOpenLink = useCallback((url: string) => {
     if (!url) return;
     const safe = url.startsWith("http") ? url : `https://${url}`;
@@ -432,13 +484,25 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.heroCard}>
-            <LinearGradient
-              colors={[profile.bannerFrom, profile.bannerTo]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.banner}
-            >
+            <Pressable onPress={onPickBanner} style={styles.banner} testID="pick-banner">
+              {profile.bannerUrl ? (
+                <Image
+                  source={{ uri: profile.bannerUrl }}
+                  style={StyleSheet.absoluteFillObject}
+                  contentFit="cover"
+                />
+              ) : (
+                <LinearGradient
+                  colors={[profile.bannerFrom, profile.bannerTo]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              )}
               <View style={styles.bannerOverlay} />
+              <View style={styles.bannerEditBtn}>
+                <Camera color={Colors.text} size={13} strokeWidth={2.6} />
+              </View>
               <View style={styles.bannerBadgeRow}>
                 <View style={styles.rankBadge}>
                   <rank.Icon color={rank.color} size={11} strokeWidth={3} />
@@ -447,23 +511,39 @@ export default function ProfileScreen() {
                   </Text>
                 </View>
               </View>
-            </LinearGradient>
+              {isUploading ? (
+                <View style={styles.bannerOverlay}>
+                  <Text style={styles.bannerUploading}>Uploading…</Text>
+                </View>
+              ) : null}
+            </Pressable>
 
             <View style={styles.heroBody}>
-              <View style={styles.avatarWrap}>
+              <Pressable onPress={onPickAvatar} style={styles.avatarWrap} testID="pick-avatar">
                 <View style={[styles.avatarRing, { borderColor: rank.color }]}>
-                  <View style={[styles.avatar, { backgroundColor: profile.avatarColor }]}>
-                    <Text style={styles.avatarText}>
-                      {profile.displayName.slice(0, 1).toUpperCase()}
-                    </Text>
-                  </View>
+                  {profile.avatarUrl ? (
+                    <Image
+                      source={{ uri: profile.avatarUrl }}
+                      style={styles.avatarImage}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View style={[styles.avatar, { backgroundColor: profile.avatarColor }]}>
+                      <Text style={styles.avatarText}>
+                        {(profile.displayName || "S").slice(0, 1).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.avatarEditDot}>
+                  <Camera color={Colors.ink} size={11} strokeWidth={3} />
                 </View>
                 {profile.verified ? (
                   <View style={styles.verifiedDot}>
                     <ShieldCheck color={Colors.ink} size={11} strokeWidth={3} />
                   </View>
                 ) : null}
-              </View>
+              </Pressable>
 
               <View style={styles.heroActions}>
                 <Pressable onPress={() => setEditOpen(true)} style={styles.actionBtn} testID="edit-profile">
@@ -488,6 +568,13 @@ export default function ProfileScreen() {
                   </View>
                 ) : null}
               </View>
+              {profile.customBadges.length > 0 ? (
+                <View style={styles.badgeRow}>
+                  {profile.customBadges.map((b) => (
+                    <BadgePill key={b.id} badge={b} />
+                  ))}
+                </View>
+              ) : null}
               {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
 
               <View style={styles.metaRow}>
@@ -523,12 +610,20 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.followRow}>
-                <Pressable style={styles.followItem} onPress={() => Alert.alert("Following", `${profile.following} traders`)}>
+                <Pressable
+                  style={styles.followItem}
+                  onPress={() => setFollowersOpen("following")}
+                  testID="open-following"
+                >
                   <Text style={styles.followNum}>{profile.following}</Text>
                   <Text style={styles.followKey}>Following</Text>
                 </Pressable>
                 <View style={styles.followDivider} />
-                <Pressable style={styles.followItem} onPress={() => Alert.alert("Followers", `${profile.followers} followers`)}>
+                <Pressable
+                  style={styles.followItem}
+                  onPress={() => setFollowersOpen("followers")}
+                  testID="open-followers"
+                >
                   <Text style={styles.followNum}>{profile.followers}</Text>
                   <Text style={styles.followKey}>Followers</Text>
                 </Pressable>
@@ -566,6 +661,11 @@ export default function ProfileScreen() {
             <StatCard label="WALLETS" value={stats.wallets} accent={Colors.cyan} Icon={Wallet} />
             <StatCard label="LISTED" value={stats.listed} accent={Colors.rose} Icon={Rocket} />
           </View>
+
+          <Pressable onPress={() => setSearchOpen(true)} style={styles.findBtn} testID="find-traders">
+            <Users color={Colors.text} size={13} strokeWidth={2.6} />
+            <Text style={styles.findBtnText}>Find traders to follow</Text>
+          </Pressable>
 
           <Pressable onPress={() => router.push("/list-token")} style={styles.cta} testID="profile-list-token">
             <LinearGradient
@@ -947,6 +1047,18 @@ export default function ProfileScreen() {
         }}
       />
 
+      <FollowListModal
+        visible={followersOpen !== null}
+        onClose={() => setFollowersOpen(null)}
+        kind={followersOpen}
+        userId={userId}
+      />
+
+      <SearchProfilesModal
+        visible={searchOpen}
+        onClose={() => setSearchOpen(false)}
+      />
+
       <SettingsModal
         visible={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -959,6 +1071,175 @@ export default function ProfileScreen() {
         }}
       />
     </View>
+  );
+}
+
+function BadgePill({ badge }: { badge: CustomBadge }) {
+  const color = badge.color ?? "#FFD56B";
+  return (
+    <View style={[styles.customBadge, { borderColor: `${color}55`, backgroundColor: `${color}1A` }]}>
+      <Sparkles color={color} size={10} strokeWidth={3} />
+      <Text style={[styles.customBadgeText, { color }]} numberOfLines={1}>
+        {badge.label}
+      </Text>
+    </View>
+  );
+}
+
+function FollowListModal({
+  visible,
+  onClose,
+  kind,
+  userId,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  kind: "followers" | "following" | null;
+  userId: string | null;
+}) {
+  const router = useRouter();
+  const list = useFollowList(userId, kind ?? "followers");
+  const items = list.data ?? [];
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={[styles.modalSheet, { maxHeight: "82%" }]} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>
+              {kind === "following" ? "Following" : "Followers"}
+            </Text>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <X color={Colors.muted} size={18} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {items.length === 0 ? (
+              <Text style={styles.emptyTabBody}>
+                {list.isLoading ? "Loading…" : "No one here yet."}
+              </Text>
+            ) : (
+              items.map((u) => (
+                <Pressable
+                  key={u.user_id}
+                  style={styles.followRowItem}
+                  onPress={() => {
+                    if (!u.username) return;
+                    onClose();
+                    router.push({ pathname: "/u/[handle]", params: { handle: u.username } });
+                  }}
+                  testID={`follow-row-${u.user_id}`}
+                >
+                  <View style={styles.followAvatar}>
+                    {u.avatar_url ? (
+                      <Image source={{ uri: u.avatar_url }} style={styles.followAvatarImg} contentFit="cover" />
+                    ) : (
+                      <Text style={styles.followAvatarText}>
+                        {(u.display_name ?? u.username ?? "?").slice(0, 1).toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={styles.followRowName} numberOfLines={1}>
+                        {u.display_name ?? u.username ?? "User"}
+                      </Text>
+                      {u.verified ? <ShieldCheck color={Colors.cyan} size={11} strokeWidth={3} /> : null}
+                    </View>
+                    <Text style={styles.followRowSub} numberOfLines={1}>
+                      @{u.username ?? "—"}
+                    </Text>
+                    {u.custom_badges.length > 0 ? (
+                      <View style={styles.badgeRowSmall}>
+                        {u.custom_badges.slice(0, 2).map((b) => (
+                          <BadgePill key={b.id} badge={b} />
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+                  <ChevronRight color={Colors.muted} size={14} strokeWidth={2.4} />
+                </Pressable>
+              ))
+            )}
+            <View style={{ height: 24 }} />
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function SearchProfilesModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const router = useRouter();
+  const [query, setQuery] = useState<string>("");
+  const search = useSearchProfiles(query.trim());
+  const items: ProfileSummary[] = search.data ?? [];
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={[styles.modalSheet, { maxHeight: "82%" }]} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Find traders</Text>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <X color={Colors.muted} size={18} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            style={styles.modalInput}
+            placeholderTextColor={Colors.muted}
+            placeholder="Search by name or @handle"
+            autoCapitalize="none"
+            autoCorrect={false}
+            testID="search-traders"
+          />
+          <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
+            {items.length === 0 ? (
+              <Text style={styles.emptyTabBody}>
+                {search.isLoading ? "Loading…" : "No traders match."}
+              </Text>
+            ) : (
+              items.map((u) => (
+                <Pressable
+                  key={u.user_id}
+                  style={styles.followRowItem}
+                  onPress={() => {
+                    if (!u.username) return;
+                    onClose();
+                    router.push({ pathname: "/u/[handle]", params: { handle: u.username } });
+                  }}
+                >
+                  <View style={styles.followAvatar}>
+                    {u.avatar_url ? (
+                      <Image source={{ uri: u.avatar_url }} style={styles.followAvatarImg} contentFit="cover" />
+                    ) : (
+                      <Text style={styles.followAvatarText}>
+                        {(u.display_name ?? u.username ?? "?").slice(0, 1).toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={styles.followRowName} numberOfLines={1}>
+                        {u.display_name ?? u.username ?? "User"}
+                      </Text>
+                      {u.verified ? <ShieldCheck color={Colors.cyan} size={11} strokeWidth={3} /> : null}
+                    </View>
+                    <Text style={styles.followRowSub}>
+                      @{u.username ?? "—"} · {u.followers_count ?? 0} followers
+                    </Text>
+                  </View>
+                  <ChevronRight color={Colors.muted} size={14} strokeWidth={2.4} />
+                </Pressable>
+              ))
+            )}
+            <View style={{ height: 24 }} />
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -1785,6 +2066,87 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: { color: Colors.ink, fontSize: 26, fontWeight: "900" },
+  avatarImage: { flex: 1, borderRadius: 20 },
+  avatarEditDot: {
+    position: "absolute",
+    left: -4,
+    bottom: -4,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.mint,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: Colors.card,
+  },
+  bannerEditBtn: {
+    position: "absolute",
+    bottom: 8,
+    right: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  bannerUploading: {
+    color: Colors.text,
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
+    marginTop: 40,
+  },
+  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  badgeRowSmall: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 },
+  customBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  customBadgeText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
+  findBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.cardSoft,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  findBtnText: { color: Colors.text, fontSize: 13, fontWeight: "900" },
+  followRowItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  followAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(85,245,178,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  followAvatarImg: { width: "100%", height: "100%" },
+  followAvatarText: { color: Colors.mint, fontSize: 15, fontWeight: "900" },
+  followRowName: { color: Colors.text, fontSize: 14, fontWeight: "900" },
+  followRowSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
   verifiedDot: {
     position: "absolute",
     right: -4,

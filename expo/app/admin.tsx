@@ -4,9 +4,11 @@ import { StatusBar } from "expo-status-bar";
 import {
   ArrowLeft,
   BadgeCheck,
+  Ban,
   Crown,
   Flame,
   LifeBuoy,
+  Plus,
   Rocket,
   Search,
   Shield,
@@ -40,7 +42,21 @@ import { supabase } from "@/lib/supabase";
 import { useAdmin, type AdminRole } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
 
-type Section = "overview" | "admins" | "listings" | "tickets" | "audit";
+type Section = "overview" | "admins" | "users" | "listings" | "tickets" | "audit";
+
+interface UserRow {
+  user_id: string;
+  email: string | null;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  verified: boolean;
+  badge: string | null;
+  custom_badges: { id: string; label: string; color?: string; icon?: string }[];
+  is_banned: boolean;
+  followers_count: number;
+  created_at: string;
+}
 
 interface DashboardStats {
   users: number;
@@ -160,7 +176,8 @@ export default function AdminDashboard() {
           {(
             [
               { id: "overview", label: "Overview", Icon: Sparkles },
-              { id: "admins", label: "Admins", Icon: Users },
+              { id: "admins", label: "Admins", Icon: Crown },
+              { id: "users", label: "Users", Icon: Users },
               { id: "listings", label: "Listings", Icon: Rocket },
               { id: "tickets", label: "Support", Icon: LifeBuoy },
               { id: "audit", label: "Audit Log", Icon: Shield },
@@ -184,6 +201,7 @@ export default function AdminDashboard() {
         <View style={{ flex: 1 }}>
           {section === "overview" && <OverviewSection />}
           {section === "admins" && <AdminsSection isSuperadmin={isSuperadmin} />}
+          {section === "users" && <UsersSection />}
           {section === "listings" && <ListingsSection />}
           {section === "tickets" && <TicketsSection />}
           {section === "audit" && <AuditSection />}
@@ -450,6 +468,296 @@ function AdminsSection({ isSuperadmin }: { isSuperadmin: boolean }) {
         </Pressable>
       </Modal>
     </View>
+  );
+}
+
+function UsersSection() {
+  const qc = useQueryClient();
+  const [query, setQuery] = useState<string>("");
+  const [badgeFor, setBadgeFor] = useState<UserRow | null>(null);
+
+  const usersQuery = useQuery<UserRow[]>({
+    queryKey: ["admin", "users", query],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_search_users", {
+        q: query.trim(),
+        max_rows: 60,
+      });
+      if (error) throw error;
+      return ((data ?? []) as Record<string, unknown>[]).map(
+        (r): UserRow => ({
+          user_id: String(r.user_id),
+          email: (r.email as string | null) ?? null,
+          username: (r.username as string | null) ?? null,
+          display_name: (r.display_name as string | null) ?? null,
+          avatar_url: (r.avatar_url as string | null) ?? null,
+          verified: !!r.verified,
+          badge: (r.badge as string | null) ?? null,
+          custom_badges: Array.isArray(r.custom_badges)
+            ? (r.custom_badges as { id: string; label: string; color?: string; icon?: string }[])
+            : [],
+          is_banned: !!r.is_banned,
+          followers_count: Number(r.followers_count ?? 0),
+          created_at: (r.created_at as string) ?? new Date().toISOString(),
+        }),
+      );
+    },
+    staleTime: 15_000,
+  });
+
+  const flagsMutation = useMutation({
+    mutationFn: async (input: {
+      id: string;
+      verified?: boolean;
+      banned?: boolean;
+      badge?: string;
+    }) => {
+      const { error } = await supabase.rpc("admin_set_user_flags", {
+        target_user_id: input.id,
+        set_verified: input.verified ?? null,
+        set_badge: input.badge ?? null,
+        set_banned: input.banned ?? null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (e: Error) => Alert.alert("Update failed", e.message),
+  });
+
+  const removeBadgeMutation = useMutation({
+    mutationFn: async (input: { user_id: string; badge_id: string }) => {
+      const { error } = await supabase.rpc("admin_remove_badge", {
+        target_user_id: input.user_id,
+        badge_id: input.badge_id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (e: Error) => Alert.alert("Couldn't remove badge", e.message),
+  });
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.searchBox}>
+        <Search color={Colors.muted} size={14} strokeWidth={2.6} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search by email, @handle, name…"
+          placeholderTextColor={Colors.muted}
+          style={styles.searchInput}
+          autoCapitalize="none"
+          testID="admin-users-search"
+        />
+      </View>
+      <FlatList
+        data={usersQuery.data ?? []}
+        keyExtractor={(it) => it.user_id}
+        contentContainerStyle={styles.listPad}
+        ListEmptyComponent={
+          usersQuery.isLoading ? (
+            <ActivityIndicator color={Colors.mint} style={{ marginTop: 24 }} />
+          ) : (
+            <Text style={styles.empty}>No users match.</Text>
+          )
+        }
+        renderItem={({ item }) => (
+          <View style={styles.userCard} testID={`user-${item.user_id}`}>
+            <View style={styles.listingHeader}>
+              <View style={[styles.avatar, { backgroundColor: "rgba(85,245,178,0.16)" }]}>
+                <Text style={{ color: Colors.mint, fontWeight: "900" }}>
+                  {(item.display_name ?? item.username ?? item.email ?? "?")
+                    .slice(0, 1)
+                    .toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle} numberOfLines={1}>
+                  {item.display_name ?? item.username ?? item.email ?? item.user_id.slice(0, 8)}
+                </Text>
+                <Text style={styles.rowSub} numberOfLines={1}>
+                  @{item.username ?? "—"} · {item.email ?? "no email"} · {item.followers_count} followers
+                </Text>
+              </View>
+            </View>
+
+            {item.custom_badges.length > 0 ? (
+              <View style={styles.userBadgeRow}>
+                {item.custom_badges.map((b) => (
+                  <Pressable
+                    key={b.id}
+                    onLongPress={() =>
+                      Alert.alert("Remove badge?", b.label, [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Remove",
+                          style: "destructive",
+                          onPress: () =>
+                            removeBadgeMutation.mutate({ user_id: item.user_id, badge_id: b.id }),
+                        },
+                      ])
+                    }
+                    style={[
+                      styles.userBadge,
+                      {
+                        borderColor: `${b.color ?? "#FFD56B"}55`,
+                        backgroundColor: `${b.color ?? "#FFD56B"}1A`,
+                      },
+                    ]}
+                  >
+                    <Sparkles color={b.color ?? "#FFD56B"} size={10} strokeWidth={3} />
+                    <Text
+                      style={[
+                        styles.userBadgeText,
+                        { color: b.color ?? "#FFD56B" },
+                      ]}
+                    >
+                      {b.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+
+            <View style={styles.toggleRow}>
+              <ToggleChip
+                label={item.verified ? "Verified" : "Verify"}
+                active={item.verified}
+                color={Colors.cyan}
+                Icon={BadgeCheck}
+                onPress={() => flagsMutation.mutate({ id: item.user_id, verified: !item.verified })}
+                testID={`user-verify-${item.user_id}`}
+              />
+              <ToggleChip
+                label={item.is_banned ? "Banned" : "Active"}
+                active={item.is_banned}
+                color={Colors.rose}
+                Icon={Ban}
+                onPress={() => flagsMutation.mutate({ id: item.user_id, banned: !item.is_banned })}
+                testID={`user-ban-${item.user_id}`}
+              />
+              <Pressable
+                onPress={() => setBadgeFor(item)}
+                style={[styles.toggleChip, { borderColor: "rgba(255,213,107,0.55)", backgroundColor: "rgba(255,213,107,0.12)" }]}
+                testID={`user-add-badge-${item.user_id}`}
+              >
+                <Plus color="#FFD56B" size={11} strokeWidth={2.8} />
+                <Text style={[styles.toggleChipText, { color: "#FFD56B" }]}>Add bag</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+      />
+
+      <BadgeModal
+        target={badgeFor}
+        onClose={() => setBadgeFor(null)}
+        onSaved={() => {
+          setBadgeFor(null);
+          qc.invalidateQueries({ queryKey: ["admin", "users"] });
+          qc.invalidateQueries({ queryKey: ["profile"] });
+        }}
+      />
+    </View>
+  );
+}
+
+function BadgeModal({
+  target,
+  onClose,
+  onSaved,
+}: {
+  target: UserRow | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [label, setLabel] = useState<string>("");
+  const [color, setColor] = useState<string>("#FFD56B");
+  const colors = ["#FFD56B", "#55F5B2", "#38D7FF", "#FF5D8F", "#FFB84C", "#B88CFF"];
+
+  const addMutation = useMutation({
+    mutationFn: async () => {
+      if (!target) throw new Error("No user");
+      const id = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32) || `bag-${Date.now()}`;
+      const { error } = await supabase.rpc("admin_add_badge", {
+        target_user_id: target.user_id,
+        badge_id: id,
+        badge_label: label.trim(),
+        badge_color: color,
+        badge_icon: "sparkles",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setLabel("");
+      setColor("#FFD56B");
+      onSaved();
+    },
+    onError: (e: Error) => Alert.alert("Couldn't grant badge", e.message),
+  });
+
+  return (
+    <Modal visible={!!target} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>Grant verify bag</Text>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <X color={Colors.muted} size={18} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+          <Text style={styles.modalLabel}>BADGE LABEL</Text>
+          <TextInput
+            value={label}
+            onChangeText={setLabel}
+            placeholder="OG, Diamond Hands, Whale, Genesis…"
+            placeholderTextColor={Colors.muted}
+            style={styles.modalInput}
+            maxLength={32}
+            testID="badge-label"
+          />
+          <Text style={styles.modalLabel}>COLOR</Text>
+          <View style={styles.roleGrid}>
+            {colors.map((c) => {
+              const active = color === c;
+              return (
+                <Pressable
+                  key={c}
+                  onPress={() => setColor(c)}
+                  style={[
+                    styles.colorSwatch,
+                    { backgroundColor: c },
+                    active && { borderColor: Colors.text, borderWidth: 3 },
+                  ]}
+                  testID={`badge-color-${c}`}
+                />
+              );
+            })}
+          </View>
+          <Pressable
+            onPress={() => addMutation.mutate()}
+            disabled={!label.trim() || addMutation.isPending}
+            style={[
+              styles.primaryBtn,
+              { marginTop: 18 },
+              (!label.trim() || addMutation.isPending) && { opacity: 0.55 },
+            ]}
+            testID="badge-grant"
+          >
+            <Text style={styles.primaryBtnText}>
+              {addMutation.isPending ? "Granting…" : "Grant bag"}
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -1029,4 +1337,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
   },
+  userCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    gap: 10,
+  },
+  userBadgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  userBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  userBadgeText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
+  colorSwatch: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
 });

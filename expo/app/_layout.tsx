@@ -10,6 +10,7 @@ import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
 import { AuthProvider } from "@/providers/auth-provider";
 import { LaunchpadProvider } from "@/providers/launchpad-provider";
+import { ProfileProvider } from "@/providers/profile-provider";
 
 SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
   console.log("SolTools splash hold skipped during boot", error);
@@ -42,6 +43,7 @@ function RootLayoutNav() {
       <Stack.Screen name="compose" options={{ presentation: "modal" }} />
       <Stack.Screen name="launch/[id]" />
       <Stack.Screen name="tool/[id]" />
+      <Stack.Screen name="u/[handle]" />
       <Stack.Screen name="admin" />
       <Stack.Screen name="+not-found" />
     </Stack>
@@ -59,13 +61,15 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <AdminProvider>
-          <AppProvider>
-            <LaunchpadProvider>
-              <GestureHandlerRootView style={styles.gestureRoot}>
-                <RootLayoutNav />
-              </GestureHandlerRootView>
-            </LaunchpadProvider>
-          </AppProvider>
+          <ProfileProvider>
+            <AppProvider>
+              <LaunchpadProvider>
+                <GestureHandlerRootView style={styles.gestureRoot}>
+                  <RootLayoutNav />
+                </GestureHandlerRootView>
+              </LaunchpadProvider>
+            </AppProvider>
+          </ProfileProvider>
         </AdminProvider>
       </AuthProvider>
     </QueryClientProvider>
