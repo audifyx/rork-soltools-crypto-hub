@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { Compass, Home, Rocket, User, Users, Wrench } from "lucide-react-native";
+import { Compass, Home, Radio, Rocket, User, Users, Wrench } from "lucide-react-native";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
@@ -57,6 +57,13 @@ export default function TabsLayout() {
         options={{
           title: "Launches",
           tabBarIcon: ({ color, size }) => <Rocket color={color} size={size} strokeWidth={2.4} />,
+        }}
+      />
+      <Tabs.Screen
+        name="streams"
+        options={{
+          title: "Streams",
+          tabBarIcon: ({ color, size }) => <Radio color={color} size={size} strokeWidth={2.4} />,
         }}
       />
       <Tabs.Screen
@@ -130,7 +137,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
   label: {
-    fontSize: 9.5,
+    fontSize: 8.5,
     fontWeight: "800",
     letterSpacing: 0.3,
     marginTop: 2,

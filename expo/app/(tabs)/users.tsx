@@ -5,10 +5,14 @@ import { StatusBar } from "expo-status-bar";
 import * as Haptics from "expo-haptics";
 import {
   ChevronRight,
+  Crown,
+  Flame,
   Globe,
+  Heart,
   Search,
   ShieldCheck,
   Sparkles,
+  Star,
   TrendingUp,
   UserPlus,
   Users as UsersIcon,
@@ -40,6 +44,7 @@ import {
 } from "@/providers/profile-provider";
 
 type Mode = "online" | "all";
+type Filter = "none" | "verified" | "following" | "top";
 
 function tap() {
   if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
@@ -62,16 +67,44 @@ export default function UsersScreen() {
   const { userId } = useAuth();
   const { toggleFollow, isToggling } = useProfileProvider();
   const [mode, setMode] = useState<Mode>("online");
+  const [filter, setFilter] = useState<Filter>("none");
   const [query, setQuery] = useState<string>("");
 
   const overview = useUsersOverview();
   const list = usePlatformUsers({ q: query, onlineOnly: mode === "online" });
 
-  const items = useMemo<PlatformUser[]>(() => list.data ?? [], [list.data]);
+  const raw = useMemo<PlatformUser[]>(() => list.data ?? [], [list.data]);
+
+  const topTraders = useMemo<PlatformUser[]>(
+    () => raw.slice().sort((a, b) => b.followers_count - a.followers_count).slice(0, 5),
+    [raw],
+  );
+
+  const suggested = useMemo<PlatformUser[]>(
+    () =>
+      raw
+        .filter((u) => u.user_id !== userId && !u.is_following && (u.verified || u.followers_count > 0))
+        .slice(0, 10),
+    [raw, userId],
+  );
+
+  const items = useMemo<PlatformUser[]>(() => {
+    let arr = raw.slice();
+    if (filter === "verified") arr = arr.filter((u) => u.verified);
+    if (filter === "following") arr = arr.filter((u) => u.is_following);
+    if (filter === "top")
+      arr = arr.sort((a, b) => b.followers_count - a.followers_count);
+    return arr;
+  }, [raw, filter]);
 
   const onSwitchMode = useCallback((m: Mode) => {
     tap();
     setMode(m);
+  }, []);
+
+  const onSwitchFilter = useCallback((f: Filter) => {
+    tap();
+    setFilter((prev) => (prev === f ? "none" : f));
   }, []);
 
   const onOpenUser = useCallback(
@@ -181,6 +214,106 @@ export default function UsersScreen() {
           }
         >
           <LeaderboardCard />
+
+          {topTraders.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHead}>
+                <View style={styles.sectionHeadLeft}>
+                  <Crown color={Colors.orange} size={14} strokeWidth={2.8} />
+                  <Text style={styles.sectionTitle}>Top traders</Text>
+                </View>
+                <Pressable onPress={() => onSwitchFilter("top")} hitSlop={8}>
+                  <Text style={styles.sectionAction}>See all</Text>
+                </Pressable>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.topRow}
+              >
+                {topTraders.map((u, i) => (
+                  <TopTraderCard
+                    key={u.user_id}
+                    rank={i + 1}
+                    user={u}
+                    onPress={() => onOpenUser(u)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {suggested.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHead}>
+                <View style={styles.sectionHeadLeft}>
+                  <Sparkles color={Colors.cyan} size={14} strokeWidth={2.8} />
+                  <Text style={styles.sectionTitle}>Suggested for you</Text>
+                </View>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.suggestRow}
+              >
+                {suggested.map((u) => (
+                  <SuggestedCard
+                    key={u.user_id}
+                    user={u}
+                    onPress={() => onOpenUser(u)}
+                    onFollow={() => onToggleFollow(u)}
+                    disabled={isToggling}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          <View style={styles.filterRow}>
+            <FilterChip
+              label="All"
+              active={filter === "none"}
+              onPress={() => onSwitchFilter("none")}
+              Icon={Globe}
+              tone={Colors.text}
+            />
+            <FilterChip
+              label="Verified"
+              active={filter === "verified"}
+              onPress={() => onSwitchFilter("verified")}
+              Icon={ShieldCheck}
+              tone={Colors.cyan}
+            />
+            <FilterChip
+              label="Following"
+              active={filter === "following"}
+              onPress={() => onSwitchFilter("following")}
+              Icon={Heart}
+              tone={Colors.rose}
+            />
+            <FilterChip
+              label="Top"
+              active={filter === "top"}
+              onPress={() => onSwitchFilter("top")}
+              Icon={Flame}
+              tone={Colors.orange}
+            />
+          </View>
+
+          <View style={styles.listHead}>
+            <Text style={styles.listTitle}>
+              {filter === "verified"
+                ? "Verified"
+                : filter === "following"
+                  ? "Following"
+                  : filter === "top"
+                    ? "By followers"
+                    : mode === "online"
+                      ? "Online now"
+                      : "Everyone"}
+            </Text>
+            <Text style={styles.listCount}>{items.length}</Text>
+          </View>
 
           {list.isLoading ? (
             <View style={styles.loading}>
@@ -390,6 +523,146 @@ function UserRow({
       )}
 
       <ChevronRight color={Colors.muted} size={14} strokeWidth={2.4} />
+    </Pressable>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onPress,
+  Icon,
+  tone,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+  tone: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.filterChip,
+        active && {
+          backgroundColor: `${tone}1F`,
+          borderColor: `${tone}66`,
+        },
+      ]}
+      testID={`users-filter-${label.toLowerCase()}`}
+    >
+      <Icon color={active ? tone : Colors.muted} size={12} strokeWidth={2.8} />
+      <Text style={[styles.filterChipText, active && { color: tone }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function TopTraderCard({
+  rank,
+  user,
+  onPress,
+}: {
+  rank: number;
+  user: PlatformUser;
+  onPress: () => void;
+}) {
+  const rankTone = rank === 1 ? Colors.orange : rank === 2 ? Colors.cyan : rank === 3 ? Colors.rose : Colors.muted;
+  return (
+    <Pressable onPress={onPress} style={styles.topCard} testID={`top-${user.user_id}`}>
+      <View style={[styles.topRank, { backgroundColor: `${rankTone}1F`, borderColor: `${rankTone}55` }]}>
+        {rank === 1 ? (
+          <Crown color={rankTone} size={11} strokeWidth={3} />
+        ) : (
+          <Text style={[styles.topRankText, { color: rankTone }]}>{rank}</Text>
+        )}
+      </View>
+      <View style={styles.topAvatarWrap}>
+        {user.avatar_url ? (
+          <Image source={{ uri: user.avatar_url }} style={styles.topAvatar} contentFit="cover" />
+        ) : (
+          <LinearGradient
+            colors={[Colors.mint, Colors.cyan]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.topAvatar}
+          >
+            <Text style={styles.avatarText}>
+              {(user.display_name ?? user.username ?? "?").slice(0, 1).toUpperCase()}
+            </Text>
+          </LinearGradient>
+        )}
+        {user.is_online ? <View style={styles.topOnline} /> : null}
+      </View>
+      <Text style={styles.topName} numberOfLines={1}>
+        {user.display_name ?? user.username ?? "User"}
+      </Text>
+      <View style={styles.topStats}>
+        <TrendingUp color={Colors.muted} size={10} strokeWidth={3} />
+        <Text style={styles.topStatsText}>
+          {user.followers_count.toLocaleString()}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function SuggestedCard({
+  user,
+  onPress,
+  onFollow,
+  disabled,
+}: {
+  user: PlatformUser;
+  onPress: () => void;
+  onFollow: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.suggestCard} testID={`suggested-${user.user_id}`}>
+      <View style={styles.suggestAvatarWrap}>
+        {user.avatar_url ? (
+          <Image source={{ uri: user.avatar_url }} style={styles.suggestAvatar} contentFit="cover" />
+        ) : (
+          <LinearGradient
+            colors={[Colors.cyan, Colors.violet]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.suggestAvatar}
+          >
+            <Text style={styles.avatarText}>
+              {(user.display_name ?? user.username ?? "?").slice(0, 1).toUpperCase()}
+            </Text>
+          </LinearGradient>
+        )}
+      </View>
+      <View style={styles.suggestNameLine}>
+        <Text style={styles.suggestName} numberOfLines={1}>
+          {user.display_name ?? user.username ?? "User"}
+        </Text>
+        {user.verified ? <ShieldCheck color={Colors.cyan} size={10} strokeWidth={3} /> : null}
+      </View>
+      <Text style={styles.suggestHandle} numberOfLines={1}>
+        @{user.username ?? "—"}
+      </Text>
+      <Pressable
+        onPress={(e) => {
+          e.stopPropagation();
+          onFollow();
+        }}
+        disabled={disabled}
+        style={[styles.suggestFollow, user.is_following && styles.suggestFollowOn, disabled && { opacity: 0.6 }]}
+        testID={`suggested-follow-${user.user_id}`}
+      >
+        <UserPlus
+          color={user.is_following ? Colors.mint : Colors.ink}
+          size={11}
+          strokeWidth={3}
+        />
+        <Text style={[styles.suggestFollowText, user.is_following && { color: Colors.mint }]}>
+          {user.is_following ? "Following" : "Follow"}
+        </Text>
+      </Pressable>
     </Pressable>
   );
 }
@@ -665,5 +938,184 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.3,
+  },
+  section: { marginBottom: 18 },
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  sectionHeadLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+  },
+  sectionAction: { color: Colors.mint, fontSize: 11, fontWeight: "800" },
+  topRow: { gap: 10, paddingRight: 4 },
+  topCard: {
+    width: 124,
+    paddingTop: 16,
+    paddingBottom: 12,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Colors.card,
+    alignItems: "center",
+    position: "relative",
+  },
+  topRank: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topRankText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
+  topAvatarWrap: { width: 52, height: 52 },
+  topAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topOnline: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    backgroundColor: Colors.mint,
+    borderWidth: 2.5,
+    borderColor: Colors.card,
+  },
+  topName: {
+    color: Colors.text,
+    fontSize: 12,
+    fontWeight: "900",
+    marginTop: 8,
+    letterSpacing: -0.2,
+  },
+  topStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+  },
+  topStatsText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
+  suggestRow: { gap: 10, paddingRight: 4 },
+  suggestCard: {
+    width: 138,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(56,215,255,0.2)",
+    backgroundColor: Colors.card,
+    alignItems: "center",
+  },
+  suggestAvatarWrap: { width: 48, height: 48 },
+  suggestAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  suggestNameLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 8,
+  },
+  suggestName: {
+    color: Colors.text,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+    flexShrink: 1,
+  },
+  suggestHandle: {
+    color: Colors.muted,
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  suggestFollow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Colors.mint,
+    marginTop: 10,
+  },
+  suggestFollowOn: {
+    backgroundColor: "rgba(85,245,178,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.4)",
+  },
+  suggestFollowText: {
+    color: Colors.ink,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Colors.card,
+  },
+  filterChipText: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  listHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+    marginBottom: 10,
+  },
+  listTitle: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  listCount: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "900",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    overflow: "hidden",
   },
 });

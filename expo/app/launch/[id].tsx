@@ -406,6 +406,50 @@ export default function LaunchDetailScreen() {
             </Text>
           </View>
         </ScrollView>
+
+        <View style={styles.stickyBar} pointerEvents="box-none">
+          <LinearGradient
+            colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.85)", Colors.ink]}
+            style={styles.stickyFade}
+            pointerEvents="none"
+          />
+          <View style={styles.stickyInner}>
+            <Pressable
+              onPress={() => setWatching((v) => !v)}
+              style={[styles.stickyWatch, watching && styles.stickyWatchOn]}
+              testID="sticky-watch"
+            >
+              <Bookmark
+                color={watching ? Colors.mint : Colors.text}
+                size={16}
+                strokeWidth={2.6}
+                fill={watching ? Colors.mint : "transparent"}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() => openLink(`https://jup.ag/swap/SOL-${token.contract}`)}
+              style={[styles.stickyAction, styles.stickyBuy]}
+              testID="sticky-buy"
+            >
+              <LinearGradient
+                colors={[Colors.mint, Colors.cyan]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <TrendingUp color={Colors.ink} size={15} strokeWidth={3} />
+              <Text style={styles.stickyBuyText}>Buy</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => openLink(`https://jup.ag/swap/${token.contract}-SOL`)}
+              style={[styles.stickyAction, styles.stickySell]}
+              testID="sticky-sell"
+            >
+              <TrendingDown color={Colors.rose} size={15} strokeWidth={3} />
+              <Text style={styles.stickySellText}>Sell</Text>
+            </Pressable>
+          </View>
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -458,7 +502,7 @@ function LinkRow({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
   safe: { flex: 1 },
-  scroll: { paddingBottom: 64 },
+  scroll: { paddingBottom: 130 },
 
   bannerWrap: { height: 200, position: "relative" },
   banner: { ...StyleSheet.absoluteFillObject },
@@ -654,6 +698,59 @@ const styles = StyleSheet.create({
   linkLabel: { color: Colors.text, fontSize: 12, fontWeight: "900" },
   linkValue: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2, maxWidth: 220 },
 
+  stickyBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 28,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === "ios" ? 22 : 16,
+  },
+  stickyFade: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  stickyInner: {
+    flexDirection: "row",
+    gap: 10,
+    padding: 8,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.25)",
+    backgroundColor: "rgba(11,24,26,0.92)",
+  },
+  stickyWatch: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  stickyWatchOn: {
+    backgroundColor: "rgba(85,245,178,0.14)",
+    borderColor: "rgba(85,245,178,0.45)",
+  },
+  stickyAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 48,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  stickyBuy: {},
+  stickyBuyText: { color: Colors.ink, fontSize: 14, fontWeight: "900", letterSpacing: 0.4 },
+  stickySell: {
+    backgroundColor: "rgba(255,93,143,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(255,93,143,0.45)",
+  },
+  stickySellText: { color: Colors.rose, fontSize: 14, fontWeight: "900", letterSpacing: 0.4 },
   tradeBtn: { marginHorizontal: 16, marginTop: 22, borderRadius: 14, overflow: "hidden" },
   tradeGradient: {
     flexDirection: "row",
