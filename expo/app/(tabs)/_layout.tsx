@@ -17,6 +17,9 @@ export default function TabsLayout() {
         tabBarLabelStyle: styles.label,
         tabBarStyle: styles.bar,
         tabBarItemStyle: styles.item,
+        tabBarIconStyle: styles.icon,
+        tabBarAllowFontScaling: false,
+        tabBarLabelPosition: "below-icon",
         tabBarBackground: () => (
           <View style={styles.barBgWrap} pointerEvents="none">
             <View style={styles.barBg} />
@@ -79,17 +82,18 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   bar: {
     position: "absolute",
-    left: 12,
-    right: 12,
+    left: 8,
+    right: 8,
     bottom: Platform.OS === "ios" ? 22 : 14,
     borderTopWidth: 0,
     borderWidth: 1.5,
     borderColor: "rgba(184,140,255,0.55)",
     backgroundColor: "transparent",
     elevation: 0,
-    height: 68,
-    paddingTop: 8,
-    paddingBottom: 8,
+    height: 72,
+    paddingTop: 6,
+    paddingBottom: 10,
+    paddingHorizontal: 2,
     borderRadius: 28,
     overflow: "hidden",
     shadowColor: "#B88CFF",
@@ -98,7 +102,12 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
   },
   item: {
-    paddingTop: 4,
+    paddingTop: 2,
+    paddingHorizontal: 0,
+    flex: 1,
+  },
+  icon: {
+    marginBottom: 0,
   },
   barBgWrap: {
     flex: 1,
@@ -110,9 +119,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(11, 8, 24, 0.88)",
   },
   label: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "800",
-    letterSpacing: 0.6,
+    letterSpacing: 0.3,
     marginTop: 2,
+    marginBottom: 0,
+    includeFontPadding: false,
+    textAlign: "center",
   },
 });
