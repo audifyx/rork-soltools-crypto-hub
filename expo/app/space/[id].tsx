@@ -2,6 +2,7 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Bell,
@@ -13,7 +14,6 @@ import {
   MicOff,
   PhoneOff,
   Share2,
-  Sparkles,
   Users as UsersIcon,
   Volume2,
 } from "lucide-react-native";
@@ -30,9 +30,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { supabase } from "@/lib/supabase";
 import { useSocial } from "@/providers/social-provider";
 
 interface Participant {
+  id: string;
   handle: string;
   name: string;
   color: string;
@@ -41,39 +43,13 @@ interface Participant {
   role: "host" | "co-host" | "speaker" | "listener";
 }
 
-const PARTICIPANTS: Participant[] = [
-  { handle: "@cryptoking", name: "CryptoKing", color: Colors.mint, speaking: true, muted: false, role: "host" },
-  { handle: "@frogwhisperer", name: "Frog", color: Colors.rose, speaking: false, muted: false, role: "co-host" },
-  { handle: "@whaletracker", name: "Whale", color: Colors.cyan, speaking: false, muted: true, role: "speaker" },
-  { handle: "@neuralnode", name: "Neural", color: Colors.violet, speaking: true, muted: false, role: "speaker" },
-  { handle: "@chartmaster", name: "Charts", color: Colors.orange, speaking: false, muted: false, role: "speaker" },
-  { handle: "@sniper", name: "Sniper", color: Colors.neon, speaking: false, muted: true, role: "speaker" },
-];
+const ROLE_COLORS = [Colors.mint, Colors.violet, Colors.cyan, Colors.rose, Colors.orange];
 
-const LISTENERS: Participant[] = Array.from({ length: 18 }).map((_, i) => ({
-  handle: `@user${i}`,
-  name: `User${i}`,
-  color: i % 2 === 0 ? Colors.cyan : Colors.violet,
-  speaking: false,
-  muted: true,
-  role: "listener",
-}));
-
-interface ChatMsg {
-  id: string;
-  handle: string;
-  name: string;
-  color: string;
-  text: string;
-  type: "msg" | "join" | "react";
+function colorFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
+  return ROLE_COLORS[Math.abs(h) % ROLE_COLORS.length];
 }
-
-const CHAT_SEED: ChatMsg[] = [
-  { id: "c1", handle: "@frogwhisperer", name: "Frog", color: Colors.rose, text: "good vibes in here today 🔥", type: "msg" },
-  { id: "c2", handle: "@neuralnode", name: "Neural", color: Colors.violet, text: "$BONK breaking out, watching closely", type: "msg" },
-  { id: "c3", handle: "@listener", name: "Listener", color: Colors.cyan, text: "joined the room", type: "join" },
-  { id: "c4", handle: "@chartmaster", name: "Charts", color: Colors.orange, text: "TA setup looks juicy on the 4h", type: "msg" },
-];
 
 export default function SpaceDetailScreen() {
   const router = useRouter();
@@ -84,6 +60,70 @@ export default function SpaceDetailScreen() {
   const [muted, setMuted] = useState<boolean>(true);
   const [hand, setHand] = useState<boolean>(false);
   const [reactions, setReactions] = useState<number>(0);
+
+  const participantsQ = useQuery<Participant[]>({
+    queryKey: ["space", "participants", id ?? ""],
+    enabled: !!id,
+    queryFn: async () => {
+      if (!id) return [];
+      try {
+        const { data, error } = await supabase
+          .from("livekit_participants")
+          .select("id,user_id,identity,role,joined_at,left_at")
+          .eq("room_id", id)
+          .is("left_at", null)
+          .order("joined_at", { ascending: true })
+          .limit(200);
+        if (error) throw error;
+        const rows = data ?? [];
+        const userIds = Array.from(
+          new Set(rows.map((r) => r.user_id as string | null).filter((v): v is string => !!v)),
+        );
+        let userMap = new Map<string, { handle: string; name: string }>();
+        if (userIds.length > 0) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id,username,display_name")
+            .in("id", userIds);
+          userMap = new Map(
+            (profs ?? []).map((p) => [
+              p.id as string,
+              {
+                handle: p.username ? `@${p.username as string}` : "",
+                name:
+                  ((p.display_name as string | null) ?? (p.username as string | null) ?? "User") ||
+                  "User",
+              },
+            ]),
+          );
+        }
+        return rows.map((r): Participant => {
+          const u = r.user_id ? userMap.get(r.user_id as string) : undefined;
+          const role = ((r.role as string) ?? "listener").toLowerCase();
+          const normalized: Participant["role"] =
+            role === "host" || role === "co-host" || role === "speaker" ? role : "listener";
+          return {
+            id: r.id as string,
+            handle: u?.handle ?? `@${(r.identity as string) || "anon"}`,
+            name: u?.name ?? ((r.identity as string) || "Listener"),
+            color: colorFor((r.identity as string) || (r.id as string)),
+            speaking: false,
+            muted: normalized === "listener",
+            role: normalized,
+          };
+        });
+      } catch (e) {
+        console.log("[space] participants fetch failed", e);
+        return [];
+      }
+    },
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+
+  const participants = participantsQ.data ?? [];
+  const speakers = participants.filter((p) => p.role !== "listener");
+  const listeners = participants.filter((p) => p.role === "listener");
 
   if (!space) {
     return (
@@ -107,6 +147,9 @@ export default function SpaceDetailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     router.back();
   };
+
+  const visibleListeners = listeners.slice(0, 12);
+  const remainingListeners = Math.max(0, listeners.length - visibleListeners.length);
 
   return (
     <View style={styles.root} testID="space-detail">
@@ -146,21 +189,18 @@ export default function SpaceDetailScreen() {
           </Pressable>
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Text style={styles.title}>{space.title}</Text>
-          <Text style={styles.desc}>{space.description}</Text>
+          {space.description ? <Text style={styles.desc}>{space.description}</Text> : null}
 
           <View style={styles.metaRow}>
             <View style={styles.metaPill}>
               <UsersIcon color={Colors.muted} size={11} strokeWidth={2.8} />
-              <Text style={styles.metaText}>{space.listeners} listening</Text>
+              <Text style={styles.metaText}>{listeners.length} listening</Text>
             </View>
             <View style={styles.metaPill}>
               <Mic color={space.accent[0]} size={11} strokeWidth={2.8} />
-              <Text style={styles.metaText}>{space.speakers} speakers</Text>
+              <Text style={styles.metaText}>{speakers.length} speakers</Text>
             </View>
             {space.recording ? (
               <View style={[styles.metaPill, { backgroundColor: "rgba(255,93,143,0.16)" }]}>
@@ -171,53 +211,60 @@ export default function SpaceDetailScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>SPEAKERS</Text>
-            <View style={styles.grid}>
-              {PARTICIPANTS.map((p) => (
-                <SpeakerTile key={p.handle} p={p} accent={space.accent[0]} />
-              ))}
-            </View>
+            <Text style={styles.sectionLabel}>SPEAKERS · {speakers.length}</Text>
+            {speakers.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Mic color={Colors.muted} size={20} strokeWidth={2.4} />
+                <Text style={styles.emptyText}>No speakers on stage yet</Text>
+              </View>
+            ) : (
+              <View style={styles.grid}>
+                {speakers.map((p) => (
+                  <SpeakerTile key={p.id} p={p} accent={space.accent[0]} />
+                ))}
+              </View>
+            )}
           </View>
 
           <View style={styles.section}>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionLabel}>LISTENERS · {LISTENERS.length}</Text>
+              <Text style={styles.sectionLabel}>LISTENERS · {listeners.length}</Text>
             </View>
-            <View style={styles.listenerGrid}>
-              {LISTENERS.slice(0, 12).map((l) => (
-                <View key={l.handle} style={[styles.listenerAvatar, { backgroundColor: l.color }]}>
-                  <Text style={styles.listenerInit}>
-                    {l.name.slice(0, 1).toUpperCase()}
-                  </Text>
-                </View>
-              ))}
-              <View style={styles.listenerMore}>
-                <Text style={styles.listenerMoreText}>+{LISTENERS.length - 12}</Text>
+            {listeners.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <UsersIcon color={Colors.muted} size={20} strokeWidth={2.4} />
+                <Text style={styles.emptyText}>Be the first to drop in</Text>
               </View>
-            </View>
+            ) : (
+              <View style={styles.listenerGrid}>
+                {visibleListeners.map((l) => (
+                  <View
+                    key={l.id}
+                    style={[styles.listenerAvatar, { backgroundColor: l.color }]}
+                  >
+                    <Text style={styles.listenerInit}>
+                      {l.name.slice(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
+                ))}
+                {remainingListeners > 0 ? (
+                  <View style={styles.listenerMore}>
+                    <Text style={styles.listenerMoreText}>+{remainingListeners}</Text>
+                  </View>
+                ) : null}
+              </View>
+            )}
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>LIVE CHAT</Text>
             <View style={styles.chatBox}>
-              {CHAT_SEED.map((m) => (
-                <View key={m.id} style={styles.chatRow}>
-                  <View style={[styles.chatAvatar, { backgroundColor: m.color }]}>
-                    <Text style={styles.chatInit}>{m.name.slice(0, 1).toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.chatName}>
-                      {m.name}{" "}
-                      <Text style={styles.chatHandle}>{m.handle}</Text>
-                    </Text>
-                    {m.type === "join" ? (
-                      <Text style={styles.chatJoin}>{m.text}</Text>
-                    ) : (
-                      <Text style={styles.chatText}>{m.text}</Text>
-                    )}
-                  </View>
-                </View>
-              ))}
+              <View style={styles.chatEmpty}>
+                <MessageCircle color={Colors.muted} size={18} strokeWidth={2.4} />
+                <Text style={styles.chatEmptyText}>
+                  Live chat in this room hasn&apos;t started yet.
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -241,12 +288,7 @@ export default function SpaceDetailScreen() {
                 size={16}
                 strokeWidth={2.6}
               />
-              <Text
-                style={[
-                  styles.remindText,
-                  following && { color: Colors.mint },
-                ]}
-              >
+              <Text style={[styles.remindText, following && { color: Colors.mint }]}>
                 {following ? "Reminder set" : "Remind me when live"}
               </Text>
             </Pressable>
@@ -286,11 +328,7 @@ export default function SpaceDetailScreen() {
               ]}
               testID="space-hand"
             >
-              <Hand
-                color={hand ? Colors.orange : Colors.text}
-                size={18}
-                strokeWidth={2.6}
-              />
+              <Hand color={hand ? Colors.orange : Colors.text} size={18} strokeWidth={2.6} />
             </Pressable>
             <ReactionBtn count={reactions} onPress={() => setReactions((r) => r + 1)} />
             <Pressable style={styles.barBtn} testID="space-cc">
@@ -392,7 +430,12 @@ function ReactionBtn({ count, onPress }: { count: number; onPress: () => void })
   return (
     <Pressable onPress={press} style={styles.barBtn} testID="space-react">
       <Animated.View style={{ transform: [{ scale }] }}>
-        <Heart color={Colors.rose} size={18} strokeWidth={2.6} fill={count > 0 ? Colors.rose : "transparent"} />
+        <Heart
+          color={Colors.rose}
+          size={18}
+          strokeWidth={2.6}
+          fill={count > 0 ? Colors.rose : "transparent"}
+        />
       </Animated.View>
       {count > 0 ? (
         <View style={styles.reactCount}>
@@ -457,7 +500,25 @@ const styles = StyleSheet.create({
 
   section: { marginTop: 22 },
   sectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sectionLabel: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.4, marginBottom: 12 },
+  sectionLabel: {
+    color: Colors.muted,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    marginBottom: 12,
+  },
+
+  emptyBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 22,
+    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  emptyText: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
 
   grid: { flexDirection: "row", flexWrap: "wrap" },
   speakerTile: { width: "33.33%", alignItems: "center", marginBottom: 18 },
@@ -533,21 +594,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
-    gap: 12,
   },
-  chatRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  chatAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
+  chatEmpty: {
     alignItems: "center",
     justifyContent: "center",
+    gap: 8,
+    paddingVertical: 16,
   },
-  chatInit: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
-  chatName: { color: Colors.text, fontSize: 12, fontWeight: "900" },
-  chatHandle: { color: Colors.muted, fontWeight: "700" },
-  chatText: { color: Colors.text, fontSize: 13, fontWeight: "500", marginTop: 2, lineHeight: 18 },
-  chatJoin: { color: Colors.muted, fontSize: 12, fontWeight: "700", fontStyle: "italic", marginTop: 2 },
+  chatEmptyText: {
+    color: Colors.muted,
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
+  },
 
   remindCta: {
     flexDirection: "row",
@@ -587,10 +646,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
-  leaveBtn: {
-    backgroundColor: Colors.rose,
-    borderColor: Colors.rose,
-  },
+  leaveBtn: { backgroundColor: Colors.rose, borderColor: Colors.rose },
   reactCount: {
     position: "absolute",
     top: -2,

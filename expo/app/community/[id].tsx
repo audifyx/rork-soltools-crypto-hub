@@ -2,6 +2,7 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -35,8 +36,23 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { supabase } from "@/lib/supabase";
 import { useApp } from "@/providers/app-provider";
 import { CommunityPost, useSocial } from "@/providers/social-provider";
+
+interface CommunityMember {
+  id: string;
+  handle: string;
+  name: string;
+  color: string;
+}
+
+const MEMBER_COLORS = [Colors.mint, Colors.violet, Colors.cyan, Colors.rose, Colors.orange];
+function memberColorFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
+  return MEMBER_COLORS[Math.abs(h) % MEMBER_COLORS.length];
+}
 
 function fmtCount(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -76,9 +92,48 @@ export default function CommunityDetailScreen() {
   const community = useMemo(() => (id ? getCommunity(id) : undefined), [id, getCommunity]);
   const posts = useMemo(() => (id ? postsByCommunity(id) : []), [id, postsByCommunity]);
   const linkedSpaces = useMemo(
-    () => spaces.filter((s) => s.isLive).slice(0, 3),
-    [spaces],
+    () => spaces.filter((s) => s.isLive && (s as unknown as { communityId?: string }).communityId === community?.id).slice(0, 3),
+    [spaces, community?.id],
   );
+
+  const membersQ = useQuery<CommunityMember[]>({
+    queryKey: ["community", "members", community?.id ?? ""],
+    enabled: !!community?.id && tab === "members",
+    queryFn: async () => {
+      if (!community?.id) return [];
+      try {
+        const { data, error } = await supabase
+          .from("community_members")
+          .select("user_id")
+          .eq("community_id", community.id)
+          .limit(60);
+        if (error) throw error;
+        const userIds = (data ?? [])
+          .map((r) => r.user_id as string)
+          .filter((v): v is string => !!v);
+        if (userIds.length === 0) return [];
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id,username,display_name,avatar_color")
+          .in("id", userIds);
+        return (profs ?? []).map((p): CommunityMember => {
+          const username = (p.username as string | null) ?? "";
+          const display = (p.display_name as string | null) ?? username ?? "User";
+          return {
+            id: p.id as string,
+            handle: username ? `@${username}` : "",
+            name: display || "User",
+            color: (p.avatar_color as string | null) ?? memberColorFor(p.id as string),
+          };
+        });
+      } catch (e) {
+        console.log("[community] members fetch failed", e);
+        return [];
+      }
+    },
+    staleTime: 30_000,
+  });
+  const members = membersQ.data ?? [];
 
   const onSend = useCallback(async () => {
     const text = composer.trim();
@@ -372,35 +427,44 @@ export default function CommunityDetailScreen() {
             {tab === "members" ? (
               <View style={styles.membersWrap}>
                 <Text style={styles.membersIntro}>
-                  {fmtCount(community.online)} active right now
+                  {fmtCount(community.members)} members · {fmtCount(community.online)} active
                 </Text>
-                <View style={styles.memberGrid}>
-                  {Array.from({ length: 12 }).map((_, i) => (
-                    <View key={`m${i}`} style={styles.memberCell}>
-                      <View
-                        style={[
-                          styles.memberAvatar,
-                          {
-                            backgroundColor:
-                              i % 3 === 0
-                                ? Colors.mint
-                                : i % 3 === 1
-                                ? Colors.violet
-                                : Colors.cyan,
-                          },
-                        ]}
-                      >
-                        <Text style={styles.memberInit}>
-                          {String.fromCharCode(65 + i)}
-                        </Text>
-                      </View>
-                      <Text style={styles.memberName} numberOfLines={1}>
-                        @user{i}
-                      </Text>
-                      <View style={styles.memberOnline} />
+                {members.length === 0 ? (
+                  <View style={styles.emptyFeed}>
+                    <View
+                      style={[
+                        styles.emptyIcon,
+                        { backgroundColor: `${community.accent[0]}1A` },
+                      ]}
+                    >
+                      <Users color={community.accent[0]} size={24} strokeWidth={2.4} />
                     </View>
-                  ))}
-                </View>
+                    <Text style={styles.emptyTitle}>
+                      {membersQ.isLoading ? "Loading members..." : "No members yet"}
+                    </Text>
+                    <Text style={styles.emptyBody}>
+                      Be the first to join {community.name}.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.memberGrid}>
+                    {members.map((m) => (
+                      <View key={m.id} style={styles.memberCell}>
+                        <View
+                          style={[styles.memberAvatar, { backgroundColor: m.color }]}
+                        >
+                          <Text style={styles.memberInit}>
+                            {m.name.slice(0, 1).toUpperCase()}
+                          </Text>
+                        </View>
+                        <Text style={styles.memberName} numberOfLines={1}>
+                          {m.handle || m.name}
+                        </Text>
+                        <View style={styles.memberOnline} />
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             ) : null}
           </View>

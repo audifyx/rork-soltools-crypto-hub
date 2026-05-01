@@ -6,69 +6,18 @@ import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import Colors from "@/constants/colors";
-
-interface VoiceRoom {
-  id: string;
-  title: string;
-  subtitle: string;
-  hostName: string;
-  speakers: number;
-  listeners: number;
-  isLive: boolean;
-  accent: [string, string];
-  topic: string;
-}
-
-const SAMPLE_ROOMS: VoiceRoom[] = [
-  {
-    id: "alpha-call",
-    title: "Live Alpha · Solana memes",
-    subtitle: "calls every 10 min",
-    hostName: "@cryptoking",
-    speakers: 6,
-    listeners: 142,
-    isLive: true,
-    accent: [Colors.rose, Colors.orange],
-    topic: "MEMES",
-  },
-  {
-    id: "whale-watch",
-    title: "Whale Watch Hour",
-    subtitle: "tracking $50k+ moves",
-    hostName: "@whaletracker",
-    speakers: 3,
-    listeners: 87,
-    isLive: true,
-    accent: [Colors.cyan, Colors.violet],
-    topic: "WHALES",
-  },
-  {
-    id: "ai-sniper",
-    title: "AI Sniper Lounge",
-    subtitle: "auto-buy strategy",
-    hostName: "@snipergpt",
-    speakers: 4,
-    listeners: 64,
-    isLive: true,
-    accent: [Colors.mint, Colors.cyan],
-    topic: "AI",
-  },
-  {
-    id: "chill",
-    title: "Chill Chart Vibes",
-    subtitle: "TA & lo-fi beats",
-    hostName: "@chartmaster",
-    speakers: 2,
-    listeners: 41,
-    isLive: false,
-    accent: [Colors.violet, Colors.rose],
-    topic: "TA",
-  },
-];
+import { Space, useSocial } from "@/providers/social-provider";
 
 export default function VoiceRoomsRail() {
   const router = useRouter();
-  const rooms = useMemo<VoiceRoom[]>(() => SAMPLE_ROOMS, []);
+  const { liveSpaces, upcomingSpaces } = useSocial();
+
+  const rooms = useMemo<Space[]>(() => {
+    const merged = [...liveSpaces, ...upcomingSpaces];
+    return merged.slice(0, 8);
+  }, [liveSpaces, upcomingSpaces]);
+
+  if (rooms.length === 0) return null;
 
   return (
     <View style={styles.wrap} testID="voice-rooms-rail">
@@ -78,10 +27,12 @@ export default function VoiceRoomsRail() {
             <Headphones color={Colors.violet} size={14} strokeWidth={2.6} />
           </View>
           <Text style={styles.title}>Voice rooms</Text>
-          <View style={styles.live}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>{rooms.filter((r) => r.isLive).length} LIVE</Text>
-          </View>
+          {liveSpaces.length > 0 ? (
+            <View style={styles.live}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>{liveSpaces.length} LIVE</Text>
+            </View>
+          ) : null}
         </View>
         <Pressable
           onPress={() => {
@@ -104,7 +55,7 @@ export default function VoiceRoomsRail() {
             key={r.id}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              router.push({ pathname: "/space/[id]", params: { id: r.id === "alpha-call" ? "live-alpha" : r.id === "chill" ? "chart-vibes" : r.id } });
+              router.push({ pathname: "/space/[id]", params: { id: r.id } });
             }}
             style={[styles.card, { shadowColor: r.accent[0] }]}
             testID={`voice-room-${r.id}`}
@@ -116,7 +67,12 @@ export default function VoiceRoomsRail() {
               style={styles.cardInner}
             >
               <View style={styles.cardTop}>
-                <View style={[styles.topicPill, { backgroundColor: `${r.accent[0]}26`, borderColor: `${r.accent[0]}66` }]}>
+                <View
+                  style={[
+                    styles.topicPill,
+                    { backgroundColor: `${r.accent[0]}26`, borderColor: `${r.accent[0]}66` },
+                  ]}
+                >
                   <Text style={[styles.topicText, { color: r.accent[0] }]}>{r.topic}</Text>
                 </View>
                 {r.isLive ? (
@@ -131,7 +87,7 @@ export default function VoiceRoomsRail() {
                 {r.title}
               </Text>
               <Text style={styles.cardSub} numberOfLines={1}>
-                {r.subtitle} · {r.hostName}
+                {r.description ? r.description : r.hostName} · {r.hostHandle}
               </Text>
 
               <View style={styles.cardFoot}>
@@ -191,23 +147,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,93,143,0.4)",
   },
-  liveDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: Colors.rose,
-  },
-  liveText: {
-    color: Colors.rose,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-  },
+  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.rose },
+  liveText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
   see: { color: Colors.violet, fontSize: 12, fontWeight: "800" },
-  row: {
-    paddingHorizontal: 14,
-    gap: 12,
-  },
+  row: { paddingHorizontal: 14, gap: 12 },
   card: {
     width: 230,
     borderRadius: 22,
@@ -220,27 +163,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor: "rgba(8,12,16,0.85)",
   },
-  cardInner: {
-    padding: 14,
-    minHeight: 132,
-    justifyContent: "space-between",
-  },
-  cardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  topicPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  topicText: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
+  cardInner: { padding: 14, minHeight: 132, justifyContent: "space-between" },
+  cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  topicPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1 },
+  topicText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   livePulse: {
     flexDirection: "row",
     alignItems: "center",
@@ -250,12 +176,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(255,93,143,0.18)",
   },
-  livePulseText: {
-    color: Colors.rose,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-  },
+  livePulseText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
   cardTitle: {
     color: Colors.text,
     fontSize: 15,
@@ -263,18 +184,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     marginTop: 10,
   },
-  cardSub: {
-    color: Colors.muted,
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 3,
-  },
-  cardFoot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 10,
-  },
+  cardSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 3 },
+  cardFoot: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
   statChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -284,11 +195,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.05)",
   },
-  statText: {
-    color: Colors.text,
-    fontSize: 11,
-    fontWeight: "800",
-  },
+  statText: { color: Colors.text, fontSize: 11, fontWeight: "800" },
   joinBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -298,10 +205,5 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     marginLeft: "auto",
   },
-  joinText: {
-    color: Colors.ink,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-  },
+  joinText: { color: Colors.ink, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
 });
