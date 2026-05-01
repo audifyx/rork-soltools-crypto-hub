@@ -11,13 +11,16 @@ import {
   Bookmark,
   Feather,
   Flame,
+  Gem,
   Heart,
   ImagePlus,
   Inbox,
   MessageCircle,
   Repeat2,
+  Rocket,
   Search,
   Share2,
+  Skull,
   Sparkles,
   TrendingDown,
   TrendingUp,
@@ -304,11 +307,23 @@ export default function HomeFeedScreen() {
             <Text style={styles.brandText}>SOL TOOLS</Text>
           </View>
           <View style={styles.topActions}>
-            <Pressable style={styles.iconBtn} testID="search-btn">
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => router.push("/(tabs)/discover")}
+              testID="search-btn"
+            >
               <Search color={Colors.text} size={18} strokeWidth={2.4} />
             </Pressable>
-            <Pressable style={styles.iconBtn} testID="bell-btn">
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                router.push("/notifications");
+              }}
+              testID="bell-btn"
+            >
               <Bell color={Colors.text} size={18} strokeWidth={2.4} />
+              <View style={styles.bellDot} pointerEvents="none" />
             </Pressable>
           </View>
         </View>
@@ -832,8 +847,9 @@ function UserPostCard({
         {post.text ? <Text style={styles.postText}>{post.text}</Text> : null}
         {post.images && post.images.length > 0 ? <PostImageGrid images={post.images} /> : null}
         {post.ticker ? (
-          <PostPairCard pair={{ ticker: `$${post.ticker}`, changePct: post.changePct ?? 0 }} />
+          <PostPairCard pair={{ ticker: `${post.ticker}`, changePct: post.changePct ?? 0 }} />
         ) : null}
+        <ReactionBar postId={post.id} />
         <View style={styles.actionsRow}>
           <ActionItem
             icon={<MessageCircle color={Colors.muted} size={16} strokeWidth={2.2} />}
@@ -1014,6 +1030,79 @@ function PostPairCard({ pair }: { pair: { ticker: string; changePct: number } })
   );
 }
 
+type ReactionKey = "rocket" | "diamond" | "fire" | "bear";
+const REACTIONS: { key: ReactionKey; Icon: typeof Rocket; color: string; label: string }[] = [
+  { key: "rocket", Icon: Rocket, color: Colors.mint, label: "Rocket" },
+  { key: "diamond", Icon: Gem, color: Colors.cyan, label: "Diamond" },
+  { key: "fire", Icon: Flame, color: Colors.orange, label: "Fire" },
+  { key: "bear", Icon: Skull, color: Colors.rose, label: "Bear" },
+];
+
+function ReactionBar({ postId }: { postId: string }) {
+  // Local-only reactions per session: lightweight feel-good interactions until
+  // a backend reactions table lands.
+  const [counts, setCounts] = useState<Record<ReactionKey, number>>(() => {
+    const seed = Math.abs(
+      postId.split("").reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) >>> 0, 17),
+    );
+    return {
+      rocket: seed % 7,
+      diamond: (seed >>> 3) % 5,
+      fire: (seed >>> 5) % 6,
+      bear: (seed >>> 7) % 3,
+    };
+  });
+  const [picked, setPicked] = useState<ReactionKey | null>(null);
+
+  const onTap = useCallback(
+    (key: ReactionKey) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      setCounts((prev) => {
+        const wasPicked = picked === key;
+        return { ...prev, [key]: Math.max(0, prev[key] + (wasPicked ? -1 : 1)) };
+      });
+      setPicked((prev) => (prev === key ? null : key));
+    },
+    [picked],
+  );
+
+  return (
+    <View style={styles.reactionBar} testID={`reactions-${postId}`}>
+      {REACTIONS.map((r) => {
+        const active = picked === r.key;
+        const count = counts[r.key];
+        return (
+          <Pressable
+            key={r.key}
+            onPress={() => onTap(r.key)}
+            style={[
+              styles.reactionPill,
+              active && {
+                backgroundColor: `${r.color}1F`,
+                borderColor: `${r.color}66`,
+              },
+            ]}
+            hitSlop={4}
+            testID={`react-${r.key}-${postId}`}
+          >
+            <r.Icon
+              color={active ? r.color : Colors.muted}
+              size={13}
+              strokeWidth={2.4}
+              fill={active ? r.color : "transparent"}
+            />
+            {count > 0 ? (
+              <Text style={[styles.reactionCount, active && { color: r.color }]}>
+                {count}
+              </Text>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function ActionItem({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
     <View style={styles.actionBtn}>
@@ -1056,6 +1145,28 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   avatarImg: { width: "100%", height: "100%" },
+  reactionBar: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 10,
+    flexWrap: "wrap",
+  },
+  reactionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  reactionCount: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+  },
   brandPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -1084,6 +1195,17 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  bellDot: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.rose,
+    borderWidth: 1.5,
+    borderColor: Colors.ink,
   },
 
   filterWrap: {

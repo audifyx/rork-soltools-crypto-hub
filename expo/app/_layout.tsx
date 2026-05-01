@@ -45,6 +45,7 @@ function RootLayoutNav() {
       <Stack.Screen name="tool/[id]" />
       <Stack.Screen name="u/[handle]" />
       <Stack.Screen name="admin" />
+      <Stack.Screen name="notifications" options={{ presentation: "card", animation: "slide_from_right" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

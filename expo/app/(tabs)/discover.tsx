@@ -292,7 +292,14 @@ export default function DiscoverScreen() {
             </Text>
           </View>
           <View style={styles.headerActions}>
-            <Pressable style={styles.iconBtn} testID="discover-alerts">
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                router.push("/notifications");
+              }}
+              testID="discover-alerts"
+            >
               <Bell color={Colors.text} size={16} strokeWidth={2.4} />
             </Pressable>
             <Pressable

@@ -4,6 +4,9 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   ArrowLeft,
+  Check,
+  Coins,
+  Copy,
   Globe,
   MapPin,
   ShieldCheck,
@@ -13,12 +16,18 @@ import {
   UserPlus,
   UserCheck,
   Wallet,
+  X,
+  Zap,
 } from "lucide-react-native";
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
+import * as Clipboard from "expo-clipboard";
+import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -45,6 +54,7 @@ export default function PublicProfileScreen() {
   const profileQ = usePublicProfile(handle);
   const profile = profileQ.data;
   const isSelf = !!profile && profile.id === userId;
+  const [tipOpen, setTipOpen] = useState<boolean>(false);
 
   const onToggleFollow = useCallback(async () => {
     if (!isAuthenticated) {
@@ -132,30 +142,47 @@ export default function PublicProfileScreen() {
             </View>
 
             {!isSelf ? (
-              <Pressable
-                onPress={onToggleFollow}
-                disabled={isToggling}
-                style={[
-                  styles.followBtn,
-                  profile.is_following ? styles.followingBtn : styles.notFollowingBtn,
-                  isToggling && { opacity: 0.55 },
-                ]}
-                testID="toggle-follow"
-              >
-                {profile.is_following ? (
-                  <UserCheck color={Colors.text} size={14} strokeWidth={2.6} />
-                ) : (
-                  <UserPlus color={Colors.ink} size={14} strokeWidth={2.6} />
-                )}
-                <Text
+              <View style={styles.actionStack}>
+                {profile.wallet_address ? (
+                  <Pressable
+                    onPress={() => {
+                      if (Platform.OS !== "web") {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      }
+                      setTipOpen(true);
+                    }}
+                    style={styles.tipBtn}
+                    testID="open-tip"
+                  >
+                    <Coins color={Colors.orange} size={13} strokeWidth={2.8} />
+                    <Text style={styles.tipBtnText}>Tip</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  onPress={onToggleFollow}
+                  disabled={isToggling}
                   style={[
-                    styles.followBtnText,
-                    profile.is_following ? { color: Colors.text } : { color: Colors.ink },
+                    styles.followBtn,
+                    profile.is_following ? styles.followingBtn : styles.notFollowingBtn,
+                    isToggling && { opacity: 0.55 },
                   ]}
+                  testID="toggle-follow"
                 >
-                  {profile.is_following ? "Following" : "Follow"}
-                </Text>
-              </Pressable>
+                  {profile.is_following ? (
+                    <UserCheck color={Colors.text} size={14} strokeWidth={2.6} />
+                  ) : (
+                    <UserPlus color={Colors.ink} size={14} strokeWidth={2.6} />
+                  )}
+                  <Text
+                    style={[
+                      styles.followBtnText,
+                      profile.is_following ? { color: Colors.text } : { color: Colors.ink },
+                    ]}
+                  >
+                    {profile.is_following ? "Following" : "Follow"}
+                  </Text>
+                </Pressable>
+              </View>
             ) : null}
           </View>
 
@@ -256,7 +283,152 @@ export default function PublicProfileScreen() {
           </View>
         </View>
       </ScrollView>
+      <TipModal
+        visible={tipOpen}
+        onClose={() => setTipOpen(false)}
+        recipientName={display}
+        recipientHandle={profile.username ?? "trader"}
+        walletAddress={profile.wallet_address ?? ""}
+      />
     </View>
+  );
+}
+
+const TIP_AMOUNTS: number[] = [0.1, 0.5, 1, 5];
+
+function TipModal({
+  visible,
+  onClose,
+  recipientName,
+  recipientHandle,
+  walletAddress,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  recipientName: string;
+  recipientHandle: string;
+  walletAddress: string;
+}) {
+  const [amount, setAmount] = useState<number>(0.5);
+  const [copied, setCopied] = useState<boolean>(false);
+  const onCopy = useCallback(async () => {
+    await Clipboard.setStringAsync(walletAddress);
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  }, [walletAddress]);
+  const onSend = useCallback(async () => {
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
+    const url = `https://phantom.app/ul/v1/send?recipient=${walletAddress}&amount=${amount}`;
+    const can = await Linking.canOpenURL(url).catch(() => false);
+    if (can) {
+      Linking.openURL(url).catch(() => {});
+    } else {
+      await Clipboard.setStringAsync(walletAddress);
+      Alert.alert(
+        "Wallet copied",
+        `Open Phantom or your Solana wallet and paste this address to tip ${amount} SOL.`,
+      );
+    }
+    onClose();
+  }, [amount, walletAddress, onClose]);
+  const short = walletAddress
+    ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-6)}`
+    : "";
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <Pressable style={tipStyles.backdrop} onPress={onClose}>
+        <Pressable style={tipStyles.sheet} onPress={(e) => e.stopPropagation()}>
+          <View style={tipStyles.handle} />
+          <View style={tipStyles.header}>
+            <View style={tipStyles.titleWrap}>
+              <Coins color={Colors.orange} size={16} strokeWidth={2.6} />
+              <Text style={tipStyles.title}>Tip {recipientName}</Text>
+            </View>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <X color={Colors.muted} size={18} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+          <Text style={tipStyles.sub}>
+            Send SOL directly to @{recipientHandle}'s wallet.
+          </Text>
+
+          <Text style={tipStyles.sectionLabel}>AMOUNT (SOL)</Text>
+          <View style={tipStyles.amountRow}>
+            {TIP_AMOUNTS.map((v) => {
+              const active = amount === v;
+              return (
+                <Pressable
+                  key={v}
+                  onPress={() => {
+                    if (Platform.OS !== "web") {
+                      Haptics.selectionAsync().catch(() => {});
+                    }
+                    setAmount(v);
+                  }}
+                  style={[tipStyles.amountChip, active && tipStyles.amountChipActive]}
+                  testID={`tip-amount-${v}`}
+                >
+                  <Text
+                    style={[
+                      tipStyles.amountText,
+                      active && tipStyles.amountTextActive,
+                    ]}
+                  >
+                    {v} SOL
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={tipStyles.sectionLabel}>RECIPIENT WALLET</Text>
+          <Pressable onPress={onCopy} style={tipStyles.walletBox} testID="copy-tip-wallet">
+            <View style={tipStyles.walletIcon}>
+              <Wallet color={Colors.cyan} size={14} strokeWidth={2.6} />
+            </View>
+            <Text style={tipStyles.walletText} numberOfLines={1}>
+              {short || "No wallet linked"}
+            </Text>
+            {copied ? (
+              <Check color={Colors.mint} size={14} strokeWidth={3} />
+            ) : (
+              <Copy color={Colors.muted} size={14} strokeWidth={2.6} />
+            )}
+          </Pressable>
+
+          <Pressable
+            onPress={onSend}
+            disabled={!walletAddress}
+            style={[tipStyles.sendBtn, !walletAddress && { opacity: 0.5 }]}
+            testID="send-tip"
+          >
+            <LinearGradient
+              colors={[Colors.orange, Colors.rose]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={tipStyles.sendGrad}
+            >
+              <Zap color={Colors.ink} size={16} strokeWidth={3} />
+              <Text style={tipStyles.sendText}>Send {amount} SOL</Text>
+            </LinearGradient>
+          </Pressable>
+          <Text style={tipStyles.foot}>
+            Opens Phantom (or your default wallet) to confirm. SolTools never holds funds.
+          </Text>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -318,6 +490,29 @@ const styles = StyleSheet.create({
   avatarImg: { flex: 1, borderRadius: 22 },
   avatar: { flex: 1, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   avatarText: { color: Colors.ink, fontSize: 32, fontWeight: "900" },
+  actionStack: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  tipBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,184,76,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,184,76,0.4)",
+  },
+  tipBtnText: {
+    color: Colors.orange,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
   followBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -325,7 +520,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 11,
     borderRadius: 999,
-    marginBottom: 10,
   },
   notFollowingBtn: { backgroundColor: Colors.mint },
   followingBtn: {
@@ -378,4 +572,114 @@ const styles = StyleSheet.create({
   },
   statNum: { color: Colors.text, fontSize: 18, fontWeight: "900" },
   statKey: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
+});
+
+const tipStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: Colors.panel,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 10,
+    paddingBottom: 36,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,184,76,0.18)",
+  },
+  handle: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  titleWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
+  title: { color: Colors.text, fontSize: 18, fontWeight: "900", letterSpacing: -0.3 },
+  sub: { color: Colors.muted, fontSize: 13, fontWeight: "600", marginTop: 6 },
+  sectionLabel: {
+    color: Colors.muted,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    marginTop: 22,
+    marginBottom: 10,
+  },
+  amountRow: { flexDirection: "row", gap: 8 },
+  amountChip: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+  },
+  amountChipActive: {
+    backgroundColor: "rgba(255,184,76,0.14)",
+    borderColor: Colors.orange,
+  },
+  amountText: { color: Colors.text, fontSize: 13, fontWeight: "800" },
+  amountTextActive: { color: Colors.orange, fontWeight: "900" },
+  walletBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(56,215,255,0.18)",
+  },
+  walletIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(56,215,255,0.16)",
+  },
+  walletText: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    flex: 1,
+  },
+  sendBtn: {
+    marginTop: 22,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  sendGrad: {
+    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  sendText: {
+    color: Colors.ink,
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+  foot: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 14,
+    lineHeight: 16,
+  },
 });
