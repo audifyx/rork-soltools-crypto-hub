@@ -68,6 +68,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useApp, type Currency, type Language, type ThemeMode, type UserPrefs } from "@/providers/app-provider";
+import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
@@ -269,6 +270,7 @@ export default function ProfileScreen() {
     deletePost,
   } = useApp();
   const { listings } = useLaunchpad();
+  const { isAuthenticated, email: authEmail, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
@@ -1438,10 +1440,30 @@ function SettingsModal({
                 />
                 <MenuRow
                   Icon={LogOut}
-                  label="Sign out"
-                  sub="Local session stays on device"
-                  danger
-                  onPress={() => Alert.alert("Sign out", "You're signed out locally.", [{ text: "OK" }])}
+                  label={isAuthenticated ? "Sign out" : "Sign in / Create account"}
+                  sub={isAuthenticated ? (authEmail ?? "Signed in") : "Sync your data across devices"}
+                  danger={isAuthenticated}
+                  onPress={async () => {
+                    if (isAuthenticated) {
+                      Alert.alert("Sign out", "Are you sure you want to sign out?", [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Sign out",
+                          style: "destructive",
+                          onPress: async () => {
+                            try {
+                              await signOut();
+                              router.replace("/auth");
+                            } catch (e) {
+                              Alert.alert("Sign out failed", e instanceof Error ? e.message : "Try again");
+                            }
+                          },
+                        },
+                      ]);
+                    } else {
+                      router.push("/auth");
+                    }
+                  }}
                 />
                 <View style={{ height: 24 }} />
               </>

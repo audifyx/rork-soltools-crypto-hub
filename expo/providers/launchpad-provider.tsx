@@ -3,10 +3,13 @@ import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/providers/auth-provider";
 import {
   LaunchSort,
   LaunchTab,
   LaunchToken,
+  LaunchVenue,
   LaunchVenueFilter,
   LaunchpadStats,
 } from "@/types/launchpad";
@@ -58,8 +61,56 @@ export type SubmitTokenInput = Omit<
   featured?: boolean;
 };
 
+const VALID_VENUES: LaunchVenue[] = [
+  "pumpfun",
+  "pumpswap",
+  "raydium",
+  "meteora",
+  "jupiter",
+  "other",
+];
+
+function rowToToken(row: Record<string, unknown>, currentUserId: string | null): LaunchToken {
+  const venueRaw = String(row.status ?? "other").toLowerCase();
+  const venue: LaunchVenue = (VALID_VENUES.includes(venueRaw as LaunchVenue)
+    ? venueRaw
+    : "other") as LaunchVenue;
+  return {
+    id: String(row.id ?? ""),
+    name: (row.token_name as string) ?? "Unnamed",
+    ticker: ((row.symbol as string) ?? "").toUpperCase(),
+    description: (row.description as string) ?? "",
+    logoUrl: (row.logo_url as string) ?? null,
+    bannerUrl: (row.banner_url as string) ?? null,
+    contract: (row.contract_address as string) ?? "",
+    venue,
+    status: "live",
+    website: (row.website as string) ?? undefined,
+    twitter: (row.twitter as string) ?? undefined,
+    telegram: (row.telegram as string) ?? undefined,
+    discord: (row.discord as string) ?? undefined,
+    tags: [],
+    featured: !!row.is_featured,
+    hot: false,
+    verified: false,
+    createdAt: row.created_at
+      ? new Date(row.created_at as string).getTime()
+      : Date.now(),
+    submittedBy: currentUserId && row.user_id === currentUserId ? "user" : "system",
+    price: null,
+    change24hPct: null,
+    liquidityUsd: Number(row.liquidity_usd ?? 0) || null,
+    marketCapUsd: Number(row.market_cap ?? 0) || null,
+    volume24hUsd: null,
+    holders: null,
+    upvotes: 0,
+    watchers: 0,
+  };
+}
+
 export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   const queryClient = useQueryClient();
+  const { userId, isAuthenticated } = useAuth();
   const [tab, setTab] = useState<LaunchTab>("all");
   const [sort, setSort] = useState<LaunchSort>("newest");
   const [venue, setVenue] = useState<LaunchVenueFilter>("all");
@@ -67,9 +118,28 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   const [upvoted, setUpvoted] = useState<Record<string, true>>({});
 
   const listingsQuery = useQuery<LaunchToken[]>({
-    queryKey: ["launchpad", "listings"],
-    queryFn: loadListings,
-    staleTime: Infinity,
+    queryKey: ["launchpad", "listings", userId ?? "guest"],
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from("pump_v5_submissions")
+          .select(
+            "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,liquidity_usd,market_cap,is_featured,status,created_at",
+          )
+          .order("created_at", { ascending: false })
+          .limit(200);
+        if (error) throw error;
+        const remote = (data ?? []).map((row) => rowToToken(row as Record<string, unknown>, userId));
+        const local = await loadListings();
+        const map = new Map<string, LaunchToken>();
+        [...remote, ...local].forEach((t) => map.set(t.id, t));
+        return Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
+      } catch (e) {
+        console.log("[launchpad] supabase fetch failed, using local", e);
+        return loadListings();
+      }
+    },
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -78,6 +148,47 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
 
   const submitMutation = useMutation({
     mutationFn: async (input: SubmitTokenInput) => {
+      if (isAuthenticated && userId) {
+        try {
+          const { data, error } = await supabase
+            .from("pump_v5_submissions")
+            .insert({
+              user_id: userId,
+              token_name: input.name,
+              symbol: input.ticker,
+              description: input.description,
+              logo_url: input.logoUrl ?? null,
+              banner_url: input.bannerUrl ?? null,
+              contract_address: input.contract,
+              website: input.website ?? null,
+              twitter: input.twitter ?? null,
+              telegram: input.telegram ?? null,
+              discord: input.discord ?? null,
+              liquidity_usd: input.liquidityUsd ?? null,
+              market_cap: input.marketCapUsd ?? null,
+              is_featured: input.featured ?? false,
+              status: input.venue,
+            })
+            .select(
+              "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,liquidity_usd,market_cap,is_featured,status,created_at",
+            )
+            .single();
+          if (error) throw error;
+          const token = rowToToken(data as Record<string, unknown>, userId);
+          token.submittedBy = "user";
+          const prev =
+            (queryClient.getQueryData<LaunchToken[]>([
+              "launchpad",
+              "listings",
+              userId,
+            ]) ?? []).slice();
+          const next = [token, ...prev];
+          console.log("[launchpad] supabase token submitted", token.ticker);
+          return next;
+        } catch (e) {
+          console.log("[launchpad] supabase submit failed, falling back", e);
+        }
+      }
       const token: LaunchToken = {
         ...input,
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -89,37 +200,50 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
         verified: false,
         submittedBy: "user",
       };
-      const prev = (queryClient.getQueryData<LaunchToken[]>(["launchpad", "listings"]) ?? []).slice();
+      const prev =
+        (queryClient.getQueryData<LaunchToken[]>([
+          "launchpad",
+          "listings",
+          userId ?? "guest",
+        ]) ?? []).slice();
       const next = [token, ...prev];
       await persistListings(next);
-      console.log("[launchpad] token submitted", token.ticker);
+      console.log("[launchpad] local token submitted", token.ticker);
       return next;
     },
     onSuccess: (next) => {
-      queryClient.setQueryData(["launchpad", "listings"], next);
+      queryClient.setQueryData(["launchpad", "listings", userId ?? "guest"], next);
     },
   });
 
   const removeMutation = useMutation({
     mutationFn: async (id: string) => {
-      const prev = (queryClient.getQueryData<LaunchToken[]>(["launchpad", "listings"]) ?? []).slice();
+      if (isAuthenticated) {
+        try {
+          await supabase.from("pump_v5_submissions").delete().eq("id", id);
+        } catch (e) {
+          console.log("[launchpad] remote delete failed", e);
+        }
+      }
+      const prev =
+        (queryClient.getQueryData<LaunchToken[]>([
+          "launchpad",
+          "listings",
+          userId ?? "guest",
+        ]) ?? []).slice();
       const next = prev.filter((t) => t.id !== id);
       await persistListings(next);
       return next;
     },
     onSuccess: (next) => {
-      queryClient.setQueryData(["launchpad", "listings"], next);
+      queryClient.setQueryData(["launchpad", "listings", userId ?? "guest"], next);
     },
   });
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
-      // TODO: wire to backend endpoint that pulls live trending pairs
-      await new Promise((r) => setTimeout(r, 700));
+      await queryClient.invalidateQueries({ queryKey: ["launchpad", "listings"] });
       return Date.now();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["launchpad", "listings"] });
     },
   });
 
@@ -135,16 +259,16 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
         persistUpvotes(next);
         return next;
       });
-      const prev = queryClient.getQueryData<LaunchToken[]>(["launchpad", "listings"]) ?? [];
+      const key = ["launchpad", "listings", userId ?? "guest"] as const;
+      const prev = queryClient.getQueryData<LaunchToken[]>(key) ?? [];
       const updated = prev.map((t) =>
         t.id === id
           ? { ...t, upvotes: Math.max(0, t.upvotes + (upvoted[id] ? -1 : 1)) }
           : t,
       );
-      queryClient.setQueryData(["launchpad", "listings"], updated);
-      persistListings(updated);
+      queryClient.setQueryData(key, updated);
     },
-    [queryClient, upvoted],
+    [queryClient, upvoted, userId],
   );
 
   const listings = listingsQuery.data ?? [];

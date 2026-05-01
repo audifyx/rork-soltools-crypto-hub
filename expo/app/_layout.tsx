@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import Colors from "@/constants/colors";
 import { AppProvider } from "@/providers/app-provider";
+import { AuthProvider } from "@/providers/auth-provider";
 import { LaunchpadProvider } from "@/providers/launchpad-provider";
 
 SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
@@ -34,6 +35,7 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: styles.stackContent }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="auth" options={{ presentation: "modal" }} />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="list-token" options={{ presentation: "modal" }} />
       <Stack.Screen name="compose" options={{ presentation: "modal" }} />
@@ -53,13 +55,15 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppProvider>
-        <LaunchpadProvider>
-          <GestureHandlerRootView style={styles.gestureRoot}>
-            <RootLayoutNav />
-          </GestureHandlerRootView>
-        </LaunchpadProvider>
-      </AppProvider>
+      <AuthProvider>
+        <AppProvider>
+          <LaunchpadProvider>
+            <GestureHandlerRootView style={styles.gestureRoot}>
+              <RootLayoutNav />
+            </GestureHandlerRootView>
+          </LaunchpadProvider>
+        </AppProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

@@ -3,6 +3,9 @@ import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/providers/auth-provider";
+
 const POSTS_KEY = "soltools.posts.v1";
 const WATCH_KEY = "soltools.watchlist.v1";
 const ALERTS_KEY = "soltools.alerts.v1";
@@ -66,6 +69,7 @@ export interface UserProfile {
   rank: string;
   followers: number;
   following: number;
+  avatarUrl?: string;
 }
 
 export type Currency = "USD" | "EUR" | "GBP" | "SOL";
@@ -148,39 +152,180 @@ async function saveJson<T>(key: string, value: T): Promise<void> {
   }
 }
 
+type AlertCondition = "above" | "below" | "volume_spike" | "whale_buy";
+const alertTypeToCond: Record<AlertItem["type"], AlertCondition> = {
+  "price-above": "above",
+  "price-below": "below",
+  "volume-spike": "volume_spike",
+  "whale-buy": "whale_buy",
+};
+const condToAlertType: Record<string, AlertItem["type"]> = {
+  above: "price-above",
+  below: "price-below",
+  volume_spike: "volume-spike",
+  whale_buy: "whale-buy",
+};
+
 export const [AppProvider, useApp] = createContextHook(() => {
   const qc = useQueryClient();
+  const { userId, isAuthenticated } = useAuth();
 
   const postsQ = useQuery<UserPost[]>({
-    queryKey: ["app", "posts"],
-    queryFn: () => loadJson<UserPost[]>(POSTS_KEY, []),
-    staleTime: Infinity,
-  });
-  const watchQ = useQuery<WatchItem[]>({
-    queryKey: ["app", "watch"],
-    queryFn: () => loadJson<WatchItem[]>(WATCH_KEY, []),
-    staleTime: Infinity,
-  });
-  const alertsQ = useQuery<AlertItem[]>({
-    queryKey: ["app", "alerts"],
-    queryFn: () => loadJson<AlertItem[]>(ALERTS_KEY, []),
-    staleTime: Infinity,
-  });
-  const walletsQ = useQuery<TrackedWallet[]>({
-    queryKey: ["app", "wallets"],
-    queryFn: () => loadJson<TrackedWallet[]>(WALLETS_KEY, []),
-    staleTime: Infinity,
-  });
-  const profileQ = useQuery<UserProfile>({
-    queryKey: ["app", "profile"],
+    queryKey: ["app", "posts", userId ?? "guest"],
     queryFn: async () => {
-      const stored = await loadJson<Partial<UserProfile>>(PROFILE_KEY, {});
-      return { ...DEFAULT_PROFILE, ...stored } as UserProfile;
+      if (isAuthenticated && userId) {
+        try {
+          const { data, error } = await supabase
+            .from("community_posts")
+            .select("id,user_id,content,image_url,likes_count,created_at")
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(200);
+          if (error) throw error;
+          return (data ?? []).map((row): UserPost => ({
+            id: row.id as string,
+            text: (row.content as string) ?? "",
+            createdAt: new Date(row.created_at as string).getTime(),
+            likes: (row.likes_count as number) ?? 0,
+            reposts: 0,
+            comments: 0,
+            liked: false,
+          }));
+        } catch (e) {
+          console.log("[app] posts fetch fallback", e);
+        }
+      }
+      return loadJson<UserPost[]>(POSTS_KEY, []);
     },
-    staleTime: Infinity,
+    staleTime: 30_000,
   });
+
+  const watchQ = useQuery<WatchItem[]>({
+    queryKey: ["app", "watch", userId ?? "guest"],
+    queryFn: async () => {
+      if (isAuthenticated && userId) {
+        try {
+          const { data, error } = await supabase
+            .from("tracked_tokens")
+            .select("id,token_address,symbol,name,created_at")
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false });
+          if (error) throw error;
+          return (data ?? []).map((r): WatchItem => ({
+            id: r.id as string,
+            ticker: ((r.symbol as string) ?? "").toUpperCase(),
+            contract: (r.token_address as string) ?? "",
+            addedAt: new Date(r.created_at as string).getTime(),
+          }));
+        } catch (e) {
+          console.log("[app] watchlist fetch fallback", e);
+        }
+      }
+      return loadJson<WatchItem[]>(WATCH_KEY, []);
+    },
+    staleTime: 30_000,
+  });
+
+  const alertsQ = useQuery<AlertItem[]>({
+    queryKey: ["app", "alerts", userId ?? "guest"],
+    queryFn: async () => {
+      if (isAuthenticated && userId) {
+        try {
+          const { data, error } = await supabase
+            .from("price_alerts")
+            .select("id,token_address,symbol,target_price,condition,is_active,created_at")
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false });
+          if (error) throw error;
+          return (data ?? []).map((r): AlertItem => ({
+            id: r.id as string,
+            ticker: ((r.symbol as string) ?? "").toUpperCase(),
+            type: condToAlertType[(r.condition as string) ?? "above"] ?? "price-above",
+            value: Number(r.target_price ?? 0),
+            enabled: !!r.is_active,
+            createdAt: new Date(r.created_at as string).getTime(),
+          }));
+        } catch (e) {
+          console.log("[app] alerts fetch fallback", e);
+        }
+      }
+      return loadJson<AlertItem[]>(ALERTS_KEY, []);
+    },
+    staleTime: 30_000,
+  });
+
+  const walletsQ = useQuery<TrackedWallet[]>({
+    queryKey: ["app", "wallets", userId ?? "guest"],
+    queryFn: async () => {
+      if (isAuthenticated && userId) {
+        try {
+          const { data, error } = await supabase
+            .from("tracked_wallets")
+            .select("id,wallet_address,label,created_at")
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false });
+          if (error) throw error;
+          return (data ?? []).map((r): TrackedWallet => ({
+            id: r.id as string,
+            address: (r.wallet_address as string) ?? "",
+            label: (r.label as string) ?? "",
+            addedAt: new Date(r.created_at as string).getTime(),
+          }));
+        } catch (e) {
+          console.log("[app] wallets fetch fallback", e);
+        }
+      }
+      return loadJson<TrackedWallet[]>(WALLETS_KEY, []);
+    },
+    staleTime: 30_000,
+  });
+
+  const profileQ = useQuery<UserProfile>({
+    queryKey: ["app", "profile", userId ?? "guest"],
+    queryFn: async () => {
+      const local = await loadJson<Partial<UserProfile>>(PROFILE_KEY, {});
+      const base = { ...DEFAULT_PROFILE, ...local } as UserProfile;
+      if (isAuthenticated && userId) {
+        try {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select(
+              "id,user_id,username,bio,avatar_url,wallet_address,twitter_handle,website,followers_count,following_count,badge,trades_count,win_rate,created_at",
+            )
+            .eq("id", userId)
+            .maybeSingle();
+          if (error) throw error;
+          if (data) {
+            return {
+              ...base,
+              handle: data.username ? `@${data.username}` : base.handle,
+              displayName: (data.username as string) ?? base.displayName,
+              bio: (data.bio as string) ?? base.bio,
+              avatarUrl: (data.avatar_url as string) ?? base.avatarUrl,
+              walletAddress: (data.wallet_address as string) ?? base.walletAddress,
+              twitterHandle: (data.twitter_handle as string) ?? base.twitterHandle,
+              website: (data.website as string) ?? base.website,
+              followers: Number(data.followers_count ?? base.followers),
+              following: Number(data.following_count ?? base.following),
+              trades: Number(data.trades_count ?? base.trades),
+              winRate: Number(data.win_rate ?? base.winRate),
+              rank: (data.badge as string) ?? base.rank,
+              joinedAt: data.created_at
+                ? new Date(data.created_at as string).getTime()
+                : base.joinedAt,
+            };
+          }
+        } catch (e) {
+          console.log("[app] profile fetch fallback", e);
+        }
+      }
+      return base;
+    },
+    staleTime: 30_000,
+  });
+
   const prefsQ = useQuery<UserPrefs>({
-    queryKey: ["app", "prefs"],
+    queryKey: ["app", "prefs", userId ?? "guest"],
     queryFn: async () => {
       const stored = await loadJson<Partial<UserPrefs>>(PREFS_KEY, {});
       return { ...DEFAULT_PREFS, ...stored } as UserPrefs;
@@ -197,6 +342,26 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const addPost = useMutation({
     mutationFn: async (input: { text: string; ticker?: string; changePct?: number }) => {
+      if (isAuthenticated && userId) {
+        const { data, error } = await supabase
+          .from("community_posts")
+          .insert({ user_id: userId, content: input.text })
+          .select("id,user_id,content,image_url,likes_count,created_at")
+          .single();
+        if (error) throw error;
+        const post: UserPost = {
+          id: data.id as string,
+          text: (data.content as string) ?? input.text,
+          ticker: input.ticker,
+          changePct: input.changePct,
+          createdAt: new Date(data.created_at as string).getTime(),
+          likes: (data.likes_count as number) ?? 0,
+          reposts: 0,
+          comments: 0,
+          liked: false,
+        };
+        return [post, ...posts];
+      }
       const post: UserPost = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         text: input.text,
@@ -212,132 +377,303 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await saveJson(POSTS_KEY, next);
       return next;
     },
-    onSuccess: (next) => qc.setQueryData(["app", "posts"], next),
+    onSuccess: (next) => qc.setQueryData(["app", "posts", userId ?? "guest"], next),
   });
 
   const togglePostLike = useCallback(
     async (id: string) => {
       const next = posts.map((p) =>
-        p.id === id
-          ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) }
-          : p,
+        p.id === id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p,
       );
-      qc.setQueryData(["app", "posts"], next);
-      await saveJson(POSTS_KEY, next);
+      qc.setQueryData(["app", "posts", userId ?? "guest"], next);
+      if (isAuthenticated) {
+        try {
+          const target = next.find((p) => p.id === id);
+          if (target) {
+            await supabase
+              .from("community_posts")
+              .update({ likes_count: target.likes })
+              .eq("id", id);
+          }
+        } catch (e) {
+          console.log("[app] post like sync failed", e);
+        }
+      } else {
+        await saveJson(POSTS_KEY, next);
+      }
     },
-    [posts, qc],
+    [posts, qc, userId, isAuthenticated],
   );
 
   const deletePost = useCallback(
     async (id: string) => {
       const next = posts.filter((p) => p.id !== id);
-      qc.setQueryData(["app", "posts"], next);
-      await saveJson(POSTS_KEY, next);
+      qc.setQueryData(["app", "posts", userId ?? "guest"], next);
+      if (isAuthenticated) {
+        try {
+          await supabase.from("community_posts").delete().eq("id", id);
+        } catch (e) {
+          console.log("[app] post delete failed", e);
+        }
+      } else {
+        await saveJson(POSTS_KEY, next);
+      }
     },
-    [posts, qc],
+    [posts, qc, userId, isAuthenticated],
   );
 
   const addWatch = useCallback(
     async (input: { ticker: string; contract: string }) => {
       if (watchlist.some((w) => w.contract === input.contract)) return;
+      const symbol = input.ticker.replace("$", "").toUpperCase();
+      if (isAuthenticated && userId) {
+        try {
+          const { data, error } = await supabase
+            .from("tracked_tokens")
+            .insert({
+              user_id: userId,
+              token_address: input.contract,
+              symbol,
+              name: symbol,
+            })
+            .select("id,created_at")
+            .single();
+          if (error) throw error;
+          const item: WatchItem = {
+            id: data.id as string,
+            ticker: symbol,
+            contract: input.contract,
+            addedAt: new Date(data.created_at as string).getTime(),
+          };
+          const next = [item, ...watchlist];
+          qc.setQueryData(["app", "watch", userId], next);
+          return;
+        } catch (e) {
+          console.log("[app] watch insert fallback", e);
+        }
+      }
       const item: WatchItem = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        ticker: input.ticker.replace("$", "").toUpperCase(),
+        ticker: symbol,
         contract: input.contract,
         addedAt: Date.now(),
       };
       const next = [item, ...watchlist];
-      qc.setQueryData(["app", "watch"], next);
+      qc.setQueryData(["app", "watch", userId ?? "guest"], next);
       await saveJson(WATCH_KEY, next);
     },
-    [watchlist, qc],
+    [watchlist, qc, userId, isAuthenticated],
   );
 
   const removeWatch = useCallback(
     async (id: string) => {
       const next = watchlist.filter((w) => w.id !== id);
-      qc.setQueryData(["app", "watch"], next);
-      await saveJson(WATCH_KEY, next);
+      qc.setQueryData(["app", "watch", userId ?? "guest"], next);
+      if (isAuthenticated) {
+        try {
+          await supabase.from("tracked_tokens").delete().eq("id", id);
+        } catch (e) {
+          console.log("[app] watch delete fallback", e);
+        }
+      } else {
+        await saveJson(WATCH_KEY, next);
+      }
     },
-    [watchlist, qc],
+    [watchlist, qc, userId, isAuthenticated],
   );
 
   const addAlert = useCallback(
     async (input: { ticker: string; type: AlertItem["type"]; value: number }) => {
+      const ticker = input.ticker.toUpperCase();
+      if (isAuthenticated && userId) {
+        try {
+          const { data, error } = await supabase
+            .from("price_alerts")
+            .insert({
+              user_id: userId,
+              symbol: ticker,
+              token_address: ticker,
+              target_price: input.value,
+              condition: alertTypeToCond[input.type],
+              is_active: true,
+            })
+            .select("id,created_at")
+            .single();
+          if (error) throw error;
+          const item: AlertItem = {
+            id: data.id as string,
+            ticker,
+            type: input.type,
+            value: input.value,
+            enabled: true,
+            createdAt: new Date(data.created_at as string).getTime(),
+          };
+          const next = [item, ...alerts];
+          qc.setQueryData(["app", "alerts", userId], next);
+          return;
+        } catch (e) {
+          console.log("[app] alert insert fallback", e);
+        }
+      }
       const item: AlertItem = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        ticker: input.ticker.toUpperCase(),
+        ticker,
         type: input.type,
         value: input.value,
         enabled: true,
         createdAt: Date.now(),
       };
       const next = [item, ...alerts];
-      qc.setQueryData(["app", "alerts"], next);
+      qc.setQueryData(["app", "alerts", userId ?? "guest"], next);
       await saveJson(ALERTS_KEY, next);
     },
-    [alerts, qc],
+    [alerts, qc, userId, isAuthenticated],
   );
 
   const toggleAlert = useCallback(
     async (id: string) => {
       const next = alerts.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a));
-      qc.setQueryData(["app", "alerts"], next);
-      await saveJson(ALERTS_KEY, next);
+      qc.setQueryData(["app", "alerts", userId ?? "guest"], next);
+      if (isAuthenticated) {
+        try {
+          const target = next.find((a) => a.id === id);
+          if (target) {
+            await supabase
+              .from("price_alerts")
+              .update({ is_active: target.enabled })
+              .eq("id", id);
+          }
+        } catch (e) {
+          console.log("[app] alert toggle sync failed", e);
+        }
+      } else {
+        await saveJson(ALERTS_KEY, next);
+      }
     },
-    [alerts, qc],
+    [alerts, qc, userId, isAuthenticated],
   );
 
   const removeAlert = useCallback(
     async (id: string) => {
       const next = alerts.filter((a) => a.id !== id);
-      qc.setQueryData(["app", "alerts"], next);
-      await saveJson(ALERTS_KEY, next);
+      qc.setQueryData(["app", "alerts", userId ?? "guest"], next);
+      if (isAuthenticated) {
+        try {
+          await supabase.from("price_alerts").delete().eq("id", id);
+        } catch (e) {
+          console.log("[app] alert delete fallback", e);
+        }
+      } else {
+        await saveJson(ALERTS_KEY, next);
+      }
     },
-    [alerts, qc],
+    [alerts, qc, userId, isAuthenticated],
   );
 
   const addWallet = useCallback(
     async (input: { address: string; label: string }) => {
       if (wallets.some((w) => w.address === input.address)) return;
+      const label = input.label || `${input.address.slice(0, 4)}…${input.address.slice(-4)}`;
+      if (isAuthenticated && userId) {
+        try {
+          const { data, error } = await supabase
+            .from("tracked_wallets")
+            .insert({
+              user_id: userId,
+              wallet_address: input.address,
+              label,
+            })
+            .select("id,created_at")
+            .single();
+          if (error) throw error;
+          const item: TrackedWallet = {
+            id: data.id as string,
+            address: input.address,
+            label,
+            addedAt: new Date(data.created_at as string).getTime(),
+          };
+          const next = [item, ...wallets];
+          qc.setQueryData(["app", "wallets", userId], next);
+          return;
+        } catch (e) {
+          console.log("[app] wallet insert fallback", e);
+        }
+      }
       const item: TrackedWallet = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         address: input.address,
-        label: input.label || `${input.address.slice(0, 4)}…${input.address.slice(-4)}`,
+        label,
         addedAt: Date.now(),
       };
       const next = [item, ...wallets];
-      qc.setQueryData(["app", "wallets"], next);
+      qc.setQueryData(["app", "wallets", userId ?? "guest"], next);
       await saveJson(WALLETS_KEY, next);
     },
-    [wallets, qc],
+    [wallets, qc, userId, isAuthenticated],
   );
 
   const removeWallet = useCallback(
     async (id: string) => {
       const next = wallets.filter((w) => w.id !== id);
-      qc.setQueryData(["app", "wallets"], next);
-      await saveJson(WALLETS_KEY, next);
+      qc.setQueryData(["app", "wallets", userId ?? "guest"], next);
+      if (isAuthenticated) {
+        try {
+          await supabase.from("tracked_wallets").delete().eq("id", id);
+        } catch (e) {
+          console.log("[app] wallet delete fallback", e);
+        }
+      } else {
+        await saveJson(WALLETS_KEY, next);
+      }
     },
-    [wallets, qc],
+    [wallets, qc, userId, isAuthenticated],
   );
 
   const updateProfile = useCallback(
     async (patch: Partial<UserProfile>) => {
       const next = { ...profile, ...patch };
-      qc.setQueryData(["app", "profile"], next);
+      qc.setQueryData(["app", "profile", userId ?? "guest"], next);
       await saveJson(PROFILE_KEY, next);
+      if (isAuthenticated && userId) {
+        try {
+          const handleVal = next.handle.replace(/^@/, "").trim();
+          await supabase.from("profiles").upsert(
+            {
+              id: userId,
+              user_id: userId,
+              username: handleVal || null,
+              bio: next.bio || null,
+              avatar_url: next.avatarUrl ?? null,
+              wallet_address: next.walletAddress || null,
+              twitter_handle: next.twitterHandle || null,
+              website: next.website || null,
+            },
+            { onConflict: "id" },
+          );
+        } catch (e) {
+          console.log("[app] profile upsert failed", e);
+        }
+      }
     },
-    [profile, qc],
+    [profile, qc, userId, isAuthenticated],
   );
 
   const updatePrefs = useCallback(
     async (patch: Partial<UserPrefs>) => {
       const next = { ...prefs, ...patch };
-      qc.setQueryData(["app", "prefs"], next);
+      qc.setQueryData(["app", "prefs", userId ?? "guest"], next);
       await saveJson(PREFS_KEY, next);
+      if (isAuthenticated && userId) {
+        try {
+          await supabase
+            .from("user_settings")
+            .upsert({ user_id: userId, id: userId }, { onConflict: "user_id" });
+        } catch (e) {
+          console.log("[app] settings touch failed", e);
+        }
+      }
     },
-    [prefs, qc],
+    [prefs, qc, userId, isAuthenticated],
   );
 
   const resetAllData = useCallback(async () => {
@@ -350,12 +686,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       AsyncStorage.removeItem(PREFS_KEY),
       AsyncStorage.removeItem(FOLLOWS_KEY),
     ]);
-    qc.setQueryData(["app", "posts"], []);
-    qc.setQueryData(["app", "watch"], []);
-    qc.setQueryData(["app", "alerts"], []);
-    qc.setQueryData(["app", "wallets"], []);
-    qc.setQueryData(["app", "profile"], DEFAULT_PROFILE);
-    qc.setQueryData(["app", "prefs"], DEFAULT_PREFS);
+    qc.invalidateQueries({ queryKey: ["app"] });
   }, [qc]);
 
   return useMemo(
