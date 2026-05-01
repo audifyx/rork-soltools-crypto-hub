@@ -1,3 +1,4 @@
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -8,26 +9,28 @@ import {
   BadgeCheck,
   Bell,
   Calendar,
-  Hash,
   Image as ImageIcon,
+  Link as LinkIcon,
   MessageCircle,
+  MoreVertical,
   Pin,
+  Search,
   Send,
-  Settings as SettingsIcon,
   Share2,
-  Shield,
   Sparkles,
-  TrendingUp,
+  UserPlus,
   Users,
-  Wallet,
+  X,
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  Animated,
   FlatList,
   ListRenderItem,
+  Modal,
   Platform,
   Pressable,
-  ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -71,7 +74,7 @@ function timeAgo(t: number): string {
   return `${d}d`;
 }
 
-type Tab = "feed" | "rules" | "members";
+type Tab = "recent" | "media" | "about";
 
 export default function CommunityDetailScreen() {
   const router = useRouter();
@@ -83,22 +86,19 @@ export default function CommunityDetailScreen() {
     postsByCommunity,
     addCommunityPost,
     togglePostLike,
-    spaces,
   } = useSocial();
   const { profile } = useApp();
-  const [tab, setTab] = useState<Tab>("feed");
+  const [tab, setTab] = useState<Tab>("recent");
   const [composer, setComposer] = useState<string>("");
+  const [menuOpen, setMenuOpen] = useState<boolean>(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const community = useMemo(() => (id ? getCommunity(id) : undefined), [id, getCommunity]);
   const posts = useMemo(() => (id ? postsByCommunity(id) : []), [id, postsByCommunity]);
-  const linkedSpaces = useMemo(
-    () => spaces.filter((s) => s.isLive && (s as unknown as { communityId?: string }).communityId === community?.id).slice(0, 3),
-    [spaces, community?.id],
-  );
 
   const membersQ = useQuery<CommunityMember[]>({
     queryKey: ["community", "members", community?.id ?? ""],
-    enabled: !!community?.id && tab === "members",
+    enabled: !!community?.id,
     queryFn: async () => {
       if (!community?.id) return [];
       try {
@@ -135,6 +135,11 @@ export default function CommunityDetailScreen() {
   });
   const members = membersQ.data ?? [];
 
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 1600);
+  }, []);
+
   const onSend = useCallback(async () => {
     const text = composer.trim();
     if (!community || text.length === 0) return;
@@ -148,6 +153,44 @@ export default function CommunityDetailScreen() {
     });
     setComposer("");
   }, [composer, community, addCommunityPost, profile]);
+
+  const shareLink = useMemo(
+    () =>
+      community
+        ? `https://soltools.app/community/${community.handle ?? community.id}`
+        : "",
+    [community],
+  );
+
+  const onShareVia = useCallback(async () => {
+    setMenuOpen(false);
+    if (!community) return;
+    try {
+      await Share.share({
+        message: `Join the ${community.name} community on SolTools — ${shareLink}`,
+        url: shareLink,
+      });
+    } catch (e) {
+      console.log("[community] share failed", e);
+    }
+  }, [community, shareLink]);
+
+  const onCopyLink = useCallback(async () => {
+    setMenuOpen(false);
+    try {
+      await Clipboard.setStringAsync(shareLink);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      showToast("Link copied");
+    } catch (e) {
+      console.log("[community] copy failed", e);
+    }
+  }, [shareLink, showToast]);
+
+  const onInvite = useCallback(() => {
+    setMenuOpen(false);
+    Haptics.selectionAsync().catch(() => {});
+    showToast("Invite sheet coming soon");
+  }, [showToast]);
 
   if (!community) {
     return (
@@ -166,10 +209,14 @@ export default function CommunityDetailScreen() {
   }
 
   const joined = isJoined(community.id);
+  const mediaPosts = posts.filter((p) => p.ticker || p.pinned);
 
   const renderPost: ListRenderItem<CommunityPost> = ({ item }) => (
     <PostRow post={item} onLike={() => togglePostLike(item.id)} />
   );
+
+  const dataForTab: CommunityPost[] =
+    tab === "recent" ? posts : tab === "media" ? mediaPosts : [];
 
   return (
     <View style={styles.root} testID="community-detail">
@@ -177,7 +224,7 @@ export default function CommunityDetailScreen() {
       <StatusBar style="light" />
 
       <FlatList
-        data={tab === "feed" ? posts : []}
+        data={dataForTab}
         keyExtractor={(p) => p.id}
         renderItem={renderPost}
         contentContainerStyle={styles.listContent}
@@ -192,10 +239,10 @@ export default function CommunityDetailScreen() {
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
               />
-              <LinearGradient
-                colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.85)", Colors.ink]}
-                style={StyleSheet.absoluteFill}
-              />
+              <View style={styles.bannerScrim} />
+              <View style={styles.bannerEmojiWrap}>
+                <Text style={styles.bannerEmoji}>{community.iconEmoji}</Text>
+              </View>
               <SafeAreaView edges={["top"]} style={styles.bannerSafe}>
                 <View style={styles.bannerBar}>
                   <Pressable
@@ -203,17 +250,21 @@ export default function CommunityDetailScreen() {
                     style={styles.bannerIcon}
                     testID="community-back"
                   >
-                    <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
+                    <ArrowLeft color={Colors.text} size={20} strokeWidth={2.6} />
                   </Pressable>
                   <View style={styles.bannerActions}>
-                    <Pressable style={styles.bannerIcon}>
-                      <Share2 color={Colors.text} size={16} strokeWidth={2.4} />
+                    <Pressable style={styles.bannerIcon} testID="community-search">
+                      <Search color={Colors.text} size={18} strokeWidth={2.4} />
                     </Pressable>
-                    <Pressable style={styles.bannerIcon}>
-                      <Bell color={Colors.text} size={16} strokeWidth={2.4} />
-                    </Pressable>
-                    <Pressable style={styles.bannerIcon}>
-                      <SettingsIcon color={Colors.text} size={16} strokeWidth={2.4} />
+                    <Pressable
+                      style={styles.bannerIcon}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setMenuOpen(true);
+                      }}
+                      testID="community-more"
+                    >
+                      <MoreVertical color={Colors.text} size={18} strokeWidth={2.4} />
                     </Pressable>
                   </View>
                 </View>
@@ -221,256 +272,199 @@ export default function CommunityDetailScreen() {
             </View>
 
             <View style={styles.headInfo}>
-              <View style={styles.headTopRow}>
-                <View
-                  style={[
-                    styles.avatar,
-                    {
-                      backgroundColor: `${community.accent[0]}28`,
-                      borderColor: community.accent[0],
-                    },
-                  ]}
-                >
-                  <Text style={styles.avatarEmoji}>{community.iconEmoji}</Text>
-                </View>
-                <Pressable
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    toggleJoin(community.id);
-                  }}
-                  style={[
-                    styles.joinBtn,
-                    joined
-                      ? styles.joinBtnOn
-                      : { backgroundColor: community.accent[0] },
-                  ]}
-                  testID="community-join"
-                >
-                  <Text
-                    style={[
-                      styles.joinText,
-                      { color: joined ? Colors.text : Colors.ink },
-                    ]}
-                  >
-                    {joined ? "JOINED" : "JOIN"}
-                  </Text>
-                </Pressable>
-              </View>
-
               <View style={styles.nameRow}>
                 <Text style={styles.name} numberOfLines={1}>
                   {community.name}
                 </Text>
                 {community.verified ? (
-                  <BadgeCheck color={Colors.cyan} size={18} strokeWidth={2.6} />
+                  <BadgeCheck color={Colors.cyan} size={20} strokeWidth={2.6} />
                 ) : null}
               </View>
-              <Text style={styles.handle}>#{community.handle}</Text>
-              <Text style={styles.desc}>{community.description}</Text>
 
-              <View style={styles.statRow}>
-                <Stat icon={Users} label="MEMBERS" value={fmtCount(community.members)} />
-                <Stat
-                  icon={Hash}
-                  label="POSTS"
-                  value={fmtCount(community.posts)}
-                  tone={Colors.cyan}
-                />
-                <Stat
-                  icon={Sparkles}
-                  label="ONLINE"
-                  value={fmtCount(community.online)}
-                  tone={Colors.mint}
-                  pulse
-                />
-              </View>
-
-              {community.pinnedTicker ? (
-                <Pressable style={styles.tickerCta} testID="community-ticker">
-                  <View
-                    style={[
-                      styles.tickerIcon,
-                      { backgroundColor: `${community.accent[0]}22` },
-                    ]}
-                  >
-                    <Wallet color={community.accent[0]} size={14} strokeWidth={2.6} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.tickerLabel}>FEATURED TOKEN</Text>
-                    <Text style={styles.tickerValue}>{community.pinnedTicker}</Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.tickerChange,
-                      { backgroundColor: "rgba(85,245,178,0.16)" },
-                    ]}
-                  >
-                    <TrendingUp color={Colors.mint} size={11} strokeWidth={3} />
-                    <Text style={[styles.tickerChangeText, { color: Colors.mint }]}>
-                      +12.4%
-                    </Text>
-                  </View>
-                </Pressable>
-              ) : null}
-
-              {linkedSpaces.length > 0 ? (
-                <View style={styles.spacesWrap}>
-                  <View style={styles.spacesHead}>
-                    <View style={styles.liveDot} />
-                    <Text style={styles.spacesTitle}>Live spaces</Text>
-                  </View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.spacesRow}
-                  >
-                    {linkedSpaces.map((s) => (
-                      <Pressable
-                        key={s.id}
-                        onPress={() => router.push({ pathname: "/space/[id]", params: { id: s.id } })}
-                        style={styles.spaceChip}
-                        testID={`community-space-${s.id}`}
+              <View style={styles.memberRow}>
+                <View style={styles.memberStack}>
+                  {(members.length > 0 ? members.slice(0, 3) : placeholderMembers()).map(
+                    (m, i) => (
+                      <View
+                        key={`${m.id}-${i}`}
+                        style={[
+                          styles.stackAvatar,
+                          {
+                            backgroundColor: m.color,
+                            marginLeft: i === 0 ? 0 : -10,
+                            zIndex: 10 - i,
+                          },
+                        ]}
                       >
-                        <View style={[styles.spaceDot, { backgroundColor: s.accent[0] }]} />
-                        <Text style={styles.spaceTitle} numberOfLines={1}>
-                          {s.title}
+                        <Text style={styles.stackInit}>
+                          {m.name.slice(0, 1).toUpperCase()}
                         </Text>
-                        <Text style={styles.spaceListeners}>· {s.listeners}</Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
+                      </View>
+                    ),
+                  )}
                 </View>
-              ) : null}
-
-              <View style={styles.tabsRow}>
-                {(["feed", "rules", "members"] as Tab[]).map((t) => {
-                  const active = tab === t;
-                  return (
-                    <Pressable
-                      key={t}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setTab(t);
-                      }}
-                      style={[styles.tabBtn, active && styles.tabBtnActive]}
-                      testID={`tab-${t}`}
-                    >
-                      <Text
-                        style={[styles.tabText, active && { color: Colors.text }]}
-                      >
-                        {t === "feed" ? "Feed" : t === "rules" ? "Rules" : "Members"}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {tab === "feed" ? (
-                <View style={styles.composer}>
-                  <View
-                    style={[
-                      styles.composerAvatar,
-                      { backgroundColor: profile.avatarColor },
-                    ]}
-                  >
-                    <Text style={styles.composerInit}>
-                      {(profile.displayName || "Y").slice(0, 1).toUpperCase()}
-                    </Text>
-                  </View>
-                  <TextInput
-                    value={composer}
-                    onChangeText={setComposer}
-                    placeholder={`Post to ${community.name}...`}
-                    placeholderTextColor={Colors.muted}
-                    style={styles.composerInput}
-                    multiline
-                  />
+                <Text style={styles.memberCount}>
+                  {fmtCount(community.members)} Members
+                </Text>
+                <View style={styles.headIcons}>
                   <Pressable
-                    onPress={onSend}
-                    style={[
-                      styles.sendBtn,
-                      composer.trim().length === 0 && { opacity: 0.4 },
-                    ]}
-                    disabled={composer.trim().length === 0}
-                    testID="community-send"
+                    style={styles.headCircle}
+                    onPress={() => Haptics.selectionAsync().catch(() => {})}
+                    testID="community-ai"
                   >
-                    <Send color={Colors.ink} size={14} strokeWidth={2.8} />
+                    <Sparkles color={Colors.text} size={16} strokeWidth={2.4} />
+                  </Pressable>
+                  <Pressable
+                    style={styles.headCircle}
+                    onPress={() => Haptics.selectionAsync().catch(() => {})}
+                    testID="community-bell"
+                  >
+                    <Bell color={Colors.text} size={16} strokeWidth={2.4} />
+                    <View style={styles.bellDot} />
+                  </Pressable>
+                  <Pressable
+                    style={styles.headCircle}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      toggleJoin(community.id);
+                    }}
+                    testID="community-join"
+                  >
+                    <UserPlus
+                      color={joined ? Colors.mint : Colors.text}
+                      size={16}
+                      strokeWidth={2.4}
+                    />
                   </Pressable>
                 </View>
-              ) : null}
+              </View>
+
+              <Text style={styles.desc} numberOfLines={3}>
+                {community.description ||
+                  `${community.name} is the official community on SolTools.`}
+              </Text>
             </View>
 
-            {tab === "rules" ? (
-              <View style={styles.rulesWrap}>
-                <View style={styles.rulesHead}>
-                  <Shield color={Colors.cyan} size={14} strokeWidth={2.6} />
-                  <Text style={styles.rulesTitle}>Community rules</Text>
-                </View>
-                {community.rules.map((r, i) => (
-                  <View key={r} style={styles.ruleRow}>
-                    <View style={styles.ruleNum}>
-                      <Text style={styles.ruleNumText}>{i + 1}</Text>
-                    </View>
-                    <Text style={styles.ruleText}>{r}</Text>
-                  </View>
-                ))}
-                <View style={styles.metaCard}>
-                  <Calendar color={Colors.muted} size={12} strokeWidth={2.4} />
-                  <Text style={styles.metaText}>
-                    Founded by {community.ownerHandle} ·{" "}
-                    {Math.floor((Date.now() - community.createdAt) / (1000 * 60 * 60 * 24))}d ago
+            <View style={styles.tabsRow}>
+              <TabBtn
+                label="Most Recent"
+                active={tab === "recent"}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setTab("recent");
+                }}
+              />
+              <TabBtn
+                label="Media"
+                active={tab === "media"}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setTab("media");
+                }}
+              />
+              <TabBtn
+                label="About"
+                active={tab === "about"}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setTab("about");
+                }}
+              />
+            </View>
+
+            {tab === "recent" ? (
+              <View style={styles.composer}>
+                <View
+                  style={[
+                    styles.composerAvatar,
+                    { backgroundColor: profile.avatarColor },
+                  ]}
+                >
+                  <Text style={styles.composerInit}>
+                    {(profile.displayName || "Y").slice(0, 1).toUpperCase()}
                   </Text>
                 </View>
+                <TextInput
+                  value={composer}
+                  onChangeText={setComposer}
+                  placeholder={`Post to ${community.name}...`}
+                  placeholderTextColor={Colors.muted}
+                  style={styles.composerInput}
+                  multiline
+                />
+                <Pressable
+                  onPress={onSend}
+                  style={[
+                    styles.sendBtn,
+                    composer.trim().length === 0 && { opacity: 0.4 },
+                  ]}
+                  disabled={composer.trim().length === 0}
+                  testID="community-send"
+                >
+                  <Send color={Colors.ink} size={14} strokeWidth={2.8} />
+                </Pressable>
               </View>
             ) : null}
 
-            {tab === "members" ? (
-              <View style={styles.membersWrap}>
-                <Text style={styles.membersIntro}>
-                  {fmtCount(community.members)} members · {fmtCount(community.online)} active
-                </Text>
-                {members.length === 0 ? (
-                  <View style={styles.emptyFeed}>
-                    <View
-                      style={[
-                        styles.emptyIcon,
-                        { backgroundColor: `${community.accent[0]}1A` },
-                      ]}
-                    >
-                      <Users color={community.accent[0]} size={24} strokeWidth={2.4} />
-                    </View>
-                    <Text style={styles.emptyTitle}>
-                      {membersQ.isLoading ? "Loading members..." : "No members yet"}
-                    </Text>
-                    <Text style={styles.emptyBody}>
-                      Be the first to join {community.name}.
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.memberGrid}>
-                    {members.map((m) => (
-                      <View key={m.id} style={styles.memberCell}>
-                        <View
-                          style={[styles.memberAvatar, { backgroundColor: m.color }]}
-                        >
-                          <Text style={styles.memberInit}>
-                            {m.name.slice(0, 1).toUpperCase()}
-                          </Text>
+            {tab === "about" ? (
+              <View style={styles.aboutWrap}>
+                <View style={styles.aboutCard}>
+                  <Text style={styles.aboutLabel}>About</Text>
+                  <Text style={styles.aboutBody}>
+                    {community.description || `Welcome to ${community.name}.`}
+                  </Text>
+                </View>
+                <View style={styles.aboutGrid}>
+                  <AboutStat
+                    icon={Users}
+                    value={fmtCount(community.members)}
+                    label="Members"
+                  />
+                  <AboutStat
+                    icon={Sparkles}
+                    value={fmtCount(community.online)}
+                    label="Online"
+                    tint={Colors.mint}
+                  />
+                  <AboutStat
+                    icon={MessageCircle}
+                    value={fmtCount(community.posts)}
+                    label="Posts"
+                    tint={Colors.cyan}
+                  />
+                </View>
+                <View style={styles.aboutCard}>
+                  <Text style={styles.aboutLabel}>Rules</Text>
+                  {community.rules.length === 0 ? (
+                    <Text style={styles.aboutBody}>Be respectful. No spam. Have fun.</Text>
+                  ) : (
+                    community.rules.map((r, i) => (
+                      <View key={r} style={styles.ruleRow}>
+                        <View style={styles.ruleNum}>
+                          <Text style={styles.ruleNumText}>{i + 1}</Text>
                         </View>
-                        <Text style={styles.memberName} numberOfLines={1}>
-                          {m.handle || m.name}
-                        </Text>
-                        <View style={styles.memberOnline} />
+                        <Text style={styles.ruleText}>{r}</Text>
                       </View>
-                    ))}
-                  </View>
-                )}
+                    ))
+                  )}
+                </View>
+                <View style={styles.metaCard}>
+                  <Calendar color={Colors.muted} size={12} strokeWidth={2.4} />
+                  <Text style={styles.metaText}>
+                    Founded by {community.ownerHandle || "@administration"} ·{" "}
+                    {Math.max(
+                      0,
+                      Math.floor((Date.now() - community.createdAt) / (1000 * 60 * 60 * 24)),
+                    )}
+                    d ago
+                  </Text>
+                </View>
               </View>
             ) : null}
           </View>
         }
         ListEmptyComponent={
-          tab === "feed" ? (
+          tab === "about" ? null : (
             <View style={styles.emptyFeed}>
               <View
                 style={[
@@ -478,42 +472,134 @@ export default function CommunityDetailScreen() {
                   { backgroundColor: `${community.accent[0]}1A` },
                 ]}
               >
-                <MessageCircle color={community.accent[0]} size={24} strokeWidth={2.4} />
+                {tab === "media" ? (
+                  <ImageIcon color={community.accent[0]} size={24} strokeWidth={2.4} />
+                ) : (
+                  <MessageCircle color={community.accent[0]} size={24} strokeWidth={2.4} />
+                )}
               </View>
-              <Text style={styles.emptyTitle}>No posts yet</Text>
+              <Text style={styles.emptyTitle}>
+                {tab === "media" ? "No media yet" : "No posts yet"}
+              </Text>
               <Text style={styles.emptyBody}>
-                Be the first to start the conversation in {community.name}.
+                {tab === "media"
+                  ? `Media posts will appear here.`
+                  : `Be the first to start the conversation in ${community.name}.`}
               </Text>
             </View>
-          ) : null
+          )
         }
       />
+
+      {/* Three-dot share menu */}
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuOpen(false)}
+      >
+        <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
+          <View />
+        </Pressable>
+        <SafeAreaView edges={["top"]} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          <View style={styles.menuCard} pointerEvents="auto">
+            <MenuItem
+              label="Share via..."
+              icon={Share2}
+              onPress={onShareVia}
+              testID="menu-share"
+            />
+            <View style={styles.menuDivider} />
+            <MenuItem
+              label="Copy Link"
+              icon={LinkIcon}
+              onPress={onCopyLink}
+              testID="menu-copy"
+            />
+            <View style={styles.menuDivider} />
+            <MenuItem
+              label="Invite members"
+              icon={UserPlus}
+              onPress={onInvite}
+              testID="menu-invite"
+            />
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {toast ? (
+        <Animated.View style={styles.toast} pointerEvents="none">
+          <Text style={styles.toastText}>{toast}</Text>
+          <Pressable onPress={() => setToast(null)} hitSlop={8}>
+            <X color={Colors.text} size={14} strokeWidth={2.6} />
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
 
-function Stat({
-  icon: Icon,
+function placeholderMembers(): CommunityMember[] {
+  return [
+    { id: "p1", handle: "", name: "A", color: Colors.violet },
+    { id: "p2", handle: "", name: "B", color: Colors.cyan },
+    { id: "p3", handle: "", name: "C", color: Colors.mint },
+  ];
+}
+
+function TabBtn({
   label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.tabBtn} testID={`tab-${label}`}>
+      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+      {active ? <View style={styles.tabUnderline} /> : null}
+    </Pressable>
+  );
+}
+
+function MenuItem({
+  label,
+  icon: Icon,
+  onPress,
+  testID,
+}: {
+  label: string;
+  icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+  onPress: () => void;
+  testID?: string;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.menuItem} testID={testID}>
+      <Text style={styles.menuItemText}>{label}</Text>
+      <Icon color={Colors.text} size={18} strokeWidth={2.2} />
+    </Pressable>
+  );
+}
+
+function AboutStat({
+  icon: Icon,
   value,
-  tone,
-  pulse,
+  label,
+  tint,
 }: {
   icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
-  label: string;
   value: string;
-  tone?: string;
-  pulse?: boolean;
+  label: string;
+  tint?: string;
 }) {
-  const c = tone ?? Colors.text;
+  const c = tint ?? Colors.text;
   return (
-    <View style={styles.statBox}>
-      <View style={styles.statIconRow}>
-        <Icon color={c} size={11} strokeWidth={2.8} />
-        <Text style={[styles.statLabel, { color: Colors.muted }]}>{label}</Text>
-        {pulse ? <View style={styles.statPulse} /> : null}
-      </View>
-      <Text style={styles.statValue}>{value}</Text>
+    <View style={styles.aboutStat}>
+      <Icon color={c} size={14} strokeWidth={2.6} />
+      <Text style={[styles.aboutStatValue, { color: c }]}>{value}</Text>
+      <Text style={styles.aboutStatLabel}>{label}</Text>
     </View>
   );
 }
@@ -586,10 +672,6 @@ function PostRow({ post, onLike }: { post: CommunityPost; onLike: () => void }) 
           <MessageCircle color={Colors.muted} size={13} strokeWidth={2.6} />
           <Text style={styles.postActionText}>{post.comments}</Text>
         </View>
-        <View style={styles.postAction}>
-          <ImageIcon color={Colors.muted} size={13} strokeWidth={2.6} />
-          <Text style={styles.postActionText}>0</Text>
-        </View>
       </View>
     </View>
   );
@@ -600,142 +682,115 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   listContent: { paddingBottom: 140 },
 
-  bannerWrap: { height: 200, overflow: "hidden" },
-  bannerSafe: { paddingHorizontal: 18, paddingTop: 6 },
+  bannerWrap: { height: 280, overflow: "hidden" },
+  bannerScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  bannerEmojiWrap: {
+    position: "absolute",
+    inset: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bannerEmoji: { fontSize: 110, opacity: 0.7 },
+  bannerSafe: { paddingHorizontal: 14, paddingTop: 6 },
   bannerBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  bannerActions: { flexDirection: "row", gap: 8 },
+  bannerActions: { flexDirection: "row", gap: 10 },
   bannerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.45)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  headInfo: { paddingHorizontal: 18, marginTop: -42 },
-  headTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-  },
-  avatar: {
-    width: 84,
-    height: 84,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-  },
-  avatarEmoji: { fontSize: 40 },
-  joinBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 14,
-  },
-  joinBtnOn: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  joinText: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
-
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 },
-  name: { color: Colors.text, fontSize: 24, fontWeight: "900", letterSpacing: -0.6 },
-  handle: { color: Colors.muted, fontSize: 13, fontWeight: "800", marginTop: 2 },
-  desc: {
+  headInfo: { paddingHorizontal: 18, marginTop: 14 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  name: {
     color: Colors.text,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 19,
-    marginTop: 10,
-    opacity: 0.86,
+    fontSize: 32,
+    fontWeight: "900",
+    letterSpacing: -0.8,
   },
-
-  statRow: { flexDirection: "row", gap: 8, marginTop: 16 },
-  statBox: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-  },
-  statIconRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  statLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
-  statValue: { color: Colors.text, fontSize: 17, fontWeight: "900", marginTop: 6, letterSpacing: -0.4 },
-  statPulse: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.mint, marginLeft: "auto" },
-
-  tickerCta: {
+  memberRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    marginTop: 14,
+    marginTop: 12,
   },
-  tickerIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  tickerLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
-  tickerValue: { color: Colors.text, fontSize: 14, fontWeight: "900", marginTop: 2 },
-  tickerChange: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 10,
-  },
-  tickerChangeText: { fontSize: 11, fontWeight: "900" },
-
-  spacesWrap: { marginTop: 14 },
-  spacesHead: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-  spacesTitle: { color: Colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 0.4 },
-  liveDot: { width: 6, height: 6, borderRadius: 4, backgroundColor: Colors.rose },
-  spacesRow: { gap: 8 },
-  spaceChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+  memberStack: { flexDirection: "row", alignItems: "center" },
+  stackAvatar: {
+    width: 26,
+    height: 26,
     borderRadius: 999,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    maxWidth: 220,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: Colors.ink,
   },
-  spaceDot: { width: 6, height: 6, borderRadius: 4 },
-  spaceTitle: { color: Colors.text, fontSize: 11, fontWeight: "800", flexShrink: 1 },
-  spaceListeners: { color: Colors.muted, fontSize: 10, fontWeight: "800" },
+  stackInit: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
+  memberCount: { color: Colors.muted, fontSize: 13, fontWeight: "700", flex: 1 },
+  headIcons: { flexDirection: "row", gap: 8 },
+  headCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bellDot: {
+    position: "absolute",
+    top: 8,
+    right: 9,
+    width: 6,
+    height: 6,
+    borderRadius: 4,
+    backgroundColor: Colors.mint,
+  },
+
+  desc: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "500",
+    lineHeight: 20,
+    marginTop: 14,
+    opacity: 0.85,
+  },
 
   tabsRow: {
     flexDirection: "row",
-    gap: 6,
-    marginTop: 18,
-    padding: 4,
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 0,
+    marginTop: 22,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
   },
   tabBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 14,
     alignItems: "center",
-    borderRadius: 10,
+    justifyContent: "center",
   },
-  tabBtnActive: { backgroundColor: "rgba(255,255,255,0.06)" },
-  tabText: { color: Colors.muted, fontSize: 12, fontWeight: "900", letterSpacing: 0.4 },
+  tabText: { color: Colors.muted, fontSize: 14, fontWeight: "700" },
+  tabTextActive: { color: Colors.text, fontWeight: "900" },
+  tabUnderline: {
+    position: "absolute",
+    left: "20%",
+    right: "20%",
+    bottom: -1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#3D7DFF",
+  },
 
   composer: {
     flexDirection: "row",
@@ -743,11 +798,11 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 12,
     borderRadius: 16,
-    backgroundColor: Colors.card,
+    backgroundColor: "rgba(255,255,255,0.03)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
     marginTop: 14,
-    marginBottom: 14,
+    marginHorizontal: 18,
   },
   composerAvatar: {
     width: 32,
@@ -822,30 +877,51 @@ const styles = StyleSheet.create({
   postAction: { flexDirection: "row", alignItems: "center", gap: 5 },
   postActionText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
 
-  rulesWrap: { paddingHorizontal: 18, marginTop: 14 },
-  rulesHead: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
-  rulesTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2 },
-  ruleRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
+  aboutWrap: { paddingHorizontal: 18, marginTop: 14, gap: 10 },
+  aboutCard: {
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: Colors.card,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.03)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
+  },
+  aboutLabel: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.4,
     marginBottom: 8,
   },
+  aboutBody: { color: Colors.text, fontSize: 13, fontWeight: "500", lineHeight: 19 },
+  aboutGrid: { flexDirection: "row", gap: 10 },
+  aboutStat: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    alignItems: "flex-start",
+    gap: 4,
+  },
+  aboutStatValue: { fontSize: 18, fontWeight: "900", marginTop: 2 },
+  aboutStatLabel: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  ruleRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginTop: 8 },
   ruleNum: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 7,
     backgroundColor: "rgba(255,255,255,0.06)",
     alignItems: "center",
     justifyContent: "center",
   },
   ruleNumText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
-  ruleText: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: "600", lineHeight: 19 },
+  ruleText: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: "500", lineHeight: 19 },
   metaCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -853,36 +929,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.03)",
-    marginTop: 10,
   },
   metaText: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
-
-  membersWrap: { paddingHorizontal: 18, marginTop: 14 },
-  membersIntro: { color: Colors.muted, fontSize: 12, fontWeight: "800", marginBottom: 12 },
-  memberGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  memberCell: { width: "22%", alignItems: "center" },
-  memberAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  memberInit: { color: Colors.ink, fontSize: 18, fontWeight: "900" },
-  memberName: {
-    color: Colors.text,
-    fontSize: 10,
-    fontWeight: "800",
-    marginTop: 5,
-    maxWidth: "100%",
-  },
-  memberOnline: {
-    width: 6,
-    height: 6,
-    borderRadius: 4,
-    backgroundColor: Colors.mint,
-    marginTop: 3,
-  },
 
   emptyFeed: {
     paddingHorizontal: 32,
@@ -917,4 +965,47 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   notFoundBtnText: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
+
+  menuOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.5)" },
+  menuCard: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 56 : 56,
+    right: 14,
+    width: 240,
+    borderRadius: 16,
+    backgroundColor: "#0E1416",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  menuItemText: { color: Colors.text, fontSize: 15, fontWeight: "600" },
+  menuDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.06)" },
+
+  toast: {
+    position: "absolute",
+    bottom: 60,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "rgba(20,28,30,0.95)",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  toastText: { color: Colors.text, fontSize: 13, fontWeight: "700" },
 });
