@@ -6,6 +6,7 @@ import { ScanLine } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Dimensions,
   Easing,
   Pressable,
   StyleSheet,
@@ -18,17 +19,29 @@ import AnimatedGlobe from "@/components/AnimatedGlobe";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/providers/auth-provider";
 
-const BUILD_TAG = "welcome-v6";
+const BUILD_TAG = "welcome-x-v1";
+const { width: SCREEN_W } = Dimensions.get("window");
+
+const ROTATING_LINES: string[] = [
+  "See what's moving on Solana.",
+  "Snipe new pairs the moment they go live.",
+  "Track every wallet. Outrun every whale.",
+  "Trade. Launch. Earn. All in one app.",
+];
 
 export default function WelcomeScreen() {
   const { isAuthenticated, isLoading } = useAuth();
   const [showSplash, setShowSplash] = useState<boolean>(true);
+  const [lineIndex, setLineIndex] = useState<number>(0);
 
   const splashOpacity = useRef<Animated.Value>(new Animated.Value(1)).current;
   const splashScale = useRef<Animated.Value>(new Animated.Value(0.85)).current;
+  const splashRingSpin = useRef<Animated.Value>(new Animated.Value(0)).current;
   const contentOpacity = useRef<Animated.Value>(new Animated.Value(0)).current;
   const contentRise = useRef<Animated.Value>(new Animated.Value(28)).current;
   const ctaScale = useRef<Animated.Value>(new Animated.Value(1)).current;
+  const lineOpacity = useRef<Animated.Value>(new Animated.Value(1)).current;
+  const lineShift = useRef<Animated.Value>(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -39,25 +52,34 @@ export default function WelcomeScreen() {
 
   useEffect(() => {
     console.log("welcome mounted", { build: BUILD_TAG });
+    Animated.loop(
+      Animated.timing(splashRingSpin, {
+        toValue: 1,
+        duration: 6000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+
     Animated.sequence([
       Animated.spring(splashScale, { toValue: 1, friction: 7, tension: 70, useNativeDriver: true }),
-      Animated.delay(700),
+      Animated.delay(900),
       Animated.parallel([
         Animated.timing(splashOpacity, {
           toValue: 0,
-          duration: 480,
+          duration: 520,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(contentOpacity, {
           toValue: 1,
-          duration: 600,
+          duration: 620,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(contentRise, {
           toValue: 0,
-          duration: 600,
+          duration: 620,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -65,7 +87,44 @@ export default function WelcomeScreen() {
     ]).start(({ finished }) => {
       if (finished) setShowSplash(false);
     });
-  }, [contentOpacity, contentRise, splashOpacity, splashScale]);
+  }, [contentOpacity, contentRise, splashOpacity, splashScale, splashRingSpin]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Animated.parallel([
+        Animated.timing(lineOpacity, {
+          toValue: 0,
+          duration: 320,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(lineShift, {
+          toValue: -16,
+          duration: 320,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setLineIndex((i) => (i + 1) % ROTATING_LINES.length);
+        lineShift.setValue(16);
+        Animated.parallel([
+          Animated.timing(lineOpacity, {
+            toValue: 1,
+            duration: 360,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(lineShift, {
+            toValue: 0,
+            duration: 360,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]).start();
+      });
+    }, 3400);
+    return () => clearInterval(interval);
+  }, [lineOpacity, lineShift]);
 
   const goSignUp = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
@@ -84,6 +143,11 @@ export default function WelcomeScreen() {
     Animated.spring(ctaScale, { toValue: 1, friction: 5, tension: 110, useNativeDriver: true }).start();
   }, [ctaScale]);
 
+  const splashRingRotate = splashRingSpin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
   return (
     <View style={styles.root} testID="welcome-root">
       <StatusBar style="light" />
@@ -95,17 +159,22 @@ export default function WelcomeScreen() {
       />
 
       <View style={styles.globeWrap} pointerEvents="none">
-        <AnimatedGlobe size={460} />
+        <AnimatedGlobe size={SCREEN_W * 1.25} />
       </View>
+
+      <LinearGradient
+        colors={["transparent", "rgba(2,5,6,0.6)", "rgba(2,5,6,0.95)"]}
+        locations={[0, 0.55, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
 
       <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
         <Animated.View
           style={[styles.content, { opacity: contentOpacity, transform: [{ translateY: contentRise }] }]}
           testID="welcome-content"
         >
-          <View style={styles.topSpacer} />
-
-          <View style={styles.brandWrap}>
+          <View style={styles.topRow}>
             <View style={styles.logoBadge}>
               <LinearGradient
                 colors={[Colors.mint, Colors.cyan]}
@@ -113,15 +182,26 @@ export default function WelcomeScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.logoBadgeInner}
               >
-                <ScanLine color={Colors.ink} size={28} strokeWidth={3} />
+                <ScanLine color={Colors.ink} size={22} strokeWidth={3} />
               </LinearGradient>
             </View>
           </View>
 
+          <View style={styles.spacer} />
+
           <View style={styles.headlineWrap}>
-            <Text style={styles.headline}>See what's moving on Solana.</Text>
+            <Text style={styles.eyebrow}>SOL TOOLS</Text>
+            <Animated.Text
+              style={[
+                styles.headline,
+                { opacity: lineOpacity, transform: [{ translateY: lineShift }] },
+              ]}
+              testID="rotating-headline"
+            >
+              {ROTATING_LINES[lineIndex]}
+            </Animated.Text>
             <Text style={styles.sub}>
-              Real-time pairs, AI risk scoring, social trading and a launchpad — all in one app.
+              Real-time pairs, AI risk scoring, social trading and a launchpad — built for Solana.
             </Text>
           </View>
 
@@ -145,9 +225,12 @@ export default function WelcomeScreen() {
               </Pressable>
             </Animated.View>
 
-            <Pressable onPress={goSignIn} style={styles.secondaryBtn} testID="cta-signin">
-              <Text style={styles.secondaryText}>Sign in</Text>
-            </Pressable>
+            <View style={styles.signinRow}>
+              <Text style={styles.signinPrompt}>Have an account? </Text>
+              <Pressable onPress={goSignIn} hitSlop={10} testID="cta-signin">
+                <Text style={styles.signinLink}>Sign in</Text>
+              </Pressable>
+            </View>
 
             <Text style={styles.terms}>
               By continuing you agree to our Terms and Privacy Policy.
@@ -161,6 +244,9 @@ export default function WelcomeScreen() {
             style={[styles.splash, { opacity: splashOpacity }]}
             testID="welcome-splash"
           >
+            <Animated.View
+              style={[styles.splashRing, { transform: [{ rotate: splashRingRotate }] }]}
+            />
             <Animated.View style={{ transform: [{ scale: splashScale }], alignItems: "center" }}>
               <View style={styles.splashLogo}>
                 <LinearGradient
@@ -169,9 +255,11 @@ export default function WelcomeScreen() {
                   end={{ x: 1, y: 1 }}
                   style={styles.splashLogoInner}
                 >
-                  <ScanLine color={Colors.ink} size={52} strokeWidth={3} />
+                  <ScanLine color={Colors.ink} size={56} strokeWidth={3} />
                 </LinearGradient>
               </View>
+              <Text style={styles.splashName}>SOL TOOLS</Text>
+              <Text style={styles.splashTag}>PRO TRADING SUITE</Text>
             </Animated.View>
           </Animated.View>
         ) : null}
@@ -187,92 +275,95 @@ const styles = StyleSheet.create({
 
   globeWrap: {
     position: "absolute",
-    top: -80,
-    left: 0,
+    top: -SCREEN_W * 0.3,
+    left: -SCREEN_W * 0.12,
     right: 0,
     alignItems: "center",
-    opacity: 0.85,
+    opacity: 0.9,
   },
 
-  topSpacer: { flex: 1 },
-
-  brandWrap: { alignItems: "flex-start", marginBottom: 24 },
+  topRow: { paddingTop: 8, alignItems: "flex-start" },
   logoBadge: {
     padding: 2,
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.16)",
   },
   logoBadgeInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  headlineWrap: { marginBottom: 32 },
+  spacer: { flex: 1 },
+
+  headlineWrap: { marginBottom: 28 },
+  eyebrow: {
+    color: Colors.mint,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 3.2,
+    marginBottom: 14,
+  },
   headline: {
     color: Colors.text,
-    fontSize: 40,
-    lineHeight: 44,
+    fontSize: 44,
+    lineHeight: 48,
     fontWeight: "900",
-    letterSpacing: -1.4,
+    letterSpacing: -1.6,
+    minHeight: 96,
   },
   sub: {
     color: Colors.muted,
     fontSize: 15,
     lineHeight: 22,
     fontWeight: "600",
-    marginTop: 14,
+    marginTop: 16,
   },
 
-  ctaStack: { gap: 12, paddingBottom: 12 },
+  ctaStack: { gap: 14, paddingBottom: 12 },
 
   primaryBtn: {
     borderRadius: 999,
     overflow: "hidden",
     shadowColor: Colors.mint,
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
+    shadowOpacity: 0.4,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
   },
   primaryGradient: {
-    minHeight: 54,
+    minHeight: 56,
     alignItems: "center",
     justifyContent: "center",
   },
   primaryText: {
     color: Colors.ink,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     letterSpacing: 0.2,
   },
 
-  secondaryBtn: {
-    minHeight: 54,
-    borderRadius: 999,
+  signinRow: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+    paddingVertical: 6,
   },
-  secondaryText: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: "800",
-  },
+  signinPrompt: { color: Colors.muted, fontSize: 14, fontWeight: "600" },
+  signinLink: { color: Colors.mint, fontSize: 14, fontWeight: "900" },
 
   terms: {
     color: Colors.muted,
     fontSize: 11,
     fontWeight: "600",
     textAlign: "center",
-    marginTop: 14,
+    marginTop: 4,
     lineHeight: 16,
+    opacity: 0.8,
   },
 
   splash: {
@@ -280,6 +371,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.ink,
+  },
+  splashRing: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    borderWidth: 1.5,
+    borderColor: "rgba(85,245,178,0.35)",
+    borderTopColor: "rgba(85,245,178,0.95)",
+    borderRightColor: "rgba(56,215,255,0.7)",
   },
   splashLogo: {
     padding: 4,
@@ -289,10 +390,24 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.16)",
   },
   splashLogoInner: {
-    width: 120,
-    height: 120,
+    width: 124,
+    height: 124,
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
+  },
+  splashName: {
+    color: Colors.text,
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: 4,
+    marginTop: 22,
+  },
+  splashTag: {
+    color: Colors.mint,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2.6,
+    marginTop: 6,
   },
 });
