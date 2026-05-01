@@ -1,9 +1,8 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowUpRight, Copy, Crown, Flame, TrendingDown, TrendingUp } from "lucide-react-native";
-import React, { memo, useCallback } from "react";
+import { ArrowUpRight, Flame, TrendingDown, TrendingUp } from "lucide-react-native";
+import React, { memo, useCallback, useMemo } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 
 import Colors from "@/constants/colors";
@@ -19,99 +18,140 @@ interface Props {
 const formatUsd = fmtUsd;
 const formatTokenPrice = fmtPrice;
 
+/** Deterministic pseudo-random for star placement so cards stay stable across re-renders. */
+function seeded(seed: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return () => {
+    h += 0x6d2b79f5;
+    let t = h;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+interface Star {
+  top: number;
+  left: number;
+  size: number;
+  opacity: number;
+}
+
 function TokenCardImpl({ token, onPress, onChart }: Props) {
   const positive = (token.change24hPct ?? 0) >= 0;
   const accent = positive ? Colors.mint : Colors.rose;
-  // Neon ring color: hot=orange, positive=mint, otherwise violet
-  const ringColor = token.hot ? Colors.orange : positive ? Colors.mint : Colors.violet;
+  const tickerText = `$${token.ticker.replace("$", "").toUpperCase()}`;
 
-  const onCopy = useCallback(async () => {
-    await Clipboard.setStringAsync(token.contract);
+  const stars = useMemo<Star[]>(() => {
+    const rand = seeded(token.id);
+    return Array.from({ length: 22 }, () => ({
+      top: rand() * 100,
+      left: rand() * 100,
+      size: rand() < 0.85 ? 1.2 : 2.2,
+      opacity: 0.25 + rand() * 0.6,
+    }));
+  }, [token.id]);
+
+  const handleChart = useCallback(() => {
     if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Haptics.selectionAsync().catch(() => {});
     }
-    console.log("[launchpad] copied contract", token.ticker);
-  }, [token.contract, token.ticker]);
-
-  const tickerText = `$${token.ticker.replace("$", "")}`;
+    onChart();
+  }, [onChart]);
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.cardOuter,
-        { shadowColor: ringColor },
-        pressed && styles.cardPressed,
-      ]}
+      style={({ pressed }) => [styles.cardOuter, pressed && styles.cardPressed]}
       testID={`token-card-${token.id}`}
     >
-      {/* Outer neon halo */}
-      <View
-        style={[
-          styles.neonHalo,
-          { borderColor: ringColor, shadowColor: ringColor },
-        ]}
-        pointerEvents="none"
-      />
-
       <View style={styles.card}>
-        {/* atmospheric glow layers */}
+        {/* deep space base */}
         <LinearGradient
-          colors={[`${ringColor}22`, "rgba(0,0,0,0)", `${ringColor}14`]}
+          colors={["#02050A", "#070016", "#000000"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <View style={[styles.glowBlob, { backgroundColor: `${ringColor}33` }]} />
-        <View style={[styles.glowBlob2, { backgroundColor: `${Colors.violet}22` }]} />
 
-        {/* HEADER: logo with neon ring + change pill */}
+        {/* nebula glow */}
+        <View
+          style={[
+            styles.nebula,
+            { backgroundColor: positive ? "rgba(85,245,178,0.22)" : "rgba(255,93,143,0.22)" },
+          ]}
+          pointerEvents="none"
+        />
+        <View style={styles.nebulaViolet} pointerEvents="none" />
+
+        {/* starfield */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {stars.map((s, i) => (
+            <View
+              key={`${token.id}-star-${i}`}
+              style={[
+                styles.star,
+                {
+                  top: `${s.top}%`,
+                  left: `${s.left}%`,
+                  width: s.size,
+                  height: s.size,
+                  borderRadius: s.size,
+                  opacity: s.opacity,
+                },
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* HEADER: logo + diagonal arrow */}
         <View style={styles.headerRow}>
-          <View
-            style={[
-              styles.logoRing,
-              { borderColor: ringColor, shadowColor: ringColor },
-            ]}
-          >
-            {token.logoUrl ? (
-              <Image source={{ uri: token.logoUrl }} style={styles.logo} contentFit="cover" />
-            ) : (
-              <LinearGradient
-                colors={[ringColor, Colors.cyan]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.logoFallback}
-              >
-                <Text style={styles.logoFallbackText} numberOfLines={1}>
-                  {token.ticker.replace("$", "").slice(0, 2)}
-                </Text>
-              </LinearGradient>
-            )}
+          <View style={styles.logoRing}>
+            <View style={styles.logoInner}>
+              {token.logoUrl ? (
+                <Image source={{ uri: token.logoUrl }} style={styles.logo} contentFit="cover" />
+              ) : (
+                <LinearGradient
+                  colors={[Colors.cyan, Colors.violet]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.logoFallback}
+                >
+                  <Text style={styles.logoFallbackText} numberOfLines={1}>
+                    {token.ticker.replace("$", "").slice(0, 2).toUpperCase()}
+                  </Text>
+                </LinearGradient>
+              )}
+            </View>
           </View>
 
           {token.change24hPct != null ? (
-            <View style={styles.changeCol}>
-              <View
-                style={[
-                  styles.changePill,
-                  {
-                    borderColor: `${accent}99`,
-                    backgroundColor: `${accent}1F`,
-                    shadowColor: accent,
-                  },
-                ]}
-              >
-                {positive ? (
-                  <TrendingUp color={accent} size={11} strokeWidth={3} />
-                ) : (
-                  <TrendingDown color={accent} size={11} strokeWidth={3} />
-                )}
-                <Text style={[styles.changeText, { color: accent }]}>
-                  {positive ? "+" : ""}
-                  {token.change24hPct.toFixed(1)}%
-                </Text>
-                <Text style={styles.changeSub}>24h</Text>
-              </View>
+            <View style={styles.changeCol} pointerEvents="none">
+              <View style={[styles.arrowGlow, { backgroundColor: `${accent}33` }]} />
+              {positive ? (
+                <TrendingUp
+                  color={accent}
+                  size={36}
+                  strokeWidth={3.4}
+                  style={styles.arrowIcon}
+                />
+              ) : (
+                <TrendingDown
+                  color={accent}
+                  size={36}
+                  strokeWidth={3.4}
+                  style={styles.arrowIcon}
+                />
+              )}
+              <Text style={[styles.changePct, { color: accent, textShadowColor: `${accent}AA` }]}>
+                {positive ? "+" : ""}
+                {token.change24hPct.toFixed(1)}%
+              </Text>
+              <Text style={styles.change24h}>24h</Text>
             </View>
           ) : null}
         </View>
@@ -119,42 +159,34 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
         {/* TICKER + HOT */}
         <View style={styles.tickerRow}>
           <Text
-            style={[
-              styles.tickerNeon,
-              { color: ringColor, textShadowColor: `${ringColor}CC` },
-            ]}
+            style={[styles.tickerNeon, { textShadowColor: `${Colors.neon}DD` }]}
             numberOfLines={1}
+            adjustsFontSizeToFit
           >
             {tickerText}
           </Text>
           {token.hot ? (
             <View style={styles.hotPill}>
-              <Flame color={Colors.orange} size={10} strokeWidth={3} />
-              <Text style={styles.hotText}>HOT</Text>
-            </View>
-          ) : token.featured ? (
-            <View style={styles.hotPill}>
-              <Crown color={Colors.orange} size={10} strokeWidth={3} />
-              <Text style={styles.hotText}>FEAT</Text>
+              <View style={styles.hotInner}>
+                <Flame color={Colors.orange} size={11} strokeWidth={3} />
+                <Text style={styles.hotText}>HOT</Text>
+              </View>
             </View>
           ) : null}
         </View>
-        <Text style={styles.nameLine} numberOfLines={1}>
-          {token.name}
-        </Text>
 
-        {/* MARKET CAP + LIVE */}
+        {/* MC + LIVE */}
         <View style={styles.mcRow}>
           <View style={styles.mcCol}>
             <Text style={styles.mcLabel}>MARKET CAP</Text>
-            <Text style={styles.mcValue} numberOfLines={1}>
+            <Text style={[styles.mcValue, { textShadowColor: `${Colors.cyan}88` }]} numberOfLines={1}>
               {formatUsd(token.marketCapUsd)}
             </Text>
           </View>
           <View style={styles.venuePill}>
             {token.status === "live" ? <View style={styles.liveDot} /> : null}
-            {token.status === "live" ? <Text style={styles.liveText}>LIVE</Text> : null}
             <Text style={styles.venueText} numberOfLines={1}>
+              {token.status === "live" ? "LIVE " : ""}
               {token.venue}
             </Text>
           </View>
@@ -162,88 +194,49 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
 
         {/* STAT TILES */}
         <View style={styles.statsRow}>
-          <Stat
-            label="LIQ"
-            value={formatUsd(token.liquidityUsd)}
-            tint="rgba(56,215,255,0.18)"
-            border="rgba(56,215,255,0.55)"
-            color={Colors.cyan}
-            shadow={Colors.cyan}
-          />
-          <Stat
-            label="PRICE"
-            value={formatTokenPrice(token.price)}
-            tint="rgba(217,70,255,0.16)"
-            border="rgba(217,70,255,0.55)"
-            color={Colors.neon}
-            shadow={Colors.neon}
-          />
-          <Stat
-            label="VOL"
-            value={formatUsd(token.volume24hUsd)}
-            tint="rgba(85,245,178,0.16)"
-            border="rgba(85,245,178,0.55)"
-            color={Colors.mint}
-            shadow={Colors.mint}
-          />
+          <Stat label="LIQUIDITY" value={`~${formatUsd(token.liquidityUsd)}`} color={Colors.cyan} />
+          <Stat label="PRICE" value={formatTokenPrice(token.price)} color={Colors.neon} />
+          <Stat label="VOLUME" value={`~${formatUsd(token.volume24hUsd)}`} color={Colors.mint} />
         </View>
 
-        {/* FOOTER ACTIONS */}
-        <View style={styles.footerRow}>
-          <Pressable
-            onPress={onCopy}
-            style={styles.iconBtn}
-            hitSlop={6}
-            testID={`copy-${token.id}`}
+        {/* CHART CTA */}
+        <Pressable
+          onPress={handleChart}
+          style={({ pressed }) => [styles.chartBtnWrap, pressed && styles.chartPressed]}
+          hitSlop={6}
+          testID={`chart-${token.id}`}
+        >
+          <LinearGradient
+            colors={[Colors.violet, Colors.neon, "#7C3AED"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.chartBtn}
           >
-            <Copy color={Colors.muted} size={13} strokeWidth={2.4} />
-          </Pressable>
-          <Pressable
-            onPress={onChart}
-            style={styles.chartBtnWrap}
-            hitSlop={6}
-            testID={`chart-${token.id}`}
-          >
-            <LinearGradient
-              colors={[Colors.violet, Colors.neon, Colors.magenta]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.chartBtn}
-            >
-              <ArrowUpRight color={Colors.text} size={14} strokeWidth={3} />
-              <Text style={styles.chartText}>Chart</Text>
-            </LinearGradient>
-          </Pressable>
-        </View>
+            <ArrowUpRight color={Colors.text} size={15} strokeWidth={3.2} />
+            <Text style={styles.chartText}>Chart</Text>
+          </LinearGradient>
+        </Pressable>
       </View>
     </Pressable>
   );
 }
 
-function Stat({
-  label,
-  value,
-  tint,
-  border,
-  color,
-  shadow,
-}: {
-  label: string;
-  value: string;
-  tint: string;
-  border: string;
-  color: string;
-  shadow: string;
-}) {
+function Stat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <View
-      style={[
-        styles.stat,
-        { backgroundColor: tint, borderColor: border, shadowColor: shadow },
-      ]}
-    >
+    <View style={[styles.stat, { shadowColor: color }]}>
+      <LinearGradient
+        colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0.02)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={[styles.statTopline, { backgroundColor: `${color}66` }]} />
       <Text style={styles.statLabel}>{label}</Text>
-      <Text style={[styles.statValue, { color }]} numberOfLines={1}>
+      <Text
+        style={[styles.statValue, { color, textShadowColor: `${color}AA` }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {value}
       </Text>
     </View>
@@ -253,125 +246,150 @@ function Stat({
 const styles = StyleSheet.create({
   cardOuter: {
     flex: 1,
-    borderRadius: 30,
+    borderRadius: 26,
     minWidth: 0,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
+    shadowColor: Colors.neon,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
     shadowRadius: 22,
     elevation: 10,
   },
-  cardPressed: { opacity: 0.95, transform: [{ scale: 0.985 }] },
-  neonHalo: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 30,
-    borderWidth: 1.6,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.95,
-    shadowRadius: 18,
-    elevation: 8,
-  },
+  cardPressed: { opacity: 0.94, transform: [{ scale: 0.985 }] },
   card: {
-    borderRadius: 30,
-    padding: 14,
-    backgroundColor: "rgba(8, 14, 18, 0.86)",
+    borderRadius: 26,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    backgroundColor: "#02040A",
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
-  glowBlob: {
+  nebula: {
+    position: "absolute",
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    top: -60,
+    right: -80,
+    opacity: 0.7,
+  },
+  nebulaViolet: {
     position: "absolute",
     width: 200,
     height: 200,
     borderRadius: 100,
-    top: -80,
-    right: -80,
-    opacity: 0.55,
-  },
-  glowBlob2: {
-    position: "absolute",
-    width: 160,
-    height: 160,
-    borderRadius: 80,
     bottom: -60,
-    left: -60,
-    opacity: 0.5,
+    left: -70,
+    backgroundColor: "rgba(217,70,255,0.14)",
+    opacity: 0.7,
+  },
+  star: {
+    position: "absolute",
+    backgroundColor: "#E8F4FF",
   },
 
   headerRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 8,
+    minHeight: 78,
   },
   logoRing: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    borderWidth: 2.5,
-    overflow: "hidden",
+    width: 70,
+    height: 70,
+    borderRadius: 18,
+    padding: 2,
+    backgroundColor: Colors.cyan,
+    shadowColor: Colors.cyan,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
-    shadowRadius: 14,
-    elevation: 8,
-    backgroundColor: Colors.ink,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  logoInner: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#F2F4FA",
   },
   logo: { width: "100%", height: "100%" },
   logoFallback: { flex: 1, alignItems: "center", justifyContent: "center" },
-  logoFallbackText: { color: Colors.ink, fontSize: 16, fontWeight: "900" },
+  logoFallbackText: { color: Colors.ink, fontSize: 22, fontWeight: "900" },
 
-  changeCol: { alignItems: "flex-end", flexShrink: 1 },
-  changePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1.2,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.85,
-    shadowRadius: 10,
-    elevation: 4,
+  changeCol: {
+    alignItems: "flex-end",
+    flexShrink: 0,
+    paddingTop: 2,
+    minWidth: 86,
   },
-  changeText: { fontSize: 12, fontWeight: "900", letterSpacing: -0.2 },
-  changeSub: {
-    color: Colors.muted,
-    fontSize: 9,
+  arrowGlow: {
+    position: "absolute",
+    right: -8,
+    top: -8,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    opacity: 0.6,
+  },
+  arrowIcon: { marginBottom: 2, marginRight: -2 },
+  changePct: {
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.4,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 14,
+  },
+  change24h: {
+    color: Colors.text,
+    fontSize: 11,
     fontWeight: "800",
-    marginLeft: 2,
-    letterSpacing: 0.6,
+    marginTop: 1,
+    letterSpacing: 0.4,
   },
 
   tickerRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
-    marginTop: 14,
+    marginTop: 16,
   },
   tickerNeon: {
-    fontSize: 24,
+    color: Colors.neon,
+    fontSize: 28,
     fontWeight: "900",
-    letterSpacing: -0.6,
+    letterSpacing: -0.8,
     flexShrink: 1,
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
+    textShadowRadius: 18,
   },
   hotPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(255,184,76,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(255,184,76,0.6)",
+    padding: 1.5,
+    backgroundColor: "transparent",
+    borderWidth: 1.4,
+    borderColor: "rgba(255,184,76,0.85)",
     shadowColor: Colors.orange,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    elevation: 5,
   },
-  hotText: { color: Colors.orange, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
-  nameLine: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 3 },
+  hotInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  hotText: {
+    color: Colors.orange,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
 
   mcRow: {
     flexDirection: "row",
@@ -381,83 +399,125 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   mcCol: { flex: 1, minWidth: 0 },
-  mcLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
-  mcValue: {
+  mcLabel: {
     color: Colors.text,
-    fontSize: 20,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    opacity: 0.85,
+  },
+  mcValue: {
+    color: Colors.cyan,
+    fontSize: 22,
     fontWeight: "900",
     marginTop: 3,
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 14,
   },
 
   venuePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: "rgba(85,245,178,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.45)",
-    maxWidth: "55%",
-  },
-  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.mint },
-  liveText: { color: Colors.mint, fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
-  venueText: { color: Colors.muted, fontSize: 9, fontWeight: "800", letterSpacing: 0.4 },
-
-  statsRow: { flexDirection: "row", gap: 7, marginTop: 14 },
-  stat: {
-    flex: 1,
-    paddingVertical: 9,
-    paddingHorizontal: 8,
-    borderRadius: 14,
-    borderWidth: 1.2,
-    minWidth: 0,
+    borderColor: "rgba(85,245,178,0.55)",
+    shadowColor: Colors.mint,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 8,
     elevation: 3,
+    maxWidth: "58%",
   },
-  statLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
-  statValue: { fontSize: 12, fontWeight: "900", marginTop: 4, letterSpacing: -0.2 },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.mint,
+    shadowColor: Colors.mint,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  venueText: {
+    color: Colors.text,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
 
-  footerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 14,
-    gap: 8,
-  },
-  iconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  chartBtnWrap: {
+  statsRow: { flexDirection: "row", gap: 7, marginTop: 14 },
+  stat: {
     flex: 1,
+    paddingTop: 11,
+    paddingBottom: 11,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    minWidth: 0,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  statTopline: {
+    position: "absolute",
+    top: 0,
+    left: 10,
+    right: 10,
+    height: 1,
+  },
+  statLabel: {
+    color: Colors.text,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    opacity: 0.75,
+  },
+  statValue: {
+    fontSize: 13,
+    fontWeight: "900",
+    marginTop: 6,
+    letterSpacing: -0.2,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
+
+  chartBtnWrap: {
+    marginTop: 14,
+    alignSelf: "center",
+    minWidth: "70%",
     borderRadius: 999,
     overflow: "hidden",
     shadowColor: Colors.neon,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.85,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOpacity: 0.95,
+    shadowRadius: 16,
+    elevation: 8,
   },
+  chartPressed: { opacity: 0.92, transform: [{ scale: 0.97 }] },
   chartBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 7,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
   },
-  chartText: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: 0.4 },
+  chartText: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
 });
 
 export default memo(TokenCardImpl);
