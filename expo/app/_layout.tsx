@@ -1,0 +1,112 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import React, { useEffect } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+
+import Colors from "@/constants/colors";
+import { AppProvider } from "@/providers/app-provider";
+import { LaunchpadProvider } from "@/providers/launchpad-provider";
+
+SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
+  console.log("SolTools splash hold skipped during boot", error);
+});
+
+const queryClient = new QueryClient();
+
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
+  console.log("SolTools root error", error.message);
+
+  return (
+    <View style={styles.errorRoot} testID="soltools-error-boundary">
+      <Text style={styles.errorEyebrow}>SolTools scanner interrupted</Text>
+      <Text style={styles.errorTitle}>SolTools hit a loading glitch.</Text>
+      <Text style={styles.errorBody}>Tap retry to reconnect wallet tracking, pair scanning, and the social feed.</Text>
+      <Text onPress={retry} style={styles.errorAction} testID="soltools-error-retry">
+        Retry SolTools
+      </Text>
+    </View>
+  );
+}
+
+function RootLayoutNav() {
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: styles.stackContent }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="list-token" options={{ presentation: "modal" }} />
+      <Stack.Screen name="compose" options={{ presentation: "modal" }} />
+      <Stack.Screen name="launch/[id]" />
+      <Stack.Screen name="tool/[id]" />
+      <Stack.Screen name="+not-found" />
+    </Stack>
+  );
+}
+
+export default function RootLayout() {
+  useEffect(() => {
+    SplashScreen.hideAsync().catch((error: unknown) => {
+      console.log("SolTools splash hide skipped", error);
+    });
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppProvider>
+        <LaunchpadProvider>
+          <GestureHandlerRootView style={styles.gestureRoot}>
+            <RootLayoutNav />
+          </GestureHandlerRootView>
+        </LaunchpadProvider>
+      </AppProvider>
+    </QueryClientProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
+  stackContent: {
+    backgroundColor: Colors.ink,
+  },
+  errorRoot: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: Colors.ink,
+  },
+  errorEyebrow: {
+    color: Colors.orange,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginBottom: 10,
+  },
+  errorTitle: {
+    color: Colors.text,
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: "900",
+  },
+  errorBody: {
+    color: Colors.muted,
+    fontSize: 16,
+    lineHeight: 23,
+    marginTop: 12,
+    marginBottom: 22,
+  },
+  errorAction: {
+    alignSelf: "flex-start",
+    color: Colors.ink,
+    backgroundColor: Colors.mint,
+    borderRadius: 16,
+    overflow: "hidden",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+});
