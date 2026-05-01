@@ -31,9 +31,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import DexChart from "@/components/DexChart";
+import { useDexToken } from "@/lib/api/dexscreener";
 import { useTokenOverview } from "@/lib/api/market";
 import { useLaunchpad } from "@/providers/launchpad-provider";
-import { fmtUsd } from "@/utils/format";
+import { fmtPrice, fmtUsd } from "@/utils/format";
 
 function shortAddress(addr: string): string {
   if (addr.length <= 10) return addr;
@@ -41,6 +42,7 @@ function shortAddress(addr: string): string {
 }
 
 const formatUsd = fmtUsd;
+const formatPrice = fmtPrice;
 
 export default function LaunchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,12 +52,17 @@ export default function LaunchDetailScreen() {
   const [watching, setWatching] = useState<boolean>(false);
 
   const token = id ? getById(id) : null;
+  // DexScreener is the source of truth for chart-aligned price/MC/liq.
+  // Birdeye is kept as fallback for holders + edge cases.
+  const { data: dex } = useDexToken(token?.contract ?? null);
   const { data: overview } = useTokenOverview(token?.contract ?? null);
-  const livePrice = overview?.price ?? token?.price ?? null;
-  const liveChange = overview?.priceChange24h ?? token?.change24hPct ?? null;
-  const liveLiq = overview?.liquidity ?? token?.liquidityUsd ?? null;
-  const liveMc = overview?.marketCap ?? token?.marketCapUsd ?? null;
+  const livePrice = dex?.priceUsd ?? overview?.price ?? token?.price ?? null;
+  const liveChange = dex?.priceChange24hPct ?? overview?.priceChange24h ?? token?.change24hPct ?? null;
+  const liveLiq = dex?.liquidityUsd ?? overview?.liquidity ?? token?.liquidityUsd ?? null;
+  const liveMc = dex?.marketCapUsd ?? overview?.marketCap ?? token?.marketCapUsd ?? null;
+  const liveVol = dex?.volume24hUsd ?? token?.volume24hUsd ?? null;
   const liveHolders = overview?.holder ?? token?.holders ?? null;
+  const pairAddress = dex?.pairAddress ?? null;
 
   const onCopy = useCallback(async () => {
     if (!token) return;
@@ -261,11 +268,11 @@ export default function LaunchDetailScreen() {
               ) : null}
             </View>
             <Text style={styles.priceSubLine}>
-              Price {livePrice != null && livePrice > 0 ? formatUsd(livePrice) : "—"}
+              Price {livePrice != null && livePrice > 0 ? formatPrice(livePrice) : "—"}
               {liveLiq != null && liveLiq > 0 ? `  ·  Liq ${formatUsd(liveLiq)}` : ""}
             </Text>
             <View style={styles.chartEmbed} testID="chart-embed">
-              <DexChart contract={token.contract} height={320} />
+              <DexChart contract={token.contract} pairAddress={pairAddress ?? undefined} height={320} />
             </View>
             <View style={styles.chartCtaRow}>
               <Pressable
@@ -288,7 +295,7 @@ export default function LaunchDetailScreen() {
           <View style={styles.metricsGrid}>
             <Metric label="Liquidity" value={formatUsd(liveLiq)} />
             <Metric label="Market cap" value={formatUsd(liveMc)} />
-            <Metric label="24h volume" value={formatUsd(token.volume24hUsd)} />
+            <Metric label="24h volume" value={formatUsd(liveVol)} />
             <Metric label="Holders" value={liveHolders ? liveHolders.toLocaleString() : "—"} />
           </View>
 

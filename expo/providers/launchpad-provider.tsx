@@ -3,6 +3,7 @@ import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useDexTokens } from "@/lib/api/dexscreener";
 import { fetchLivePairs } from "@/lib/api/pairs";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
@@ -289,7 +290,34 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
     [queryClient, upvoted, userId],
   );
 
-  const listings = listingsQuery.data ?? [];
+  const rawListings = listingsQuery.data ?? [];
+
+  // Live overlay: poll DexScreener for the visible contracts so price / MC /
+  // liquidity / 24h change always match the chart and refresh in real time.
+  const visibleAddresses = useMemo(() => {
+    const addrs = rawListings
+      .map((t) => t.contract)
+      .filter((c): c is string => !!c && c.length >= 32);
+    return Array.from(new Set(addrs)).slice(0, 60);
+  }, [rawListings]);
+  const { data: dexMap } = useDexTokens(visibleAddresses);
+
+  const listings = useMemo<LaunchToken[]>(() => {
+    if (!dexMap) return rawListings;
+    return rawListings.map((t) => {
+      const live = t.contract ? dexMap[t.contract] : undefined;
+      if (!live) return t;
+      return {
+        ...t,
+        price: live.priceUsd ?? t.price ?? null,
+        change24hPct: live.priceChange24hPct ?? t.change24hPct ?? null,
+        liquidityUsd: live.liquidityUsd ?? t.liquidityUsd ?? null,
+        marketCapUsd: live.marketCapUsd ?? t.marketCapUsd ?? null,
+        volume24hUsd: live.volume24hUsd ?? t.volume24hUsd ?? null,
+        logoUrl: t.logoUrl ?? live.imageUrl ?? null,
+      };
+    });
+  }, [rawListings, dexMap]);
 
   const filtered = useMemo<LaunchToken[]>(() => {
     let items = listings.slice();
