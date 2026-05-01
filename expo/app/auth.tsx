@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Haptics from "expo-haptics";
 import {
@@ -36,7 +36,9 @@ type Mode = "signin" | "signup";
 
 export default function AuthScreen() {
   const { signIn, signUp, isSigningIn, isSigningUp, resetPassword } = useAuth();
-  const [mode, setMode] = useState<Mode>("signin");
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const initialMode: Mode = params?.mode === "signup" ? "signup" : "signin";
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [username, setUsername] = useState<string>("");
