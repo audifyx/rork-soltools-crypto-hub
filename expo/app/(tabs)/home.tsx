@@ -436,7 +436,8 @@ function FeedHeader({
           <VoiceRoomsRail />
           <CommunitiesRail />
           <TrendingPairsRail />
-          <TrendingTopics />
+          <TrendingTickersRail />
+          <TrendingTagsCard />
         </>
       ) : null}
       <ComposePrompt
@@ -770,32 +771,156 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
   );
 }
 
-function TrendingTopics() {
+type TickerTab = "trending" | "gainers" | "losers" | "volume";
+const TICKER_TABS: { key: TickerTab; label: string }[] = [
+  { key: "trending", label: "Trending" },
+  { key: "gainers", label: "Gainers" },
+  { key: "losers", label: "Losers" },
+  { key: "volume", label: "Volume" },
+];
+
+function tokenOverviewToPair(t: {
+  address: string;
+  symbol?: string;
+  name?: string;
+  logoURI?: string;
+  price?: number;
+  priceChange24h?: number;
+  liquidity?: number;
+  marketCap?: number;
+}, idx: number): LaunchToken {
+  const symbol = (t.symbol ?? "").toUpperCase();
+  return {
+    id: t.address,
+    name: t.name ?? symbol,
+    ticker: symbol,
+    description: "",
+    logoUrl: t.logoURI ?? null,
+    bannerUrl: null,
+    contract: t.address,
+    venue: "other",
+    status: "live",
+    tags: [],
+    featured: false,
+    hot: idx < 3,
+    verified: false,
+    createdAt: Date.now(),
+    submittedBy: "system",
+    price: t.price ?? null,
+    change24hPct: t.priceChange24h ?? null,
+    liquidityUsd: t.liquidity ?? null,
+    marketCapUsd: t.marketCap ?? null,
+    volume24hUsd: t.liquidity ?? null,
+    holders: null,
+    upvotes: 0,
+    watchers: 0,
+  };
+}
+
+function TrendingTickersRail() {
   const router = useRouter();
   const { listings } = useLaunchpad();
-  const { data: trending } = useTrendingTokens(15);
+  const { data: trending } = useTrendingTokens(30);
+  const [tab, setTab] = useState<TickerTab>("trending");
 
-  const topMovers = useMemo(() => {
+  const pairs = useMemo<LaunchToken[]>(() => {
     const fromTrending = (trending ?? [])
-      .filter((t) => t.symbol)
-      .map((t) => ({
-        id: t.address,
-        ticker: (t.symbol ?? "").toUpperCase(),
-        change: t.priceChange24h ?? 0,
-        volume: t.liquidity ?? t.marketCap ?? 0,
-      }));
-    if (fromTrending.length > 0) return fromTrending.slice(0, 6);
-    return listings
-      .slice()
-      .sort((a, b) => Math.abs(b.change24hPct ?? 0) - Math.abs(a.change24hPct ?? 0))
-      .slice(0, 6)
-      .map((t) => ({
-        id: t.id,
-        ticker: t.ticker.replace("$", ""),
-        change: t.change24hPct ?? 0,
-        volume: t.volume24hUsd ?? 0,
-      }));
-  }, [trending, listings]);
+      .filter((t) => !!t.symbol)
+      .map((t, i) => tokenOverviewToPair(t, i));
+    const base: LaunchToken[] = fromTrending.length > 0
+      ? fromTrending
+      : listings.slice();
+    const arr = base.slice();
+    switch (tab) {
+      case "gainers":
+        arr.sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0));
+        break;
+      case "losers":
+        arr.sort((a, b) => (a.change24hPct ?? 0) - (b.change24hPct ?? 0));
+        break;
+      case "volume":
+        arr.sort((a, b) => (b.volume24hUsd ?? b.liquidityUsd ?? 0) - (a.volume24hUsd ?? a.liquidityUsd ?? 0));
+        break;
+      case "trending":
+      default:
+        arr.sort((a, b) => Math.abs(b.change24hPct ?? 0) - Math.abs(a.change24hPct ?? 0));
+        break;
+    }
+    return arr.slice(0, 12);
+  }, [trending, listings, tab]);
+
+  const onOpen = useCallback(
+    (id: string) => router.push({ pathname: "/launch/[id]", params: { id } }),
+    [router]
+  );
+
+  return (
+    <View style={styles.railWrap}>
+      <View style={styles.railHeader}>
+        <View style={styles.railTitleRow}>
+          <TrendingUp color={Colors.mint} size={16} strokeWidth={2.6} />
+          <Text style={styles.railTitle}>Trending tickers</Text>
+        </View>
+        <Pressable
+          hitSlop={8}
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => {});
+            router.push("/(tabs)/discover");
+          }}
+          testID="tickers-see-all"
+        >
+          <Text style={styles.railLink}>See all</Text>
+        </Pressable>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tickerTabsRow}
+      >
+        {TICKER_TABS.map((t) => {
+          const active = tab === t.key;
+          return (
+            <Pressable
+              key={t.key}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setTab(t.key);
+              }}
+              style={[styles.tickerTab, active ? styles.tickerTabActive : null]}
+              testID={`ticker-tab-${t.key}`}
+            >
+              <Text style={[styles.tickerTabText, active ? styles.tickerTabTextActive : null]}>
+                {t.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      {pairs.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.railContent}
+        >
+          {pairs.map((p) => (
+            <PairCard key={`${tab}-${p.id}`} pair={p} onPress={() => onOpen(p.id)} />
+          ))}
+        </ScrollView>
+      ) : (
+        <View style={styles.railEmpty} testID="tickers-empty">
+          <Text style={styles.railEmptyTitle}>No trending tickers</Text>
+          <Text style={styles.railEmptyBody}>
+            Trending tickers will appear here as soon as live market data loads.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function TrendingTagsCard() {
+  const router = useRouter();
+  const { listings } = useLaunchpad();
 
   const topTags = useMemo(() => {
     const counts = new Map<string, number>();
@@ -806,94 +931,27 @@ function TrendingTopics() {
       .map(([tag, count]) => ({ tag, count }));
   }, [listings]);
 
-  if (topMovers.length === 0 && topTags.length === 0) {
-    return (
-      <View style={styles.topicsWrap}>
-        <Text style={styles.sectionLabel}>Trending</Text>
-        <Text style={styles.topicsEmpty}>
-          Trending tickers and tags will appear here once live market data loads.
-        </Text>
-      </View>
-    );
-  }
+  if (topTags.length === 0) return null;
 
   return (
     <View style={styles.topicsWrap}>
-      <View style={styles.topicsHeadRow}>
-        <Text style={styles.sectionLabel}>Trending tickers</Text>
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync().catch(() => {});
-            router.push("/(tabs)/discover");
-          }}
-          hitSlop={8}
-          testID="topics-see-all"
-        >
-          <Text style={styles.railLink}>See all</Text>
-        </Pressable>
-      </View>
-      {topMovers.map((m, i) => {
-        const positive = m.change >= 0;
-        const accent = positive ? Colors.mint : Colors.rose;
-        return (
+      <Text style={styles.sectionLabel}>Trending tags</Text>
+      <View style={styles.tagsRow}>
+        {topTags.map(({ tag, count }) => (
           <Pressable
-            key={m.id}
-            style={styles.topicRow}
+            key={tag}
+            style={styles.tagChip}
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
-              router.push({ pathname: "/launch/[id]", params: { id: m.id } });
+              router.push("/(tabs)/discover");
             }}
-            testID={`topic-${m.id}`}
+            testID={`tag-${tag}`}
           >
-            <View style={styles.topicLeft}>
-              <Text style={styles.topicRank}>{i + 1}</Text>
-              <View>
-                <Text style={[styles.topicTag, { color: Colors.text }]} numberOfLines={1}>
-                  ${m.ticker}
-                </Text>
-                <Text style={styles.topicCount}>Vol {formatCompactUsd(m.volume)}</Text>
-              </View>
-            </View>
-            <View
-              style={[
-                styles.topicChange,
-                { backgroundColor: `${accent}1A`, borderColor: `${accent}55` },
-              ]}
-            >
-              {positive ? (
-                <TrendingUp color={accent} size={11} strokeWidth={3} />
-              ) : (
-                <TrendingDown color={accent} size={11} strokeWidth={3} />
-              )}
-              <Text style={[styles.topicChangeText, { color: accent }]}>
-                {positive ? "+" : ""}{m.change.toFixed(1)}%
-              </Text>
-            </View>
+            <Text style={styles.tagText}>#{tag}</Text>
+            <Text style={styles.tagCount}>{count}</Text>
           </Pressable>
-        );
-      })}
-
-      {topTags.length > 0 ? (
-        <View style={styles.tagSection}>
-          <Text style={styles.sectionLabel}>Trending tags</Text>
-          <View style={styles.tagsRow}>
-            {topTags.map(({ tag, count }) => (
-              <Pressable
-                key={tag}
-                style={styles.tagChip}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  router.push("/(tabs)/discover");
-                }}
-                testID={`tag-${tag}`}
-              >
-                <Text style={styles.tagText}>#{tag}</Text>
-                <Text style={styles.tagCount}>{count}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      ) : null}
+        ))}
+      </View>
     </View>
   );
 }
@@ -1712,6 +1770,34 @@ const styles = StyleSheet.create({
   },
   pairChangeText: {
     fontSize: 12,
+    fontWeight: "900",
+  },
+
+  tickerTabsRow: {
+    paddingHorizontal: 14,
+    gap: 8,
+    marginBottom: 12,
+  },
+  tickerTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  tickerTabActive: {
+    borderColor: `${Colors.mint}88`,
+    backgroundColor: `${Colors.mint}1A`,
+  },
+  tickerTabText: {
+    color: Colors.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  tickerTabTextActive: {
+    color: Colors.mint,
     fontWeight: "900",
   },
 
