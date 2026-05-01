@@ -20,6 +20,7 @@ export interface UserPost {
   text: string;
   ticker?: string;
   changePct?: number;
+  images?: string[];
   createdAt: number;
   likes: number;
   reposts: number;
@@ -372,7 +373,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const prefs = prefsQ.data ?? DEFAULT_PREFS;
 
   const addPost = useMutation({
-    mutationFn: async (input: { text: string; ticker?: string; changePct?: number }) => {
+    mutationFn: async (input: { text: string; ticker?: string; changePct?: number; images?: string[] }) => {
       if (isAuthenticated && userId) {
         const { data, error } = await supabase
           .from("community_posts")
@@ -385,6 +386,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
           text: (data.content as string) ?? input.text,
           ticker: input.ticker,
           changePct: input.changePct,
+          images: input.images,
           createdAt: new Date(data.created_at as string).getTime(),
           likes: (data.likes_count as number) ?? 0,
           reposts: 0,
@@ -398,6 +400,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         text: input.text,
         ticker: input.ticker,
         changePct: input.changePct,
+        images: input.images,
         createdAt: Date.now(),
         likes: 0,
         reposts: 0,

@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -7,8 +8,10 @@ import {
   BadgeCheck,
   Bell,
   Bookmark,
+  Feather,
   Flame,
   Heart,
+  ImagePlus,
   Inbox,
   MessageCircle,
   Repeat2,
@@ -34,12 +37,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import TokenAvatar from "@/components/TokenAvatar";
 import Colors from "@/constants/colors";
 import { FEED_POSTS, FeedPost, TRENDING_TOPICS } from "@/constants/feed";
-import { BONK_MINT, JUP_MINT, SOL_MINT, useJupiterPrices, useTrendingTokens } from "@/lib/api/market";
+import {
+  BONK_MINT,
+  JUP_MINT,
+  SOL_MINT,
+  useJupiterPrices,
+  useTrendingTokens,
+} from "@/lib/api/market";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchToken } from "@/types/launchpad";
 import { UserPost, useApp } from "@/providers/app-provider";
 
-const FILTERS = ["For You", "Trending", "New Pairs", "Whales", "Following"] as const;
+const FILTERS = ["For You", "Following", "Trending", "New Pairs", "Whales"] as const;
 type Filter = (typeof FILTERS)[number];
 
 export default function HomeFeedScreen() {
@@ -57,6 +66,11 @@ export default function HomeFeedScreen() {
     return [...userPosts, ...FEED_POSTS];
   }, [filter, userPosts]);
 
+  const openCompose = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    router.push("/compose");
+  }, [router]);
+
   const renderPost: ListRenderItem<UserPost | FeedPost> = useCallback(
     ({ item }) => {
       if ("createdAt" in item) {
@@ -66,6 +80,8 @@ export default function HomeFeedScreen() {
             displayName={profile.displayName}
             handle={profile.handle}
             avatarColor={profile.avatarColor}
+            avatarUrl={profile.avatarUrl}
+            verified={profile.verified}
             onLike={() => togglePostLike(item.id)}
             onDelete={() => deletePost(item.id)}
           />
@@ -81,6 +97,24 @@ export default function HomeFeedScreen() {
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.topBar}>
+          <Pressable
+            onPress={() => router.push("/(tabs)/profile")}
+            style={[styles.avatarBtn, { backgroundColor: profile.avatarColor }]}
+            hitSlop={6}
+            testID="profile-btn"
+          >
+            {profile.avatarUrl ? (
+              <ExpoImage
+                source={{ uri: profile.avatarUrl }}
+                style={styles.avatarImg}
+                contentFit="cover"
+              />
+            ) : (
+              <Text style={styles.avatarBtnText}>
+                {profile.displayName.slice(0, 1).toUpperCase()}
+              </Text>
+            )}
+          </Pressable>
           <View style={styles.brandPill}>
             <LinearGradient
               colors={[Colors.mint, Colors.cyan]}
@@ -112,7 +146,7 @@ export default function HomeFeedScreen() {
                 <Pressable
                   key={f}
                   onPress={() => onSelectFilter(f)}
-                  style={[styles.filterChip, active && styles.filterChipActive]}
+                  style={styles.filterChip}
                   testID={`filter-${f}`}
                 >
                   <Text style={[styles.filterText, active && styles.filterTextActive]}>{f}</Text>
@@ -127,22 +161,30 @@ export default function HomeFeedScreen() {
           data={combined}
           keyExtractor={(p) => p.id}
           renderItem={renderPost}
-          ListHeaderComponent={<FeedHeader />}
-          ListEmptyComponent={<FeedEmpty />}
+          ListHeaderComponent={
+            <FeedHeader
+              filter={filter}
+              displayName={profile.displayName}
+              avatarColor={profile.avatarColor}
+              avatarUrl={profile.avatarUrl}
+              onCompose={openCompose}
+            />
+          }
+          ListEmptyComponent={<FeedEmpty onCompose={openCompose} />}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           testID="home-feed"
         />
 
-        <Pressable style={styles.fab} onPress={() => router.push("/compose")} testID="compose-fab">
+        <Pressable style={styles.fab} onPress={openCompose} testID="compose-fab">
           <LinearGradient
             colors={[Colors.mint, Colors.cyan]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.fabGradient}
           >
-            <Sparkles color={Colors.ink} size={22} strokeWidth={3} />
+            <Feather color={Colors.ink} size={22} strokeWidth={3} />
           </LinearGradient>
         </Pressable>
       </SafeAreaView>
@@ -150,20 +192,81 @@ export default function HomeFeedScreen() {
   );
 }
 
-function FeedHeader() {
+function FeedHeader({
+  filter,
+  displayName,
+  avatarColor,
+  avatarUrl,
+  onCompose,
+}: {
+  filter: Filter;
+  displayName: string;
+  avatarColor: string;
+  avatarUrl?: string;
+  onCompose: () => void;
+}) {
   return (
     <View style={styles.headerStack}>
-      <MarketStrip />
-      <TrendingPairsRail />
-      <TrendingTopics />
+      {filter === "For You" ? (
+        <>
+          <MarketStrip />
+          <TrendingPairsRail />
+          <TrendingTopics />
+        </>
+      ) : null}
+      <ComposePrompt
+        displayName={displayName}
+        avatarColor={avatarColor}
+        avatarUrl={avatarUrl}
+        onPress={onCompose}
+      />
       <View style={styles.feedTitleRow}>
-        <Text style={styles.feedTitle}>Live feed</Text>
+        <Text style={styles.feedTitle}>{filter === "Following" ? "Following" : "Live feed"}</Text>
         <View style={styles.livePill}>
           <View style={styles.liveDot} />
           <Text style={styles.liveText}>LIVE</Text>
         </View>
       </View>
     </View>
+  );
+}
+
+function ComposePrompt({
+  displayName,
+  avatarColor,
+  avatarUrl,
+  onPress,
+}: {
+  displayName: string;
+  avatarColor: string;
+  avatarUrl?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={styles.composer} onPress={onPress} testID="compose-prompt">
+      <View style={[styles.composerAvatar, { backgroundColor: avatarColor }]}>
+        {avatarUrl ? (
+          <ExpoImage source={{ uri: avatarUrl }} style={styles.avatarImg} contentFit="cover" />
+        ) : (
+          <Text style={styles.composerAvatarText}>
+            {displayName.slice(0, 1).toUpperCase()}
+          </Text>
+        )}
+      </View>
+      <View style={styles.composerBody}>
+        <Text style={styles.composerHint}>Share alpha, charts, or a hot take…</Text>
+        <View style={styles.composerActions}>
+          <View style={styles.composerActionPill}>
+            <ImagePlus color={Colors.mint} size={14} strokeWidth={2.4} />
+            <Text style={styles.composerActionText}>Photos</Text>
+          </View>
+          <View style={styles.composerActionPill}>
+            <Sparkles color={Colors.cyan} size={14} strokeWidth={2.4} />
+            <Text style={styles.composerActionText}>Token</Text>
+          </View>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -254,7 +357,6 @@ function TrendingPairsRail() {
       watchers: 0,
     }));
     if (fromBird.length > 0) return fromBird;
-    // Fallback to launchpad listings (Jupiter live data) so the rail is never empty
     return listings
       .slice()
       .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0))
@@ -262,7 +364,13 @@ function TrendingPairsRail() {
   }, [trending, listings]);
 
   const hasPairs = pairs.length > 0;
-  return <TrendingPairsRailInner pairs={pairs} hasPairs={hasPairs} onOpen={(id) => router.push({ pathname: "/launch/[id]", params: { id } })} />;
+  return (
+    <TrendingPairsRailInner
+      pairs={pairs}
+      hasPairs={hasPairs}
+      onOpen={(id) => router.push({ pathname: "/launch/[id]", params: { id } })}
+    />
+  );
 }
 
 function formatCompactUsd(n?: number): string {
@@ -273,7 +381,15 @@ function formatCompactUsd(n?: number): string {
   return `${n.toFixed(0)}`;
 }
 
-function TrendingPairsRailInner({ pairs, hasPairs, onOpen }: { pairs: LaunchToken[]; hasPairs: boolean; onOpen: (id: string) => void }) {
+function TrendingPairsRailInner({
+  pairs,
+  hasPairs,
+  onOpen,
+}: {
+  pairs: LaunchToken[];
+  hasPairs: boolean;
+  onOpen: (id: string) => void;
+}) {
   return (
     <View style={styles.railWrap}>
       <View style={styles.railHeader}>
@@ -328,7 +444,9 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
           </View>
         )}
       </View>
-      <Text style={styles.pairTicker} numberOfLines={1}>${pair.ticker.replace("$", "")}</Text>
+      <Text style={styles.pairTicker} numberOfLines={1}>
+        ${pair.ticker.replace("$", "")}
+      </Text>
       <Text style={styles.pairName} numberOfLines={1}>
         {pair.name}
       </Text>
@@ -349,7 +467,12 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
         </View>
       </View>
 
-      <View style={[styles.pairChangePill, { borderColor: `${accent}55`, backgroundColor: `${accent}14` }]}>
+      <View
+        style={[
+          styles.pairChangePill,
+          { borderColor: `${accent}55`, backgroundColor: `${accent}14` },
+        ]}
+      >
         {positive ? (
           <TrendingUp color={accent} size={12} strokeWidth={3} />
         ) : (
@@ -393,11 +516,62 @@ function TrendingTopics() {
   );
 }
 
+function PostImageGrid({ images }: { images: string[] }) {
+  const count = Math.min(images.length, 4);
+  if (count === 0) return null;
+  if (count === 1) {
+    return (
+      <View style={styles.imgGridSolo} testID="post-images-1">
+        <ExpoImage source={{ uri: images[0] }} style={styles.imgFill} contentFit="cover" />
+      </View>
+    );
+  }
+  if (count === 2) {
+    return (
+      <View style={styles.imgGridRow} testID="post-images-2">
+        {images.slice(0, 2).map((u, i) => (
+          <View key={`${u}-${i}`} style={styles.imgHalf}>
+            <ExpoImage source={{ uri: u }} style={styles.imgFill} contentFit="cover" />
+          </View>
+        ))}
+      </View>
+    );
+  }
+  if (count === 3) {
+    return (
+      <View style={styles.imgGridRow} testID="post-images-3">
+        <View style={styles.imgHalf}>
+          <ExpoImage source={{ uri: images[0] }} style={styles.imgFill} contentFit="cover" />
+        </View>
+        <View style={styles.imgHalf}>
+          <View style={styles.imgQuarter}>
+            <ExpoImage source={{ uri: images[1] }} style={styles.imgFill} contentFit="cover" />
+          </View>
+          <View style={[styles.imgQuarter, { marginTop: 4 }]}>
+            <ExpoImage source={{ uri: images[2] }} style={styles.imgFill} contentFit="cover" />
+          </View>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.imgGrid4} testID="post-images-4">
+      {images.slice(0, 4).map((u, i) => (
+        <View key={`${u}-${i}`} style={styles.imgQuad}>
+          <ExpoImage source={{ uri: u }} style={styles.imgFill} contentFit="cover" />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function UserPostCard({
   post,
   displayName,
   handle,
   avatarColor,
+  avatarUrl,
+  verified,
   onLike,
   onDelete,
 }: {
@@ -405,6 +579,8 @@ function UserPostCard({
   displayName: string;
   handle: string;
   avatarColor: string;
+  avatarUrl?: string;
+  verified: boolean;
   onLike: () => void;
   onDelete: () => void;
 }) {
@@ -421,26 +597,50 @@ function UserPostCard({
   return (
     <View style={styles.post} testID={`user-post-${post.id}`}>
       <View style={[styles.postAvatar, { backgroundColor: avatarColor }]}>
-        <Text style={styles.postAvatarText}>{displayName.slice(0, 1).toUpperCase()}</Text>
+        {avatarUrl ? (
+          <ExpoImage source={{ uri: avatarUrl }} style={styles.avatarImg} contentFit="cover" />
+        ) : (
+          <Text style={styles.postAvatarText}>{displayName.slice(0, 1).toUpperCase()}</Text>
+        )}
       </View>
       <View style={styles.postBody}>
         <View style={styles.postHeaderRow}>
-          <Text style={styles.postName} numberOfLines={1}>{displayName}</Text>
+          <Text style={styles.postName} numberOfLines={1}>
+            {displayName}
+          </Text>
+          {verified ? <BadgeCheck color={Colors.cyan} size={14} strokeWidth={2.6} /> : null}
           <Text style={styles.postHandle}>{handle}</Text>
           <Text style={styles.postDot}>·</Text>
           <Text style={styles.postTime}>{time}</Text>
-          <Pressable onPress={onDelete} hitSlop={6} style={{ marginLeft: "auto" }} testID={`delete-${post.id}`}>
-            <Text style={[styles.actionLabel, { color: Colors.muted }]}>×</Text>
+          <Pressable
+            onPress={onDelete}
+            hitSlop={6}
+            style={{ marginLeft: "auto" }}
+            testID={`delete-${post.id}`}
+          >
+            <Text style={[styles.actionLabel, { color: Colors.muted, fontSize: 18 }]}>×</Text>
           </Pressable>
         </View>
-        <Text style={styles.postText}>{post.text}</Text>
+        {post.text ? <Text style={styles.postText}>{post.text}</Text> : null}
+        {post.images && post.images.length > 0 ? <PostImageGrid images={post.images} /> : null}
         {post.ticker ? (
-          <PostPairCard pair={{ ticker: `${post.ticker}`, changePct: post.changePct ?? 0 }} />
+          <PostPairCard pair={{ ticker: `$${post.ticker}`, changePct: post.changePct ?? 0 }} />
         ) : null}
         <View style={styles.actionsRow}>
-          <ActionItem icon={<MessageCircle color={Colors.muted} size={16} strokeWidth={2.2} />} label={formatCount(post.comments)} />
-          <ActionItem icon={<Repeat2 color={Colors.muted} size={17} strokeWidth={2.2} />} label={formatCount(post.reposts)} />
-          <Pressable style={styles.actionBtn} onPress={onLike} hitSlop={6} testID={`like-user-${post.id}`}>
+          <ActionItem
+            icon={<MessageCircle color={Colors.muted} size={16} strokeWidth={2.2} />}
+            label={formatCount(post.comments)}
+          />
+          <ActionItem
+            icon={<Repeat2 color={Colors.muted} size={17} strokeWidth={2.2} />}
+            label={formatCount(post.reposts)}
+          />
+          <Pressable
+            style={styles.actionBtn}
+            onPress={onLike}
+            hitSlop={6}
+            testID={`like-user-${post.id}`}
+          >
             <Heart
               color={post.liked ? Colors.rose : Colors.muted}
               size={16}
@@ -459,16 +659,27 @@ function UserPostCard({
   );
 }
 
-function FeedEmpty() {
+function FeedEmpty({ onCompose }: { onCompose: () => void }) {
   return (
     <View style={styles.feedEmpty} testID="feed-empty">
       <View style={styles.feedEmptyIcon}>
         <Inbox color={Colors.mint} size={26} strokeWidth={2.2} />
       </View>
-      <Text style={styles.feedEmptyTitle}>No posts yet</Text>
+      <Text style={styles.feedEmptyTitle}>The feed is quiet</Text>
       <Text style={styles.feedEmptyBody}>
-        The live feed is empty. Connect your account or follow traders to start seeing alpha and chatter here.
+        Be the first to drop alpha. Share a chart, a token call, or a hot take.
       </Text>
+      <Pressable onPress={onCompose} style={styles.feedEmptyBtn} testID="empty-compose">
+        <LinearGradient
+          colors={[Colors.mint, Colors.cyan]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.feedEmptyBtnGrad}
+        >
+          <Feather color={Colors.ink} size={14} strokeWidth={3} />
+          <Text style={styles.feedEmptyBtnText}>Create post</Text>
+        </LinearGradient>
+      </Pressable>
     </View>
   );
 }
@@ -539,7 +750,12 @@ function PostPairCard({ pair }: { pair: { ticker: string; changePct: number } })
           <Text style={styles.embedSub}>Solana · pump.fun</Text>
         </View>
       </View>
-      <View style={[styles.embedChange, { backgroundColor: `${accent}1A`, borderColor: `${accent}55` }]}>
+      <View
+        style={[
+          styles.embedChange,
+          { backgroundColor: `${accent}1A`, borderColor: `${accent}55` },
+        ]}
+      >
         {positive ? (
           <TrendingUp color={accent} size={12} strokeWidth={3} />
         ) : (
@@ -573,13 +789,29 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
 
   topBar: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
     paddingTop: 4,
     paddingBottom: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+  avatarBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  avatarBtnText: {
+    color: Colors.ink,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  avatarImg: { width: "100%", height: "100%" },
   brandPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -591,17 +823,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(85,245,178,0.2)",
   },
-  brandDot: { width: 14, height: 14, borderRadius: 7 },
+  brandDot: { width: 12, height: 12, borderRadius: 6 },
   brandText: {
     color: Colors.text,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "900",
-    letterSpacing: 1.8,
+    letterSpacing: 1.6,
   },
-  topActions: { flexDirection: "row", gap: 10 },
+  topActions: { flexDirection: "row", gap: 8 },
   iconBtn: {
-    width: 38,
-    height: 38,
+    width: 34,
+    height: 34,
     borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
@@ -623,7 +855,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
   },
-  filterChipActive: {},
   filterText: {
     color: Colors.muted,
     fontSize: 14,
@@ -642,12 +873,64 @@ const styles = StyleSheet.create({
   },
 
   listContent: {
-    paddingBottom: 120,
+    paddingBottom: 140,
     flexGrow: 1,
   },
 
   headerStack: {
     paddingTop: 14,
+  },
+
+  composer: {
+    flexDirection: "row",
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 18,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.16)",
+  },
+  composerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  composerAvatarText: {
+    color: Colors.ink,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  composerBody: { flex: 1, justifyContent: "center", gap: 10 },
+  composerHint: {
+    color: Colors.muted,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  composerActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  composerActionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  composerActionText: {
+    color: Colors.text,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
   },
 
   marketCard: {
@@ -757,19 +1040,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  pairAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  pairAvatarText: {
-    color: Colors.ink,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.4,
   },
   hotBadge: {
     flexDirection: "row",
@@ -983,6 +1253,23 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 6,
   },
+  feedEmptyBtn: {
+    marginTop: 16,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  feedEmptyBtnGrad: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  feedEmptyBtnText: {
+    color: Colors.ink,
+    fontSize: 13,
+    fontWeight: "900",
+  },
 
   post: {
     flexDirection: "row",
@@ -996,6 +1283,7 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   postAvatarText: {
     color: Colors.ink,
@@ -1037,6 +1325,50 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: "500",
   },
+
+  imgGridSolo: {
+    marginTop: 12,
+    width: "100%",
+    aspectRatio: 16 / 10,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  imgGridRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 4,
+    height: 200,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  imgHalf: {
+    flex: 1,
+    overflow: "hidden",
+    backgroundColor: Colors.card,
+  },
+  imgQuarter: {
+    flex: 1,
+    overflow: "hidden",
+    backgroundColor: Colors.card,
+  },
+  imgGrid4: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  imgQuad: {
+    width: "49.5%",
+    aspectRatio: 1,
+    overflow: "hidden",
+    backgroundColor: Colors.card,
+  },
+  imgFill: { width: "100%", height: "100%" },
 
   embedCard: {
     marginTop: 12,
