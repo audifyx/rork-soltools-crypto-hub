@@ -3,6 +3,7 @@ import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { fetchLivePairs } from "@/lib/api/pairs";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -120,26 +121,43 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   const listingsQuery = useQuery<LaunchToken[]>({
     queryKey: ["launchpad", "listings", userId ?? "guest"],
     queryFn: async () => {
-      try {
-        const { data, error } = await supabase
-          .from("pump_v5_submissions")
-          .select(
-            "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,liquidity_usd,market_cap,is_featured,status,created_at",
-          )
-          .order("created_at", { ascending: false })
-          .limit(200);
-        if (error) throw error;
-        const remote = (data ?? []).map((row) => rowToToken(row as Record<string, unknown>, userId));
-        const local = await loadListings();
-        const map = new Map<string, LaunchToken>();
-        [...remote, ...local].forEach((t) => map.set(t.id, t));
-        return Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
-      } catch (e) {
-        console.log("[launchpad] supabase fetch failed, using local", e);
-        return loadListings();
-      }
+      const [remote, live, local] = await Promise.all([
+        (async () => {
+          try {
+            const { data, error } = await supabase
+              .from("pump_v5_submissions")
+              .select(
+                "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,liquidity_usd,market_cap,is_featured,status,created_at",
+              )
+              .order("created_at", { ascending: false })
+              .limit(200);
+            if (error) throw error;
+            return (data ?? []).map((row) => rowToToken(row as Record<string, unknown>, userId));
+          } catch (e) {
+            console.log("[launchpad] supabase fetch failed", e);
+            return [] as LaunchToken[];
+          }
+        })(),
+        (async () => {
+          try {
+            return await fetchLivePairs();
+          } catch (e) {
+            console.log("[launchpad] live pairs failed", e);
+            return [] as LaunchToken[];
+          }
+        })(),
+        loadListings(),
+      ]);
+      const map = new Map<string, LaunchToken>();
+      // Priority: user submissions (remote) > local drafts > live market data
+      [...live, ...local, ...remote].forEach((t) => {
+        if (!t.id) return;
+        map.set(t.contract || t.id, t);
+      });
+      return Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
     },
     staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 
   useEffect(() => {
