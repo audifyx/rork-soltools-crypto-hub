@@ -291,9 +291,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const profileQ = useQuery<UserProfile>({
     queryKey: ["app", "profile", userId ?? "guest"],
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     queryFn: async () => {
       const local = await loadJson<Partial<UserProfile>>(PROFILE_KEY, {});
-      const base = { ...DEFAULT_PROFILE, ...local } as UserProfile;
+      // When signed in, server is the source of truth — only fall back to
+      // local cache for fields the server returns null for.
+      const base = isAuthenticated && userId
+        ? ({ ...DEFAULT_PROFILE } as UserProfile)
+        : ({ ...DEFAULT_PROFILE, ...local } as UserProfile);
       if (isAuthenticated && userId) {
         try {
           const { data, error } = await supabase
@@ -323,7 +330,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
                   })
                   .filter((b): b is CustomBadge => b !== null)
               : [];
-            return {
+            const merged: UserProfile = {
               ...base,
               handle: data.username ? `@${data.username}` : base.handle,
               displayName: ((data.display_name as string) || (data.username as string)) ?? base.displayName,
@@ -349,15 +356,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
               joinedAt: data.created_at
                 ? new Date(data.created_at as string).getTime()
                 : base.joinedAt,
-            };
+            } as UserProfile;
+            // Cache server profile locally for offline/cold-start.
+            await saveJson(PROFILE_KEY, merged);
+            return merged;
           }
         } catch (e) {
           console.log("[app] profile fetch fallback", e);
+          // On error while authed, return local cache so UI isn't blank.
+          return { ...DEFAULT_PROFILE, ...local } as UserProfile;
         }
       }
       return base;
     },
-    staleTime: 30_000,
+    staleTime: 5_000,
   });
 
   const prefsQ = useQuery<UserPrefs>({

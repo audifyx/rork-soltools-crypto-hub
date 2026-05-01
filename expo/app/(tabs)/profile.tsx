@@ -1,10 +1,11 @@
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Award,
@@ -51,13 +52,16 @@ import {
   X,
   Zap,
 } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
+  Easing,
   Linking,
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Share,
   StyleSheet,
@@ -283,6 +287,65 @@ export default function ProfileScreen() {
   const { isAuthenticated, email: authEmail, signOut, userId } = useAuth();
   const { isAdmin, role: adminRole } = useAdmin();
   const { uploadMedia, isUploading } = useProfileProvider();
+  const qc = useQueryClient();
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Refetch profile data whenever the screen regains focus so updates made
+  // on another device sync immediately.
+  useFocusEffect(
+    useCallback(() => {
+      qc.invalidateQueries({ queryKey: ["app", "profile"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["app", "posts"] });
+      qc.invalidateQueries({ queryKey: ["app", "watch"] });
+      qc.invalidateQueries({ queryKey: ["app", "alerts"] });
+      qc.invalidateQueries({ queryKey: ["app", "wallets"] });
+      return undefined;
+    }, [qc]),
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ["app", "profile"] }),
+        qc.refetchQueries({ queryKey: ["profile"] }),
+        qc.refetchQueries({ queryKey: ["app", "posts"] }),
+        qc.refetchQueries({ queryKey: ["app", "watch"] }),
+        qc.refetchQueries({ queryKey: ["app", "alerts"] }),
+        qc.refetchQueries({ queryKey: ["app", "wallets"] }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [qc]);
+
+  // Animated XP fill + subtle ring shimmer for premium feel.
+  const xpAnim = useRef(new Animated.Value(0)).current;
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, {
+          toValue: 1,
+          duration: 2400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: false,
+        }),
+        Animated.timing(shimmer, {
+          toValue: 0,
+          duration: 2400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: false,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [shimmer]);
+
+  const ringOpacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] });
   const [tab, setTab] = useState<Tab>("overview");
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
@@ -306,6 +369,20 @@ export default function ProfileScreen() {
   }, [watchlist.length, wallets.length, alerts.length, posts.length, myListings.length, profile.xp]);
 
   const rank = useMemo(() => computeRank(computedXp), [computedXp]);
+
+  useEffect(() => {
+    Animated.timing(xpAnim, {
+      toValue: rank.progress,
+      duration: 900,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [rank.progress, xpAnim]);
+
+  const xpFillWidth = xpAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0%", "100%"],
+  });
 
   const stats = useMemo(
     () => ({
@@ -470,7 +547,18 @@ export default function ProfileScreen() {
     <View style={styles.root} testID="profile-screen">
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Colors.mint}
+              colors={[Colors.mint]}
+            />
+          }
+        >
           <View style={styles.headerRow}>
             <Text style={styles.headerTitle}>Profile</Text>
             <View style={styles.headerActions}>
@@ -499,12 +587,18 @@ export default function ProfileScreen() {
                   style={StyleSheet.absoluteFillObject}
                 />
               )}
-              <View style={styles.bannerOverlay} />
+              <LinearGradient
+                colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.35)", "rgba(11,24,26,0.95)"]}
+                locations={[0, 0.55, 1]}
+                style={StyleSheet.absoluteFillObject}
+                pointerEvents="none"
+              />
               <View style={styles.bannerEditBtn}>
-                <Camera color={Colors.text} size={13} strokeWidth={2.6} />
+                <Camera color={Colors.text} size={12} strokeWidth={2.8} />
+                <Text style={styles.bannerEditText}>EDIT</Text>
               </View>
               <View style={styles.bannerBadgeRow}>
-                <View style={styles.rankBadge}>
+                <View style={[styles.rankBadge, { borderColor: `${rank.color}88` }]}>
                   <rank.Icon color={rank.color} size={11} strokeWidth={3} />
                   <Text style={[styles.rankBadgeText, { color: rank.color }]}>
                     LVL {rank.level} · {rank.name.toUpperCase()}
@@ -512,7 +606,7 @@ export default function ProfileScreen() {
                 </View>
               </View>
               {isUploading ? (
-                <View style={styles.bannerOverlay}>
+                <View style={[styles.bannerOverlay, styles.bannerUploadingBox]}>
                   <Text style={styles.bannerUploading}>Uploading…</Text>
                 </View>
               ) : null}
@@ -520,7 +614,15 @@ export default function ProfileScreen() {
 
             <View style={styles.heroBody}>
               <Pressable onPress={onPickAvatar} style={styles.avatarWrap} testID="pick-avatar">
-                <View style={[styles.avatarRing, { borderColor: rank.color }]}>
+                <Animated.View style={[styles.avatarRingOuter, { opacity: ringOpacity }]}>
+                  <LinearGradient
+                    colors={[rank.color, Colors.cyan, Colors.mint, rank.color]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                </Animated.View>
+                <View style={styles.avatarRing}>
                   {profile.avatarUrl ? (
                     <Image
                       source={{ uri: profile.avatarUrl }}
@@ -644,12 +746,14 @@ export default function ProfileScreen() {
                   </Text>
                 </View>
                 <View style={styles.xpTrack}>
-                  <LinearGradient
-                    colors={[Colors.mint, Colors.cyan]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={[styles.xpFill, { width: `${Math.round(rank.progress * 100)}%` }]}
-                  />
+                  <Animated.View style={[styles.xpFillWrap, { width: xpFillWidth }]}>
+                    <LinearGradient
+                      colors={[Colors.mint, Colors.cyan, "#B88CFF"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={StyleSheet.absoluteFillObject}
+                    />
+                  </Animated.View>
                 </View>
               </View>
             </View>
@@ -2027,7 +2131,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
     backgroundColor: Colors.card,
   },
-  banner: { height: 110, position: "relative" },
+  banner: { height: 148, position: "relative" },
   bannerOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.18)",
@@ -2051,23 +2155,30 @@ const styles = StyleSheet.create({
   rankBadgeText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
 
   heroBody: { padding: 16, paddingTop: 0 },
-  avatarWrap: { marginTop: -38 },
+  avatarWrap: { marginTop: -46, width: 92, height: 92 },
+  avatarRingOuter: {
+    position: "absolute",
+    inset: 0,
+    width: 92,
+    height: 92,
+    borderRadius: 28,
+    overflow: "hidden",
+  },
   avatarRing: {
-    width: 80,
-    height: 80,
-    borderRadius: 26,
-    borderWidth: 3,
-    padding: 3,
-    backgroundColor: Colors.card,
+    width: 92,
+    height: 92,
+    borderRadius: 28,
+    padding: 4,
+    backgroundColor: "transparent",
   },
   avatar: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { color: Colors.ink, fontSize: 26, fontWeight: "900" },
-  avatarImage: { flex: 1, borderRadius: 20 },
+  avatarText: { color: Colors.ink, fontSize: 30, fontWeight: "900" },
+  avatarImage: { flex: 1, borderRadius: 24 },
   avatarEditDot: {
     position: "absolute",
     left: -4,
@@ -2083,7 +2194,7 @@ const styles = StyleSheet.create({
   },
   bannerEditBtn: {
     position: "absolute",
-    bottom: 8,
+    bottom: 12,
     right: 12,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -2095,6 +2206,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
   },
+  bannerEditText: { color: Colors.text, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  bannerUploadingBox: { alignItems: "center", justifyContent: "center" },
   bannerUploading: {
     color: Colors.text,
     fontSize: 12,
@@ -2229,6 +2342,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   xpFill: { height: "100%", borderRadius: 999 },
+  xpFillWrap: { height: "100%", borderRadius: 999, overflow: "hidden" },
 
   statsGrid: { flexDirection: "row", gap: 8, marginTop: 14 },
   statCard: {
