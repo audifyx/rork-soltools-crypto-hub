@@ -1593,6 +1593,7 @@ function SettingsModal({
   onResetData: () => Promise<void>;
 }) {
   const router = useRouter();
+  const { isAuthenticated, email: authEmail, signOut } = useAuth();
   const [section, setSection] = useState<"main" | "trading" | "privacy" | "appearance" | "about">("main");
 
   const onConfirmReset = useCallback(() => {
