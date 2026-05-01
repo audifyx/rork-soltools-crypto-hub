@@ -67,6 +67,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { useAdmin } from "@/providers/admin-provider";
 import { useApp, type Currency, type Language, type ThemeMode, type UserPrefs } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
@@ -271,6 +272,7 @@ export default function ProfileScreen() {
   } = useApp();
   const { listings } = useLaunchpad();
   const { isAuthenticated, email: authEmail, signOut } = useAuth();
+  const { isAdmin, role: adminRole } = useAdmin();
   const [tab, setTab] = useState<Tab>("overview");
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
@@ -686,6 +688,15 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.menuSection}>
+                {isAdmin ? (
+                  <MenuRow
+                    Icon={Shield}
+                    label="Admin Console"
+                    sub={`Logged in as ${adminRole ?? "admin"}`}
+                    rightLabel="OPEN"
+                    onPress={() => router.push("/admin")}
+                  />
+                ) : null}
                 <MenuRow
                   Icon={Bookmark}
                   label="Saved tokens"

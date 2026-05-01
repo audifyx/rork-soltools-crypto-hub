@@ -6,6 +6,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import Colors from "@/constants/colors";
+import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
 import { AuthProvider } from "@/providers/auth-provider";
 import { LaunchpadProvider } from "@/providers/launchpad-provider";
@@ -41,6 +42,7 @@ function RootLayoutNav() {
       <Stack.Screen name="compose" options={{ presentation: "modal" }} />
       <Stack.Screen name="launch/[id]" />
       <Stack.Screen name="tool/[id]" />
+      <Stack.Screen name="admin" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
@@ -56,13 +58,15 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AppProvider>
-          <LaunchpadProvider>
-            <GestureHandlerRootView style={styles.gestureRoot}>
-              <RootLayoutNav />
-            </GestureHandlerRootView>
-          </LaunchpadProvider>
-        </AppProvider>
+        <AdminProvider>
+          <AppProvider>
+            <LaunchpadProvider>
+              <GestureHandlerRootView style={styles.gestureRoot}>
+                <RootLayoutNav />
+              </GestureHandlerRootView>
+            </LaunchpadProvider>
+          </AppProvider>
+        </AdminProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
