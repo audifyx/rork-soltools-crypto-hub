@@ -1,6 +1,7 @@
 import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { AppState, type AppStateStatus } from "react-native";
 
 import { supabase } from "@/lib/supabase";
 import { uploadProfileMedia, type ProfileMediaKind } from "@/lib/upload";
@@ -49,6 +50,28 @@ export interface ProfileSummary {
   verified: boolean;
   custom_badges: CustomBadge[];
   followers_count?: number;
+}
+
+export interface PlatformUser {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  bio: string | null;
+  verified: boolean;
+  custom_badges: CustomBadge[];
+  followers_count: number;
+  is_online: boolean;
+  last_seen: string | null;
+  created_at: string;
+  is_following: boolean;
+}
+
+export interface UsersOverview {
+  total_users: number;
+  online_users: number;
+  new_today: number;
 }
 
 function normalizeBadges(input: unknown): CustomBadge[] {
@@ -108,6 +131,42 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       qc.invalidateQueries({ queryKey: ["profile"] });
     },
   });
+
+  // Presence heartbeat — keep the current user marked online while the
+  // app is in the foreground.
+  useEffect(() => {
+    if (!isAuthenticated || !userId) return;
+    let cancelled = false;
+
+    const beat = async (status: "online" | "away" | "offline" = "online") => {
+      try {
+        await supabase.rpc("heartbeat", { set_status: status });
+      } catch (e) {
+        console.log("[presence] heartbeat error", e);
+      }
+    };
+
+    beat("online");
+    const id = setInterval(() => {
+      if (!cancelled) beat("online");
+    }, 45_000);
+
+    const onAppState = (s: AppStateStatus) => {
+      if (s === "active") beat("online");
+      else beat("away");
+    };
+    const sub = AppState.addEventListener("change", onAppState);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      sub.remove();
+      supabase.rpc("set_offline").then(
+        () => undefined,
+        () => undefined,
+      );
+    };
+  }, [isAuthenticated, userId]);
 
   const followMutation = useMutation({
     mutationFn: async (target: string) => {
@@ -209,6 +268,60 @@ export function useFollowList(userId: string | null | undefined, kind: "follower
       );
     },
     staleTime: 20_000,
+  });
+}
+
+export function usePlatformUsers(opts: { q?: string; onlineOnly?: boolean }) {
+  const q = (opts.q ?? "").trim();
+  const onlineOnly = !!opts.onlineOnly;
+  return useQuery<PlatformUser[]>({
+    queryKey: ["users", "list", q, onlineOnly],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("list_users", {
+        q,
+        online_only: onlineOnly,
+        max_rows: 200,
+      });
+      if (error) throw error;
+      return ((data ?? []) as Record<string, unknown>[]).map(
+        (r): PlatformUser => ({
+          user_id: String(r.user_id),
+          username: (r.username as string | null) ?? null,
+          display_name: (r.display_name as string | null) ?? null,
+          avatar_url: (r.avatar_url as string | null) ?? null,
+          banner_url: (r.banner_url as string | null) ?? null,
+          bio: (r.bio as string | null) ?? null,
+          verified: !!r.verified,
+          custom_badges: normalizeBadges(r.custom_badges),
+          followers_count: Number(r.followers_count ?? 0),
+          is_online: !!r.is_online,
+          last_seen: (r.last_seen as string | null) ?? null,
+          created_at: (r.created_at as string) ?? new Date().toISOString(),
+          is_following: !!r.is_following,
+        }),
+      );
+    },
+    refetchInterval: onlineOnly ? 30_000 : 60_000,
+    staleTime: 15_000,
+  });
+}
+
+export function useUsersOverview() {
+  return useQuery<UsersOverview>({
+    queryKey: ["users", "overview"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("users_overview");
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : (data as unknown);
+      const r = (row ?? {}) as Record<string, unknown>;
+      return {
+        total_users: Number(r.total_users ?? 0),
+        online_users: Number(r.online_users ?? 0),
+        new_today: Number(r.new_today ?? 0),
+      };
+    },
+    refetchInterval: 30_000,
+    staleTime: 15_000,
   });
 }
 
