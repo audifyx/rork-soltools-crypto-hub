@@ -1,9 +1,9 @@
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Plus, Radio, Sparkles } from "lucide-react-native";
+import { Clock, Plus, Radio, Sparkles } from "lucide-react-native";
 import React, { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import Colors from "@/constants/colors";
 import { usePlatformUsers } from "@/providers/profile-provider";
@@ -72,23 +72,28 @@ export default function StoriesRail({ onCompose, onOpenUser }: StoriesRailProps)
 
       <Pressable
         onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+          Haptics.selectionAsync().catch(() => {});
+          Alert.alert(
+            "Live streams · Coming soon",
+            "Voice & video rooms are getting their own dedicated tab. We're polishing the experience — check back shortly.",
+          );
         }}
         style={styles.tile}
         testID="story-live"
       >
-        <View style={[styles.ring, styles.liveRing]}>
-          <View style={[styles.inner, { backgroundColor: "rgba(255,93,143,0.2)" }]}>
+        <View style={[styles.ring, styles.soonRing]}>
+          <View style={[styles.inner, { backgroundColor: "rgba(255,255,255,0.05)" }]}>
             <View style={styles.live}>
-              <Radio color={Colors.rose} size={20} strokeWidth={2.6} />
+              <Radio color={Colors.muted} size={20} strokeWidth={2.4} />
             </View>
-            <View style={styles.liveDot}>
-              <Text style={styles.liveText}>LIVE</Text>
+            <View style={styles.soonPill}>
+              <Clock color={Colors.ink} size={8} strokeWidth={3} />
+              <Text style={styles.soonText}>SOON</Text>
             </View>
           </View>
         </View>
-        <Text style={styles.label} numberOfLines={1}>
-          Go live
+        <Text style={[styles.label, { color: Colors.muted }]} numberOfLines={1}>
+          Live · soon
         </Text>
       </Pressable>
 
@@ -138,7 +143,7 @@ export default function StoriesRail({ onCompose, onOpenUser }: StoriesRailProps)
               <Sparkles color={Colors.muted} size={20} strokeWidth={2.4} />
             </View>
           </View>
-          <Text style={[styles.label, { color: Colors.muted }]}>No live now</Text>
+          <Text style={[styles.label, { color: Colors.muted }]}>No one online</Text>
         </View>
       ) : null}
     </ScrollView>
@@ -171,6 +176,29 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,93,143,0.3)",
     borderWidth: 1.5,
     borderColor: Colors.rose,
+  },
+  soonRing: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.12)",
+    borderStyle: "dashed",
+  },
+  soonPill: {
+    position: "absolute",
+    bottom: -4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    backgroundColor: Colors.text,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  soonText: {
+    color: Colors.ink,
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.6,
   },
   inner: {
     width: "100%",
