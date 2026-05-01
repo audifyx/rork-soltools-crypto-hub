@@ -80,28 +80,11 @@ const TOOLS: Tool[] = [
     badge: "PRO",
   },
   {
-    id: "lp-sniper",
-    name: "LP Sniper",
-    tagline: "Catch new pools instantly",
-    Icon: Crosshair,
-    accent: Colors.orange,
-    category: "trade",
-    badge: "HOT",
-  },
-  {
     id: "whale-radar",
     name: "Whale Radar",
     tagline: "Smart money in real-time",
     Icon: Radar,
     accent: Colors.cyan,
-    category: "scan",
-  },
-  {
-    id: "new-pairs",
-    name: "New Pairs",
-    tagline: "Fresh launches stream",
-    Icon: Rocket,
-    accent: Colors.mint,
     category: "scan",
   },
   {
@@ -212,6 +195,10 @@ export default function ToolsScreen() {
 
   const onOpenTool = useCallback((id: string) => {
     Haptics.selectionAsync().catch(() => {});
+    if (id === "new-pairs" || id === "lp-sniper") {
+      router.push("/(tabs)/discover");
+      return;
+    }
     router.push({ pathname: "/tool/[id]", params: { id } });
   }, [router]);
 

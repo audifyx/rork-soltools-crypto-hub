@@ -30,6 +30,7 @@ import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import DexChart from "@/components/DexChart";
 import { useTokenOverview } from "@/lib/api/market";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 
@@ -267,34 +268,23 @@ export default function LaunchDetailScreen() {
               ) : null}
             </View>
             <View style={styles.chartEmbed} testID="chart-embed">
-              <Image
-                source={{
-                  uri: `https://dd.dexscreener.com/ds-data/tokens/solana/${token.contract}.png?key=trending&theme=dark`,
-                }}
-                style={styles.chartImg}
-                contentFit="cover"
-                transition={150}
-              />
-              <LinearGradient
-                colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.5)"]}
-                style={styles.chartFade}
-              />
-              <View style={styles.chartCtaRow}>
-                <Pressable
-                  onPress={() => openLink(`https://dexscreener.com/solana/${token.contract}`)}
-                  style={styles.chartCta}
-                  testID="open-dexscreener"
-                >
-                  <Text style={styles.chartCtaText}>DexScreener →</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => openLink(`https://birdeye.so/token/${token.contract}?chain=solana`)}
-                  style={styles.chartCta}
-                  testID="open-birdeye"
-                >
-                  <Text style={styles.chartCtaText}>Birdeye →</Text>
-                </Pressable>
-              </View>
+              <DexChart contract={token.contract} height={320} />
+            </View>
+            <View style={styles.chartCtaRow}>
+              <Pressable
+                onPress={() => openLink(`https://dexscreener.com/solana/${token.contract}`)}
+                style={styles.chartCta}
+                testID="open-dexscreener"
+              >
+                <Text style={styles.chartCtaText}>DexScreener →</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => openLink(`https://birdeye.so/token/${token.contract}?chain=solana`)}
+                style={styles.chartCta}
+                testID="open-birdeye"
+              >
+                <Text style={styles.chartCtaText}>Birdeye →</Text>
+              </Pressable>
             </View>
           </View>
 
@@ -549,23 +539,15 @@ const styles = StyleSheet.create({
   changeText: { fontSize: 12, fontWeight: "900" },
   chartEmbed: {
     marginTop: 14,
-    height: 150,
     borderRadius: 14,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.02)",
-    position: "relative",
   },
   chartImg: { ...StyleSheet.absoluteFillObject },
   chartFade: { ...StyleSheet.absoluteFillObject },
   chartCtaRow: {
-    position: "absolute",
-    left: 10,
-    right: 10,
-    bottom: 10,
     flexDirection: "row",
     gap: 8,
+    marginTop: 10,
   },
   chartCta: {
     flex: 1,

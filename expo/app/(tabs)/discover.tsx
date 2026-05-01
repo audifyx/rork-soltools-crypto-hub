@@ -79,48 +79,57 @@ type Category = {
   match: (t: LaunchToken) => boolean;
 };
 
+function tokenHaystack(t: LaunchToken): string {
+  return [t.name, t.ticker, t.description ?? "", ...(t.tags ?? [])]
+    .join(" ")
+    .toLowerCase();
+}
+
 const CATEGORIES: Category[] = [
   {
     id: "memes",
     label: "Memes",
     Icon: Flame,
     tone: Colors.orange,
-    match: (t) => t.tags.some((x) => /meme|dog|cat|pepe|frog/i.test(x)),
+    match: (t) =>
+      /meme|dog|cat|pepe|frog|inu|shib|wif|bonk|popcat|moon|chad|wojak|doge/i.test(
+        tokenHaystack(t),
+      ),
   },
   {
     id: "ai",
     label: "AI",
     Icon: Bot,
     tone: Colors.cyan,
-    match: (t) => t.tags.some((x) => /ai|agent|gpt|llm/i.test(x)),
+    match: (t) => /\bai\b|agent|gpt|llm|neural|gemini|claude|grok|brain/i.test(tokenHaystack(t)),
   },
   {
     id: "gaming",
     label: "Gaming",
     Icon: Gamepad2,
     tone: Colors.mint,
-    match: (t) => t.tags.some((x) => /game|play|p2e/i.test(x)),
+    match: (t) => /game|gaming|play|p2e|arcade|quest|guild|esports/i.test(tokenHaystack(t)),
   },
   {
     id: "defi",
     label: "DeFi",
     Icon: Layers,
     tone: Colors.cyan,
-    match: (t) => t.tags.some((x) => /defi|swap|lend|yield|liquid/i.test(x)),
+    match: (t) => /defi|swap|lend|yield|liquid|stake|vault|perp|amm|dex/i.test(tokenHaystack(t)),
   },
   {
     id: "nft",
     label: "NFT",
     Icon: Gem,
     tone: Colors.rose,
-    match: (t) => t.tags.some((x) => /nft|collectible|art/i.test(x)),
+    match: (t) => /nft|collectible|art|pfp|jpeg|mint/i.test(tokenHaystack(t)),
   },
   {
     id: "infra",
     label: "Infra",
     Icon: Shield,
     tone: Colors.mint,
-    match: (t) => t.tags.some((x) => /infra|tool|sdk|node/i.test(x)),
+    match: (t) => /infra|tool|sdk|node|rpc|bridge|oracle|depin|data/i.test(tokenHaystack(t)),
   },
 ];
 

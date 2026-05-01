@@ -109,14 +109,6 @@ const META: Record<string, ToolMeta> = {
     description:
       "Paste any contract for an AI risk score, holder cluster analysis, LP lock detection, and tax behavior.",
   },
-  "lp-sniper": {
-    id: "lp-sniper",
-    name: "LP Sniper",
-    tagline: "Catch new pools instantly",
-    Icon: Crosshair,
-    accent: Colors.orange,
-    description: "Auto-snipe new liquidity pools the moment they go live. Set rules, slippage, and budget.",
-  },
   "whale-radar": {
     id: "whale-radar",
     name: "Whale Radar",
@@ -124,14 +116,6 @@ const META: Record<string, ToolMeta> = {
     Icon: Radar,
     accent: Colors.cyan,
     description: "Watch top trader wallets and get pinged when whales accumulate or rotate.",
-  },
-  "new-pairs": {
-    id: "new-pairs",
-    name: "New Pairs",
-    tagline: "Fresh launches stream",
-    Icon: Rocket,
-    accent: Colors.mint,
-    description: "Live stream of every new Solana pair. Filter by liquidity, age, and rug score.",
   },
   "ai-analyst": {
     id: "ai-analyst",
@@ -309,11 +293,8 @@ function ToolBody({ meta }: { meta: ToolMeta }) {
       return <WatchlistTool accent={meta.accent} />;
     case "voice-lobby":
       return <VoiceLobbyTool accent={meta.accent} />;
-    case "lp-sniper":
-      return <SniperTool accent={meta.accent} />;
     case "whale-radar":
       return <WhaleRadarTool accent={meta.accent} />;
-    case "new-pairs":
     case "trending":
       return <TokenStreamTool accent={meta.accent} kind={meta.id} />;
     case "copy-trade":
