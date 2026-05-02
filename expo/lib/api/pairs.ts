@@ -1,4 +1,5 @@
 import { LaunchToken, LaunchVenue } from "@/types/launchpad";
+import { isSafeToken } from "@/lib/safety";
 
 const JUP_LITE = "https://lite-api.jup.ag";
 
@@ -54,6 +55,7 @@ function toLaunchToken(t: JupTokenV2, opts: { hot?: boolean; featured?: boolean 
   const change = t.stats24h?.priceChange;
   const vol = (t.stats24h?.buyVolume ?? 0) + (t.stats24h?.sellVolume ?? 0);
   const created = t.createdAt ? new Date(t.createdAt).getTime() : Date.now();
+  const venue = mapVenue(t.launchpad);
   return {
     id: t.id,
     name: t.name || t.symbol || "Unknown",
@@ -62,7 +64,7 @@ function toLaunchToken(t: JupTokenV2, opts: { hot?: boolean; featured?: boolean 
     logoUrl: t.icon ?? null,
     bannerUrl: null,
     contract: t.id,
-    venue: mapVenue(t.launchpad),
+    venue,
     status: "live",
     tags: t.tags ?? [],
     featured: !!opts.featured,
@@ -99,9 +101,26 @@ async function fetchList(path: string): Promise<JupTokenV2[]> {
 /**
  * Live new pairs from Jupiter's public Lite API. No key required.
  */
+function safeFromJupiter(t: JupTokenV2, lt: LaunchToken): boolean {
+  return isSafeToken({
+    marketCapUsd: lt.marketCapUsd,
+    liquidityUsd: lt.liquidityUsd,
+    priceChange24hPct: lt.change24hPct,
+    venue: lt.venue,
+    launchpad: t.launchpad,
+    tags: t.tags,
+    audit: t.audit,
+    organicScoreLabel: t.organicScoreLabel,
+  });
+}
+
 export async function fetchNewPairs(): Promise<LaunchToken[]> {
   const items = await fetchList("/tokens/v2/recent");
-  return items.slice(0, 60).map((t) => toLaunchToken(t, { hot: false }));
+  return items
+    .map((t) => ({ t, lt: toLaunchToken(t, { hot: false }) }))
+    .filter(({ t, lt }) => safeFromJupiter(t, lt))
+    .slice(0, 60)
+    .map(({ lt }) => lt);
 }
 
 /**
@@ -109,7 +128,11 @@ export async function fetchNewPairs(): Promise<LaunchToken[]> {
  */
 export async function fetchTopTraded(): Promise<LaunchToken[]> {
   const items = await fetchList("/tokens/v2/toptraded/24h");
-  return items.slice(0, 40).map((t) => toLaunchToken(t, { hot: true }));
+  return items
+    .map((t) => ({ t, lt: toLaunchToken(t, { hot: true }) }))
+    .filter(({ t, lt }) => safeFromJupiter(t, lt))
+    .slice(0, 40)
+    .map(({ lt }) => lt);
 }
 
 /**
@@ -118,7 +141,11 @@ export async function fetchTopTraded(): Promise<LaunchToken[]> {
  */
 export async function fetchTopOrganic(): Promise<LaunchToken[]> {
   const items = await fetchList("/tokens/v2/toporganicscore/24h");
-  return items.slice(0, 30).map((t) => toLaunchToken(t, {}));
+  return items
+    .map((t) => ({ t, lt: toLaunchToken(t, {}) }))
+    .filter(({ t, lt }) => safeFromJupiter(t, lt))
+    .slice(0, 30)
+    .map(({ lt }) => lt);
 }
 
 /**

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useDexTokens } from "@/lib/api/dexscreener";
 import { fetchLivePairs } from "@/lib/api/pairs";
+import { isSafeToken } from "@/lib/safety";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -320,7 +321,17 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   }, [rawListings, dexMap]);
 
   const filtered = useMemo<LaunchToken[]>(() => {
-    let items = listings.slice();
+    let items = listings.slice().filter((t) =>
+      // User-submitted listings always pass; market data is rug-screened.
+      t.submittedBy === "user" ||
+        isSafeToken({
+          marketCapUsd: t.marketCapUsd,
+          liquidityUsd: t.liquidityUsd,
+          priceChange24hPct: t.change24hPct,
+          venue: t.venue,
+          tags: t.tags,
+        }),
+    );
     if (tab === "featured") items = items.filter((t) => t.featured);
     if (tab === "mine") items = items.filter((t) => t.submittedBy === "user");
     if (venue !== "all") items = items.filter((t) => t.venue === venue);

@@ -10,6 +10,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 
+import { isSafeToken } from "@/lib/safety";
+
 const BASE = "https://api.dexscreener.com/latest/dex";
 const PROFILES_URL = "https://api.dexscreener.com/token-profiles/latest/v1";
 const BOOSTS_URL = "https://api.dexscreener.com/token-boosts/latest/v1";
@@ -190,9 +192,16 @@ export async function getNewSolanaPairs(limit: number = 20): Promise<DexPair[]> 
   const pairs: DexPair[] = [];
   for (const a of addrList) {
     const snap = snapshots[a];
-    if (snap?.pair && snap.pair.chainId === "solana") {
-      pairs.push(snap.pair);
-    }
+    if (!snap?.pair || snap.pair.chainId !== "solana") continue;
+    const safe = isSafeToken({
+      marketCapUsd: snap.marketCapUsd,
+      liquidityUsd: snap.liquidityUsd,
+      priceChange24hPct: snap.priceChange24hPct,
+      labels: snap.pair.labels,
+      launchpad: snap.dexId,
+    });
+    if (!safe) continue;
+    pairs.push(snap.pair);
   }
   pairs.sort((a, b) => (b.pairCreatedAt ?? 0) - (a.pairCreatedAt ?? 0));
   return pairs.slice(0, limit);

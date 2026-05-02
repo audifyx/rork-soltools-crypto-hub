@@ -59,6 +59,7 @@ import {
   useNewSolanaPairs,
 } from "@/lib/api/market";
 import { useDexTokens } from "@/lib/api/dexscreener";
+import { isSafeToken } from "@/lib/safety";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
@@ -192,6 +193,13 @@ export default function HomeFeedScreen() {
     if (filter === "Trending") {
       const tokens =
         (trendingTokens ?? [])
+          .filter((t) =>
+            isSafeToken({
+              marketCapUsd: t.marketCap ?? null,
+              liquidityUsd: t.liquidity ?? null,
+              priceChange24hPct: t.priceChange24h ?? null,
+            }),
+          )
           .map((t, i): LaunchToken => ({
             id: t.address,
             name: t.name ?? t.symbol ?? "Token",
@@ -223,6 +231,16 @@ export default function HomeFeedScreen() {
     if (filter === "New Pairs") {
       return listings
         .slice()
+        .filter((t) =>
+          t.submittedBy === "user" ||
+            isSafeToken({
+              marketCapUsd: t.marketCapUsd,
+              liquidityUsd: t.liquidityUsd,
+              priceChange24hPct: t.change24hPct,
+              venue: t.venue,
+              tags: t.tags,
+            }),
+        )
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, 30)
         .map((t): FeedItem => ({ kind: "token", data: t }));
@@ -674,9 +692,28 @@ function TrendingPairsRail() {
         watchers: 0,
       };
     });
-    if (fromDex.length > 0) return fromDex;
+    const safeDex = fromDex.filter((t) =>
+      isSafeToken({
+        marketCapUsd: t.marketCapUsd,
+        liquidityUsd: t.liquidityUsd,
+        priceChange24hPct: t.change24hPct,
+        venue: t.venue,
+        tags: t.tags,
+      }),
+    );
+    if (safeDex.length > 0) return safeDex;
     return listings
       .slice()
+      .filter((t) =>
+        t.submittedBy === "user" ||
+          isSafeToken({
+            marketCapUsd: t.marketCapUsd,
+            liquidityUsd: t.liquidityUsd,
+            priceChange24hPct: t.change24hPct,
+            venue: t.venue,
+            tags: t.tags,
+          }),
+      )
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 12);
   }, [newPairs, listings]);
