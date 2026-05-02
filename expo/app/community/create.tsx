@@ -136,7 +136,7 @@ export default function CreateCommunityScreen() {
           return;
         }
         const res = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: ["images"],
           quality: 0.85,
           allowsEditing: true,
           aspect: kind === "avatar" ? [1, 1] : [3, 1],
@@ -147,7 +147,14 @@ export default function CreateCommunityScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         setUploadingKind(kind);
         const slug = handle.trim().toLowerCase() || `c-${Date.now().toString(36)}`;
-        const url = await uploadCommunityMedia(slug, kind, asset.uri, asset.base64 ?? null);
+        const url = await uploadCommunityMedia(
+          slug,
+          kind,
+          asset.uri,
+          asset.base64 ?? null,
+          asset.fileName ?? null,
+          asset.mimeType ?? null,
+        );
         if (kind === "avatar") setAvatarUrl(url);
         else setBannerUrl(url);
       } catch (e) {
@@ -312,6 +319,9 @@ export default function CreateCommunityScreen() {
               isPrivate={isPrivate}
               avatarUrl={avatarUrl}
               bannerUrl={bannerUrl}
+              uploadingKind={uploadingKind}
+              onPickAvatar={() => onPickImage("avatar")}
+              onPickBanner={() => onPickImage("banner")}
             />
 
             {step === 0 ? (
@@ -435,6 +445,9 @@ function PreviewCard({
   isPrivate,
   avatarUrl,
   bannerUrl,
+  uploadingKind,
+  onPickAvatar,
+  onPickBanner,
 }: {
   name: string;
   handle: string;
@@ -446,6 +459,9 @@ function PreviewCard({
   isPrivate: boolean;
   avatarUrl: string | null;
   bannerUrl: string | null;
+  uploadingKind: "avatar" | "banner" | null;
+  onPickAvatar: () => void;
+  onPickBanner: () => void;
 }) {
   const pulse = React.useRef(new Animated.Value(0)).current;
   React.useEffect(() => {
@@ -463,7 +479,12 @@ function PreviewCard({
 
   return (
     <View style={styles.preview}>
-      <View style={styles.previewBanner}>
+      <Pressable
+        onPress={onPickBanner}
+        disabled={uploadingKind !== null}
+        style={styles.previewBanner}
+        testID="preview-pick-banner"
+      >
         <LinearGradient
           colors={[palette[0], palette[1]]}
           start={{ x: 0, y: 0 }}
@@ -483,15 +504,28 @@ function PreviewCard({
         >
           {bannerUrl ? null : <Text style={styles.previewBlobText}>{emoji}</Text>}
         </Animated.View>
+        <View style={styles.previewUploadBadge}>
+          {uploadingKind === "banner" ? (
+            <ActivityIndicator color={Colors.text} size="small" />
+          ) : (
+            <Camera color={Colors.text} size={13} strokeWidth={2.8} />
+          )}
+          <Text style={styles.previewUploadText}>{bannerUrl ? "Change banner" : "Add banner"}</Text>
+        </View>
         {isPrivate ? (
           <View style={styles.privateBadge}>
             <Lock color={Colors.text} size={10} strokeWidth={2.8} />
             <Text style={styles.privateBadgeText}>PRIVATE</Text>
           </View>
         ) : null}
-      </View>
+      </Pressable>
       <View style={styles.previewBody}>
-        <View style={[styles.previewAvatar, { borderColor: Colors.ink }]}>
+        <Pressable
+          onPress={onPickAvatar}
+          disabled={uploadingKind !== null}
+          style={[styles.previewAvatar, { borderColor: Colors.ink }]}
+          testID="preview-pick-avatar"
+        >
           <LinearGradient
             colors={[palette[0], palette[1]]}
             start={{ x: 0, y: 0 }}
@@ -507,7 +541,14 @@ function PreviewCard({
           ) : (
             <Text style={styles.previewAvatarEmoji}>{emoji}</Text>
           )}
-        </View>
+          <View style={styles.previewAvatarCamera}>
+            {uploadingKind === "avatar" ? (
+              <ActivityIndicator color={Colors.text} size="small" />
+            ) : (
+              <Camera color={Colors.text} size={11} strokeWidth={3} />
+            )}
+          </View>
+        </Pressable>
         <Text style={styles.previewName} numberOfLines={1}>
           {name}
         </Text>
@@ -1117,6 +1158,21 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.18)",
   },
   privateBadgeText: { color: Colors.text, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  previewUploadBadge: {
+    position: "absolute",
+    left: 14,
+    bottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.52)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  previewUploadText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
 
   previewBody: { padding: 16 },
   previewAvatar: {
@@ -1131,6 +1187,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   previewAvatarEmoji: { fontSize: 28 },
+  previewAvatarCamera: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.68)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
   previewName: { color: Colors.text, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
   previewHandle: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 2 },
   previewDesc: {

@@ -835,17 +835,20 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             .eq("id", communityId);
           if (error) throw error;
         }
-        const next = localCommunities.map((c) =>
+        const applyPatch = (c: Community): Community =>
           c.id === communityId
             ? {
                 ...c,
-                avatarUrl: patch.avatarUrl ?? c.avatarUrl,
-                bannerUrl: patch.bannerUrl ?? c.bannerUrl,
+                avatarUrl: patch.avatarUrl !== undefined ? patch.avatarUrl : c.avatarUrl,
+                bannerUrl: patch.bannerUrl !== undefined ? patch.bannerUrl : c.bannerUrl,
               }
-            : c,
-        );
+            : c;
+        const next = localCommunities.map(applyPatch);
         setLocalCommunities(next);
         await saveJson(localKey, next);
+        qc.setQueriesData<Community[]>({ queryKey: ["social", "communities"] }, (prev) =>
+          prev ? prev.map(applyPatch) : prev,
+        );
         qc.invalidateQueries({ queryKey: ["social", "communities"] });
       } catch (e) {
         console.log("[social] updateCommunityMedia failed", e);

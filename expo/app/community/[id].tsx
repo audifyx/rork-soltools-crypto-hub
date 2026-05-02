@@ -1,6 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -10,6 +11,7 @@ import {
   BadgeCheck,
   Bell,
   Calendar,
+  Camera,
   Image as ImageIcon,
   Link as LinkIcon,
   MessageCircle,
@@ -25,6 +27,8 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
   FlatList,
   ListRenderItem,
@@ -41,7 +45,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
+import { useAuth } from "@/providers/auth-provider";
 import { CommunityPost, useSocial } from "@/providers/social-provider";
 
 interface CommunityMember {
@@ -87,15 +93,25 @@ export default function CommunityDetailScreen() {
     postsByCommunity,
     addCommunityPost,
     togglePostLike,
+    updateCommunityMedia,
   } = useSocial();
   const { profile } = useApp();
+  const { isAuthenticated, userId } = useAuth();
   const [tab, setTab] = useState<Tab>("recent");
   const [composer, setComposer] = useState<string>("");
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
 
   const community = useMemo(() => (id ? getCommunity(id) : undefined), [id, getCommunity]);
   const posts = useMemo(() => (id ? postsByCommunity(id) : []), [id, postsByCommunity]);
+  const canEditMedia = useMemo(() => {
+    if (!community || !isAuthenticated || !userId) return false;
+    if (community.ownerId === userId) return true;
+    const ownerHandle = community.ownerHandle.replace(/^@/, "").toLowerCase();
+    const myHandle = profile.handle.replace(/^@/, "").toLowerCase();
+    return ownerHandle.length > 0 && myHandle.length > 0 && ownerHandle === myHandle;
+  }, [community, isAuthenticated, profile.handle, userId]);
 
   const membersQ = useQuery<CommunityMember[]>({
     queryKey: ["community", "members", community?.id ?? ""],
@@ -193,6 +209,71 @@ export default function CommunityDetailScreen() {
     showToast("Invite sheet coming soon");
   }, [showToast]);
 
+  const onPickCommunityMedia = useCallback(
+    async (kind: "avatar" | "banner") => {
+      if (!community) return;
+      if (!isAuthenticated) {
+        Alert.alert("Sign in", "Sign in to update community images.");
+        return;
+      }
+      if (!canEditMedia) {
+        Alert.alert("Owner only", "Only the community owner can change these images.");
+        return;
+      }
+      try {
+        if (Platform.OS !== "web") {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!perm.granted) {
+            Alert.alert("Permission needed", "Allow photo access to update community images.");
+            return;
+          }
+        }
+        const res = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          quality: 0.85,
+          allowsEditing: true,
+          aspect: kind === "avatar" ? [1, 1] : [3, 1],
+          base64: true,
+        });
+        if (res.canceled || !res.assets[0]?.uri) return;
+        const asset = res.assets[0];
+        setUploadingKind(kind);
+        const url = await uploadCommunityMedia(
+          community.id || community.handle,
+          kind,
+          asset.uri,
+          asset.base64 ?? null,
+          asset.fileName ?? null,
+          asset.mimeType ?? null,
+        );
+        await updateCommunityMedia(
+          community.id,
+          kind === "avatar" ? { avatarUrl: url } : { bannerUrl: url },
+        );
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        showToast(kind === "avatar" ? "Community image updated" : "Community banner updated");
+      } catch (e) {
+        console.log("[community] media upload failed", e);
+        Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");
+      } finally {
+        setUploadingKind(null);
+      }
+    },
+    [canEditMedia, community, isAuthenticated, showToast, updateCommunityMedia],
+  );
+
+  const onRemoveCommunityMedia = useCallback(
+    async (kind: "avatar" | "banner") => {
+      if (!community || !canEditMedia) return;
+      await updateCommunityMedia(
+        community.id,
+        kind === "avatar" ? { avatarUrl: null } : { bannerUrl: null },
+      );
+      showToast(kind === "avatar" ? "Community image removed" : "Community banner removed");
+    },
+    [canEditMedia, community, showToast, updateCommunityMedia],
+  );
+
   if (!community) {
     return (
       <View style={styles.root}>
@@ -279,11 +360,33 @@ export default function CommunityDetailScreen() {
                   </View>
                 </View>
               </SafeAreaView>
+              {canEditMedia ? (
+                <Pressable
+                  onPress={() => onPickCommunityMedia("banner")}
+                  disabled={uploadingKind !== null}
+                  style={styles.editBannerBtn}
+                  testID="community-edit-banner"
+                >
+                  {uploadingKind === "banner" ? (
+                    <ActivityIndicator color={Colors.text} size="small" />
+                  ) : (
+                    <Camera color={Colors.text} size={14} strokeWidth={2.8} />
+                  )}
+                  <Text style={styles.editBannerText}>
+                    {community.bannerUrl ? "Change banner" : "Add banner"}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
 
             <View style={styles.headInfo}>
               <View style={styles.headAvatarRow}>
-                <View style={styles.headAvatar}>
+                <Pressable
+                  onPress={() => onPickCommunityMedia("avatar")}
+                  disabled={!canEditMedia || uploadingKind !== null}
+                  style={styles.headAvatar}
+                  testID="community-edit-avatar"
+                >
                   <LinearGradient
                     colors={[community.accent[0], community.accent[1]]}
                     start={{ x: 0, y: 0 }}
@@ -299,7 +402,16 @@ export default function CommunityDetailScreen() {
                   ) : (
                     <Text style={styles.headAvatarEmoji}>{community.iconEmoji}</Text>
                   )}
-                </View>
+                  {canEditMedia ? (
+                    <View style={styles.avatarCameraBadge}>
+                      {uploadingKind === "avatar" ? (
+                        <ActivityIndicator color={Colors.text} size="small" />
+                      ) : (
+                        <Camera color={Colors.text} size={12} strokeWidth={3} />
+                      )}
+                    </View>
+                  ) : null}
+                </Pressable>
                 <Pressable
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -557,6 +669,58 @@ export default function CommunityDetailScreen() {
         </Pressable>
         <SafeAreaView edges={["top"]} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           <View style={styles.menuCard} pointerEvents="auto">
+            {canEditMedia ? (
+              <>
+                <MenuItem
+                  label={community.bannerUrl ? "Change banner" : "Add banner"}
+                  icon={Camera}
+                  onPress={() => {
+                    setMenuOpen(false);
+                    void onPickCommunityMedia("banner");
+                  }}
+                  testID="menu-banner"
+                />
+                <View style={styles.menuDivider} />
+                <MenuItem
+                  label={community.avatarUrl ? "Change image" : "Add image"}
+                  icon={ImageIcon}
+                  onPress={() => {
+                    setMenuOpen(false);
+                    void onPickCommunityMedia("avatar");
+                  }}
+                  testID="menu-avatar"
+                />
+                {community.bannerUrl ? (
+                  <>
+                    <View style={styles.menuDivider} />
+                    <MenuItem
+                      label="Remove banner"
+                      icon={X}
+                      onPress={() => {
+                        setMenuOpen(false);
+                        void onRemoveCommunityMedia("banner");
+                      }}
+                      testID="menu-remove-banner"
+                    />
+                  </>
+                ) : null}
+                {community.avatarUrl ? (
+                  <>
+                    <View style={styles.menuDivider} />
+                    <MenuItem
+                      label="Remove image"
+                      icon={X}
+                      onPress={() => {
+                        setMenuOpen(false);
+                        void onRemoveCommunityMedia("avatar");
+                      }}
+                      testID="menu-remove-avatar"
+                    />
+                  </>
+                ) : null}
+                <View style={styles.menuDivider} />
+              </>
+            ) : null}
             <MenuItem
               label="Share via..."
               icon={Share2}
@@ -755,6 +919,19 @@ const styles = StyleSheet.create({
     borderColor: Colors.ink,
   },
   headAvatarEmoji: { fontSize: 36 },
+  avatarCameraBadge: {
+    position: "absolute",
+    right: -1,
+    bottom: -1,
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
   joinPrimary: {
     flexDirection: "row",
     alignItems: "center",
@@ -804,6 +981,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  editBannerBtn: {
+    position: "absolute",
+    left: 18,
+    bottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+  },
+  editBannerText: { color: Colors.text, fontSize: 12, fontWeight: "900" },
 
   headInfo: { paddingHorizontal: 18, marginTop: 14 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },

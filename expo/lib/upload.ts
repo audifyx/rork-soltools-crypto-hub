@@ -172,11 +172,13 @@ export async function uploadCommunityMedia(
   kind: CommunityMediaKind,
   uri: string,
   base64?: string | null,
+  fileName?: string | null,
+  mimeType?: string | null,
 ): Promise<string> {
-  const ext = extFromUri(uri, "jpg");
+  const ext = extFromMime(mimeType) ?? extFromUri(fileName ?? uri, "jpg");
   const safeScope = scope.replace(/[^a-zA-Z0-9_-]/g, "_");
   const path = `${safeScope}/${kind}-${Date.now()}.${ext}`;
-  const ct = contentType(ext);
+  const ct = contentType(ext, mimeType);
 
   let body: ArrayBuffer | Blob;
   try {
