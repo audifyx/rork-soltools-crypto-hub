@@ -1,20 +1,36 @@
--- ==============================================================
--- Rork Solana Social Trading App — Complete Supabase Setup
--- Generated: 2026-05-02
--- 
--- HOW TO USE:
---   1. Open Supabase → SQL Editor → New Query
---   2. Paste this entire file
---   3. Run. Idempotent (safe to re-run).
--- 
--- Includes: schema, RLS, RPCs, storage buckets, triggers, indexes.
--- ==============================================================
+-- =====================================================================
+-- SOLTOOLS / AUDIFYX — MEGA SUPABASE SETUP (single source of truth)
+-- =====================================================================
+-- Run this ONE file in Supabase SQL Editor. Fully idempotent — safe to
+-- re-run any time. Replaces all previous migration / setup files.
+--
+-- What this builds (everything the app needs):
+--   • Extensions, enums
+--   • Profiles, admin_roles, followers, settings, credits, presence
+--   • Launchpad: pump_v5_submissions + upvotes
+--   • Communities: communities, community_members, community_posts,
+--     community_messages, post_likes, community_post_comments
+--   • Trading lobbies + voice rooms (LiveKit)
+--   • Watchlists, alerts, trades, pnl, portfolio
+--   • Notifications + announcements + app_settings + platform_settings
+--   • Live feed events + provider integrations (jupiter / helius /
+--     birdeye / alchemy / quicknode / livekit)
+--   • Stories (36h ephemeral) + story_views
+--   • DMs (chat_messages + dm_threads / dm_messages)
+--   • All triggers (counters, signup, owner protection)
+--   • All RLS policies (open SELECT on social, owner-write)
+--   • All RPCs the frontend calls
+--   • Storage buckets: profile-media, post-images, community-images,
+--     avatars, banners, story-media, community-media, post-media,
+--     dm-media, launch-logos, launch-banners, wallpapers, token-images
+--   • Realtime publication wiring
+--   • Counter resync + audifyx@gmail.com owner bootstrap
+-- =====================================================================
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501000000_full_schema.sql
--- ==============================================================
-
+-- =====================================================================
+-- INCLUDED: supabase/migrations/20260501000000_full_schema.sql
+-- =====================================================================
 -- =====================================================================
 -- SolTools — Full Supabase Schema
 -- Project: ffjipnkhcebjvttliptb
@@ -1110,10 +1126,9 @@ on conflict (provider, label) do nothing;
 -- =====================================================================
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501010000_admin_dashboard.sql
--- ==============================================================
-
+-- =====================================================================
+-- INCLUDED: supabase/migrations/20260501010000_admin_dashboard.sql
+-- =====================================================================
 -- =====================================================================
 -- Admin Dashboard support
 -- - Bootstraps audifyx@gmail.com as the platform's only superadmin
@@ -1338,10 +1353,9 @@ grant execute on function public.is_admin(uuid) to authenticated, anon;
 grant execute on function public.has_admin_role(uuid, text[]) to authenticated;
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501020000_profiles_social.sql
--- ==============================================================
-
+-- =====================================================================
+-- INCLUDED: supabase/migrations/20260501020000_profiles_social.sql
+-- =====================================================================
 -- =====================================================================
 -- Profiles social — banner uploads, custom verify "bags" / badges,
 -- follow/unfollow RPCs, public profile lookup, admin badge controls.
@@ -1723,10 +1737,9 @@ $$;
 grant execute on function public.search_profiles(text, int) to authenticated, anon;
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501030000_feed_likes_whales.sql
--- ==============================================================
-
+-- =====================================================================
+-- INCLUDED: supabase/migrations/20260501030000_feed_likes_whales.sql
+-- =====================================================================
 -- =====================================================================
 -- Feed essentials: post likes, whale events, and the Following feed RPC.
 -- These power the Home tab's For You / Following / Whales filters and
@@ -1855,159 +1868,9 @@ $$;
 grant execute on function public.get_following_feed(int) to authenticated;
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501040000_audifyx_owner.sql
--- ==============================================================
-
 -- =====================================================================
--- Owner bootstrap + new-user blank profile defaults
---
--- 1. Make sure every new auth user gets a fresh profile with NO avatar
---    and NO banner — they upload one at sign-up or anytime later.
--- 2. Bootstrap audifyx@gmail.com as the platform owner with:
---      - superadmin role
---      - verified = true
---      - custom_badges: OWNER + DEV
---      - a permanent custom avatar + banner
---    These flags are preserved every time the bootstrap runs (idempotent).
--- 3. Re-bootstraps automatically the moment audifyx@gmail.com signs up.
+-- INCLUDED: supabase/migrations/20260501050000_audifyx_owner_assets.sql
 -- =====================================================================
-
--- --------------------------------------------------------------------
--- 1. handle_new_user — blank media for everyone except audifyx
--- --------------------------------------------------------------------
-create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = public as $$
-declare
-  is_owner boolean := lower(coalesce(new.email, '')) = 'audifyx@gmail.com';
-  owner_avatar text := 'https://r2-pub.rork.com/generated-images/690ae05a-2c77-4177-aebc-813612d3370c.png';
-  owner_banner text := 'https://r2-pub.rork.com/generated-images/4d5d4184-779c-4b8a-95ad-eddddb365d09.png';
-  owner_badges jsonb := jsonb_build_array(
-    jsonb_build_object('id','owner','label','OWNER','color','#FFD56B','icon','crown','granted_at', to_jsonb(now())),
-    jsonb_build_object('id','dev','label','DEV','color','#38D7FF','icon','code','granted_at', to_jsonb(now()))
-  );
-begin
-  insert into public.profiles (
-    id, user_id, username, display_name,
-    avatar_url, banner_url,
-    verified, custom_badges
-  )
-  values (
-    new.id,
-    new.id,
-    coalesce(nullif(new.raw_user_meta_data->>'username',''), split_part(new.email,'@',1)),
-    coalesce(nullif(new.raw_user_meta_data->>'username',''), split_part(new.email,'@',1)),
-    case when is_owner then owner_avatar else null end,
-    case when is_owner then owner_banner else null end,
-    case when is_owner then true else false end,
-    case when is_owner then owner_badges else '[]'::jsonb end
-  )
-  on conflict (id) do update
-    set avatar_url   = case when is_owner then owner_avatar else public.profiles.avatar_url end,
-        banner_url   = case when is_owner then owner_banner else public.profiles.banner_url end,
-        verified     = case when is_owner then true else public.profiles.verified end,
-        custom_badges = case when is_owner then owner_badges else public.profiles.custom_badges end,
-        updated_at   = now();
-
-  insert into public.user_settings (user_id) values (new.id) on conflict (user_id) do nothing;
-  insert into public.user_credits  (user_id) values (new.id) on conflict (user_id) do nothing;
-
-  if is_owner then
-    insert into public.admin_roles (user_id, role, granted_by)
-    values (new.id, 'superadmin', new.id)
-    on conflict (user_id) do update set role = 'superadmin';
-  end if;
-
-  return new;
-end $$;
-
-drop trigger if exists trg_on_auth_user_created on auth.users;
-create trigger trg_on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
-
--- --------------------------------------------------------------------
--- 2. One-shot bootstrap if the owner already exists
--- --------------------------------------------------------------------
-do $$
-declare
-  owner_id uuid;
-  owner_avatar text := 'https://r2-pub.rork.com/generated-images/690ae05a-2c77-4177-aebc-813612d3370c.png';
-  owner_banner text := 'https://r2-pub.rork.com/generated-images/4d5d4184-779c-4b8a-95ad-eddddb365d09.png';
-  owner_badges jsonb := jsonb_build_array(
-    jsonb_build_object('id','owner','label','OWNER','color','#FFD56B','icon','crown','granted_at', to_jsonb(now())),
-    jsonb_build_object('id','dev','label','DEV','color','#38D7FF','icon','code','granted_at', to_jsonb(now()))
-  );
-begin
-  select id into owner_id from auth.users where lower(email) = 'audifyx@gmail.com' limit 1;
-  if owner_id is null then
-    return;
-  end if;
-
-  -- Make sure profile row exists
-  insert into public.profiles (id, user_id, username, display_name)
-  values (owner_id, owner_id, 'audifyx', 'Audifyx')
-  on conflict (id) do nothing;
-
-  update public.profiles
-     set avatar_url    = owner_avatar,
-         banner_url    = owner_banner,
-         verified      = true,
-         badge         = coalesce(badge, 'owner'),
-         display_name  = coalesce(nullif(display_name, ''), 'Audifyx'),
-         username      = coalesce(nullif(username::text, ''), 'audifyx'),
-         custom_badges = owner_badges,
-         updated_at    = now()
-   where id = owner_id;
-
-  insert into public.admin_roles (user_id, role, granted_by)
-  values (owner_id, 'superadmin', owner_id)
-  on conflict (user_id) do update set role = 'superadmin';
-
-  insert into public.user_settings (user_id) values (owner_id) on conflict (user_id) do nothing;
-  insert into public.user_credits  (user_id) values (owner_id) on conflict (user_id) do nothing;
-end $$;
-
--- --------------------------------------------------------------------
--- 3. Safety net: protect owner badges from being wiped by upserts
--- --------------------------------------------------------------------
-create or replace function public.preserve_owner_identity()
-returns trigger language plpgsql security definer set search_path = public as $$
-declare
-  is_owner boolean;
-begin
-  select lower(email) = 'audifyx@gmail.com' into is_owner
-    from auth.users where id = new.id;
-  if coalesce(is_owner, false) then
-    new.verified := true;
-    if new.custom_badges is null
-       or jsonb_typeof(new.custom_badges) <> 'array'
-       or jsonb_array_length(new.custom_badges) = 0 then
-      new.custom_badges := jsonb_build_array(
-        jsonb_build_object('id','owner','label','OWNER','color','#FFD56B','icon','crown'),
-        jsonb_build_object('id','dev','label','DEV','color','#38D7FF','icon','code')
-      );
-    end if;
-    if new.avatar_url is null or new.avatar_url = '' then
-      new.avatar_url := 'https://r2-pub.rork.com/generated-images/690ae05a-2c77-4177-aebc-813612d3370c.png';
-    end if;
-    if new.banner_url is null or new.banner_url = '' then
-      new.banner_url := 'https://r2-pub.rork.com/generated-images/4d5d4184-779c-4b8a-95ad-eddddb365d09.png';
-    end if;
-  end if;
-  return new;
-end $$;
-
-drop trigger if exists trg_preserve_owner_identity on public.profiles;
-create trigger trg_preserve_owner_identity
-  before insert or update on public.profiles
-  for each row execute function public.preserve_owner_identity();
-
-
--- ==============================================================
--- SECTION: supabase/migrations/20260501050000_audifyx_owner_assets.sql
--- ==============================================================
-
 -- =====================================================================
 -- Audifyx owner profile — final custom avatar + banner
 --
@@ -2145,10 +2008,9 @@ begin
 end $$;
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501060000_users_presence.sql
--- ==============================================================
-
+-- =====================================================================
+-- INCLUDED: supabase/migrations/20260501060000_users_presence.sql
+-- =====================================================================
 -- =====================================================================
 -- Users + Presence
 --
@@ -2431,10 +2293,9 @@ grant execute on function public.update_my_profile(
 ) to authenticated;
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501070000_admin_rpcs_and_settings.sql
--- ==============================================================
-
+-- =====================================================================
+-- INCLUDED: supabase/migrations/20260501070000_admin_rpcs_and_settings.sql
+-- =====================================================================
 -- =====================================================================
 -- 20260501070000_admin_rpcs_and_settings
 --
@@ -2894,10 +2755,9 @@ end $$;
 select 'admin_rpcs_and_settings migration applied' as status;
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501080000_communities_voice_extras.sql
--- ==============================================================
-
+-- =====================================================================
+-- INCLUDED: supabase/migrations/20260501080000_communities_voice_extras.sql
+-- =====================================================================
 -- Extend communities + livekit_rooms with the fields the UI needs so
 -- everything in the app can be backed by real data (no mock seeds).
 
@@ -2951,10 +2811,9 @@ create trigger trg_community_posts_count_del after delete on public.community_po
   for each row execute function public.handle_community_post_count();
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501090000_full_sync.sql
--- ==============================================================
-
+-- =====================================================================
+-- INCLUDED: supabase/migrations/20260501090000_full_sync.sql
+-- =====================================================================
 -- =====================================================================
 -- FULL SYNC MIGRATION
 -- =====================================================================
@@ -3592,10 +3451,9 @@ end $$;
 -- =====================================================================
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501100000_users_tab.sql
--- ==============================================================
-
+-- =====================================================================
+-- INCLUDED: supabase/migrations/20260501100000_users_tab.sql
+-- =====================================================================
 -- =====================================================================
 -- USERS TAB — full schema, RPCs, RLS, realtime
 -- =====================================================================
@@ -4014,19 +3872,17 @@ grant execute on function public.sweep_presence() to authenticated, anon;
 -- =====================================================================
 
 
--- ==============================================================
--- SECTION: supabase/migrations/20260501110000_stories.sql
--- ==============================================================
-
 -- =====================================================================
--- STORIES — ephemeral 36h photo stories with viewer tracking
+-- INCLUDED: supabase/migrations/20260502090000_stories_fix.sql
 -- =====================================================================
--- Idempotent migration that adds:
---   • stories + story_views tables
---   • storage bucket `story-media`
---   • RPCs: list_active_stories, list_story_viewers, record_story_view,
---           delete_my_story, sweep_expired_stories
---   • RLS, indexes, realtime publication
+-- =====================================================================
+-- STORIES FIX — recover from failed initial migration
+-- =====================================================================
+-- The original stories migration created a partial index using now(),
+-- which Postgres rejects ("functions in index predicate must be marked
+-- IMMUTABLE"). On failure, the entire migration aborted and the stories
+-- table + RPCs were never created. This migration recreates everything
+-- idempotently with a valid index.
 -- =====================================================================
 
 create extension if not exists "uuid-ossp";
@@ -4042,9 +3898,13 @@ create table if not exists public.stories (
   created_at  timestamptz not null default now(),
   expires_at  timestamptz not null default (now() + interval '36 hours')
 );
-create index if not exists stories_user_idx       on public.stories (user_id, created_at desc);
-create index if not exists stories_active_idx     on public.stories (expires_at);
-create index if not exists stories_created_idx    on public.stories (created_at desc);
+
+-- Drop the broken partial index if it somehow exists.
+drop index if exists public.stories_active_idx;
+
+create index if not exists stories_user_idx    on public.stories (user_id, created_at desc);
+create index if not exists stories_active_idx  on public.stories (expires_at);
+create index if not exists stories_created_idx on public.stories (created_at desc);
 
 create table if not exists public.story_views (
   story_id   uuid not null references public.stories(id) on delete cascade,
@@ -4101,7 +3961,7 @@ begin
     using (bucket_id = %L and (storage.foldername(name))[1] = auth.uid()::text)$p$, b||'_delete', b);
 end $$;
 
--- 4. Sweep helper (callers can run this opportunistically) -----------
+-- 4. RPCs -----------------------------------------------------------
 create or replace function public.sweep_expired_stories()
 returns integer language plpgsql security definer set search_path = public as $$
 declare n integer;
@@ -4112,7 +3972,6 @@ begin
 end $$;
 grant execute on function public.sweep_expired_stories() to authenticated, anon;
 
--- 5. List active stories with author + viewed_by_me ------------------
 create or replace function public.list_active_stories(max_rows int default 200)
 returns table (
   id           uuid,
@@ -4157,7 +4016,6 @@ begin
 end $$;
 grant execute on function public.list_active_stories(int) to authenticated, anon;
 
--- 6. Viewers for a story (only owner can call meaningfully) ----------
 create or replace function public.list_story_viewers(target_story_id uuid)
 returns table (
   user_id      uuid,
@@ -4174,8 +4032,6 @@ declare
 begin
   select user_id into owner from public.stories where id = target_story_id;
   if owner is null then return; end if;
-  -- Anyone can read viewer list (RLS allowed) but we still gate to owner
-  -- to avoid leaking viewers across users.
   if caller is null or caller <> owner then return; end if;
 
   return query
@@ -4194,7 +4050,6 @@ begin
 end $$;
 grant execute on function public.list_story_viewers(uuid) to authenticated;
 
--- 7. Record a view (idempotent, increments views_count once) ---------
 create or replace function public.record_story_view(target_story_id uuid)
 returns integer language plpgsql security definer set search_path = public as $$
 declare
@@ -4229,7 +4084,6 @@ begin
 end $$;
 grant execute on function public.record_story_view(uuid) to authenticated;
 
--- 8. Delete my story --------------------------------------------------
 create or replace function public.delete_my_story(target_story_id uuid)
 returns boolean language plpgsql security definer set search_path = public as $$
 declare caller uuid := auth.uid();
@@ -4241,11 +4095,716 @@ begin
 end $$;
 grant execute on function public.delete_my_story(uuid) to authenticated;
 
--- 9. Realtime publication --------------------------------------------
+-- 5. Server-side create_story RPC (defensive fallback) ---------------
+create or replace function public.create_story(
+  p_media_url text,
+  p_caption   text default null
+) returns table (
+  id          uuid,
+  user_id     uuid,
+  media_url   text,
+  caption     text,
+  views_count integer,
+  created_at  timestamptz,
+  expires_at  timestamptz
+) language plpgsql security definer set search_path = public as $$
+declare caller uuid := auth.uid();
+begin
+  if caller is null then
+    raise exception 'Sign in required';
+  end if;
+  if p_media_url is null or length(trim(p_media_url)) = 0 then
+    raise exception 'media_url is required';
+  end if;
+
+  return query
+    insert into public.stories (user_id, media_url, caption)
+    values (caller, p_media_url, nullif(trim(coalesce(p_caption, '')), ''))
+    returning stories.id, stories.user_id, stories.media_url, stories.caption,
+              stories.views_count, stories.created_at, stories.expires_at;
+end $$;
+grant execute on function public.create_story(text, text) to authenticated;
+
+-- 6. Realtime publication --------------------------------------------
 do $$
 declare
   t text;
   tables text[] := array['stories','story_views'];
+begin
+  foreach t in array tables loop
+    begin
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    exception when duplicate_object then null;
+              when undefined_object  then null;
+              when others            then null;
+    end;
+  end loop;
+end $$;
+
+
+-- =====================================================================
+-- INCLUDED: sql/004_communities_users_wireup.sql
+-- =====================================================================
+-- ============================================================================
+-- 004_communities_users_wireup.sql
+-- Final wiring for Communities + Users tabs.
+-- Idempotent. Safe to re-run. Short on purpose.
+-- ============================================================================
+
+-- 1. Make sure community columns the UI needs exist ------------------------
+alter table public.communities
+  add column if not exists slug          text,
+  add column if not exists category      text not null default 'alpha',
+  add column if not exists icon_emoji    text not null default '✨',
+  add column if not exists accent_a      text,
+  add column if not exists accent_b      text,
+  add column if not exists verified      boolean not null default false,
+  add column if not exists trending      boolean not null default false,
+  add column if not exists pinned_ticker text,
+  add column if not exists rules         jsonb   not null default '[]'::jsonb,
+  add column if not exists tags          jsonb   not null default '[]'::jsonb,
+  add column if not exists is_private    boolean not null default false,
+  add column if not exists member_count  integer not null default 0,
+  add column if not exists posts_count   integer not null default 0,
+  add column if not exists online_count  integer not null default 0;
+
+create unique index if not exists communities_slug_uniq
+  on public.communities (lower(slug)) where slug is not null;
+
+-- 2. Re-sync counters from source-of-truth tables --------------------------
+update public.communities c
+   set member_count = coalesce((
+         select count(*) from public.community_members m where m.community_id = c.id
+       ), 0),
+       posts_count  = coalesce((
+         select count(*) from public.community_posts p where p.community_id = c.id
+       ), 0);
+
+-- 3. RLS for communities (read-all, owner-write) ---------------------------
+alter table public.communities       enable row level security;
+alter table public.community_members enable row level security;
+alter table public.community_posts   enable row level security;
+
+do $$
+begin
+  begin execute 'drop policy if exists "communities_read"         on public.communities';        exception when others then null; end;
+  begin execute 'drop policy if exists "communities_select"       on public.communities';        exception when others then null; end;
+  begin execute 'drop policy if exists "communities_create_owner" on public.communities';        exception when others then null; end;
+  begin execute 'drop policy if exists "communities_insert"       on public.communities';        exception when others then null; end;
+  begin execute 'drop policy if exists "communities_update_owner" on public.communities';        exception when others then null; end;
+  begin execute 'drop policy if exists "communities_update"       on public.communities';        exception when others then null; end;
+  execute $p$create policy "communities_read"         on public.communities for select using (true)$p$;
+  execute $p$create policy "communities_create_owner" on public.communities for insert with check (auth.uid() = owner_id)$p$;
+  execute $p$create policy "communities_update_owner" on public.communities for update using (auth.uid() = owner_id) with check (auth.uid() = owner_id)$p$;
+
+  begin execute 'drop policy if exists "cm_read"       on public.community_members'; exception when others then null; end;
+  begin execute 'drop policy if exists "cm_join_self"  on public.community_members'; exception when others then null; end;
+  begin execute 'drop policy if exists "cm_leave_self" on public.community_members'; exception when others then null; end;
+  execute $p$create policy "cm_read"       on public.community_members for select using (true)$p$;
+  execute $p$create policy "cm_join_self"  on public.community_members for insert with check (auth.uid() = user_id)$p$;
+  execute $p$create policy "cm_leave_self" on public.community_members for delete using (auth.uid() = user_id)$p$;
+
+  begin execute 'drop policy if exists "cp_read"       on public.community_posts'; exception when others then null; end;
+  begin execute 'drop policy if exists "cp_write_self" on public.community_posts'; exception when others then null; end;
+  execute $p$create policy "cp_read"       on public.community_posts for select using (true)$p$;
+  execute $p$create policy "cp_write_self" on public.community_posts for insert with check (auth.uid() = user_id)$p$;
+end $$;
+
+-- 4. Single source of truth for member/post counter triggers ---------------
+create or replace function public.fn_community_members_count()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.communities set member_count = member_count + 1 where id = new.community_id;
+  elsif tg_op = 'DELETE' then
+    update public.communities set member_count = greatest(0, member_count - 1) where id = old.community_id;
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists trg_community_members_ins   on public.community_members;
+drop trigger if exists trg_community_members_del   on public.community_members;
+drop trigger if exists trg_community_member_count  on public.community_members;
+create trigger trg_community_members_ins after insert on public.community_members
+  for each row execute function public.fn_community_members_count();
+create trigger trg_community_members_del after delete on public.community_members
+  for each row execute function public.fn_community_members_count();
+
+create or replace function public.fn_community_posts_count()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.communities set posts_count = posts_count + 1 where id = new.community_id;
+  elsif tg_op = 'DELETE' then
+    update public.communities set posts_count = greatest(0, posts_count - 1) where id = old.community_id;
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists trg_community_posts_count_ins on public.community_posts;
+drop trigger if exists trg_community_posts_count_del on public.community_posts;
+drop trigger if exists trg_community_post_count     on public.community_posts;
+create trigger trg_community_posts_count_ins after insert on public.community_posts
+  for each row execute function public.fn_community_posts_count();
+create trigger trg_community_posts_count_del after delete on public.community_posts
+  for each row execute function public.fn_community_posts_count();
+
+-- 5. Realtime publication for community + users tables ---------------------
+do $$
+declare
+  t text;
+  tables text[] := array[
+    'communities', 'community_members', 'community_posts',
+    'profiles',    'followers',         'user_presence'
+  ];
+begin
+  foreach t in array tables loop
+    begin
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    exception when duplicate_object then null;
+              when undefined_object  then null;
+              when others            then null;
+    end;
+  end loop;
+end $$;
+
+-- 6. Re-sync follower / following counts -----------------------------------
+-- Some older deployments use `following_id` instead of `followee_id` on the
+-- followers table. Detect the column at runtime so this block is portable.
+do $fix$
+declare
+  followee_col text;
+begin
+  -- Make sure the counter columns exist on profiles
+  begin
+    alter table public.profiles add column if not exists followers_count integer not null default 0;
+  exception when others then null; end;
+  begin
+    alter table public.profiles add column if not exists following_count integer not null default 0;
+  exception when others then null; end;
+
+  if not exists (select 1 from information_schema.tables
+                  where table_schema = 'public' and table_name = 'followers') then
+    return;
+  end if;
+
+  select column_name into followee_col
+    from information_schema.columns
+   where table_schema = 'public'
+     and table_name   = 'followers'
+     and column_name in ('followee_id','following_id')
+   order by case column_name when 'followee_id' then 0 else 1 end
+   limit 1;
+
+  if followee_col is null then
+    -- Nothing we can sync against; bail out quietly.
+    return;
+  end if;
+
+  execute format($f$
+    update public.profiles p
+       set followers_count = coalesce((select count(*) from public.followers f where f.%I = p.id), 0),
+           following_count = coalesce((select count(*) from public.followers f where f.follower_id = p.id), 0)
+  $f$, followee_col);
+end $fix$;
+
+-- 7. Whoami/current user posts cache helper for postsByCommunity -----------
+-- Returns the post + a `liked` flag for the caller. UI uses this to render
+-- the heart state on first paint without a second round-trip per post.
+create or replace function public.list_community_posts(target_community_id uuid, max_rows int default 100)
+returns table (
+  id              uuid,
+  community_id    uuid,
+  user_id         uuid,
+  content         text,
+  ticker          text,
+  change_pct      numeric,
+  likes_count     integer,
+  comments_count  integer,
+  pinned          boolean,
+  created_at      timestamptz,
+  liked           boolean,
+  username        text,
+  display_name    text,
+  avatar_color    text
+) language sql stable security definer set search_path = public as $$
+  select cp.id, cp.community_id, cp.user_id, cp.content, cp.ticker, cp.change_pct,
+         cp.likes_count, cp.comments_count, coalesce(cp.pinned, false),
+         cp.created_at,
+         case when auth.uid() is null then false
+              else exists(select 1 from public.post_likes pl
+                           where pl.post_id = cp.id and pl.user_id = auth.uid())
+         end as liked,
+         p.username::text, p.display_name, p.avatar_color
+    from public.community_posts cp
+    left join public.profiles p on p.id = cp.user_id
+   where cp.community_id = target_community_id
+   order by coalesce(cp.pinned, false) desc, cp.created_at desc
+   limit greatest(1, least(max_rows, 200));
+$$;
+grant execute on function public.list_community_posts(uuid, int) to authenticated, anon;
+
+-- ============================================================================
+-- DONE
+-- ============================================================================
+
+
+-- =====================================================================
+-- INCLUDED: sql/005_communities_media_and_create.sql
+-- =====================================================================
+-- ============================================================================
+-- 005_communities_media_and_create.sql
+-- Adds avatar/banner image columns to communities (idempotent), an atomic
+-- create_community RPC that inserts the row + auto-joins the owner so the
+-- community shows up immediately, and re-applies sane RLS so created
+-- communities are visible across users.
+--
+-- Safe to re-run.
+-- ============================================================================
+
+-- 1. Make sure the media columns the UI now writes exist --------------------
+alter table public.communities
+  add column if not exists avatar_url text,
+  add column if not exists banner_url text;
+
+-- 2. Drop both legacy + current SELECT policies and recreate a single,
+--    permissive read policy. Multiple PERMISSIVE policies OR together but
+--    older deployments left a private-gating policy that hid newly created
+--    communities for non-members; consolidating avoids surprises.
+do $$
+begin
+  begin execute 'drop policy if exists "communities_select"       on public.communities'; exception when others then null; end;
+  begin execute 'drop policy if exists "communities_read"         on public.communities'; exception when others then null; end;
+  begin execute 'drop policy if exists "communities_create_owner" on public.communities'; exception when others then null; end;
+  begin execute 'drop policy if exists "communities_insert"       on public.communities'; exception when others then null; end;
+  begin execute 'drop policy if exists "communities_update_owner" on public.communities'; exception when others then null; end;
+  begin execute 'drop policy if exists "communities_update"       on public.communities'; exception when others then null; end;
+
+  execute $p$create policy "communities_read"         on public.communities
+            for select using (true)$p$;
+  execute $p$create policy "communities_create_owner" on public.communities
+            for insert with check (auth.uid() = owner_id)$p$;
+  execute $p$create policy "communities_update_owner" on public.communities
+            for update using (auth.uid() = owner_id)
+            with check (auth.uid() = owner_id)$p$;
+end $$;
+
+-- 3. Atomic create RPC: inserts the community AND auto-joins the owner
+--    in a single round trip so the new community is visible everywhere
+--    immediately (cards, joined list, member count).
+create or replace function public.create_community(
+  p_name        text,
+  p_slug        text,
+  p_description text default '',
+  p_category    text default 'alpha',
+  p_icon_emoji  text default '✨',
+  p_accent_a    text default null,
+  p_accent_b    text default null,
+  p_rules       jsonb default '[]'::jsonb,
+  p_tags        jsonb default '[]'::jsonb,
+  p_is_private  boolean default false,
+  p_avatar_url  text default null,
+  p_banner_url  text default null
+) returns table (
+  id           uuid,
+  name         text,
+  slug         text,
+  description  text,
+  owner_id     uuid,
+  category     text,
+  icon_emoji   text,
+  accent_a     text,
+  accent_b     text,
+  rules        jsonb,
+  tags         jsonb,
+  is_private   boolean,
+  avatar_url   text,
+  banner_url   text,
+  member_count integer,
+  created_at   timestamptz
+) language plpgsql security definer set search_path = public as $$
+declare
+  caller uuid := auth.uid();
+  new_id uuid;
+  clean_slug text := lower(regexp_replace(coalesce(p_slug,''), '^@', ''));
+begin
+  if caller is null then raise exception 'not authenticated'; end if;
+
+  insert into public.communities (
+    name, slug, description, owner_id, category, icon_emoji,
+    accent_a, accent_b, rules, tags, is_private,
+    avatar_url, banner_url
+  ) values (
+    p_name, nullif(clean_slug, ''), coalesce(p_description, ''), caller,
+    coalesce(p_category, 'alpha'), coalesce(p_icon_emoji, '✨'),
+    p_accent_a, p_accent_b, coalesce(p_rules, '[]'::jsonb),
+    coalesce(p_tags, '[]'::jsonb), coalesce(p_is_private, false),
+    p_avatar_url, p_banner_url
+  )
+  returning communities.id into new_id;
+
+  -- Auto-join owner (idempotent) — counter trigger keeps member_count in sync.
+  insert into public.community_members (community_id, user_id, role)
+  values (new_id, caller, 'owner')
+  on conflict do nothing;
+
+  return query
+    select c.id, c.name, c.slug, c.description, c.owner_id,
+           c.category, c.icon_emoji, c.accent_a, c.accent_b,
+           c.rules, c.tags, c.is_private,
+           c.avatar_url, c.banner_url, c.member_count, c.created_at
+      from public.communities c
+     where c.id = new_id;
+end $$;
+
+grant execute on function public.create_community(
+  text, text, text, text, text, text, text, jsonb, jsonb, boolean, text, text
+) to authenticated;
+
+-- 4. Helpful: ensure unique slug index exists (case-insensitive, partial). --
+create unique index if not exists communities_slug_uniq
+  on public.communities (lower(slug)) where slug is not null;
+
+-- ============================================================================
+-- DONE
+-- ============================================================================
+
+
+-- =====================================================================
+-- INCLUDED: sql/006_profile_media_storage_fix.sql
+-- =====================================================================
+-- ============================================================================
+-- 006_profile_media_storage_fix.sql
+-- Re-applies the storage buckets + RLS policies the app actually uploads to:
+--   • profile-media     (avatar / banner)
+--   • post-images       (feed posts)
+--   • community-images  (community avatar / banner)
+--
+-- Earlier migrations (stories, full_sync, etc.) churned policy names which
+-- can leave the profile-media bucket without a working insert/update policy
+-- and break "upload profile picture / banner". This file is fully idempotent
+-- and safe to re-run.
+-- ============================================================================
+
+-- 1. Make sure each bucket exists and is public --------------------------
+insert into storage.buckets (id, name, public) values
+  ('profile-media',    'profile-media',    true),
+  ('post-images',      'post-images',      true),
+  ('community-images', 'community-images', true)
+on conflict (id) do update set public = excluded.public;
+
+-- 2. Wipe any older policy variants we have used over time, then create
+--    a clean canonical set per bucket. -----------------------------------
+do $$
+declare
+  b text;
+  buckets text[] := array['profile-media','post-images','community-images'];
+  -- All historical policy name patterns we have used so we can drop them
+  -- before recreating fresh ones.
+  drop_suffixes text[] := array[
+    '_public_read','_owner_write','_owner_update','_owner_delete',
+    '_read','_insert','_update','_delete',
+    '_owner_insert'
+  ];
+  s text;
+begin
+  foreach b in array buckets loop
+    foreach s in array drop_suffixes loop
+      begin
+        execute format('drop policy if exists %I on storage.objects', b || s);
+      exception when others then null; end;
+    end loop;
+
+    -- Also drop any quoted variants that were created with mixed case names.
+    begin execute format('drop policy if exists "%s_public_read"   on storage.objects', b); exception when others then null; end;
+    begin execute format('drop policy if exists "%s_owner_write"   on storage.objects', b); exception when others then null; end;
+    begin execute format('drop policy if exists "%s_owner_update"  on storage.objects', b); exception when others then null; end;
+    begin execute format('drop policy if exists "%s_owner_delete"  on storage.objects', b); exception when others then null; end;
+
+    -- Public read for everyone.
+    execute format($p$create policy %I on storage.objects
+      for select using (bucket_id = %L)$p$, b || '_public_read', b);
+
+    -- Authenticated users may insert into a folder named after their own uid.
+    execute format($p$create policy %I on storage.objects
+      for insert to authenticated
+      with check (
+        bucket_id = %L
+        and auth.uid() is not null
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )$p$, b || '_owner_write', b);
+
+    -- Owners may update / overwrite their own files.
+    execute format($p$create policy %I on storage.objects
+      for update to authenticated
+      using (
+        bucket_id = %L
+        and auth.uid() is not null
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )
+      with check (
+        bucket_id = %L
+        and auth.uid() is not null
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )$p$, b || '_owner_update', b, b);
+
+    -- Owners may delete their own files.
+    execute format($p$create policy %I on storage.objects
+      for delete to authenticated
+      using (
+        bucket_id = %L
+        and auth.uid() is not null
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )$p$, b || '_owner_delete', b);
+  end loop;
+end $$;
+
+-- 3. Make absolutely sure the profiles table has the columns the UI writes
+--    (avatar_url / banner_url). ------------------------------------------
+alter table public.profiles
+  add column if not exists avatar_url text,
+  add column if not exists banner_url text;
+
+-- ============================================================================
+-- DONE
+-- ============================================================================
+
+
+-- =====================================================================
+-- INCLUDED: supabase/migrations/20260502100000_backend_sync_fix.sql
+-- =====================================================================
+-- =====================================================================
+-- BACKEND SYNC FIX — make data visible across users
+-- =====================================================================
+-- Consolidates RPCs and RLS that were previously only in the loose
+-- sql/ folder, so every install gets:
+--   • list_community_posts(target_community_id, max_rows)
+--   • create_community(...) atomic insert + auto-join owner
+--   • Open SELECT RLS on profiles / communities / community_posts /
+--     community_members / followers / livekit_rooms / user_presence
+--   • Counter resyncs so member/post/follower numbers are correct
+--   • Realtime publication coverage for the social tables
+--
+-- Idempotent. Safe to re-run.
+-- =====================================================================
+
+-- 1. Ensure the columns the UI reads from exist ----------------------------
+alter table public.communities
+  add column if not exists slug          text,
+  add column if not exists category      text not null default 'alpha',
+  add column if not exists icon_emoji    text not null default '✨',
+  add column if not exists accent_a      text,
+  add column if not exists accent_b      text,
+  add column if not exists verified      boolean not null default false,
+  add column if not exists trending      boolean not null default false,
+  add column if not exists pinned_ticker text,
+  add column if not exists rules         jsonb   not null default '[]'::jsonb,
+  add column if not exists tags          jsonb   not null default '[]'::jsonb,
+  add column if not exists is_private    boolean not null default false,
+  add column if not exists member_count  integer not null default 0,
+  add column if not exists posts_count   integer not null default 0,
+  add column if not exists online_count  integer not null default 0,
+  add column if not exists avatar_url    text,
+  add column if not exists banner_url    text;
+
+create unique index if not exists communities_slug_uniq
+  on public.communities (lower(slug)) where slug is not null;
+
+alter table public.community_posts
+  add column if not exists image_url      text,
+  add column if not exists likes_count    integer not null default 0,
+  add column if not exists reposts_count  integer not null default 0,
+  add column if not exists comments_count integer not null default 0,
+  add column if not exists pinned         boolean not null default false,
+  add column if not exists ticker         text,
+  add column if not exists change_pct     numeric(10,2);
+
+-- 2. RLS: open read across the social surface, owner-write -----------------
+alter table public.profiles            enable row level security;
+alter table public.followers           enable row level security;
+alter table public.communities         enable row level security;
+alter table public.community_members   enable row level security;
+alter table public.community_posts     enable row level security;
+
+do $$
+begin
+  -- profiles: anyone can read, owner can update / insert their row
+  begin execute 'drop policy if exists "profiles_read"        on public.profiles'; exception when others then null; end;
+  begin execute 'drop policy if exists "profiles_update_self" on public.profiles'; exception when others then null; end;
+  begin execute 'drop policy if exists "profiles_insert_self" on public.profiles'; exception when others then null; end;
+  execute $p$create policy "profiles_read"        on public.profiles for select using (true)$p$;
+  execute $p$create policy "profiles_update_self" on public.profiles for update using (auth.uid() = id) with check (auth.uid() = id)$p$;
+  execute $p$create policy "profiles_insert_self" on public.profiles for insert with check (auth.uid() = id)$p$;
+
+  -- followers
+  begin execute 'drop policy if exists "followers_read"        on public.followers'; exception when others then null; end;
+  begin execute 'drop policy if exists "followers_write_self"  on public.followers'; exception when others then null; end;
+  begin execute 'drop policy if exists "followers_delete_self" on public.followers'; exception when others then null; end;
+  execute $p$create policy "followers_read"        on public.followers for select using (true)$p$;
+  execute $p$create policy "followers_write_self"  on public.followers for insert with check (auth.uid() = follower_id)$p$;
+  execute $p$create policy "followers_delete_self" on public.followers for delete using (auth.uid() = follower_id)$p$;
+
+  -- communities
+  begin execute 'drop policy if exists "communities_read"         on public.communities'; exception when others then null; end;
+  begin execute 'drop policy if exists "communities_select"       on public.communities'; exception when others then null; end;
+  begin execute 'drop policy if exists "communities_create_owner" on public.communities'; exception when others then null; end;
+  begin execute 'drop policy if exists "communities_insert"       on public.communities'; exception when others then null; end;
+  begin execute 'drop policy if exists "communities_update_owner" on public.communities'; exception when others then null; end;
+  begin execute 'drop policy if exists "communities_update"       on public.communities'; exception when others then null; end;
+  execute $p$create policy "communities_read"         on public.communities for select using (true)$p$;
+  execute $p$create policy "communities_create_owner" on public.communities for insert with check (auth.uid() = owner_id)$p$;
+  execute $p$create policy "communities_update_owner" on public.communities for update using (auth.uid() = owner_id) with check (auth.uid() = owner_id)$p$;
+
+  -- community_members
+  begin execute 'drop policy if exists "cm_read"       on public.community_members'; exception when others then null; end;
+  begin execute 'drop policy if exists "cm_join_self"  on public.community_members'; exception when others then null; end;
+  begin execute 'drop policy if exists "cm_leave_self" on public.community_members'; exception when others then null; end;
+  execute $p$create policy "cm_read"       on public.community_members for select using (true)$p$;
+  execute $p$create policy "cm_join_self"  on public.community_members for insert with check (auth.uid() = user_id)$p$;
+  execute $p$create policy "cm_leave_self" on public.community_members for delete using (auth.uid() = user_id)$p$;
+
+  -- community_posts
+  begin execute 'drop policy if exists "cp_read"        on public.community_posts'; exception when others then null; end;
+  begin execute 'drop policy if exists "cp_write_self"  on public.community_posts'; exception when others then null; end;
+  begin execute 'drop policy if exists "cp_update_self" on public.community_posts'; exception when others then null; end;
+  begin execute 'drop policy if exists "cp_delete_self" on public.community_posts'; exception when others then null; end;
+  execute $p$create policy "cp_read"        on public.community_posts for select using (true)$p$;
+  execute $p$create policy "cp_write_self"  on public.community_posts for insert with check (auth.uid() = user_id)$p$;
+  execute $p$create policy "cp_update_self" on public.community_posts for update using (auth.uid() = user_id) with check (auth.uid() = user_id)$p$;
+  execute $p$create policy "cp_delete_self" on public.community_posts for delete using (auth.uid() = user_id)$p$;
+end $$;
+
+-- 3. list_community_posts RPC --------------------------------------------
+create or replace function public.list_community_posts(
+  target_community_id uuid,
+  max_rows int default 100
+) returns table (
+  id              uuid,
+  community_id    uuid,
+  user_id         uuid,
+  content         text,
+  ticker          text,
+  change_pct      numeric,
+  likes_count     integer,
+  comments_count  integer,
+  pinned          boolean,
+  created_at      timestamptz,
+  liked           boolean,
+  username        text,
+  display_name    text,
+  avatar_color    text
+) language sql stable security definer set search_path = public as $$
+  select cp.id, cp.community_id, cp.user_id, cp.content, cp.ticker, cp.change_pct,
+         cp.likes_count, cp.comments_count, coalesce(cp.pinned, false),
+         cp.created_at,
+         case when auth.uid() is null then false
+              else exists(select 1 from public.post_likes pl
+                           where pl.post_id = cp.id and pl.user_id = auth.uid())
+         end as liked,
+         p.username::text, p.display_name, p.avatar_color
+    from public.community_posts cp
+    left join public.profiles p on p.id = cp.user_id
+   where cp.community_id = target_community_id
+   order by coalesce(cp.pinned, false) desc, cp.created_at desc
+   limit greatest(1, least(max_rows, 200));
+$$;
+
+grant execute on function public.list_community_posts(uuid, int) to authenticated, anon;
+
+-- 4. create_community RPC -- atomic insert + owner auto-join ------------
+create or replace function public.create_community(
+  p_name        text,
+  p_slug        text,
+  p_description text default '',
+  p_category    text default 'alpha',
+  p_icon_emoji  text default '✨',
+  p_accent_a    text default null,
+  p_accent_b    text default null,
+  p_rules       jsonb default '[]'::jsonb,
+  p_tags        jsonb default '[]'::jsonb,
+  p_is_private  boolean default false,
+  p_avatar_url  text default null,
+  p_banner_url  text default null
+) returns table (
+  id           uuid,
+  name         text,
+  slug         text,
+  description  text,
+  owner_id     uuid,
+  category     text,
+  icon_emoji   text,
+  accent_a     text,
+  accent_b     text,
+  rules        jsonb,
+  tags         jsonb,
+  is_private   boolean,
+  avatar_url   text,
+  banner_url   text,
+  member_count integer,
+  created_at   timestamptz
+) language plpgsql security definer set search_path = public as $$
+declare
+  caller     uuid := auth.uid();
+  new_id     uuid;
+  clean_slug text := lower(regexp_replace(coalesce(p_slug, ''), '^@', ''));
+begin
+  if caller is null then
+    raise exception 'not authenticated';
+  end if;
+
+  insert into public.communities (
+    name, slug, description, owner_id, category, icon_emoji,
+    accent_a, accent_b, rules, tags, is_private,
+    avatar_url, banner_url
+  ) values (
+    p_name, nullif(clean_slug, ''), coalesce(p_description, ''), caller,
+    coalesce(p_category, 'alpha'), coalesce(p_icon_emoji, '✨'),
+    p_accent_a, p_accent_b,
+    coalesce(p_rules, '[]'::jsonb), coalesce(p_tags, '[]'::jsonb),
+    coalesce(p_is_private, false),
+    p_avatar_url, p_banner_url
+  )
+  returning communities.id into new_id;
+
+  insert into public.community_members (community_id, user_id, role)
+  values (new_id, caller, 'owner')
+  on conflict do nothing;
+
+  return query
+    select c.id, c.name, c.slug, c.description, c.owner_id,
+           c.category, c.icon_emoji, c.accent_a, c.accent_b,
+           c.rules, c.tags, c.is_private,
+           c.avatar_url, c.banner_url, c.member_count, c.created_at
+      from public.communities c
+     where c.id = new_id;
+end $$;
+
+grant execute on function public.create_community(
+  text, text, text, text, text, text, text, jsonb, jsonb, boolean, text, text
+) to authenticated;
+
+-- 5. Counter resync ------------------------------------------------------
+update public.communities c
+   set member_count = coalesce((
+         select count(*) from public.community_members m where m.community_id = c.id
+       ), 0),
+       posts_count  = coalesce((
+         select count(*) from public.community_posts p where p.community_id = c.id
+       ), 0);
+
+update public.profiles p
+   set followers_count = coalesce((select count(*) from public.followers f where f.followee_id = p.id), 0),
+       following_count = coalesce((select count(*) from public.followers f where f.follower_id = p.id), 0);
+
+-- 6. Realtime publication --------------------------------------------------
+do $$
+declare
+  t      text;
+  tables text[] := array[
+    'profiles', 'followers', 'user_presence',
+    'communities', 'community_members', 'community_posts',
+    'post_likes', 'notifications', 'livekit_rooms', 'livekit_participants'
+  ];
 begin
   foreach t in array tables loop
     begin
@@ -4262,231 +4821,280 @@ end $$;
 -- =====================================================================
 
 
--- ==============================================================
--- SECTION: sql/002_storage_and_buckets.sql
--- ==============================================================
-
 -- =====================================================================
--- STORAGE BUCKETS CONFIGURATION
--- Supabase Storage buckets for user uploads
+-- FINAL CONSOLIDATED FIXES (profile sync, banners, counters, realtime)
 -- =====================================================================
 
--- NOTE: Storage buckets are created via the Supabase Dashboard or API
--- These SQL statements document the required bucket structure
+-- 1. Make sure every profile column the UI references exists --------------
+alter table public.profiles
+  add column if not exists user_id        uuid,
+  add column if not exists display_name   text,
+  add column if not exists bio            text,
+  add column if not exists avatar_url     text,
+  add column if not exists banner_url     text,
+  add column if not exists avatar_color   text,
+  add column if not exists banner_from    text,
+  add column if not exists banner_to      text,
+  add column if not exists wallet_address text,
+  add column if not exists twitter_handle text,
+  add column if not exists website        text,
+  add column if not exists location       text,
+  add column if not exists badge          text default 'Recruit',
+  add column if not exists verified       boolean not null default false,
+  add column if not exists custom_badges  jsonb   not null default '[]'::jsonb,
+  add column if not exists is_banned      boolean not null default false,
+  add column if not exists followers_count integer not null default 0,
+  add column if not exists following_count integer not null default 0,
+  add column if not exists trades_count    integer not null default 0,
+  add column if not exists win_rate        numeric(6,2)  not null default 0,
+  add column if not exists pnl_pct         numeric(10,2) not null default 0,
+  add column if not exists volume_usd      numeric(18,2) not null default 0,
+  add column if not exists xp              integer not null default 0,
+  add column if not exists last_seen_at    timestamptz,
+  add column if not exists status          text default 'offline';
 
--- BUCKET 1: Avatars
--- Name: avatars
--- Public: true
--- MIME types: image/*
--- Max file size: 5 MB (5242880 bytes)
--- Storage Path: /avatars/{user_id}/avatar.{ext}
+-- Backfill user_id (mirrors id) for any rows that pre-date that column
+update public.profiles set user_id = id where user_id is null;
 
--- BUCKET 2: Banners/Wallpapers  
--- Name: banners
--- Public: true
--- MIME types: image/*
--- Max file size: 10 MB (10485760 bytes)
--- Storage Path: /banners/{user_id}/banner.{ext}
+-- 2. Backfill missing profiles for existing auth users --------------------
+insert into public.profiles (id, user_id, username, display_name, created_at, updated_at)
+select u.id,
+       u.id,
+       lower(regexp_replace(coalesce(split_part(u.email, '@', 1), 'user'), '[^a-z0-9_]+', '', 'g'))
+         || substr(replace(u.id::text, '-', ''), 1, 4),
+       coalesce(split_part(u.email, '@', 1), 'User'),
+       now(), now()
+  from auth.users u
+  left join public.profiles p on p.id = u.id
+ where p.id is null
+on conflict (id) do nothing;
 
--- BUCKET 3: Community Images
--- Name: community-images
--- Public: true
--- MIME types: image/*
--- Max file size: 10 MB (10485760 bytes)
--- Storage Path: /community/{community_id}/{post_id}/image.{ext}
+-- 3. Resync counters so badges/cards/numbers match reality ----------------
+update public.profiles p
+   set followers_count = coalesce((select count(*) from public.followers f where f.followee_id = p.id), 0),
+       following_count = coalesce((select count(*) from public.followers f where f.follower_id = p.id), 0);
 
--- Storage Policies Documentation:
+update public.communities c
+   set member_count = coalesce((select count(*) from public.community_members m where m.community_id = c.id), 0),
+       posts_count  = coalesce((select count(*) from public.community_posts  pp where pp.community_id = c.id), 0);
 
--- AVATARS BUCKET:
--- 1. Anonymous can view all avatars (SELECT)
--- 2. Authenticated users can upload to their own avatar folder (INSERT)
--- 3. Users can update/delete their own avatar (UPDATE, DELETE)
--- 4. Admin can delete any avatar (DELETE)
+update public.community_posts cp
+   set likes_count    = coalesce((select count(*) from public.post_likes pl where pl.post_id = cp.id), 0),
+       comments_count = coalesce((select count(*) from public.community_post_comments cm where cm.post_id = cp.id), 0);
 
--- BANNERS BUCKET:
--- 1. Anonymous can view all banners (SELECT)
--- 2. Authenticated users can upload to their own banner folder (INSERT)
--- 3. Users can update/delete their own banner (UPDATE, DELETE)
--- 4. Admin can delete any banner (DELETE)
+-- 4. Wide-open SELECT on social surface (RLS still gates writes) ----------
+alter table public.profiles            enable row level security;
+alter table public.followers           enable row level security;
+alter table public.communities         enable row level security;
+alter table public.community_members   enable row level security;
+alter table public.community_posts     enable row level security;
+alter table public.post_likes          enable row level security;
+alter table public.user_presence       enable row level security;
+alter table public.stories             enable row level security;
+alter table public.story_views         enable row level security;
 
--- COMMUNITY IMAGES BUCKET:
--- 1. Anonymous can view community images (SELECT)
--- 2. Authenticated users can upload to community posts (INSERT)
--- 3. Users can manage their own post images (UPDATE, DELETE)
--- 4. Community admins can delete images in their community (DELETE)
-
--- NOTE: Configure these policies in the Supabase Dashboard:
--- Storage > [Bucket Name] > Policies
-
-select 'Storage buckets configuration documented. Create buckets in Supabase Dashboard.' as status;
-
-
--- ==============================================================
--- SECTION: sql/003_community_create.sql
--- ==============================================================
-
--- ============================================================================
--- 003_community_create.sql
--- Adds support for the Create Community flow shipped in the app.
---
--- Run after 002_storage_and_buckets.sql.
--- Safe to re-run: every statement uses IF [NOT] EXISTS.
--- ============================================================================
-
--- 1. Communities table -------------------------------------------------------
-create table if not exists public.communities (
-    id uuid primary key default gen_random_uuid(),
-    name text not null,
-    slug text unique,
-    description text default '',
-    owner_id uuid references auth.users(id) on delete set null,
-    member_count integer default 1,
-    posts_count integer default 0,
-    online_count integer default 0,
-    category text default 'alpha',
-    icon_emoji text default '✨',
-    accent_a text,
-    accent_b text,
-    verified boolean default false,
-    trending boolean default false,
-    pinned_ticker text,
-    rules jsonb default '[]'::jsonb,
-    tags jsonb default '[]'::jsonb,
-    is_private boolean default false,
-    created_at timestamptz default now()
-);
-
-create index if not exists communities_owner_idx on public.communities(owner_id);
-create index if not exists communities_trending_idx on public.communities(trending);
-create index if not exists communities_category_idx on public.communities(category);
-
--- 2. Membership table --------------------------------------------------------
-create table if not exists public.community_members (
-    community_id uuid references public.communities(id) on delete cascade,
-    user_id uuid references auth.users(id) on delete cascade,
-    role text default 'member',
-    joined_at timestamptz default now(),
-    primary key (community_id, user_id)
-);
-
-create index if not exists community_members_user_idx on public.community_members(user_id);
-
--- 3. Posts table -------------------------------------------------------------
-create table if not exists public.community_posts (
-    id uuid primary key default gen_random_uuid(),
-    community_id uuid references public.communities(id) on delete cascade,
-    user_id uuid references auth.users(id) on delete set null,
-    content text not null,
-    ticker text,
-    change_pct numeric,
-    likes_count integer default 0,
-    comments_count integer default 0,
-    pinned boolean default false,
-    created_at timestamptz default now()
-);
-
-create index if not exists community_posts_community_idx on public.community_posts(community_id, created_at desc);
-
--- 4. RLS ---------------------------------------------------------------------
-alter table public.communities enable row level security;
-alter table public.community_members enable row level security;
-alter table public.community_posts enable row level security;
-
--- Communities: anyone can read non-private; owners can manage.
-drop policy if exists "communities_select" on public.communities;
-create policy "communities_select" on public.communities
-    for select using (
-        is_private = false
-        or owner_id = auth.uid()
-        or exists (
-            select 1 from public.community_members m
-            where m.community_id = id and m.user_id = auth.uid()
-        )
-    );
-
-drop policy if exists "communities_insert" on public.communities;
-create policy "communities_insert" on public.communities
-    for insert with check (auth.uid() is not null and owner_id = auth.uid());
-
-drop policy if exists "communities_update_owner" on public.communities;
-create policy "communities_update_owner" on public.communities
-    for update using (owner_id = auth.uid());
-
--- Members: a user can read their own memberships and members of communities they belong to.
-drop policy if exists "community_members_select" on public.community_members;
-create policy "community_members_select" on public.community_members
-    for select using (true);
-
-drop policy if exists "community_members_insert_self" on public.community_members;
-create policy "community_members_insert_self" on public.community_members
-    for insert with check (auth.uid() = user_id);
-
-drop policy if exists "community_members_delete_self" on public.community_members;
-create policy "community_members_delete_self" on public.community_members
-    for delete using (auth.uid() = user_id);
-
--- Posts: members can read; authors can insert/update.
-drop policy if exists "community_posts_select" on public.community_posts;
-create policy "community_posts_select" on public.community_posts
-    for select using (
-        exists (
-            select 1 from public.communities c
-            where c.id = community_id
-              and (
-                c.is_private = false
-                or c.owner_id = auth.uid()
-                or exists (
-                    select 1 from public.community_members m
-                    where m.community_id = c.id and m.user_id = auth.uid()
-                )
-              )
-        )
-    );
-
-drop policy if exists "community_posts_insert" on public.community_posts;
-create policy "community_posts_insert" on public.community_posts
-    for insert with check (auth.uid() = user_id);
-
-drop policy if exists "community_posts_update_author" on public.community_posts;
-create policy "community_posts_update_author" on public.community_posts
-    for update using (auth.uid() = user_id);
-
--- 5. Triggers to keep counters in sync ---------------------------------------
-create or replace function public.community_member_count_trigger()
-returns trigger language plpgsql as $$
+do $resync$
+declare r record;
 begin
-    if (tg_op = 'INSERT') then
-        update public.communities set member_count = coalesce(member_count, 0) + 1
-            where id = new.community_id;
-    elsif (tg_op = 'DELETE') then
-        update public.communities set member_count = greatest(coalesce(member_count, 1) - 1, 0)
-            where id = old.community_id;
-    end if;
-    return null;
-end;
-$$;
+  for r in select policyname from pg_policies where schemaname='public' and tablename='profiles' loop
+    execute format('drop policy if exists %I on public.profiles', r.policyname);
+  end loop;
+  execute $p$create policy profiles_read        on public.profiles for select using (true)$p$;
+  execute $p$create policy profiles_insert_self on public.profiles for insert with check (auth.uid() = id)$p$;
+  execute $p$create policy profiles_update_self on public.profiles for update using (auth.uid() = id) with check (auth.uid() = id)$p$;
 
-drop trigger if exists trg_community_member_count on public.community_members;
-create trigger trg_community_member_count
-    after insert or delete on public.community_members
-    for each row execute function public.community_member_count_trigger();
+  for r in select policyname from pg_policies where schemaname='public' and tablename='followers' loop
+    execute format('drop policy if exists %I on public.followers', r.policyname);
+  end loop;
+  execute $p$create policy followers_read        on public.followers for select using (true)$p$;
+  execute $p$create policy followers_write_self  on public.followers for insert with check (auth.uid() = follower_id)$p$;
+  execute $p$create policy followers_delete_self on public.followers for delete using (auth.uid() = follower_id)$p$;
 
-create or replace function public.community_post_count_trigger()
-returns trigger language plpgsql as $$
+  for r in select policyname from pg_policies where schemaname='public' and tablename='communities' loop
+    execute format('drop policy if exists %I on public.communities', r.policyname);
+  end loop;
+  execute $p$create policy communities_read         on public.communities for select using (true)$p$;
+  execute $p$create policy communities_create_owner on public.communities for insert with check (auth.uid() = owner_id)$p$;
+  execute $p$create policy communities_update_owner on public.communities for update using (auth.uid() = owner_id) with check (auth.uid() = owner_id)$p$;
+
+  for r in select policyname from pg_policies where schemaname='public' and tablename='community_members' loop
+    execute format('drop policy if exists %I on public.community_members', r.policyname);
+  end loop;
+  execute $p$create policy cm_read       on public.community_members for select using (true)$p$;
+  execute $p$create policy cm_join_self  on public.community_members for insert with check (auth.uid() = user_id)$p$;
+  execute $p$create policy cm_leave_self on public.community_members for delete using (auth.uid() = user_id)$p$;
+
+  for r in select policyname from pg_policies where schemaname='public' and tablename='community_posts' loop
+    execute format('drop policy if exists %I on public.community_posts', r.policyname);
+  end loop;
+  execute $p$create policy cp_read        on public.community_posts for select using (true)$p$;
+  execute $p$create policy cp_write_self  on public.community_posts for insert with check (auth.uid() = user_id)$p$;
+  execute $p$create policy cp_update_self on public.community_posts for update using (auth.uid() = user_id) with check (auth.uid() = user_id)$p$;
+  execute $p$create policy cp_delete_self on public.community_posts for delete using (auth.uid() = user_id or public.is_admin(auth.uid()))$p$;
+
+  for r in select policyname from pg_policies where schemaname='public' and tablename='post_likes' loop
+    execute format('drop policy if exists %I on public.post_likes', r.policyname);
+  end loop;
+  execute $p$create policy post_likes_read        on public.post_likes for select using (true)$p$;
+  execute $p$create policy post_likes_write_self  on public.post_likes for insert with check (auth.uid() = user_id)$p$;
+  execute $p$create policy post_likes_delete_self on public.post_likes for delete using (auth.uid() = user_id)$p$;
+
+  for r in select policyname from pg_policies where schemaname='public' and tablename='user_presence' loop
+    execute format('drop policy if exists %I on public.user_presence', r.policyname);
+  end loop;
+  execute $p$create policy user_presence_read        on public.user_presence for select using (true)$p$;
+  execute $p$create policy user_presence_self_write  on public.user_presence for insert to authenticated with check (auth.uid() = user_id)$p$;
+  execute $p$create policy user_presence_self_update on public.user_presence for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id)$p$;
+
+  for r in select policyname from pg_policies where schemaname='public' and tablename='stories' loop
+    execute format('drop policy if exists %I on public.stories', r.policyname);
+  end loop;
+  execute $p$create policy stories_read        on public.stories for select using (true)$p$;
+  execute $p$create policy stories_insert_self on public.stories for insert to authenticated with check (auth.uid() = user_id)$p$;
+  execute $p$create policy stories_delete_self on public.stories for delete to authenticated using (auth.uid() = user_id)$p$;
+
+  for r in select policyname from pg_policies where schemaname='public' and tablename='story_views' loop
+    execute format('drop policy if exists %I on public.story_views', r.policyname);
+  end loop;
+  execute $p$create policy story_views_read        on public.story_views for select using (true)$p$;
+  execute $p$create policy story_views_insert_self on public.story_views for insert to authenticated with check (auth.uid() = viewer_id)$p$;
+end $resync$;
+
+-- 5. Ensure ALL upload buckets exist + are public + have correct RLS ------
+insert into storage.buckets (id, name, public) values
+  ('profile-media',    'profile-media',    true),
+  ('post-images',      'post-images',      true),
+  ('community-images', 'community-images', true),
+  ('avatars',          'avatars',          true),
+  ('banners',          'banners',          true),
+  ('story-media',      'story-media',      true),
+  ('community-media',  'community-media',  true),
+  ('post-media',       'post-media',       true),
+  ('dm-media',         'dm-media',         true),
+  ('launch-logos',     'launch-logos',     true),
+  ('launch-banners',   'launch-banners',   true),
+  ('wallpapers',       'wallpapers',       true),
+  ('token-images',     'token-images',     true)
+on conflict (id) do update set public = excluded.public;
+
+do $buckets$
+declare
+  b text;
+  bks text[] := array[
+    'profile-media','post-images','community-images',
+    'avatars','banners','story-media',
+    'community-media','post-media','dm-media',
+    'launch-logos','launch-banners','wallpapers','token-images'
+  ];
+  s text;
+  drop_suffixes text[] := array[
+    '_public_read','_owner_write','_owner_update','_owner_delete',
+    '_owner_insert','_read','_insert','_update','_delete'
+  ];
 begin
-    if (tg_op = 'INSERT') then
-        update public.communities set posts_count = coalesce(posts_count, 0) + 1
-            where id = new.community_id;
-    elsif (tg_op = 'DELETE') then
-        update public.communities set posts_count = greatest(coalesce(posts_count, 1) - 1, 0)
-            where id = old.community_id;
-    end if;
-    return null;
-end;
-$$;
+  foreach b in array bks loop
+    foreach s in array drop_suffixes loop
+      begin execute format('drop policy if exists %I on storage.objects', b || s); exception when others then null; end;
+      begin execute format('drop policy if exists "%s%s" on storage.objects', b, s); exception when others then null; end;
+    end loop;
 
-drop trigger if exists trg_community_post_count on public.community_posts;
-create trigger trg_community_post_count
-    after insert or delete on public.community_posts
-    for each row execute function public.community_post_count_trigger();
+    execute format($p$create policy %I on storage.objects
+      for select using (bucket_id = %L)$p$, b || '_public_read', b);
 
+    execute format($p$create policy %I on storage.objects
+      for insert to authenticated
+      with check (
+        bucket_id = %L
+        and auth.uid() is not null
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )$p$, b || '_owner_write', b);
+
+    execute format($p$create policy %I on storage.objects
+      for update to authenticated
+      using (
+        bucket_id = %L
+        and auth.uid() is not null
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )
+      with check (
+        bucket_id = %L
+        and auth.uid() is not null
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )$p$, b || '_owner_update', b, b);
+
+    execute format($p$create policy %I on storage.objects
+      for delete to authenticated
+      using (
+        bucket_id = %L
+        and (
+          auth.uid()::text = (storage.foldername(name))[1]
+          or public.is_admin(auth.uid())
+        )
+      )$p$, b || '_owner_delete', b);
+  end loop;
+end $buckets$;
+
+-- 6. Make sure the realtime publication has every social table -----------
+do $rt$
+declare
+  t text;
+  tables text[] := array[
+    'profiles','followers','user_presence','notifications',
+    'communities','community_members','community_posts',
+    'post_likes','community_post_comments',
+    'stories','story_views',
+    'livekit_rooms','livekit_participants',
+    'dm_threads','dm_messages',
+    'announcements','whale_events','live_feed_events',
+    'pump_v5_submissions','chat_messages',
+    'lobby_messages','lobby_watchlists','trading_lobbies'
+  ];
+begin
+  foreach t in array tables loop
+    begin
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    exception when duplicate_object then null;
+              when undefined_object  then null;
+              when others            then null;
+    end;
+  end loop;
+end $rt$;
+
+-- 7. Owner bootstrap one more time (audifyx@gmail.com) -------------------
+do $owner$
+declare
+  owner_id uuid;
+  owner_avatar text := 'https://r2-pub.rork.com/generated-images/cf1055f1-cb3f-45fa-9d53-e7bf835bd3fe.png';
+  owner_banner text := 'https://r2-pub.rork.com/generated-images/647148c5-8a0c-4947-ba97-f62b44261d5b.png';
+  owner_badges jsonb := jsonb_build_array(
+    jsonb_build_object('id','owner','label','OWNER','color','#FFD56B','icon','crown','granted_at', to_jsonb(now())),
+    jsonb_build_object('id','dev','label','DEV','color','#38D7FF','icon','code','granted_at', to_jsonb(now()))
+  );
+begin
+  select id into owner_id from auth.users where lower(email) = 'audifyx@gmail.com' limit 1;
+  if owner_id is null then return; end if;
+
+  insert into public.profiles (id, user_id, username, display_name)
+  values (owner_id, owner_id, 'audifyx', 'Audifyx')
+  on conflict (id) do nothing;
+
+  update public.profiles
+     set avatar_url    = owner_avatar,
+         banner_url    = owner_banner,
+         verified      = true,
+         badge         = coalesce(badge, 'owner'),
+         display_name  = coalesce(nullif(display_name, ''), 'Audifyx'),
+         username      = coalesce(nullif(username::text, ''), 'audifyx'),
+         custom_badges = owner_badges,
+         updated_at    = now()
+   where id = owner_id;
+
+  insert into public.admin_roles (user_id, role, granted_by)
+  values (owner_id, 'superadmin', owner_id)
+  on conflict (user_id) do update set role = 'superadmin';
+end $owner$;
+
+-- =====================================================================
+-- DONE.
+-- =====================================================================
+select 'MEGA_SETUP complete' as status;
