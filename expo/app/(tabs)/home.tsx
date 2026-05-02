@@ -57,7 +57,7 @@ import {
   useTrendingTokens,
   useNewSolanaPairs,
 } from "@/lib/api/market";
-import { useDexTokens } from "@/lib/api/dexscreener";
+import { type DexPair, useDexTokens } from "@/lib/api/dexscreener";
 import { isSafeToken } from "@/lib/safety";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
@@ -708,58 +708,82 @@ function MarketTile({
   );
 }
 
-function TrendingPairsRail() {
-  const router = useRouter();
-  const { data: newPairs } = useNewSolanaPairs(12);
-  const { listings } = useLaunchpad();
-  const goAll = useCallback(() => {
-    Haptics.selectionAsync().catch(() => {});
-    router.push("/(tabs)/launches");
-  }, [router]);
+function dexPairToLaunchToken(p: DexPair): LaunchToken {
+  const created = p.pairCreatedAt ?? Date.now();
+  const ageMs = Date.now() - created;
+  const ageHours = ageMs / 3_600_000;
+  const change = p.priceChange?.h24 ?? null;
+  const price = p.priceUsd ? Number(p.priceUsd) : null;
+  return {
+    id: p.baseToken.address,
+    name: p.baseToken.name ?? p.baseToken.symbol ?? "Token",
+    ticker: (p.baseToken.symbol ?? "").toUpperCase(),
+    description: "",
+    logoUrl: p.info?.imageUrl ?? null,
+    bannerUrl: null,
+    contract: p.baseToken.address,
+    venue: "other",
+    status: "live",
+    tags: [],
+    featured: false,
+    hot: ageHours < 24 || (change ?? 0) > 50,
+    verified: false,
+    createdAt: created,
+    submittedBy: "system",
+    price: Number.isFinite(price) ? price : null,
+    change24hPct: change,
+    liquidityUsd: p.liquidity?.usd ?? null,
+    marketCapUsd: p.marketCap ?? p.fdv ?? null,
+    volume24hUsd: p.volume?.h24 ?? null,
+    holders: null,
+    upvotes: 0,
+    watchers: 0,
+  };
+}
 
-  const pairs: LaunchToken[] = useMemo(() => {
-    const fromDex = (newPairs ?? []).map((p): LaunchToken => {
-      const created = p.pairCreatedAt ?? Date.now();
-      const ageMs = Date.now() - created;
-      const ageHours = ageMs / 3_600_000;
-      const change = p.priceChange?.h24 ?? null;
-      return {
-        id: p.baseToken.address,
-        name: p.baseToken.name ?? p.baseToken.symbol ?? "Token",
-        ticker: (p.baseToken.symbol ?? "").toUpperCase(),
-        description: "",
-        logoUrl: p.info?.imageUrl ?? null,
-        bannerUrl: null,
-        contract: p.baseToken.address,
-        venue: "other",
-        status: "live",
-        tags: [],
-        featured: false,
-        hot: ageHours < 24 || (change ?? 0) > 50,
-        verified: false,
-        createdAt: created,
-        submittedBy: "system",
-        price: p.priceUsd ? Number(p.priceUsd) : null,
-        change24hPct: change,
-        liquidityUsd: p.liquidity?.usd ?? null,
-        marketCapUsd: p.marketCap ?? p.fdv ?? null,
-        volume24hUsd: p.volume?.h24 ?? null,
-        holders: null,
-        upvotes: 0,
-        watchers: 0,
-      };
-    });
-    const safeDex = fromDex.filter((t) =>
-      isSafeToken({
-        marketCapUsd: t.marketCapUsd,
-        liquidityUsd: t.liquidityUsd,
-        priceChange24hPct: t.change24hPct,
-        venue: t.venue,
-        tags: t.tags,
-      }),
-    );
-    if (safeDex.length > 0) return safeDex;
-    return listings
+function getTokenDedupeKeys(t: LaunchToken): string[] {
+  return [t.id, t.contract, t.ticker ? `symbol:${t.ticker}` : null]
+    .filter((value): value is string => !!value)
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function hasExcludedTokenKey(t: LaunchToken, excluded: Set<string>): boolean {
+  return getTokenDedupeKeys(t).some((key) => excluded.has(key));
+}
+
+function makeTokenKeySet(tokens: LaunchToken[]): Set<string> {
+  const keys = new Set<string>();
+  tokens.forEach((token) => getTokenDedupeKeys(token).forEach((key) => keys.add(key)));
+  return keys;
+}
+
+function uniqueLaunchTokens(tokens: LaunchToken[]): LaunchToken[] {
+  const seen = new Set<string>();
+  const out: LaunchToken[] = [];
+  tokens.forEach((token) => {
+    const keys = getTokenDedupeKeys(token);
+    if (keys.length > 0 && keys.some((key) => seen.has(key))) return;
+    keys.forEach((key) => seen.add(key));
+    out.push(token);
+  });
+  return out;
+}
+
+function getVisibleNewPairTokens(newPairs: DexPair[] | undefined, listings: LaunchToken[]): LaunchToken[] {
+  const fromDex = (newPairs ?? []).map(dexPairToLaunchToken);
+  const safeDex = fromDex.filter((t) =>
+    isSafeToken({
+      marketCapUsd: t.marketCapUsd,
+      liquidityUsd: t.liquidityUsd,
+      priceChange24hPct: t.change24hPct,
+      venue: t.venue,
+      tags: t.tags,
+    }),
+  );
+  if (safeDex.length > 0) return uniqueLaunchTokens(safeDex).slice(0, 12);
+  return uniqueLaunchTokens(
+    listings
       .slice()
       .filter((t) =>
         t.submittedBy === "user" ||
@@ -771,9 +795,23 @@ function TrendingPairsRail() {
             tags: t.tags,
           }),
       )
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, 12);
-  }, [newPairs, listings]);
+      .sort((a, b) => b.createdAt - a.createdAt),
+  ).slice(0, 12);
+}
+
+function TrendingPairsRail() {
+  const router = useRouter();
+  const { data: newPairs } = useNewSolanaPairs(12);
+  const { listings } = useLaunchpad();
+  const goAll = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    router.push("/(tabs)/launches");
+  }, [router]);
+
+  const pairs: LaunchToken[] = useMemo(
+    () => getVisibleNewPairTokens(newPairs, listings),
+    [newPairs, listings],
+  );
 
   const hasPairs = pairs.length > 0;
   return (
@@ -1010,11 +1048,16 @@ function TrendingTickersRail() {
   const sortType = tab === "losers" ? ("asc" as const) : ("desc" as const);
 
   const { data: trending } = useTrendingTokens({
-    limit: 30,
+    limit: 60,
     sort_by: sortBy,
     sort_type: sortType,
     timeframe,
   });
+  const { data: visibleNewPairs } = useNewSolanaPairs(12);
+  const excludedNewPairKeys = useMemo<Set<string>>(
+    () => makeTokenKeySet(getVisibleNewPairTokens(visibleNewPairs, listings)),
+    [visibleNewPairs, listings],
+  );
 
   const pickChange = useCallback(
     (t: { priceChange1h?: number; priceChange24h?: number; priceChange7d?: number }): number | null => {
@@ -1040,8 +1083,10 @@ function TrendingTickersRail() {
           change24hPct: change,
           volume24hUsd: t.volume24hUSD ?? pair.volume24hUsd,
         };
-      });
-    const base: LaunchToken[] = fromTrending.length > 0 ? fromTrending : listings.slice();
+      })
+      .filter((token) => !hasExcludedTokenKey(token, excludedNewPairKeys));
+    const fallbackListings = listings.filter((token) => !hasExcludedTokenKey(token, excludedNewPairKeys));
+    const base: LaunchToken[] = fromTrending.length > 0 ? fromTrending : fallbackListings;
     const arr = base.slice();
     if (fromTrending.length === 0) {
       switch (tab) {
@@ -1063,8 +1108,8 @@ function TrendingTickersRail() {
           break;
       }
     }
-    return arr.slice(0, 12);
-  }, [trending, listings, tab, pickChange]);
+    return uniqueLaunchTokens(arr).slice(0, 12);
+  }, [trending, listings, tab, pickChange, excludedNewPairKeys]);
 
   const onOpen = useCallback(
     (id: string) => router.push({ pathname: "/launch/[id]", params: { id } }),
