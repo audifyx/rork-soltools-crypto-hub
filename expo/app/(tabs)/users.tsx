@@ -33,6 +33,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import AppBackground from "@/components/ui/AppBackground";
 import LeaderboardCard from "@/components/users/LeaderboardCard";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -132,6 +133,7 @@ export default function UsersScreen() {
 
   return (
     <View style={styles.root} testID="users-screen">
+      <AppBackground variant="social" />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
@@ -680,7 +682,7 @@ function BadgePill({ badge }: { badge: CustomBadge }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   header: {
     paddingHorizontal: 18,

@@ -50,6 +50,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import TokenAvatar from "@/components/TokenAvatar";
 import AlphaInsightsCard from "@/components/discover/AlphaInsightsCard";
+import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import {
   getAlphaRunnerScore,
@@ -281,6 +282,7 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.root} testID="discover-screen">
+      <AppBackground variant="market" />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
@@ -1269,7 +1271,7 @@ function SearchEmpty({ query }: { query: string }) {
 const formatUsd = fmtUsd;
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
 
   header: {
@@ -1305,10 +1307,10 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 12 : 8,
-    borderRadius: 14,
-    backgroundColor: Colors.card,
+    borderRadius: 16,
+    backgroundColor: "rgba(16,19,29,0.76)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.12)",
   },
   searchInput: { flex: 1, color: Colors.text, fontSize: 14, fontWeight: "600", padding: 0 },
   searchKbd: {

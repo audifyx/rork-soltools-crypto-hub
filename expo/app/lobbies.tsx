@@ -32,6 +32,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import AppBackground from "@/components/ui/AppBackground";
 import { useLobbies } from "@/providers/lobbies-provider";
 
 export default function LobbiesScreen() {
@@ -96,6 +97,7 @@ export default function LobbiesScreen() {
 
   return (
     <View style={styles.root}>
+      <AppBackground variant="social" />
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -388,7 +390,7 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   scroll: { padding: 20, paddingBottom: 60 },
   topBar: {
@@ -502,7 +504,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     borderColor: "rgba(184,140,255,0.25)",
-    backgroundColor: Colors.card,
+    backgroundColor: "rgba(16,19,29,0.78)",
     overflow: "hidden",
   },
   lobbyHead: { flexDirection: "row", alignItems: "center", gap: 12 },

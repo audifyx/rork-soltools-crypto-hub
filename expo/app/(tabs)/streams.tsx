@@ -29,6 +29,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 
 const NOTIFY_KEY = "streams.notifyMe.v1";
@@ -152,6 +153,7 @@ export default function StreamsScreen() {
 
   return (
     <View style={styles.root} testID="streams-screen">
+      <AppBackground variant="social" />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <ScrollView
@@ -416,7 +418,7 @@ function ScheduleRow({ item }: { item: ScheduleItem }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   scroll: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 140 },
 

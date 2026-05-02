@@ -26,6 +26,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import AppBackground from "@/components/ui/AppBackground";
 import { useApp } from "@/providers/app-provider";
 
 const MAX_CHARS = 280;
@@ -96,6 +97,7 @@ export default function ComposeScreen() {
 
   return (
     <View style={styles.root}>
+      <AppBackground variant="feed" />
       <Stack.Screen options={{ headerShown: false, presentation: "modal" }} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
@@ -244,7 +246,7 @@ export default function ComposeScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   header: {
     flexDirection: "row",
@@ -381,7 +383,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "rgba(7,17,19,0.9)",
+    backgroundColor: "rgba(5,5,10,0.88)",
   },
   toolbarLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   toolBtn: {

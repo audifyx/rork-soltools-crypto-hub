@@ -25,6 +25,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import AppBackground from "@/components/ui/AppBackground";
 import { Community, useSocial } from "@/providers/social-provider";
 
 type Tab = "discover" | "joined";
@@ -69,6 +70,7 @@ export default function CommunitiesScreen() {
 
   return (
     <View style={styles.root} testID="communities-screen">
+      <AppBackground variant="social" />
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -323,7 +325,7 @@ function isJoinedDisplay(_c: Community): boolean {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   listContent: { paddingBottom: 140 },
   sep: { height: 14 },

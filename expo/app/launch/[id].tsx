@@ -52,6 +52,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import DexChart from "@/components/DexChart";
+import AppBackground from "@/components/ui/AppBackground";
 import { useDexToken, type DexPair } from "@/lib/api/dexscreener";
 import { useTokenOverview } from "@/lib/api/market";
 import { getTokenSecurity } from "@/lib/api/birdeye";
@@ -341,6 +342,7 @@ export default function LaunchDetailScreen() {
   if (stillResolving) {
     return (
       <View style={styles.root}>
+        <AppBackground variant="market" />
         <Stack.Screen options={{ headerShown: false }} />
         <SafeAreaView edges={["top"]} style={styles.safe}>
           <View style={styles.notFoundWrap}>
@@ -355,6 +357,7 @@ export default function LaunchDetailScreen() {
   if (!token) {
     return (
       <View style={styles.root}>
+        <AppBackground variant="market" />
         <Stack.Screen options={{ headerShown: false }} />
         <SafeAreaView edges={["top"]} style={styles.safe}>
           <View style={styles.notFoundWrap}>
@@ -391,6 +394,7 @@ export default function LaunchDetailScreen() {
 
   return (
     <View style={styles.root}>
+      <AppBackground variant="market" />
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.bgOrbTop} pointerEvents="none" />
       <View style={styles.bgOrbBottom} pointerEvents="none" />
@@ -1324,7 +1328,7 @@ function SignalBar({ label, value, color }: { label: string; value: number; colo
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   scroll: { paddingBottom: 200 },
   bgOrbTop: {

@@ -47,6 +47,7 @@ import TokenAvatar from "@/components/TokenAvatar";
 import LiveTicker from "@/components/ui/LiveTicker";
 import CommunitiesRail from "@/components/home/CommunitiesRail";
 import VoiceRoomsRail from "@/components/home/VoiceRoomsRail";
+import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import { fmtPrice } from "@/utils/format";
 
@@ -362,6 +363,7 @@ export default function HomeFeedScreen() {
 
   return (
     <View style={styles.root} testID="home-screen">
+      <AppBackground variant="feed" />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.topBar}>
@@ -1622,7 +1624,7 @@ function formatCount(n: number): string {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
 
   topBar: {
@@ -1694,9 +1696,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(255,255,255,0.07)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.13)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1783,9 +1785,9 @@ const styles = StyleSheet.create({
     marginTop: 18,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: Colors.card,
+    backgroundColor: "rgba(16,19,29,0.78)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.16)",
+    borderColor: "rgba(255,255,255,0.10)",
   },
   composerAvatar: {
     width: 40,

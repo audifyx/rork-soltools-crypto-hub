@@ -33,6 +33,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import AppBackground from "@/components/ui/AppBackground";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useApp } from "@/providers/app-provider";
@@ -266,6 +267,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.root} testID="notifications-screen">
+      <AppBackground variant="social" />
       <Stack.Screen options={{ headerShown: false, animation: "slide_from_right" }} />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -410,7 +412,7 @@ function formatUsd(n: number): string {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   header: {
     paddingHorizontal: 14,

@@ -36,6 +36,7 @@ import {
 import React, { useCallback, useMemo, useState } from "react";
 
 import Colors from "@/constants/colors";
+import AppBackground from "@/components/ui/AppBackground";
 import { type JupiterQuote, type JupiterToken } from "@/lib/api/jupiter";
 import { shortAddress } from "@/lib/solana-wallet";
 import { useAuth } from "@/providers/auth-provider";
@@ -191,6 +192,7 @@ export default function WalletScreen() {
 
   return (
     <View style={styles.root}>
+      <AppBackground variant="wallet" />
       <StatusBar style="light" />
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -394,7 +396,7 @@ function SecretBlock({ label, value, onCopy }: { label: string; value: string; o
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   scroll: { paddingHorizontal: 16, paddingBottom: 60 },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 6 },
@@ -418,7 +420,7 @@ const styles = StyleSheet.create({
   segmentActive: { backgroundColor: Colors.mint },
   segmentText: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   segmentTextActive: { color: Colors.ink },
-  card: { marginTop: 14, padding: 14, borderRadius: 20, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.07)" },
+  card: { marginTop: 14, padding: 14, borderRadius: 22, backgroundColor: "rgba(16,19,29,0.78)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
   cardHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   sectionTitle: { color: Colors.text, fontSize: 16, fontWeight: "900", letterSpacing: -0.2 },
   bodyText: { color: Colors.muted, fontSize: 12, lineHeight: 18, fontWeight: "600", marginTop: 7 },

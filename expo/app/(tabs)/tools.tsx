@@ -65,6 +65,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 
 type LucideIcon = React.ComponentType<{
@@ -657,6 +658,7 @@ export default function ToolsScreen() {
 
   return (
     <View style={styles.root} testID="tools-screen">
+      <AppBackground variant="tool" />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <ScrollView
@@ -1071,7 +1073,7 @@ function ToolRow({ tool, onPress }: { tool: Tool; onPress: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   scroll: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 140 },
 

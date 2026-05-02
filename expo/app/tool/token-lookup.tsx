@@ -43,6 +43,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import DexChart from "@/components/DexChart";
+import AppBackground from "@/components/ui/AppBackground";
 import { getTokenOverview, type TokenOverview } from "@/lib/api/birdeye";
 import { fmtNum, fmtPct, fmtPrice, fmtUsd } from "@/utils/format";
 
@@ -206,6 +207,7 @@ export default function TokenLookupScreen() {
 
   return (
     <View style={styles.root} testID="token-lookup-screen">
+      <AppBackground variant="market" />
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.bgOrbA} pointerEvents="none" />
       <View style={styles.bgOrbB} pointerEvents="none" />
@@ -532,7 +534,7 @@ function QuickAction({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   scroll: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 112 },
   bgOrbA: {

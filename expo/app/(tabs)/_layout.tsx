@@ -12,7 +12,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.mint,
+        tabBarActiveTintColor: Colors.text,
         tabBarInactiveTintColor: Colors.muted,
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.label,
@@ -28,7 +28,7 @@ export default function TabsLayout() {
             ) : null}
             <View style={styles.barBg} />
             <LinearGradient
-              colors={["rgba(184,140,255,0.28)", "rgba(56,215,255,0.10)", "rgba(85,245,178,0.16)"]}
+              colors={["rgba(0,255,163,0.22)", "rgba(124,92,255,0.18)", "rgba(34,211,255,0.14)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -97,16 +97,16 @@ const styles = StyleSheet.create({
     bottom: Platform.OS === "ios" ? 22 : 14,
     borderTopWidth: 0,
     borderWidth: 1.5,
-    borderColor: "rgba(184,140,255,0.55)",
+    borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "transparent",
     elevation: 0,
     height: 72,
     paddingTop: 6,
     paddingBottom: 10,
     paddingHorizontal: 2,
-    borderRadius: 28,
+    borderRadius: 30,
     overflow: "hidden",
-    shadowColor: "#B88CFF",
+    shadowColor: Colors.violet,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 18,
@@ -122,15 +122,15 @@ const styles = StyleSheet.create({
   barBgWrap: {
     flex: 1,
     overflow: "hidden",
-    borderRadius: 28,
+    borderRadius: 30,
   },
   barBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(11, 8, 24, 0.55)",
+    backgroundColor: "rgba(5, 5, 10, 0.72)",
   },
   barInnerBorder: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 28,
+    borderRadius: 30,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },

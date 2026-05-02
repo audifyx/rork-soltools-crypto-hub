@@ -37,6 +37,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import TokenCard from "@/components/launchpad/TokenCard";
+import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { getTokenBanner, getTokenLogo } from "@/utils/token-art";
@@ -121,6 +122,7 @@ export default function LaunchpadScreen() {
 
   return (
     <View style={styles.root} testID="launchpad-screen">
+      <AppBackground variant="market" />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <FlatList
@@ -653,7 +655,7 @@ function PickerSheet<K extends string>({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   listContent: { paddingBottom: 140 },
   columnWrap: { paddingHorizontal: 14, gap: 12, marginBottom: 12 },

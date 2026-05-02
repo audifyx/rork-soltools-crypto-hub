@@ -73,6 +73,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import AppBackground from "@/components/ui/AppBackground";
 import PortfolioCard from "@/components/profile/PortfolioCard";
 import { useAdmin } from "@/providers/admin-provider";
 import { useApp, type Currency, type Language, type ThemeMode, type UserPrefs } from "@/providers/app-provider";
@@ -573,6 +574,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.root} testID="profile-screen">
+      <AppBackground variant="social" />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <ScrollView
@@ -2283,7 +2285,7 @@ function SettingRow({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   scroll: { paddingHorizontal: 20, paddingBottom: 140 },
 

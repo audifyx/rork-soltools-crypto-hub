@@ -29,6 +29,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import AppBackground from "@/components/ui/AppBackground";
 import { Space, useSocial } from "@/providers/social-provider";
 
 type Tab = "live" | "upcoming" | "following";
@@ -91,6 +92,7 @@ export default function SpacesScreen() {
 
   return (
     <View style={styles.root} testID="spaces-screen">
+      <AppBackground variant="social" />
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -384,7 +386,7 @@ function SpaceCard({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   header: {
     paddingHorizontal: 18,

@@ -34,6 +34,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import AppBackground from "@/components/ui/AppBackground";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useApp } from "@/providers/app-provider";
@@ -263,6 +264,7 @@ export default function PostsFeedScreen() {
 
   return (
     <View style={styles.root} testID="posts-screen">
+      <AppBackground variant="feed" />
       <StatusBar style="light" />
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -668,7 +670,7 @@ function fmt(n: number): string {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   headerGlow: {
     position: "absolute",
