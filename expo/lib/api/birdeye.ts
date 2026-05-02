@@ -1,4 +1,5 @@
 import { fetchDexToken, getNewSolanaPairs, type DexPair } from "@/lib/api/dexscreener";
+import { fetchPumpFunToken, pumpFunVolume24h } from "@/lib/api/pumpfun";
 import { supabase } from "@/lib/supabase";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
@@ -97,27 +98,29 @@ function pairToOverview(pair: DexPair, fallbackAddress: string, rank?: number): 
 }
 
 async function fallbackTokenOverview(address: string): Promise<TokenOverview> {
-  const [dexResult, jupResult] = await Promise.allSettled([
+  const [dexResult, pumpResult, jupResult] = await Promise.allSettled([
     fetchDexToken(address),
+    fetchPumpFunToken(address),
     fetchJupiterToken(address),
   ]);
   const dex = dexResult.status === "fulfilled" ? dexResult.value : null;
+  const pump = pumpResult.status === "fulfilled" ? pumpResult.value : null;
   const jup = jupResult.status === "fulfilled" ? jupResult.value : null;
   const pair = dex?.pair ?? null;
 
   return {
     address,
-    symbol: jup?.symbol ?? pair?.baseToken?.symbol ?? "TOKEN",
-    name: jup?.name ?? pair?.baseToken?.name ?? "Unknown token",
-    decimals: Number(jup?.decimals ?? 0),
-    price: dex?.priceUsd ?? 0,
-    priceChange1h: dex?.priceChange1hPct ?? undefined,
-    priceChange24h: dex?.priceChange24hPct ?? undefined,
-    liquidity: dex?.liquidityUsd ?? jup?.liquidity ?? undefined,
-    marketCap: dex?.marketCapUsd ?? jup?.mcap ?? undefined,
-    volume24hUSD: dex?.volume24hUsd ?? undefined,
-    holder: jup?.holderCount,
-    logoURI: jup?.icon ?? jup?.logoURI ?? dex?.imageUrl ?? undefined,
+    symbol: pump?.symbol ?? jup?.symbol ?? pair?.baseToken?.symbol ?? "TOKEN",
+    name: pump?.name ?? jup?.name ?? pair?.baseToken?.name ?? "Unknown token",
+    decimals: Number(pump?.decimals ?? jup?.decimals ?? 0),
+    price: pump?.usdPrice ?? dex?.priceUsd ?? 0,
+    priceChange1h: pump?.stats1h?.priceChange ?? dex?.priceChange1hPct ?? undefined,
+    priceChange24h: pump?.stats24h?.priceChange ?? dex?.priceChange24hPct ?? undefined,
+    liquidity: pump?.liquidity ?? dex?.liquidityUsd ?? jup?.liquidity ?? undefined,
+    marketCap: pump?.mcap ?? pump?.fdv ?? dex?.marketCapUsd ?? jup?.mcap ?? undefined,
+    volume24hUSD: pumpFunVolume24h(pump) ?? dex?.volume24hUsd ?? undefined,
+    holder: pump?.holderCount ?? jup?.holderCount,
+    logoURI: pump?.icon ?? pump?.image_uri ?? jup?.icon ?? jup?.logoURI ?? dex?.imageUrl ?? undefined,
   };
 }
 

@@ -1,6 +1,7 @@
 import { getTokenOverview } from "@/lib/api/birdeye";
 import { fetchDexToken } from "@/lib/api/dexscreener";
 import { getTokens, rpcCall } from "@/lib/api/jupiter";
+import { fetchPumpFunToken, pumpFunVolume24h } from "@/lib/api/pumpfun";
 import { supabase } from "@/lib/supabase";
 
 const BASE58_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
@@ -62,6 +63,22 @@ function asNumber(value: unknown): number | null {
   if (typeof value === "string" && value.trim().length > 0) {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function usefulText(value: string | null | undefined, blocked: string[] = []): string | null {
+  const text = value?.trim();
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  if (blocked.some((b) => lower === b.toLowerCase())) return null;
+  return text;
+}
+
+function firstText(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    const text = usefulText(value);
+    if (text) return text;
   }
   return null;
 }
@@ -131,7 +148,7 @@ async function persistTokenScan(token: CommunityTokenCard): Promise<void> {
 }
 
 /**
- * Scans a Solana mint using Helius-compatible DAS/RPC, Birdeye, Jupiter, and DexScreener fallbacks.
+ * Scans a Solana mint using Birdeye, DexScreener, Pump.fun, Helius-compatible DAS/RPC, and Jupiter fallbacks.
  */
 export async function scanCommunityToken(
   rawAddress: string,
@@ -140,9 +157,10 @@ export async function scanCommunityToken(
   const address = cleanAddress(rawAddress);
   if (!isSolanaAddress(address)) throw new Error("Invalid Solana token address.");
 
-  const [overviewRes, dexRes, assetRes, supplyRes, jupRes] = await Promise.allSettled([
+  const [overviewRes, dexRes, pumpRes, assetRes, supplyRes, jupRes] = await Promise.allSettled([
     getTokenOverview(address),
     fetchDexToken(address),
+    fetchPumpFunToken(address),
     fetchHeliusAsset(address),
     fetchTokenSupply(address),
     getTokens(address),
@@ -150,29 +168,43 @@ export async function scanCommunityToken(
 
   const overview = overviewRes.status === "fulfilled" ? overviewRes.value : null;
   const dex = dexRes.status === "fulfilled" ? dexRes.value : null;
+  const pump = pumpRes.status === "fulfilled" ? pumpRes.value : null;
   const asset = assetRes.status === "fulfilled" ? assetRes.value : null;
   const supply = supplyRes.status === "fulfilled" ? supplyRes.value : null;
   const jup = jupRes.status === "fulfilled" ? jupRes.value[0] ?? null : null;
   const assetMeta = asset?.content?.metadata;
   const tokenInfo = asset?.token_info;
+  const pumpVolume24h = pumpFunVolume24h(pump);
+  const pumpDescription = usefulText(pump?.description);
+  const pumpSocials = [
+    pump?.twitter ? { type: "twitter", url: pump.twitter } : null,
+    pump?.telegram ? { type: "telegram", url: pump.telegram } : null,
+  ].filter((item): item is { type: string; url: string } => !!item?.url);
+  const pumpWebsites = [pump?.website].filter((url): url is string => !!usefulText(url));
 
   const token: CommunityTokenCard = {
     address,
     chain: "solana",
     symbol:
-      overview?.symbol ??
-      tokenInfo?.symbol ??
-      assetMeta?.symbol ??
-      jup?.symbol ??
-      dex?.pair?.baseToken?.symbol ??
-      "TOKEN",
+      firstText(
+        pump?.symbol,
+        tokenInfo?.symbol,
+        assetMeta?.symbol,
+        jup?.symbol,
+        dex?.pair?.baseToken?.symbol,
+        usefulText(overview?.symbol, ["TOKEN"]),
+      ) ?? "TOKEN",
     name:
-      overview?.name ??
-      assetMeta?.name ??
-      jup?.name ??
-      dex?.pair?.baseToken?.name ??
-      "Unknown Solana token",
+      firstText(
+        pump?.name,
+        assetMeta?.name,
+        jup?.name,
+        dex?.pair?.baseToken?.name,
+        usefulText(overview?.name, ["Unknown token", "Unknown Solana token"]),
+      ) ?? "Unknown Solana token",
     logoUrl:
+      pump?.icon ??
+      pump?.image_uri ??
       overview?.logoURI ??
       asset?.content?.links?.image ??
       assetMeta?.image ??
@@ -180,32 +212,45 @@ export async function scanCommunityToken(
       dex?.imageUrl ??
       null,
     priceUsd:
+      asNumber(pump?.usdPrice) ??
       asNumber(overview?.price) ??
       asNumber(tokenInfo?.price_info?.price_per_token) ??
       dex?.priceUsd ??
       null,
-    change24h: asNumber(overview?.priceChange24h) ?? dex?.priceChange24hPct ?? null,
-    marketCapUsd: asNumber(overview?.marketCap) ?? dex?.marketCapUsd ?? null,
-    liquidityUsd: asNumber(overview?.liquidity) ?? dex?.liquidityUsd ?? null,
-    volume24hUsd: asNumber(overview?.volume24hUSD) ?? dex?.volume24hUsd ?? null,
-    pairAddress: dex?.pairAddress ?? null,
+    change24h: asNumber(pump?.stats24h?.priceChange) ?? asNumber(overview?.priceChange24h) ?? dex?.priceChange24hPct ?? null,
+    marketCapUsd: asNumber(pump?.mcap) ?? asNumber(pump?.fdv) ?? asNumber(overview?.marketCap) ?? dex?.marketCapUsd ?? null,
+    liquidityUsd: asNumber(pump?.liquidity) ?? asNumber(overview?.liquidity) ?? dex?.liquidityUsd ?? null,
+    volume24hUsd: pumpVolume24h ?? asNumber(overview?.volume24hUSD) ?? dex?.volume24hUsd ?? null,
+    pairAddress: dex?.pairAddress ?? pump?.graduatedPool ?? null,
     decimals:
+      asNumber(pump?.decimals) ??
       asNumber(overview?.decimals) ??
       asNumber(tokenInfo?.decimals) ??
       asNumber(supply?.value?.decimals) ??
       asNumber(jup?.decimals) ??
       null,
-    holderCount: asNumber(overview?.holder) ?? null,
+    holderCount: asNumber(pump?.holderCount) ?? asNumber(overview?.holder) ?? null,
     metadata: {
       chain: "solana",
       ca: address,
-      description: assetMeta?.description ?? null,
-      supply: tokenInfo?.supply ?? supply?.value?.uiAmountString ?? supply?.value?.amount ?? null,
+      description: pumpDescription ?? assetMeta?.description ?? null,
+      supply: pump?.totalSupply ?? tokenInfo?.supply ?? supply?.value?.uiAmountString ?? supply?.value?.amount ?? null,
+      circulatingSupply: pump?.circSupply ?? null,
+      tokenProgram: pump?.tokenProgram ?? null,
+      launchpad: pump?.launchpad ?? dex?.dexId ?? null,
+      graduatedPool: pump?.graduatedPool ?? null,
+      graduatedAt: pump?.graduatedAt ?? null,
+      createdAt: pump?.createdAt ?? pump?.firstPool?.createdAt ?? null,
       dexId: dex?.dexId ?? null,
       pairCreatedAt: dex?.pairCreatedAt ?? null,
-      websites: dex?.websites ?? [],
-      socials: dex?.socials ?? [],
+      websites: Array.from(new Set([...(dex?.websites ?? []), ...pumpWebsites])),
+      socials: [...(dex?.socials ?? []), ...pumpSocials],
+      audit: pump?.audit ?? null,
+      organicScore: pump?.organicScore ?? null,
+      organicScoreLabel: pump?.organicScoreLabel ?? null,
+      tags: pump?.tags ?? [],
       sources: {
+        pumpfun: pump != null,
         helius: asset != null,
         birdeye: overview != null,
         dexscreener: dex?.pair != null,

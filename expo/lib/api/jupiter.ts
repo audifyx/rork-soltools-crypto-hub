@@ -1,3 +1,4 @@
+import { fetchPumpFunToken } from "@/lib/api/pumpfun";
 import { supabase } from "@/lib/supabase";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
@@ -130,6 +131,25 @@ async function directSwapOrder(params: {
   return JSON.parse(text) as { swapTransaction: string; lastValidBlockHeight?: number };
 }
 
+function looksLikeSolanaAddress(value: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value.trim());
+}
+
+async function pumpFunTokenSearch(query: string): Promise<JupiterToken[]> {
+  if (!looksLikeSolanaAddress(query)) return [];
+  const token = await fetchPumpFunToken(query);
+  if (!token) return [];
+  const address = token.id ?? token.mint ?? query;
+  return [{
+    address,
+    decimals: Number(token.decimals ?? 0),
+    name: token.name ?? token.symbol ?? "Unknown token",
+    symbol: token.symbol ?? "TOKEN",
+    logoURI: token.icon ?? token.image_uri,
+    tags: [token.launchpad, ...(token.tags ?? [])].filter((tag): tag is string => !!tag),
+  }];
+}
+
 async function directTokens(query?: string): Promise<JupiterToken[]> {
   const q = (query ?? "").trim() || "SOL,JUP,USDC,BONK";
   const res = await fetch(`${JUPITER_TOKENS_DIRECT}?query=${encodeURIComponent(q)}`);
@@ -197,12 +217,22 @@ export async function buildSwapOrder(params: {
 }
 
 export async function getTokens(query?: string): Promise<JupiterToken[]> {
+  const q = (query ?? "").trim();
   try {
-    return await callEdge<JupiterToken[]>(TOKENS_FN, { query: query ?? "" });
+    const edgeRows = await callEdge<JupiterToken[]>(TOKENS_FN, { query: q });
+    if (Array.isArray(edgeRows) && edgeRows.length > 0) return edgeRows;
   } catch (e) {
     console.log("[jupiter] tokens direct fallback", e instanceof Error ? e.message : e);
-    return directTokens(query);
   }
+
+  try {
+    const directRows = await directTokens(q);
+    if (directRows.length > 0) return directRows;
+  } catch (e) {
+    console.log("[jupiter] tokens pump.fun fallback", e instanceof Error ? e.message : e);
+  }
+
+  return pumpFunTokenSearch(q);
 }
 
 export async function getPrice(ids: string[]): Promise<Record<string, JupiterPrice>> {
