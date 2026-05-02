@@ -121,14 +121,30 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
     mutationFn: async (input: { kind: ProfileMediaKind; uri: string; base64?: string | null }) => {
       if (!userId) throw new Error("Sign in to upload");
       const url = await uploadProfileMedia(userId, input.kind, input.uri, input.base64 ?? null);
-      const patch = input.kind === "avatar" ? { avatar_url: url } : { banner_url: url };
-      const { error } = await supabase.from("profiles").update(patch).eq("id", userId);
-      if (error) throw error;
+      // Use the partial-update RPC so we never wipe other profile fields,
+      // and so the row is created if the trigger somehow missed it.
+      const rpcArgs =
+        input.kind === "avatar"
+          ? { set_avatar_url: url }
+          : { set_banner_url: url };
+      const { error: rpcErr } = await supabase.rpc("update_my_profile", rpcArgs);
+      if (rpcErr) {
+        // Fallback to a direct upsert in case the RPC is missing.
+        const patch =
+          input.kind === "avatar"
+            ? { avatar_url: url }
+            : { banner_url: url };
+        const { error: upErr } = await supabase
+          .from("profiles")
+          .upsert({ id: userId, user_id: userId, ...patch }, { onConflict: "id" });
+        if (upErr) throw upErr;
+      }
       return url;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["app", "profile"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
     },
   });
 

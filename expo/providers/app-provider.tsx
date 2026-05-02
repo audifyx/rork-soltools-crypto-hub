@@ -724,33 +724,73 @@ export const [AppProvider, useApp] = createContextHook(() => {
       qc.setQueryData(["app", "profile", userId ?? "guest"], next);
       await saveJson(PROFILE_KEY, next);
       if (isAuthenticated && userId) {
+        // Only push the fields that actually changed in this patch so we
+        // never null-out unrelated columns (e.g. avatar_url when the user
+        // edits just their bio). Maps client field -> RPC arg.
+        const argMap: Record<keyof UserProfile, string | undefined> = {
+          handle: "set_username",
+          displayName: "set_display_name",
+          bio: "set_bio",
+          avatarUrl: "set_avatar_url",
+          bannerUrl: "set_banner_url",
+          avatarColor: "set_avatar_color",
+          bannerFrom: "set_banner_from",
+          bannerTo: "set_banner_to",
+          walletAddress: "set_wallet",
+          twitterHandle: "set_twitter",
+          website: "set_website",
+          location: "set_location",
+          verified: undefined,
+          joinedAt: undefined,
+          xp: undefined,
+          trades: undefined,
+          winRate: undefined,
+          pnlPct: undefined,
+          rank: undefined,
+          followers: undefined,
+          following: undefined,
+          customBadges: undefined,
+        };
+        const args: Record<string, string | null> = {};
+        for (const k of Object.keys(patch) as (keyof UserProfile)[]) {
+          const arg = argMap[k];
+          if (!arg) continue;
+          let v = patch[k] as unknown;
+          if (k === "handle" && typeof v === "string") v = v.replace(/^@/, "").trim();
+          if (typeof v === "string") args[arg] = v.length > 0 ? v : "";
+          else if (v == null) args[arg] = "";
+        }
+        if (Object.keys(args).length === 0) return;
         try {
-          const handleVal = next.handle.replace(/^@/, "").trim();
-          await supabase.from("profiles").upsert(
-            {
+          const { error } = await supabase.rpc("update_my_profile", args);
+          if (error) throw error;
+        } catch (e) {
+          console.log("[app] update_my_profile failed, falling back", e);
+          try {
+            const fallback: Record<string, string | null> = {
               id: userId,
               user_id: userId,
-              username: handleVal || null,
-              display_name: next.displayName || null,
-              bio: next.bio || null,
-              avatar_url: next.avatarUrl && next.avatarUrl.trim() ? next.avatarUrl : null,
-              banner_url: next.bannerUrl && next.bannerUrl.trim() ? next.bannerUrl : null,
-              avatar_color: next.avatarColor || null,
-              banner_from: next.bannerFrom || null,
-              banner_to: next.bannerTo || null,
-              wallet_address: next.walletAddress || null,
-              twitter_handle: next.twitterHandle || null,
-              website: next.website || null,
-              location: next.location || null,
-            },
-            { onConflict: "id" },
-          );
-        } catch (e) {
-          console.log("[app] profile upsert failed", e);
+            };
+            if ("handle" in patch) fallback.username = (next.handle.replace(/^@/, "").trim() || null) as string | null;
+            if ("displayName" in patch) fallback.display_name = next.displayName || null;
+            if ("bio" in patch) fallback.bio = next.bio || null;
+            if ("avatarUrl" in patch) fallback.avatar_url = next.avatarUrl && next.avatarUrl.trim() ? next.avatarUrl : null;
+            if ("bannerUrl" in patch) fallback.banner_url = next.bannerUrl && next.bannerUrl.trim() ? next.bannerUrl : null;
+            if ("avatarColor" in patch) fallback.avatar_color = next.avatarColor || null;
+            if ("bannerFrom" in patch) fallback.banner_from = next.bannerFrom || null;
+            if ("bannerTo" in patch) fallback.banner_to = next.bannerTo || null;
+            if ("walletAddress" in patch) fallback.wallet_address = next.walletAddress || null;
+            if ("twitterHandle" in patch) fallback.twitter_handle = next.twitterHandle || null;
+            if ("website" in patch) fallback.website = next.website || null;
+            if ("location" in patch) fallback.location = next.location || null;
+            await supabase.from("profiles").upsert(fallback, { onConflict: "id" });
+          } catch (e2) {
+            console.log("[app] profile upsert fallback failed", e2);
+          }
         }
       }
     },
-    [profile, qc, userId, isAuthenticated],
+    [profile, qc, userId, isAuthenticated, PROFILE_KEY],
   );
 
   const updatePrefs = useCallback(

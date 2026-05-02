@@ -228,7 +228,7 @@ function rowToSpace(row: SpaceRow, hostHandle: string, hostName: string): Space 
 
 const KEY_FOLLOW_SPACES = "soltools.social.followspaces.v1";
 const KEY_JOINED_GUEST = "soltools.social.joined.guest.v1";
-const KEY_LOCAL_COMMUNITIES = "soltools.social.communities.local.v1";
+const KEY_LOCAL_COMMUNITIES_BASE = "soltools.social.communities.local.v2";
 
 async function loadJson<T>(key: string, fallback: T): Promise<T> {
   try {
@@ -253,6 +253,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
   const { userId, isAuthenticated } = useAuth();
   const scope = userId ?? "guest";
   const followKey = `${KEY_FOLLOW_SPACES}.${scope}`;
+  // Local-only communities (created while offline / before RPC succeeded)
+  // are scoped per user so they never leak across accounts after sign-out.
+  const localKey = `${KEY_LOCAL_COMMUNITIES_BASE}.${scope}`;
 
   const [followingSpaces, setFollowingSpaces] = useState<string[]>([]);
   const [guestJoined, setGuestJoined] = useState<string[]>([]);
@@ -260,11 +263,16 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
 
   useEffect(() => {
     let alive = true;
+    // Reset state immediately on scope change so the previous user's local
+    // communities can't briefly flash before AsyncStorage hydrates.
+    setLocalCommunities([]);
+    setFollowingSpaces([]);
+    setGuestJoined([]);
     void (async () => {
       const [f, gj, lc] = await Promise.all([
         loadJson<string[]>(followKey, []),
         loadJson<string[]>(KEY_JOINED_GUEST, []),
-        loadJson<Community[]>(KEY_LOCAL_COMMUNITIES, []),
+        loadJson<Community[]>(localKey, []),
       ]);
       if (!alive) return;
       setFollowingSpaces(f);
@@ -274,7 +282,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     return () => {
       alive = false;
     };
-  }, [followKey]);
+  }, [followKey, localKey]);
 
   const communitiesQ = useQuery<Community[]>({
     queryKey: ["social", "communities"],
@@ -710,7 +718,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       // Persist locally so it appears immediately.
       const next = [community, ...localCommunities];
       setLocalCommunities(next);
-      await saveJson(KEY_LOCAL_COMMUNITIES, next);
+      await saveJson(localKey, next);
 
       // Optimistically mark joined.
       const nextJoined = [community.id, ...joined];
@@ -724,7 +732,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       qc.invalidateQueries({ queryKey: ["social", "communities"] });
       return community;
     },
-    [isAuthenticated, userId, localCommunities, joined, guestJoined, qc],
+    [isAuthenticated, userId, localCommunities, joined, guestJoined, qc, localKey],
   );
 
   const joinedCommunities = useMemo(
@@ -756,13 +764,13 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             : c,
         );
         setLocalCommunities(next);
-        await saveJson(KEY_LOCAL_COMMUNITIES, next);
+        await saveJson(localKey, next);
         qc.invalidateQueries({ queryKey: ["social", "communities"] });
       } catch (e) {
         console.log("[social] updateCommunityMedia failed", e);
       }
     },
-    [isAuthenticated, userId, localCommunities, qc],
+    [isAuthenticated, userId, localCommunities, qc, localKey],
   );
 
   const trendingCommunities = useMemo(
