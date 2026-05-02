@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.ct333efmdotyxkemvlyk6"
+      "bundleIdentifier": "app.rork.ct333efmdotyxkemvlyk6",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -37,11 +40,19 @@
       "expo-font",
       "expo-web-browser",
       [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "Allow SolTools to protect your trading wallet keys with Face ID."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Allow SolTools to access your photos so you can upload profile pictures and banners."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

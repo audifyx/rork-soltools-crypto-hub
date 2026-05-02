@@ -132,6 +132,21 @@ const TOOLS: Tool[] = [
     category: "wallet",
   },
   {
+    id: "trade-vault",
+    route: "/wallet",
+    name: "Trade Vault",
+    tagline: "Create, import, connect Phantom, and swap",
+    description:
+      "Secure Solana trading wallet with local encrypted keys, Phantom deeplinks, Jupiter routes, exports, and trade history.",
+    Icon: Wallet,
+    accent: Colors.mint,
+    glow: "rgba(85,245,178,0.26)",
+    gradient: [Colors.mint, Colors.orange],
+    tags: ["Wallet", "Jupiter", "Phantom"],
+    status: "LIVE",
+    category: "trading",
+  },
+  {
     id: "ai-analysis",
     route: "/tool/ai-analysis",
     name: "AI Analysis",

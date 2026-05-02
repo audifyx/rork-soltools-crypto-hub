@@ -14,6 +14,7 @@ import { LobbiesProvider } from "@/providers/lobbies-provider";
 import { MessagesProvider } from "@/providers/messages-provider";
 import { ProfileProvider } from "@/providers/profile-provider";
 import { SocialProvider } from "@/providers/social-provider";
+import { TradingWalletProvider } from "@/providers/trading-wallet-provider";
 
 SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
   console.log("SolTools splash hold skipped during boot", error);
@@ -59,6 +60,7 @@ function RootLayoutNav() {
       <Stack.Screen name="lobby/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="notifications" options={{ presentation: "card", animation: "slide_from_right" }} />
       <Stack.Screen name="posts" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="wallet" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
@@ -81,9 +83,11 @@ export default function RootLayout() {
                 <SocialProvider>
                   <MessagesProvider>
                     <LobbiesProvider>
-                      <GestureHandlerRootView style={styles.gestureRoot}>
-                        <RootLayoutNav />
-                      </GestureHandlerRootView>
+                      <TradingWalletProvider>
+                        <GestureHandlerRootView style={styles.gestureRoot}>
+                          <RootLayoutNav />
+                        </GestureHandlerRootView>
+                      </TradingWalletProvider>
                     </LobbiesProvider>
                   </MessagesProvider>
                 </SocialProvider>
