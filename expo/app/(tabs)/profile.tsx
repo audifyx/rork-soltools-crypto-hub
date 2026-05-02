@@ -249,6 +249,16 @@ function tap() {
   }
 }
 
+async function ensurePhotoPermission(): Promise<boolean> {
+  if (Platform.OS === "web") return true;
+  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!perm.granted) {
+    Alert.alert("Permission needed", "Allow photo library access to update your profile images.");
+    return false;
+  }
+  return true;
+}
+
 function shorten(addr: string): string {
   if (!addr) return "";
   if (addr.length <= 12) return addr;
@@ -493,8 +503,12 @@ export default function ProfileScreen() {
       return;
     }
     try {
+      if (Platform.OS !== "web") {
+        const allowed = await ensurePhotoPermission();
+        if (!allowed) return;
+      }
       const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         quality: 0.85,
         allowsEditing: true,
         aspect: [1, 1],
@@ -502,9 +516,16 @@ export default function ProfileScreen() {
       });
       if (res.canceled || !res.assets[0]?.uri) return;
       const asset = res.assets[0];
-      const url = await uploadMedia({ kind: "avatar", uri: asset.uri, base64: asset.base64 });
+      const url = await uploadMedia({
+        kind: "avatar",
+        uri: asset.uri,
+        base64: asset.base64 ?? null,
+        fileName: asset.fileName ?? null,
+        mimeType: asset.mimeType ?? null,
+      });
       await updateProfile({ avatarUrl: url });
     } catch (e) {
+      console.log("[profile] avatar upload failed", e);
       Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");
     }
   }, [isAuthenticated, uploadMedia, updateProfile]);
@@ -515,8 +536,12 @@ export default function ProfileScreen() {
       return;
     }
     try {
+      if (Platform.OS !== "web") {
+        const allowed = await ensurePhotoPermission();
+        if (!allowed) return;
+      }
       const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         quality: 0.85,
         allowsEditing: true,
         aspect: [3, 1],
@@ -524,9 +549,16 @@ export default function ProfileScreen() {
       });
       if (res.canceled || !res.assets[0]?.uri) return;
       const asset = res.assets[0];
-      const url = await uploadMedia({ kind: "banner", uri: asset.uri, base64: asset.base64 });
+      const url = await uploadMedia({
+        kind: "banner",
+        uri: asset.uri,
+        base64: asset.base64 ?? null,
+        fileName: asset.fileName ?? null,
+        mimeType: asset.mimeType ?? null,
+      });
       await updateProfile({ bannerUrl: url });
     } catch (e) {
+      console.log("[profile] banner upload failed", e);
       Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");
     }
   }, [isAuthenticated, uploadMedia, updateProfile]);

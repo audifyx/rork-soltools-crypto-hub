@@ -9,15 +9,34 @@ const COMMUNITY_BUCKET = "community-images";
 export type ProfileMediaKind = "avatar" | "banner";
 export type CommunityMediaKind = "avatar" | "banner";
 
-function extFromUri(uri: string, fallback = "jpg"): string {
-  const m = uri.match(/\.([a-zA-Z0-9]+)(?:\?|$)/);
-  return (m?.[1] ?? fallback).toLowerCase().replace(/[^a-z0-9]/g, "") || fallback;
+function cleanExt(ext: string | null | undefined, fallback = "jpg"): string {
+  const safe = (ext ?? fallback).toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (safe === "jpeg") return "jpg";
+  return safe || fallback;
 }
 
-function contentType(ext: string): string {
+function extFromUri(uri: string, fallback = "jpg"): string {
+  const m = uri.match(/\.([a-zA-Z0-9]+)(?:\?|$)/);
+  return cleanExt(m?.[1], fallback);
+}
+
+function extFromMime(mimeType?: string | null): string | null {
+  const clean = (mimeType ?? "").toLowerCase().trim();
+  if (!clean.startsWith("image/")) return null;
+  const subtype = clean.split("/")[1]?.split(";")[0];
+  if (!subtype) return null;
+  if (subtype === "jpeg") return "jpg";
+  return cleanExt(subtype, "jpg");
+}
+
+function contentType(ext: string, mimeType?: string | null): string {
+  const clean = (mimeType ?? "").toLowerCase().trim();
+  if (clean.startsWith("image/")) return clean;
   if (ext === "png") return "image/png";
   if (ext === "webp") return "image/webp";
   if (ext === "gif") return "image/gif";
+  if (ext === "heic") return "image/heic";
+  if (ext === "heif") return "image/heif";
   return "image/jpeg";
 }
 
@@ -80,10 +99,12 @@ export async function uploadProfileMedia(
   kind: ProfileMediaKind,
   uri: string,
   base64?: string | null,
+  fileName?: string | null,
+  mimeType?: string | null,
 ): Promise<string> {
-  const ext = extFromUri(uri, "jpg");
+  const ext = extFromMime(mimeType) ?? extFromUri(fileName ?? uri, "jpg");
   const path = `${userId}/${kind}-${Date.now()}.${ext}`;
-  const ct = contentType(ext);
+  const ct = contentType(ext, mimeType);
 
   let body: ArrayBuffer | Blob;
   try {

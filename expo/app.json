@@ -35,7 +35,13 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow SolTools to access your photos so you can upload profile pictures and banners."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

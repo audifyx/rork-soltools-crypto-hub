@@ -118,9 +118,22 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async (input: { kind: ProfileMediaKind; uri: string; base64?: string | null }) => {
+    mutationFn: async (input: {
+      kind: ProfileMediaKind;
+      uri: string;
+      base64?: string | null;
+      fileName?: string | null;
+      mimeType?: string | null;
+    }) => {
       if (!userId) throw new Error("Sign in to upload");
-      const url = await uploadProfileMedia(userId, input.kind, input.uri, input.base64 ?? null);
+      const url = await uploadProfileMedia(
+        userId,
+        input.kind,
+        input.uri,
+        input.base64 ?? null,
+        input.fileName ?? null,
+        input.mimeType ?? null,
+      );
       // Use the partial-update RPC so we never wipe other profile fields,
       // and so the row is created if the trigger somehow missed it.
       const rpcArgs =
@@ -141,7 +154,14 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       }
       return url;
     },
-    onSuccess: () => {
+    onSuccess: (url, input) => {
+      qc.setQueriesData({ queryKey: ["app", "profile"] }, (current: unknown) => {
+        if (!current || typeof current !== "object") return current;
+        return {
+          ...(current as Record<string, unknown>),
+          ...(input.kind === "avatar" ? { avatarUrl: url } : { bannerUrl: url }),
+        };
+      });
       qc.invalidateQueries({ queryKey: ["app", "profile"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["users"] });
