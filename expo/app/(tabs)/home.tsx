@@ -54,10 +54,10 @@ import {
   BONK_MINT,
   JUP_MINT,
   SOL_MINT,
-  useJupiterPrices,
   useTrendingTokens,
   useNewSolanaPairs,
 } from "@/lib/api/market";
+import { useDexTokens } from "@/lib/api/dexscreener";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
@@ -530,10 +530,19 @@ function ComposePrompt({
 }
 
 function MarketStrip() {
-  const { data, isLoading } = useJupiterPrices([SOL_MINT, BONK_MINT, JUP_MINT]);
-  const sol = data?.[SOL_MINT]?.price;
-  const bonk = data?.[BONK_MINT]?.price;
-  const jup = data?.[JUP_MINT]?.price;
+  const router = useRouter();
+  const mints = useMemo(() => [SOL_MINT, BONK_MINT, JUP_MINT], []);
+  const { data, isLoading } = useDexTokens(mints);
+  const sol = data?.[SOL_MINT];
+  const bonk = data?.[BONK_MINT];
+  const jup = data?.[JUP_MINT];
+  const onOpen = useCallback(
+    (mint: string) => {
+      Haptics.selectionAsync().catch(() => {});
+      router.push({ pathname: "/launch/[id]", params: { id: mint } });
+    },
+    [router],
+  );
   return (
     <View style={styles.marketCard}>
       <LinearGradient
@@ -543,11 +552,29 @@ function MarketStrip() {
         style={styles.marketGradient}
       >
         <View style={styles.marketRow}>
-          <MarketTile label="SOL" price={sol} loading={isLoading} />
+          <MarketTile
+            label="SOL"
+            price={sol?.priceUsd ?? null}
+            change={sol?.priceChange24hPct ?? null}
+            loading={isLoading}
+            onPress={() => onOpen(SOL_MINT)}
+          />
           <View style={styles.marketDivider} />
-          <MarketTile label="BONK" price={bonk} loading={isLoading} digits={8} />
+          <MarketTile
+            label="BONK"
+            price={bonk?.priceUsd ?? null}
+            change={bonk?.priceChange24hPct ?? null}
+            loading={isLoading}
+            onPress={() => onOpen(BONK_MINT)}
+          />
           <View style={styles.marketDivider} />
-          <MarketTile label="JUP" price={jup} loading={isLoading} />
+          <MarketTile
+            label="JUP"
+            price={jup?.priceUsd ?? null}
+            change={jup?.priceChange24hPct ?? null}
+            loading={isLoading}
+            onPress={() => onOpen(JUP_MINT)}
+          />
         </View>
       </LinearGradient>
     </View>
@@ -557,30 +584,41 @@ function MarketStrip() {
 function MarketTile({
   label,
   price,
+  change,
   loading,
-  digits = 2,
+  onPress,
 }: {
   label: string;
-  price?: number;
+  price: number | null;
+  change: number | null;
   loading?: boolean;
-  digits?: number;
+  onPress?: () => void;
 }) {
-  const display =
-    price != null && price > 0
-      ? fmtPrice(price)
-      : loading
-        ? "…"
-        : "—";
+  const hasPrice = price != null && price > 0;
+  const display = hasPrice ? fmtPrice(price as number) : loading ? "…" : "—";
+  const positive = (change ?? 0) >= 0;
+  const changeColor = change == null ? Colors.muted : positive ? Colors.mint : Colors.rose;
+  const changeLabel =
+    change == null
+      ? loading
+        ? "loading"
+        : "—"
+      : `${positive ? "+" : ""}${change.toFixed(2)}%`;
   return (
-    <View style={styles.marketTile}>
+    <Pressable style={styles.marketTile} onPress={onPress} testID={`market-${label}`}>
       <Text style={styles.marketLabel}>{label}</Text>
       <Text style={styles.marketValue}>{display}</Text>
       <View style={styles.marketChangeRow}>
-        <Text style={[styles.marketChange, { color: price ? Colors.mint : Colors.muted }]}>
-          {price ? "live" : loading ? "loading" : "awaiting data"}
-        </Text>
+        {change != null ? (
+          positive ? (
+            <TrendingUp color={changeColor} size={10} strokeWidth={3} />
+          ) : (
+            <TrendingDown color={changeColor} size={10} strokeWidth={3} />
+          )
+        ) : null}
+        <Text style={[styles.marketChange, { color: changeColor }]}>{changeLabel}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
