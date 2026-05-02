@@ -56,6 +56,8 @@ import { useTokenOverview } from "@/lib/api/market";
 import { getTokenSecurity } from "@/lib/api/birdeye";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
+import { supabase } from "@/lib/supabase";
+import type { LaunchToken, LaunchVenue } from "@/types/launchpad";
 import { fmtNum, fmtPct, fmtPrice, fmtUsd } from "@/utils/format";
 import { getTokenBanner, getTokenLogo } from "@/utils/token-art";
 
@@ -97,7 +99,7 @@ function ageString(ts?: number | null): string {
 export default function LaunchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getById, upvoted, toggleUpvote, remove } = useLaunchpad();
+  const { getById, upvoted, toggleUpvote, remove, isLoading: listingsLoading } = useLaunchpad();
   const { userId } = useAuth();
   const [copied, setCopied] = useState<boolean>(false);
   const [watching, setWatching] = useState<boolean>(false);
@@ -108,45 +110,113 @@ export default function LaunchDetailScreen() {
   // If the id looks like a Solana mint address, treat it as a contract so users
   // can deep-link to any token even when it isn't in the launchpad listings.
   const looksLikeMint = !!id && id.length >= 32 && id.length <= 64 && !id.includes("-");
-  const lookupAddress = stored?.contract ?? (looksLikeMint ? id! : null);
-  const { data: dex } = useDexToken(lookupAddress);
+  const looksLikeUuid = !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+  // Direct Supabase fallback when the listings query hasn't yet hydrated this
+  // particular submission (e.g. deep link from a notification, or the row was
+  // newly created on another device). This guarantees the screen can resolve
+  // any submission UUID that exists in the database.
+  const submissionQuery = useQuery<LaunchToken | null>({
+    queryKey: ["submission", id ?? ""],
+    enabled: !!id && looksLikeUuid && !stored,
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from("pump_v5_submissions")
+          .select(
+            "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,liquidity_usd,market_cap,is_featured,status,created_at",
+          )
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return null;
+        const r = data as Record<string, unknown>;
+        const venueRaw = String(r.status ?? "other").toLowerCase();
+        const validVenues: LaunchVenue[] = ["pumpfun", "pumpswap", "raydium", "meteora", "jupiter", "other"];
+        const venue: LaunchVenue = (validVenues.includes(venueRaw as LaunchVenue)
+          ? venueRaw
+          : "other") as LaunchVenue;
+        return {
+          id: String(r.id ?? ""),
+          name: (r.token_name as string) ?? "Unnamed",
+          ticker: ((r.symbol as string) ?? "").toUpperCase(),
+          description: (r.description as string) ?? "",
+          logoUrl: (r.logo_url as string) ?? null,
+          bannerUrl: (r.banner_url as string) ?? null,
+          contract: (r.contract_address as string) ?? "",
+          venue,
+          status: "live",
+          website: (r.website as string) ?? undefined,
+          twitter: (r.twitter as string) ?? undefined,
+          telegram: (r.telegram as string) ?? undefined,
+          discord: (r.discord as string) ?? undefined,
+          tags: [],
+          featured: !!r.is_featured,
+          hot: false,
+          verified: false,
+          createdAt: r.created_at ? new Date(r.created_at as string).getTime() : Date.now(),
+          submittedBy: "user",
+          ownerId: (r.user_id as string | null) ?? null,
+          price: null,
+          change24hPct: null,
+          liquidityUsd: Number(r.liquidity_usd ?? 0) || null,
+          marketCapUsd: Number(r.market_cap ?? 0) || null,
+          volume24hUsd: null,
+          holders: null,
+          upvotes: 0,
+          watchers: 0,
+        };
+      } catch (e) {
+        console.log("[detail] submission fetch failed", e);
+        return null;
+      }
+    },
+    staleTime: 30_000,
+  });
+
+  const resolved = stored ?? submissionQuery.data ?? null;
+  const lookupAddress = resolved?.contract ?? (looksLikeMint ? id! : null);
+  const { data: dex, isLoading: dexLoading } = useDexToken(lookupAddress);
   const { data: overview } = useTokenOverview(lookupAddress);
 
   // Synthesize a token shell from DexScreener data when we don't have a stored
   // listing yet — this prevents the dreaded "Token not found" screen for any
   // valid Solana mint pasted into a deep link or routed from another tab.
   const token = useMemo(() => {
-    if (stored) return stored;
+    if (resolved) return resolved;
     if (!lookupAddress) return null;
-    if (!dex || !dex.pair) return null;
-    const base = dex.pair.baseToken;
-    const synth: NonNullable<ReturnType<typeof getById>> = {
+    // If DexScreener has indexed pairs, use them. Otherwise fall back to a
+    // minimal shell so the screen still renders for any pasted Solana mint —
+    // never block users on third-party indexers.
+    const base = dex?.pair?.baseToken;
+    const synth: LaunchToken = {
       id: lookupAddress,
       name: base?.name || base?.symbol || "Unknown token",
       ticker: (base?.symbol || "").toUpperCase(),
       description: "",
-      logoUrl: dex.imageUrl ?? null,
+      logoUrl: dex?.imageUrl ?? null,
       bannerUrl: null,
       contract: lookupAddress,
       venue: "other",
       status: "live",
-      tags: dex.pair.labels ?? [],
+      tags: dex?.pair?.labels ?? [],
       featured: false,
       hot: false,
       verified: false,
-      createdAt: dex.pairCreatedAt ?? Date.now(),
+      createdAt: dex?.pairCreatedAt ?? Date.now(),
       submittedBy: "system",
-      price: dex.priceUsd ?? null,
-      change24hPct: dex.priceChange24hPct ?? null,
-      liquidityUsd: dex.liquidityUsd ?? null,
-      marketCapUsd: dex.marketCapUsd ?? null,
-      volume24hUsd: dex.volume24hUsd ?? null,
+      ownerId: null,
+      price: dex?.priceUsd ?? null,
+      change24hPct: dex?.priceChange24hPct ?? null,
+      liquidityUsd: dex?.liquidityUsd ?? null,
+      marketCapUsd: dex?.marketCapUsd ?? null,
+      volume24hUsd: dex?.volume24hUsd ?? null,
       holders: null,
       upvotes: 0,
       watchers: 0,
     };
     return synth;
-  }, [stored, lookupAddress, dex, getById]);
+  }, [resolved, lookupAddress, dex]);
 
   const livePrice = dex?.priceUsd ?? overview?.price ?? token?.price ?? null;
   const changeByTf: Record<string, number | null> = {
@@ -258,6 +328,28 @@ export default function LaunchDetailScreen() {
 
   const positive = useMemo(() => (liveChange ?? 0) >= 0, [liveChange]);
   const accent = positive ? Colors.mint : Colors.rose;
+
+  // While listings or fallback queries are still in flight, never flash a
+  // "Token not found" message — show a minimal loading state instead.
+  const stillResolving =
+    !token &&
+    (listingsLoading ||
+      submissionQuery.isLoading ||
+      (looksLikeMint && dexLoading));
+
+  if (stillResolving) {
+    return (
+      <View style={styles.root}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView edges={["top"]} style={styles.safe}>
+          <View style={styles.notFoundWrap}>
+            <Text style={styles.notFoundTitle}>Loading token…</Text>
+            <Text style={styles.notFoundBody}>Fetching live market data.</Text>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   if (!token) {
     return (
