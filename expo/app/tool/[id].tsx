@@ -10,34 +10,49 @@ import {
   ArrowLeft,
   ArrowUp,
   ArrowUpRight,
+  BarChart3,
   Bell,
   BellOff,
   BellPlus,
   Bot,
   Brain,
+  Briefcase,
+  Bug,
   ChartCandlestick,
   ChartLine,
   CheckCircle2,
   ChevronRight,
   Circle,
   ClipboardPaste,
+  Clock,
+  Coins,
   Copy,
   Crosshair,
+  Droplets,
   Eye,
   Filter,
+  Fingerprint,
   Flame,
   Gauge,
+  Gift,
   Globe,
   Hash,
+  Layers,
+  LineChart,
   Loader2,
   Lock,
   Mic,
   MicOff,
   Minus,
+  Network,
+  PieChart,
   Plus,
   Power,
   Radar,
+  Repeat,
   Rocket,
+  Route,
+  Scale,
   Scan,
   Search,
   Send,
@@ -47,9 +62,11 @@ import {
   Sparkles,
   Target,
   Timer,
+  TrendingDown,
   TrendingUp,
   Users,
   UserPlus,
+  UserSearch,
   Volume2,
   Wallet,
   Waves,
@@ -205,7 +222,87 @@ const META: Record<string, ToolMeta> = {
     accent: Colors.orange,
     description: "Scan thousands of pairs for breakouts, reversals, and high-conviction patterns.",
   },
+  // Trading
+  "token-sniper": { id: "token-sniper", name: "Token Sniper", tagline: "Detect new launches instantly", Icon: Crosshair, accent: Colors.mint,
+    description: "Live stream of fresh mints across Pump.fun, Raydium, Meteora and Orca with instant-snipe filters." },
+  "liquidity-sniper": { id: "liquidity-sniper", name: "Liquidity Sniper", tagline: "Snipe new liquidity pools", Icon: Droplets, accent: Colors.cyan,
+    description: "Watch new LP creations live. Filter by quote token, min liquidity and lock state — alert on launch." },
+  "jupiter-routes": { id: "jupiter-routes", name: "Jupiter Routes", tagline: "Track swap routes & slippage", Icon: Route, accent: Colors.orange,
+    description: "Inspect Jupiter quote routes, hops, price impact and per-DEX split for any swap pair before you trade." },
+  "profit-curve": { id: "profit-curve", name: "Profit Curve", tagline: "PnL curves over time", Icon: LineChart, accent: Colors.violet,
+    description: "Plot any wallet's realized + unrealized PnL across days, weeks, months. Spot drawdowns and streaks." },
+  "trading-style": { id: "trading-style", name: "Trading Style", tagline: "Classify trader patterns", Icon: Fingerprint, accent: Colors.mint,
+    description: "AI labels wallets as scalper, sniper, swing, holder, farmer, or insider based on on-chain behavior." },
+  "wallet-profiler": { id: "wallet-profiler", name: "Wallet Profiler", tagline: "Analyze wallet performance", Icon: Briefcase, accent: Colors.cyan,
+    description: "Win rate, avg hold time, ROI, biggest wins, biggest rugs — a complete profile of any address." },
+  // Token Intel
+  "holder-analysis": { id: "holder-analysis", name: "Holder Analysis", tagline: "Deep dive into holders", Icon: Users, accent: Colors.cyan,
+    description: "Cluster holders by entry, dev wallet, sniper, fresh wallet. See accumulators vs distributors." },
+  "liquidity-scanner": { id: "liquidity-scanner", name: "Liquidity Scanner", tagline: "Pool depth at every size", Icon: Waves, accent: Colors.mint,
+    description: "Real liquidity across every pool, slippage curves at any size, and risk on low-depth pools." },
+  "token-metadata": { id: "token-metadata", name: "Token Metadata", tagline: "On-chain token data", Icon: Hash, accent: Colors.violet,
+    description: "Mint authority, freeze authority, Metaplex metadata, decimals, supply, update authority." },
+  "whale-concentration": { id: "whale-concentration", name: "Whale Concentration", tagline: "Top-holder share", Icon: PieChart, accent: Colors.orange,
+    description: "Top 10/50/100 holder share, concentration index, whale rotation, distribution health score." },
+  "wash-trading": { id: "wash-trading", name: "Wash Trading", tagline: "Detect wash patterns", Icon: Repeat, accent: Colors.rose,
+    description: "Spot circular flows, repeat counterparties, inflated volume — find fake liquidity & pump rings." },
+  "insider-detector": { id: "insider-detector", name: "Insider Detector", tagline: "Find insider patterns", Icon: UserSearch, accent: Colors.rose,
+    description: "Detect bundled buys, dev clusters, sniper bots, pre-launch funding paths and insider wallets." },
+  // DeFi & Yield
+  "staking-calculator": { id: "staking-calculator", name: "Staking Calculator", tagline: "Project staking rewards", Icon: Scale, accent: Colors.mint,
+    description: "Project SOL & SPL staking rewards across validators with APY, commission, fees, and compounding." },
+  "impermanent-loss": { id: "impermanent-loss", name: "Impermanent Loss", tagline: "IL calculator", Icon: TrendingDown, accent: Colors.cyan,
+    description: "Model IL on any LP pair with custom price moves. Compare HODL vs LP vs concentrated liquidity." },
+  "lp-scanner": { id: "lp-scanner", name: "LP Scanner", tagline: "Scan LP positions", Icon: Layers, accent: Colors.violet,
+    description: "Inspect any wallet's LP positions, current value, fees earned, and live APR across DEXs." },
+  "program-monitor": { id: "program-monitor", name: "Program Monitor", tagline: "Watch DEX programs", Icon: Network, accent: Colors.cyan,
+    description: "Watch any Solana program ID for instructions, calls, and unusual flow." },
+  "fee-analyzer": { id: "fee-analyzer", name: "Fee Analyzer", tagline: "Analyze transaction fees", Icon: Gauge, accent: Colors.orange,
+    description: "Break down priority fees, compute units, total SOL spent on fees per wallet, program, day." },
+  "token-locks": { id: "token-locks", name: "Token Locks", tagline: "Track unlock schedules", Icon: Lock, accent: Colors.violet,
+    description: "Team & LP unlocks across PinkLock, Streamflow, Bonfida — see what unlocks when in real time." },
+  // Risk
+  "rug-detector": { id: "rug-detector", name: "Rug Detector", tagline: "Analyze rug pull risk", Icon: ShieldAlert, accent: Colors.rose,
+    description: "AI rug score from mint authority, LP lock, dev wallets, holder clustering, and rug history." },
+  "risk-detector": { id: "risk-detector", name: "Risk Detector", tagline: "Comprehensive risk score", Icon: Shield, accent: Colors.rose,
+    description: "Holistic risk dashboard: rug, honeypot, wash, insider, MEV, liquidity — one consolidated score." },
+  "token-creator": { id: "token-creator", name: "Token Creator", tagline: "Track creator history", Icon: Target, accent: Colors.orange,
+    description: "Every token a creator has launched, their average performance, rug rate, and active wallets." },
+  "burn-watcher": { id: "burn-watcher", name: "Burn Watcher", tagline: "Monitor token burns", Icon: Flame, accent: Colors.orange,
+    description: "Track token burns, dev burns, LP burns and supply changes in real-time across Solana." },
+  "mev-tracker": { id: "mev-tracker", name: "MEV Tracker", tagline: "Detect MEV activity", Icon: Bug, accent: Colors.rose,
+    description: "Spot sandwich attacks, JIT liquidity, frontrunning bots, MEV losses across any token or wallet." },
+  "sol-depletion": { id: "sol-depletion", name: "SOL Depletion", tagline: "Low balance warnings", Icon: AlertTriangle, accent: Colors.orange,
+    description: "Get pinged before any tracked wallet runs out of SOL for fees. Auto-track burn rate." },
+  // Wallet Intel
+  "wallet-age": { id: "wallet-age", name: "Wallet Age", tagline: "Age & activity timeline", Icon: Clock, accent: Colors.cyan,
+    description: "First-seen, last-seen, total active days, dormancy gaps, full lifetime activity timeline." },
+  "transfer-profiler": { id: "transfer-profiler", name: "Transfer Profiler", tagline: "Analyze transfer patterns", Icon: BarChart3, accent: Colors.violet,
+    description: "Top counterparties, inflow/outflow heatmap, suspicious mixing, stablecoin vs SPL flow analysis." },
+  "wallet-graph": { id: "wallet-graph", name: "Wallet Graph", tagline: "Wallet relationships", Icon: Network, accent: Colors.cyan,
+    description: "Interactive graph of connected wallets, common funders, shared exchange deposit clusters." },
+  "stake-tracker": { id: "stake-tracker", name: "Stake Tracker", tagline: "Track stake accounts", Icon: Coins, accent: Colors.mint,
+    description: "All stake accounts, validators, rewards earned, and active/deactivating epochs for any wallet." },
+  "airdrop-analyzer": { id: "airdrop-analyzer", name: "Airdrop Analyzer", tagline: "Check airdrop eligibility", Icon: Gift, accent: Colors.violet,
+    description: "Run any wallet against active and upcoming Solana airdrops to estimate allocation and farmability." },
+  "multi-wallet": { id: "multi-wallet", name: "Multi-Wallet", tagline: "Merge wallet views", Icon: Eye, accent: Colors.mint,
+    description: "Combine multiple addresses into one consolidated portfolio — net worth, holdings, PnL, all merged." },
 };
+
+const CONTRACT_TOOLS = new Set<string>([
+  "holder-analysis", "liquidity-scanner", "token-metadata", "whale-concentration",
+  "wash-trading", "insider-detector", "rug-detector", "risk-detector",
+  "token-creator", "burn-watcher", "token-locks", "mev-tracker",
+  "impermanent-loss", "jupiter-routes",
+]);
+const WALLET_TOOLS = new Set<string>([
+  "wallet-profiler", "profit-curve", "trading-style", "wallet-age",
+  "transfer-profiler", "wallet-graph", "stake-tracker", "airdrop-analyzer",
+  "multi-wallet", "sol-depletion", "fee-analyzer", "lp-scanner",
+]);
+const STREAM_TOOLS = new Set<string>([
+  "token-sniper", "liquidity-sniper", "program-monitor", "staking-calculator",
+]);
 
 export default function ToolDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -305,6 +402,9 @@ function ToolBody({ meta }: { meta: ToolMeta }) {
     case "chart-share":
       return <ChartTool accent={meta.accent} kind={meta.id} />;
     default:
+      if (CONTRACT_TOOLS.has(meta.id)) return <GenericInputTool meta={meta} kind="contract" />;
+      if (WALLET_TOOLS.has(meta.id)) return <GenericInputTool meta={meta} kind="wallet" />;
+      if (STREAM_TOOLS.has(meta.id)) return <GenericInputTool meta={meta} kind="stream" />;
       return <ComingSoonTool accent={meta.accent} />;
   }
 }
@@ -2163,6 +2263,152 @@ function ChartTool({ accent, kind }: { accent: string; kind: string }) {
           kind === "candle-scanner"
             ? "Scan results will populate here once the data provider connects."
             : "Drop a chart into a lobby or DM to see it here."
+        }
+      />
+    </View>
+  );
+}
+
+function GenericInputTool({
+  meta,
+  kind,
+}: {
+  meta: ToolMeta;
+  kind: "contract" | "wallet" | "stream";
+}) {
+  const accent = meta.accent;
+  const [value, setValue] = useState<string>("");
+  const [scanning, setScanning] = useState<boolean>(false);
+  const [scanned, setScanned] = useState<boolean>(false);
+
+  const onPaste = useCallback(async () => {
+    try {
+      const txt = await Clipboard.getStringAsync();
+      if (txt) {
+        setValue(txt.trim());
+        Haptics.selectionAsync().catch(() => {});
+      }
+    } catch (e) { console.log("[generic] paste", e); }
+  }, []);
+
+  const onRun = useCallback(async () => {
+    if (kind !== "stream") {
+      const v = value.trim();
+      const minLen = kind === "wallet" ? 32 : 32;
+      if (v.length < minLen) {
+        Alert.alert("Invalid input", kind === "wallet" ? "Enter a Solana wallet address." : "Paste a Solana token contract.");
+        return;
+      }
+    }
+    setScanning(true);
+    setScanned(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    await new Promise((r) => setTimeout(r, 900));
+    setScanning(false);
+    setScanned(true);
+  }, [kind, value]);
+
+  const placeholder =
+    kind === "wallet" ? "So111... wallet address" :
+    kind === "contract" ? "Paste Solana token contract" :
+    "Filter (e.g. min liquidity 5 SOL)";
+
+  const inputLabel = kind === "wallet" ? "Wallet address" : kind === "contract" ? "Contract address" : "Filter";
+
+  const ctaLabel = scanning ? "Working…" : kind === "stream" ? "Start stream" : kind === "wallet" ? "Profile wallet" : "Run scan";
+
+  const tiles: { label: string; value: string; Icon: LucideIcon }[] =
+    kind === "wallet"
+      ? [
+          { label: "Win rate", value: scanned ? "—" : "—", Icon: Activity },
+          { label: "ROI", value: "—", Icon: TrendingUp },
+          { label: "Avg hold", value: "—", Icon: Timer },
+        ]
+      : kind === "contract"
+        ? [
+            { label: "Risk score", value: "—/100", Icon: ShieldAlert },
+            { label: "Liquidity", value: "—", Icon: Waves },
+            { label: "Holders", value: "—", Icon: Users },
+          ]
+        : [
+            { label: "Mints/min", value: "—", Icon: Activity },
+            { label: "Filtered", value: "—", Icon: Filter },
+            { label: "Live", value: scanning ? "ON" : "—", Icon: Power },
+          ];
+
+  return (
+    <View>
+      <SectionHead title={meta.name} accent={accent} />
+      {kind !== "stream" ? (
+        <View style={styles.formCard}>
+          <Text style={styles.label}>{inputLabel}</Text>
+          <View style={styles.inputWithAction}>
+            <TextInput
+              value={value}
+              onChangeText={setValue}
+              placeholder={placeholder}
+              placeholderTextColor={Colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[styles.input, styles.inputFlex]}
+              testID={`generic-input-${meta.id}`}
+            />
+            <Pressable onPress={onPaste} style={styles.iconAction} hitSlop={6}>
+              <ClipboardPaste color={accent} size={15} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+          <Pressable
+            onPress={onRun}
+            style={[styles.primaryBtn, { backgroundColor: accent }, scanning && { opacity: 0.6 }]}
+            disabled={scanning}
+            testID={`generic-run-${meta.id}`}
+          >
+            {scanning ? (
+              <Loader2 color={Colors.ink} size={15} strokeWidth={3} />
+            ) : (
+              <Zap color={Colors.ink} size={15} strokeWidth={3} />
+            )}
+            <Text style={styles.primaryBtnText}>{ctaLabel}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.formCard}>
+          <Text style={styles.label}>{inputLabel}</Text>
+          <TextInput
+            value={value}
+            onChangeText={setValue}
+            placeholder={placeholder}
+            placeholderTextColor={Colors.muted}
+            style={styles.input}
+          />
+          <Pressable
+            onPress={onRun}
+            style={[styles.primaryBtn, { backgroundColor: accent }, scanning && { opacity: 0.6 }]}
+            disabled={scanning}
+          >
+            {scanning ? <Loader2 color={Colors.ink} size={15} strokeWidth={3} /> : <Power color={Colors.ink} size={15} strokeWidth={3} />}
+            <Text style={styles.primaryBtnText}>{ctaLabel}</Text>
+          </Pressable>
+        </View>
+      )}
+
+      <View style={styles.statRow}>
+        {tiles.map((t) => (
+          <StatTile key={t.label} label={t.label} value={t.value} accent={accent} Icon={t.Icon} />
+        ))}
+      </View>
+
+      <SectionHead title="Result" accent={accent} />
+      <EmptyState
+        accent={accent}
+        Icon={meta.Icon}
+        title={scanning ? "Working…" : scanned ? "Backend coming online" : "Awaiting input"}
+        body={
+          scanning
+            ? "Querying live on-chain data…"
+            : scanned
+              ? `${meta.name} runs against live RPC data. Final results plug in once backend wires are deployed.`
+              : meta.description
         }
       />
     </View>

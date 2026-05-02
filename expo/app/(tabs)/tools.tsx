@@ -4,17 +4,47 @@ import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
+  BarChart3,
   Brain,
+  Briefcase,
+  Bug,
   ChevronRight,
   Clipboard as ClipboardIcon,
   Clock,
+  Coins,
+  Crosshair,
+  Droplets,
+  Eye,
+  Fingerprint,
   Flame,
+  Gauge,
+  Gift,
+  Hash,
+  Layers,
+  LineChart,
+  Lock,
   MessageCircle,
-  Search,
+  Mic,
+  Network,
+  PieChart,
+  Radar,
+  Repeat,
+  Route,
+  Scale,
   ScanLine,
+  Search,
+  Shield,
+  ShieldAlert,
   Sparkles,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  UserSearch,
   Wallet,
+  Waves,
   Wrench,
   Zap,
 } from "lucide-react-native";
@@ -43,6 +73,8 @@ type LucideIcon = React.ComponentType<{
   fill?: string;
 }>;
 
+type ToolCategory = "trading" | "analysis" | "defi" | "risk" | "wallet";
+
 type Tool = {
   id: string;
   route: string;
@@ -54,10 +86,20 @@ type Tool = {
   glow: string;
   gradient: [string, string];
   tags: string[];
-  status: "LIVE" | "BETA";
+  status: "LIVE" | "BETA" | "NEW";
+  category: ToolCategory;
 };
 
+const CATEGORIES: { key: ToolCategory; label: string; Icon: LucideIcon; accent: string }[] = [
+  { key: "trading", label: "Trading", Icon: TrendingUp, accent: Colors.mint },
+  { key: "analysis", label: "Token Intel", Icon: ScanLine, accent: Colors.cyan },
+  { key: "defi", label: "DeFi & Yield", Icon: Coins, accent: Colors.violet },
+  { key: "risk", label: "Risk", Icon: ShieldAlert, accent: Colors.rose },
+  { key: "wallet", label: "Wallet Intel", Icon: Wallet, accent: Colors.orange },
+];
+
 const TOOLS: Tool[] = [
+  // Core (Live)
   {
     id: "token-lookup",
     route: "/tool/token-lookup",
@@ -71,6 +113,7 @@ const TOOLS: Tool[] = [
     gradient: [Colors.cyan, "#7B5BFF"],
     tags: ["Live", "Chart", "On-chain"],
     status: "LIVE",
+    category: "analysis",
   },
   {
     id: "wallet-tracker",
@@ -85,6 +128,7 @@ const TOOLS: Tool[] = [
     gradient: [Colors.mint, Colors.cyan],
     tags: ["Helius", "PnL", "Live"],
     status: "LIVE",
+    category: "wallet",
   },
   {
     id: "ai-analysis",
@@ -99,6 +143,7 @@ const TOOLS: Tool[] = [
     gradient: [Colors.violet, Colors.cyan],
     tags: ["AI", "Risk", "On-chain"],
     status: "LIVE",
+    category: "analysis",
   },
   {
     id: "ai-chat",
@@ -113,6 +158,288 @@ const TOOLS: Tool[] = [
     gradient: [Colors.orange, Colors.rose],
     tags: ["GPT", "RPC", "Context"],
     status: "BETA",
+    category: "analysis",
+  },
+
+  // Trading
+  {
+    id: "token-sniper",
+    route: "/tool/token-sniper",
+    name: "Token Sniper",
+    tagline: "Detect new token launches instantly",
+    description:
+      "Real-time stream of new mints across Pump.fun, Raydium, Meteora & Orca. Filter by liquidity, dev age, and instant-snipe.",
+    Icon: Crosshair, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    gradient: [Colors.mint, Colors.cyan], tags: ["Live", "Mints", "Snipe"], status: "NEW", category: "trading",
+  },
+  {
+    id: "liquidity-sniper",
+    route: "/tool/liquidity-sniper",
+    name: "Liquidity Sniper",
+    tagline: "Snipe new liquidity pools",
+    description: "Watch new LP creations live. Filter by quote token, min liquidity and lock status — auto-alert on launch.",
+    Icon: Droplets, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    gradient: [Colors.cyan, Colors.mint], tags: ["LP", "Snipe", "Live"], status: "NEW", category: "trading",
+  },
+  {
+    id: "jupiter-routes",
+    route: "/tool/jupiter-routes",
+    name: "Jupiter Routes",
+    tagline: "Track swap routes and slippage",
+    description: "Inspect Jupiter quote routes, hops, price impact and per-DEX split for any swap pair before you trade.",
+    Icon: Route, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    gradient: [Colors.orange, Colors.rose], tags: ["Jupiter", "Routes", "Slippage"], status: "LIVE", category: "trading",
+  },
+  {
+    id: "profit-curve",
+    route: "/tool/profit-curve",
+    name: "Profit Curve",
+    tagline: "Generate PnL curves over time",
+    description: "Plot any wallet's realized + unrealized PnL across days, weeks, months. Spot drawdowns and winning streaks.",
+    Icon: LineChart, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    gradient: [Colors.violet, Colors.cyan], tags: ["PnL", "Chart", "History"], status: "NEW", category: "trading",
+  },
+  {
+    id: "trading-style",
+    route: "/tool/trading-style",
+    name: "Trading Style",
+    tagline: "Classify wallet trading patterns",
+    description: "AI classifier labels wallets as scalper, sniper, swing, holder, farmer, or insider based on on-chain behavior.",
+    Icon: Fingerprint, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    gradient: [Colors.mint, Colors.violet], tags: ["AI", "Behavior", "Tag"], status: "NEW", category: "trading",
+  },
+  {
+    id: "wallet-profiler",
+    route: "/tool/wallet-profiler",
+    name: "Wallet Profiler",
+    tagline: "Analyze any wallet's performance",
+    description: "Win rate, avg hold time, ROI, biggest wins, biggest rugs — a complete profile of any address.",
+    Icon: Briefcase, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    gradient: [Colors.cyan, Colors.mint], tags: ["Stats", "PnL", "Profile"], status: "NEW", category: "trading",
+  },
+
+  // Token Intel / Analysis
+  {
+    id: "holder-analysis",
+    route: "/tool/holder-analysis",
+    name: "Holder Analysis",
+    tagline: "Deep dive into token holders",
+    description: "Cluster holders by entry, dev wallet, sniper, fresh wallet. See who's distributing, who's accumulating.",
+    Icon: Users, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    gradient: [Colors.cyan, Colors.violet], tags: ["Clusters", "Holders"], status: "NEW", category: "analysis",
+  },
+  {
+    id: "liquidity-scanner",
+    route: "/tool/liquidity-scanner",
+    name: "Liquidity Scanner",
+    tagline: "Check pool liquidity depth",
+    description: "See real liquidity across every pool, slippage curves at various sizes, and risk of low-depth pools.",
+    Icon: Waves, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    gradient: [Colors.mint, Colors.cyan], tags: ["Liquidity", "Depth"], status: "NEW", category: "analysis",
+  },
+  {
+    id: "token-metadata",
+    route: "/tool/token-metadata",
+    name: "Token Metadata",
+    tagline: "Inspect on-chain token data",
+    description: "Mint authority, freeze authority, Metaplex metadata, decimals, supply, update authority — full transparency.",
+    Icon: Hash, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    gradient: [Colors.violet, Colors.cyan], tags: ["Mint", "Metaplex"], status: "NEW", category: "analysis",
+  },
+  {
+    id: "whale-concentration",
+    route: "/tool/whale-concentration",
+    name: "Whale Concentration",
+    tagline: "Analyze whale holdings",
+    description: "Top 10/50/100 holder share, concentration index, whale rotation tracking, and distribution health score.",
+    Icon: PieChart, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    gradient: [Colors.orange, Colors.rose], tags: ["Whales", "Distribution"], status: "NEW", category: "analysis",
+  },
+  {
+    id: "wash-trading",
+    route: "/tool/wash-trading",
+    name: "Wash Trading",
+    tagline: "Detect wash trading patterns",
+    description: "Spot circular flows, repeat counterparties, and inflated volume. Identify fake liquidity and pump rings.",
+    Icon: Repeat, accent: Colors.rose, glow: "rgba(255,93,143,0.22)",
+    gradient: [Colors.rose, Colors.orange], tags: ["Detect", "Wash"], status: "NEW", category: "analysis",
+  },
+  {
+    id: "insider-detector",
+    route: "/tool/insider-detector",
+    name: "Insider Detector",
+    tagline: "Find insider trading patterns",
+    description: "Detect bundled buys, dev clusters, sniper bots, pre-launch funding paths and connected insider wallets.",
+    Icon: UserSearch, accent: Colors.rose, glow: "rgba(255,93,143,0.22)",
+    gradient: [Colors.rose, Colors.violet], tags: ["Insiders", "Bundled"], status: "NEW", category: "analysis",
+  },
+
+  // DeFi / Yield
+  {
+    id: "staking-calculator",
+    route: "/tool/staking-calculator",
+    name: "Staking Calculator",
+    tagline: "Calculate staking rewards",
+    description: "Project SOL & SPL staking rewards across validators with APY, commission, fees, and compounding.",
+    Icon: Scale, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    gradient: [Colors.mint, Colors.cyan], tags: ["Stake", "APY"], status: "NEW", category: "defi",
+  },
+  {
+    id: "impermanent-loss",
+    route: "/tool/impermanent-loss",
+    name: "Impermanent Loss",
+    tagline: "IL calculator for LP positions",
+    description: "Model IL on any LP pair with custom price moves. Compare HODL vs LP vs concentrated liquidity.",
+    Icon: TrendingDown, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    gradient: [Colors.cyan, Colors.violet], tags: ["IL", "LP", "Calc"], status: "NEW", category: "defi",
+  },
+  {
+    id: "lp-scanner",
+    route: "/tool/lp-scanner",
+    name: "LP Scanner",
+    tagline: "Scan LP positions and yields",
+    description: "Inspect any wallet's LP positions, current value, fees earned, and live APR across Raydium, Meteora, Orca.",
+    Icon: Layers, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    gradient: [Colors.violet, Colors.mint], tags: ["LP", "Yield"], status: "NEW", category: "defi",
+  },
+  {
+    id: "program-monitor",
+    route: "/tool/program-monitor",
+    name: "Program Monitor",
+    tagline: "Monitor DEX interactions",
+    description: "Watch any Solana program ID — Raydium, Meteora, Pump, Jupiter — for instructions, calls, and unusual flow.",
+    Icon: Network, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    gradient: [Colors.cyan, Colors.violet], tags: ["Programs", "DEX"], status: "NEW", category: "defi",
+  },
+  {
+    id: "fee-analyzer",
+    route: "/tool/fee-analyzer",
+    name: "Fee Analyzer",
+    tagline: "Analyze transaction fees",
+    description: "Break down priority fees, compute units, and total SOL spent on fees per wallet, per program, per day.",
+    Icon: Gauge, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    gradient: [Colors.orange, Colors.mint], tags: ["Fees", "Analytics"], status: "NEW", category: "defi",
+  },
+  {
+    id: "token-locks",
+    route: "/tool/token-locks",
+    name: "Token Locks",
+    tagline: "Monitor token lock schedules",
+    description: "Track team & LP unlocks across PinkLock, Streamflow, Bonfida — see what unlocks when, in real time.",
+    Icon: Lock, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    gradient: [Colors.violet, Colors.cyan], tags: ["Locks", "Vesting"], status: "NEW", category: "defi",
+  },
+
+  // Risk
+  {
+    id: "rug-detector",
+    route: "/tool/rug-detector",
+    name: "Rug Detector",
+    tagline: "Analyze rug pull risk",
+    description: "AI rug score from mint authority, LP lock, dev wallets, holder clustering, and historical rug patterns.",
+    Icon: ShieldAlert, accent: Colors.rose, glow: "rgba(255,93,143,0.22)",
+    gradient: [Colors.rose, Colors.orange], tags: ["Rug", "AI"], status: "LIVE", category: "risk",
+  },
+  {
+    id: "risk-detector",
+    route: "/tool/risk-detector",
+    name: "Risk Detector",
+    tagline: "Comprehensive risk scoring",
+    description: "Holistic risk dashboard: rug, honeypot, wash, insider, MEV, liquidity — one consolidated risk score.",
+    Icon: Shield, accent: Colors.rose, glow: "rgba(255,93,143,0.22)",
+    gradient: [Colors.rose, Colors.violet], tags: ["Risk", "Score"], status: "NEW", category: "risk",
+  },
+  {
+    id: "token-creator",
+    route: "/tool/token-creator",
+    name: "Token Creator",
+    tagline: "Track token creator history",
+    description: "See every token a creator has launched, their average performance, rug rate, and active wallets.",
+    Icon: Target, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    gradient: [Colors.orange, Colors.rose], tags: ["Creator", "History"], status: "NEW", category: "risk",
+  },
+  {
+    id: "burn-watcher",
+    route: "/tool/burn-watcher",
+    name: "Burn Watcher",
+    tagline: "Monitor token burns",
+    description: "Track token burns, dev burns, LP burns and supply changes in real-time across Solana.",
+    Icon: Flame, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    gradient: [Colors.orange, Colors.rose], tags: ["Burn", "Supply"], status: "NEW", category: "risk",
+  },
+  {
+    id: "mev-tracker",
+    route: "/tool/mev-tracker",
+    name: "MEV Tracker",
+    tagline: "Detect MEV activity",
+    description: "Spot sandwich attacks, JIT liquidity, frontrunning bots, and MEV losses across any token or wallet.",
+    Icon: Bug, accent: Colors.rose, glow: "rgba(255,93,143,0.22)",
+    gradient: [Colors.rose, Colors.cyan], tags: ["MEV", "Sandwich"], status: "NEW", category: "risk",
+  },
+  {
+    id: "sol-depletion",
+    route: "/tool/sol-depletion",
+    name: "SOL Depletion",
+    tagline: "Low balance warnings",
+    description: "Get pinged before any tracked wallet runs out of SOL for fees. Auto-track burn rate per wallet.",
+    Icon: AlertTriangle, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    gradient: [Colors.orange, Colors.rose], tags: ["Alert", "SOL"], status: "NEW", category: "risk",
+  },
+
+  // Wallet Intel
+  {
+    id: "wallet-age",
+    route: "/tool/wallet-age",
+    name: "Wallet Age",
+    tagline: "Calculate wallet age & activity",
+    description: "First-seen, last-seen, total active days, dormancy gaps and full lifetime activity timeline.",
+    Icon: Clock, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    gradient: [Colors.cyan, Colors.mint], tags: ["Age", "Lifetime"], status: "NEW", category: "wallet",
+  },
+  {
+    id: "transfer-profiler",
+    route: "/tool/transfer-profiler",
+    name: "Transfer Profiler",
+    tagline: "Analyze transfer patterns",
+    description: "Top counterparties, inflow/outflow heatmap, suspicious mixing, and stablecoin vs SPL flow analysis.",
+    Icon: BarChart3, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    gradient: [Colors.violet, Colors.cyan], tags: ["Flow", "Profile"], status: "NEW", category: "wallet",
+  },
+  {
+    id: "wallet-graph",
+    route: "/tool/wallet-graph",
+    name: "Wallet Graph",
+    tagline: "Visualize wallet relationships",
+    description: "Interactive graph of connected wallets, common funders, and shared exchange deposit clusters.",
+    Icon: Network, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    gradient: [Colors.cyan, Colors.violet], tags: ["Graph", "Cluster"], status: "NEW", category: "wallet",
+  },
+  {
+    id: "stake-tracker",
+    route: "/tool/stake-tracker",
+    name: "Stake Tracker",
+    tagline: "Track staking accounts",
+    description: "All stake accounts, validators, rewards earned, and active/deactivating epochs for any wallet.",
+    Icon: Coins, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    gradient: [Colors.mint, Colors.cyan], tags: ["Stake", "Validators"], status: "NEW", category: "wallet",
+  },
+  {
+    id: "airdrop-analyzer",
+    route: "/tool/airdrop-analyzer",
+    name: "Airdrop Analyzer",
+    tagline: "Check airdrop eligibility",
+    description: "Run any wallet against active and upcoming Solana airdrops to estimate allocation and farmability.",
+    Icon: Gift, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    gradient: [Colors.violet, Colors.mint], tags: ["Airdrop", "Eligibility"], status: "NEW", category: "wallet",
+  },
+  {
+    id: "multi-wallet",
+    route: "/tool/multi-wallet",
+    name: "Multi-Wallet",
+    tagline: "Merge multiple wallet views",
+    description: "Combine multiple addresses into one consolidated portfolio — net worth, holdings, PnL, all merged.",
+    Icon: Eye, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    gradient: [Colors.mint, Colors.cyan], tags: ["Portfolio", "Merge"], status: "NEW", category: "wallet",
   },
 ];
 
@@ -340,6 +667,50 @@ export default function ToolsScreen() {
             </View>
           </Pressable>
 
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              router.push("/lobbies" as never);
+            }}
+            style={styles.lobbyBanner}
+            testID="tools-lobbies"
+          >
+            <LinearGradient
+              colors={["rgba(255,93,143,0.32)", "rgba(184,140,255,0.18)", "rgba(56,215,255,0.10)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.lobbyTopRow}>
+              <View style={styles.lobbyEyebrow}>
+                <View style={styles.lobbyDot} />
+                <Text style={styles.lobbyEyebrowText}>NEW · LIVE NOW</Text>
+              </View>
+              <View style={styles.lobbyCountChip}>
+                <Mic color={Colors.rose} size={11} strokeWidth={3} />
+                <Text style={styles.lobbyCountText}>VOICE</Text>
+              </View>
+            </View>
+            <View style={styles.lobbyBody}>
+              <LinearGradient
+                colors={[Colors.rose, Colors.violet]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.lobbyIcon}
+              >
+                <Mic color={Colors.ink} size={26} strokeWidth={2.6} />
+              </LinearGradient>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.lobbyTitle}>Trading Lobbies</Text>
+                <Text style={styles.lobbySub}>Trade together. Watch together. Win together.</Text>
+                <Text style={styles.lobbyBlurb}>
+                  Live voice rooms with shared watchlists, charts and wallet tracking.
+                </Text>
+              </View>
+              <ChevronRight color={Colors.text} size={18} strokeWidth={2.6} />
+            </View>
+          </Pressable>
+
           <View style={styles.statsRow}>
             <StatTile
               label="TOOLS"
@@ -354,9 +725,9 @@ export default function ToolsScreen() {
               Icon={Activity}
             />
             <StatTile
-              label="BETA"
-              value={TOOLS.filter((t) => t.status === "BETA").length.toString()}
-              accent={Colors.orange}
+              label="NEW"
+              value={TOOLS.filter((t) => t.status === "NEW").length.toString()}
+              accent={Colors.rose}
               Icon={Sparkles}
             />
             <StatTile
@@ -449,17 +820,44 @@ export default function ToolsScreen() {
               />
             </View>
 
-            <View style={styles.list}>
-              {filtered.map((t) => (
-                <ToolRow key={t.id} tool={t} onPress={() => onOpen(t.route, t.id)} />
-              ))}
-              {filtered.length === 0 && (
-                <View style={styles.empty}>
-                  <Text style={styles.emptyTitle}>No tools match</Text>
-                  <Text style={styles.emptyBody}>Try a different keyword.</Text>
-                </View>
-              )}
-            </View>
+            {query.trim().length > 0 ? (
+              <View style={styles.list}>
+                {filtered.map((t) => (
+                  <ToolRow key={t.id} tool={t} onPress={() => onOpen(t.route, t.id)} />
+                ))}
+                {filtered.length === 0 && (
+                  <View style={styles.empty}>
+                    <Text style={styles.emptyTitle}>No tools match</Text>
+                    <Text style={styles.emptyBody}>Try a different keyword.</Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View style={{ marginTop: 6 }}>
+                {CATEGORIES.map((cat) => {
+                  const items = TOOLS.filter((t) => t.category === cat.key);
+                  if (items.length === 0) return null;
+                  return (
+                    <View key={cat.key} style={styles.catBlock}>
+                      <View style={styles.catHead}>
+                        <View style={[styles.catIcon, { backgroundColor: `${cat.accent}1A`, borderColor: `${cat.accent}55` }]}>
+                          <cat.Icon color={cat.accent} size={13} strokeWidth={2.8} />
+                        </View>
+                        <Text style={styles.catTitle}>{cat.label}</Text>
+                        <View style={styles.catCount}>
+                          <Text style={[styles.catCountText, { color: cat.accent }]}>{items.length}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.list}>
+                        {items.map((t) => (
+                          <ToolRow key={t.id} tool={t} onPress={() => onOpen(t.route, t.id)} />
+                        ))}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
 
           <View style={styles.footerNote}>
@@ -528,37 +926,26 @@ function ToolRow({ tool, onPress }: { tool: Tool; onPress: () => void }) {
           <Text style={styles.rowName} numberOfLines={1}>
             {tool.name}
           </Text>
-          <View
-            style={[
-              styles.statusPill,
-              {
-                backgroundColor:
-                  tool.status === "LIVE"
-                    ? "rgba(85,245,178,0.14)"
-                    : "rgba(255,184,76,0.16)",
-                borderColor:
-                  tool.status === "LIVE"
-                    ? "rgba(85,245,178,0.4)"
-                    : "rgba(255,184,76,0.4)",
-              },
-            ]}
-          >
-            {tool.status === "LIVE" ? (
-              <Activity color={Colors.mint} size={10} strokeWidth={3} />
-            ) : (
-              <Sparkles color={Colors.orange} size={10} strokeWidth={3} />
-            )}
-            <Text
-              style={[
-                styles.statusPillText,
-                {
-                  color: tool.status === "LIVE" ? Colors.mint : Colors.orange,
-                },
-              ]}
-            >
-              {tool.status}
-            </Text>
-          </View>
+          {(() => {
+            const isLive = tool.status === "LIVE";
+            const isNew = tool.status === "NEW";
+            const color = isLive ? Colors.mint : isNew ? Colors.rose : Colors.orange;
+            const PillIcon = isLive ? Activity : Sparkles;
+            return (
+              <View
+                style={[
+                  styles.statusPill,
+                  {
+                    backgroundColor: `${color}26`,
+                    borderColor: `${color}66`,
+                  },
+                ]}
+              >
+                <PillIcon color={color} size={10} strokeWidth={3} />
+                <Text style={[styles.statusPillText, { color }]}>{tool.status}</Text>
+              </View>
+            );
+          })()}
         </View>
 
         <Text style={styles.rowTag} numberOfLines={1}>
@@ -959,4 +1346,55 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   footerText: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+
+  lobbyBanner: {
+    marginTop: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(255,93,143,0.4)",
+    backgroundColor: Colors.card,
+    padding: 16,
+    overflow: "hidden",
+  },
+  lobbyTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  lobbyEyebrow: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999,
+    backgroundColor: "rgba(3,7,8,0.5)",
+    borderWidth: 1, borderColor: "rgba(255,93,143,0.45)",
+  },
+  lobbyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.rose },
+  lobbyEyebrowText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 1.4 },
+  lobbyCountChip: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999,
+    backgroundColor: "rgba(255,93,143,0.16)",
+    borderWidth: 1, borderColor: "rgba(255,93,143,0.4)",
+  },
+  lobbyCountText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
+  lobbyBody: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 14 },
+  lobbyIcon: {
+    width: 56, height: 56, borderRadius: 18,
+    alignItems: "center", justifyContent: "center",
+  },
+  lobbyTitle: { color: Colors.text, fontSize: 19, fontWeight: "900", letterSpacing: -0.4 },
+  lobbySub: { color: Colors.text, fontSize: 12, fontWeight: "800", marginTop: 2, opacity: 0.9 },
+  lobbyBlurb: { color: Colors.muted, fontSize: 11, fontWeight: "600", marginTop: 4, lineHeight: 15 },
+
+  catBlock: { marginTop: 14 },
+  catHead: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginBottom: 8,
+  },
+  catIcon: {
+    width: 26, height: 26, borderRadius: 8,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1,
+  },
+  catTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2 },
+  catCount: {
+    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  catCountText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
 });
