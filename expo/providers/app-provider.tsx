@@ -380,9 +380,43 @@ export const [AppProvider, useApp] = createContextHook(() => {
     queryKey: ["app", "prefs", userId ?? "guest"],
     queryFn: async () => {
       const stored = await loadJson<Partial<UserPrefs>>(PREFS_KEY, {});
-      return { ...DEFAULT_PREFS, ...stored } as UserPrefs;
+      const localPrefs = { ...DEFAULT_PREFS, ...stored } as UserPrefs;
+      if (!isAuthenticated || !userId) return localPrefs;
+      try {
+        const { data, error } = await supabase
+          .from("user_settings")
+          .select(
+            "push,haptics,voice_lobbies,whale_alerts,ai_narration,private_profile,hide_balance,two_factor,biometric,currency,theme,language,slippage,priority_fee,mev_protection",
+          )
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return localPrefs;
+        const remote: UserPrefs = {
+          push: data.push ?? localPrefs.push,
+          haptics: data.haptics ?? localPrefs.haptics,
+          voiceLobbies: data.voice_lobbies ?? localPrefs.voiceLobbies,
+          whaleAlerts: data.whale_alerts ?? localPrefs.whaleAlerts,
+          aiNarration: data.ai_narration ?? localPrefs.aiNarration,
+          privateProfile: data.private_profile ?? localPrefs.privateProfile,
+          hideBalance: data.hide_balance ?? localPrefs.hideBalance,
+          twoFactor: data.two_factor ?? localPrefs.twoFactor,
+          biometric: data.biometric ?? localPrefs.biometric,
+          currency: (data.currency as Currency | null) ?? localPrefs.currency,
+          theme: (data.theme as ThemeMode | null) ?? localPrefs.theme,
+          language: (data.language as Language | null) ?? localPrefs.language,
+          slippage: Number(data.slippage ?? localPrefs.slippage),
+          priorityFee: Number(data.priority_fee ?? localPrefs.priorityFee),
+          mevProtection: data.mev_protection ?? localPrefs.mevProtection,
+        };
+        await saveJson(PREFS_KEY, remote);
+        return remote;
+      } catch (e) {
+        console.log("[app] settings fetch fallback", e);
+        return localPrefs;
+      }
     },
-    staleTime: Infinity,
+    staleTime: 30_000,
   });
 
   const posts = postsQ.data ?? [];
@@ -802,7 +836,27 @@ export const [AppProvider, useApp] = createContextHook(() => {
         try {
           await supabase
             .from("user_settings")
-            .upsert({ user_id: userId, id: userId }, { onConflict: "user_id" });
+            .upsert(
+              {
+                user_id: userId,
+                push: next.push,
+                haptics: next.haptics,
+                voice_lobbies: next.voiceLobbies,
+                whale_alerts: next.whaleAlerts,
+                ai_narration: next.aiNarration,
+                private_profile: next.privateProfile,
+                hide_balance: next.hideBalance,
+                two_factor: next.twoFactor,
+                biometric: next.biometric,
+                currency: next.currency,
+                theme: next.theme,
+                language: next.language,
+                slippage: next.slippage,
+                priority_fee: next.priorityFee,
+                mev_protection: next.mevProtection,
+              },
+              { onConflict: "user_id" },
+            );
         } catch (e) {
           console.log("[app] settings touch failed", e);
         }

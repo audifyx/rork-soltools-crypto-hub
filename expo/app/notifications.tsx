@@ -120,7 +120,7 @@ export default function NotificationsScreen() {
       if (!userId) return [];
       try {
         const { data, error } = await supabase
-          .from("follows")
+          .from("followers")
           .select("follower_id,created_at")
           .eq("followee_id", userId)
           .order("created_at", { ascending: false })

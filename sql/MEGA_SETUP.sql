@@ -1909,8 +1909,14 @@ begin
     case when is_owner then owner_badges else '[]'::jsonb end
   )
   on conflict (id) do update
-    set avatar_url    = case when is_owner then owner_avatar else public.profiles.avatar_url end,
-        banner_url    = case when is_owner then owner_banner else public.profiles.banner_url end,
+    set avatar_url    = case
+                          when is_owner and (public.profiles.avatar_url is null or public.profiles.avatar_url = '') then owner_avatar
+                          else public.profiles.avatar_url
+                        end,
+        banner_url    = case
+                          when is_owner and (public.profiles.banner_url is null or public.profiles.banner_url = '') then owner_banner
+                          else public.profiles.banner_url
+                        end,
         verified      = case when is_owner then true else public.profiles.verified end,
         custom_badges = case when is_owner then owner_badges else public.profiles.custom_badges end,
         updated_at    = now();
@@ -1989,8 +1995,8 @@ begin
   on conflict (id) do nothing;
 
   update public.profiles
-     set avatar_url    = owner_avatar,
-         banner_url    = owner_banner,
+     set avatar_url    = coalesce(nullif(avatar_url, ''), owner_avatar),
+         banner_url    = coalesce(nullif(banner_url, ''), owner_banner),
          verified      = true,
          badge         = coalesce(badge, 'owner'),
          display_name  = coalesce(nullif(display_name, ''), 'Audifyx'),
@@ -5079,8 +5085,8 @@ begin
   on conflict (id) do nothing;
 
   update public.profiles
-     set avatar_url    = owner_avatar,
-         banner_url    = owner_banner,
+     set avatar_url    = coalesce(nullif(avatar_url, ''), owner_avatar),
+         banner_url    = coalesce(nullif(banner_url, ''), owner_banner),
          verified      = true,
          badge         = coalesce(badge, 'owner'),
          display_name  = coalesce(nullif(display_name, ''), 'Audifyx'),

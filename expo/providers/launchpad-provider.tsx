@@ -17,12 +17,19 @@ import {
   LaunchpadStats,
 } from "@/types/launchpad";
 
-const STORAGE_KEY = "soltools.launchpad.listings.v1";
-const UPVOTES_KEY = "soltools.launchpad.upvotes.v1";
+const STORAGE_KEY_BASE = "soltools.launchpad.listings.v2";
+const UPVOTES_KEY_BASE = "soltools.launchpad.upvotes.v2";
 
-async function loadListings(): Promise<LaunchToken[]> {
+function launchpadKeys(scope: string): { listings: string; upvotes: string } {
+  return {
+    listings: `${STORAGE_KEY_BASE}.${scope}`,
+    upvotes: `${UPVOTES_KEY_BASE}.${scope}`,
+  };
+}
+
+async function loadListings(key: string): Promise<LaunchToken[]> {
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as LaunchToken[];
     if (!Array.isArray(parsed)) return [];
@@ -33,17 +40,17 @@ async function loadListings(): Promise<LaunchToken[]> {
   }
 }
 
-async function persistListings(items: LaunchToken[]): Promise<void> {
+async function persistListings(key: string, items: LaunchToken[]): Promise<void> {
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    await AsyncStorage.setItem(key, JSON.stringify(items));
   } catch (e) {
     console.log("[launchpad] persist listings failed", e);
   }
 }
 
-async function loadUpvotes(): Promise<Record<string, true>> {
+async function loadUpvotes(key: string): Promise<Record<string, true>> {
   try {
-    const raw = await AsyncStorage.getItem(UPVOTES_KEY);
+    const raw = await AsyncStorage.getItem(key);
     if (!raw) return {};
     return JSON.parse(raw) as Record<string, true>;
   } catch {
@@ -51,9 +58,9 @@ async function loadUpvotes(): Promise<Record<string, true>> {
   }
 }
 
-async function persistUpvotes(map: Record<string, true>): Promise<void> {
+async function persistUpvotes(key: string, map: Record<string, true>): Promise<void> {
   try {
-    await AsyncStorage.setItem(UPVOTES_KEY, JSON.stringify(map));
+    await AsyncStorage.setItem(key, JSON.stringify(map));
   } catch {}
 }
 
@@ -72,6 +79,15 @@ const VALID_VENUES: LaunchVenue[] = [
   "jupiter",
   "other",
 ];
+
+function normalizeTags(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return input.map(String).map((t) => t.trim()).filter(Boolean).slice(0, 12);
+}
+
+function isUuid(input: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input);
+}
 
 function rowToToken(row: Record<string, unknown>, _currentUserId: string | null): LaunchToken {
   const venueRaw = String(row.status ?? "other").toLowerCase();
@@ -92,10 +108,10 @@ function rowToToken(row: Record<string, unknown>, _currentUserId: string | null)
     twitter: (row.twitter as string) ?? undefined,
     telegram: (row.telegram as string) ?? undefined,
     discord: (row.discord as string) ?? undefined,
-    tags: [],
+    tags: normalizeTags(row.tags),
     featured: !!row.is_featured,
-    hot: false,
-    verified: false,
+    hot: !!row.is_hot,
+    verified: !!row.is_verified,
     createdAt: row.created_at
       ? new Date(row.created_at as string).getTime()
       : Date.now(),
@@ -104,20 +120,22 @@ function rowToToken(row: Record<string, unknown>, _currentUserId: string | null)
     // "other users". This is what allows users to see each other's listings.
     submittedBy: "user",
     ownerId: (row.user_id as string | null) ?? null,
-    price: null,
-    change24hPct: null,
+    price: Number(row.price_usd ?? 0) || null,
+    change24hPct: row.change_24h_pct != null ? Number(row.change_24h_pct) : null,
     liquidityUsd: Number(row.liquidity_usd ?? 0) || null,
     marketCapUsd: Number(row.market_cap ?? 0) || null,
-    volume24hUsd: null,
-    holders: null,
-    upvotes: 0,
-    watchers: 0,
+    volume24hUsd: Number(row.volume_24h_usd ?? 0) || null,
+    holders: Number(row.holders ?? 0) || null,
+    upvotes: Number(row.upvotes ?? 0),
+    watchers: Number(row.watchers ?? 0),
   };
 }
 
 export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   const queryClient = useQueryClient();
   const { userId, isAuthenticated } = useAuth();
+  const scope = userId ?? "guest";
+  const keys = useMemo(() => launchpadKeys(scope), [scope]);
   const [tab, setTab] = useState<LaunchTab>("all");
   const [sort, setSort] = useState<LaunchSort>("newest");
   const [venue, setVenue] = useState<LaunchVenueFilter>("all");
@@ -133,7 +151,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
             const { data, error } = await supabase
               .from("pump_v5_submissions")
               .select(
-                "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,liquidity_usd,market_cap,is_featured,status,created_at",
+                "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,tags,liquidity_usd,market_cap,volume_24h_usd,holders,price_usd,change_24h_pct,upvotes,watchers,is_featured,is_hot,is_verified,status,created_at",
               )
               .order("created_at", { ascending: false })
               .limit(200);
@@ -152,7 +170,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
             return [] as LaunchToken[];
           }
         })(),
-        loadListings(),
+        loadListings(keys.listings),
       ]);
       const map = new Map<string, LaunchToken>();
       // Priority: user submissions (remote) > local drafts > live market data
@@ -167,8 +185,15 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   });
 
   useEffect(() => {
-    loadUpvotes().then(setUpvoted);
-  }, []);
+    let alive = true;
+    setUpvoted({});
+    loadUpvotes(keys.upvotes).then((next) => {
+      if (alive) setUpvoted(next);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [keys.upvotes]);
 
   const submitMutation = useMutation({
     mutationFn: async (input: SubmitTokenInput) => {
@@ -190,11 +215,18 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
               discord: input.discord ?? null,
               liquidity_usd: input.liquidityUsd ?? null,
               market_cap: input.marketCapUsd ?? null,
+              tags: input.tags,
+              volume_24h_usd: input.volume24hUsd ?? null,
+              holders: input.holders ?? null,
+              price_usd: input.price ?? null,
+              change_24h_pct: input.change24hPct ?? null,
               is_featured: input.featured ?? false,
+              is_hot: false,
+              is_verified: false,
               status: input.venue,
             })
             .select(
-              "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,liquidity_usd,market_cap,is_featured,status,created_at",
+              "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,tags,liquidity_usd,market_cap,volume_24h_usd,holders,price_usd,change_24h_pct,upvotes,watchers,is_featured,is_hot,is_verified,status,created_at",
             )
             .single();
           if (error) throw error;
@@ -233,7 +265,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
           userId ?? "guest",
         ]) ?? []).slice();
       const next = [token, ...prev];
-      await persistListings(next);
+      await persistListings(keys.listings, next);
       console.log("[launchpad] local token submitted", token.ticker);
       return next;
     },
@@ -258,7 +290,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
           userId ?? "guest",
         ]) ?? []).slice();
       const next = prev.filter((t) => t.id !== id);
-      await persistListings(next);
+      await persistListings(keys.listings, next);
       return next;
     },
     onSuccess: (next) => {
@@ -275,29 +307,80 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
 
   const toggleUpvote = useCallback(
     (id: string) => {
-      setUpvoted((prev) => {
-        const next = { ...prev };
-        if (next[id]) {
-          delete next[id];
-        } else {
-          next[id] = true;
-        }
-        persistUpvotes(next);
-        return next;
-      });
+      const wasUpvoted = !!upvoted[id];
+      const nextUpvoted = { ...upvoted };
+      if (wasUpvoted) {
+        delete nextUpvoted[id];
+      } else {
+        nextUpvoted[id] = true;
+      }
+      setUpvoted(nextUpvoted);
+      void persistUpvotes(keys.upvotes, nextUpvoted);
+
       const key = ["launchpad", "listings", userId ?? "guest"] as const;
       const prev = queryClient.getQueryData<LaunchToken[]>(key) ?? [];
       const updated = prev.map((t) =>
         t.id === id
-          ? { ...t, upvotes: Math.max(0, t.upvotes + (upvoted[id] ? -1 : 1)) }
+          ? { ...t, upvotes: Math.max(0, t.upvotes + (wasUpvoted ? -1 : 1)) }
           : t,
       );
       queryClient.setQueryData(key, updated);
+
+      if (isAuthenticated && userId && isUuid(id)) {
+        void (async () => {
+          try {
+            if (wasUpvoted) {
+              const { error } = await supabase
+                .from("launch_upvotes")
+                .delete()
+                .eq("user_id", userId)
+                .eq("submission_id", id);
+              if (error) throw error;
+            } else {
+              const { error } = await supabase
+                .from("launch_upvotes")
+                .upsert({ user_id: userId, submission_id: id }, { onConflict: "user_id,submission_id" });
+              if (error) throw error;
+            }
+          } catch (e) {
+            console.log("[launchpad] upvote sync failed", e);
+            queryClient.invalidateQueries({ queryKey: ["launchpad", "listings"] });
+          }
+        })();
+      }
     },
-    [queryClient, upvoted, userId],
+    [queryClient, upvoted, userId, isAuthenticated, keys.upvotes],
   );
 
   const rawListings = listingsQuery.data ?? [];
+
+  useEffect(() => {
+    if (!isAuthenticated || !userId) return;
+    const submissionIds = rawListings.map((t) => t.id).filter(isUuid);
+    if (submissionIds.length === 0) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("launch_upvotes")
+          .select("submission_id")
+          .eq("user_id", userId)
+          .in("submission_id", submissionIds);
+        if (error) throw error;
+        if (!alive) return;
+        const remote = Object.fromEntries(
+          (data ?? []).map((r) => [String(r.submission_id), true] as const),
+        ) as Record<string, true>;
+        setUpvoted(remote);
+        await persistUpvotes(keys.upvotes, remote);
+      } catch (e) {
+        console.log("[launchpad] upvotes fetch failed", e);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [isAuthenticated, userId, rawListings, keys.upvotes]);
 
   // Live overlay: poll DexScreener for the visible contracts so price / MC /
   // liquidity / 24h change always match the chart and refresh in real time.
