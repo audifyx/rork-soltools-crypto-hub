@@ -66,7 +66,7 @@ export default function UsersScreen() {
   const router = useRouter();
   const { userId } = useAuth();
   const { toggleFollow, isToggling } = useProfileProvider();
-  const [mode, setMode] = useState<Mode>("online");
+  const [mode, setMode] = useState<Mode>("all");
   const [filter, setFilter] = useState<Filter>("none");
   const [query, setQuery] = useState<string>("");
 
