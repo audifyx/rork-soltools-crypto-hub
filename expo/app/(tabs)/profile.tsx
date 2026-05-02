@@ -498,9 +498,11 @@ export default function ProfileScreen() {
         quality: 0.85,
         allowsEditing: true,
         aspect: [1, 1],
+        base64: true,
       });
       if (res.canceled || !res.assets[0]?.uri) return;
-      const url = await uploadMedia({ kind: "avatar", uri: res.assets[0].uri });
+      const asset = res.assets[0];
+      const url = await uploadMedia({ kind: "avatar", uri: asset.uri, base64: asset.base64 });
       await updateProfile({ avatarUrl: url });
     } catch (e) {
       Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");
@@ -518,9 +520,11 @@ export default function ProfileScreen() {
         quality: 0.85,
         allowsEditing: true,
         aspect: [3, 1],
+        base64: true,
       });
       if (res.canceled || !res.assets[0]?.uri) return;
-      const url = await uploadMedia({ kind: "banner", uri: res.assets[0].uri });
+      const asset = res.assets[0];
+      const url = await uploadMedia({ kind: "banner", uri: asset.uri, base64: asset.base64 });
       await updateProfile({ bannerUrl: url });
     } catch (e) {
       Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");

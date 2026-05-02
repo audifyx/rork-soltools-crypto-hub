@@ -118,9 +118,9 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async (input: { kind: ProfileMediaKind; uri: string }) => {
+    mutationFn: async (input: { kind: ProfileMediaKind; uri: string; base64?: string | null }) => {
       if (!userId) throw new Error("Sign in to upload");
-      const url = await uploadProfileMedia(userId, input.kind, input.uri);
+      const url = await uploadProfileMedia(userId, input.kind, input.uri, input.base64 ?? null);
       const patch = input.kind === "avatar" ? { avatar_url: url } : { banner_url: url };
       const { error } = await supabase.from("profiles").update(patch).eq("id", userId);
       if (error) throw error;
