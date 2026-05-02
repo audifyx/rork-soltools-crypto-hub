@@ -32,6 +32,23 @@ export interface Community {
   bannerUrl?: string | null;
 }
 
+export interface CommunityPostQuote {
+  id: string;
+  authorHandle: string;
+  authorName: string;
+  content: string;
+  imageUrl?: string | null;
+  ticker?: string;
+  createdAt?: number;
+}
+
+export interface CommunityPostReplyRef {
+  id: string;
+  authorHandle: string;
+  authorName: string;
+  content: string;
+}
+
 export interface CommunityPost {
   id: string;
   communityId: string;
@@ -45,8 +62,15 @@ export interface CommunityPost {
   createdAt: number;
   likes: number;
   comments: number;
+  reposts: number;
   liked: boolean;
+  reposted: boolean;
+  bookmarked: boolean;
   pinned?: boolean;
+  parentPostId?: string | null;
+  quotePostId?: string | null;
+  quote?: CommunityPostQuote | null;
+  replyTo?: CommunityPostReplyRef | null;
 }
 
 export interface Space {
@@ -210,6 +234,65 @@ function rowToCommunity(row: CommunityRow, ownerHandle: string): Community {
     tags,
     avatarUrl: normalizeMediaUrl(row.avatar_url),
     bannerUrl: normalizeMediaUrl(row.banner_url),
+  };
+}
+
+type PostRowRecord = Record<string, unknown>;
+
+function displayNameFrom(username: string, displayName: unknown): string {
+  return ((displayName as string | null) ?? username) || "User";
+}
+
+function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): CommunityPost {
+  const postId = String(row.id);
+  const username = (row.username as string | null) ?? "";
+  const quoteUsername = (row.quote_author_username as string | null) ?? "";
+  const quoteId = (row.quote_post_id as string | null) ?? null;
+  const parentUsername = (row.parent_author_username as string | null) ?? "";
+  const parentId = (row.parent_post_id as string | null) ?? null;
+  const quoteContent = (row.quote_content as string | null) ?? "";
+  const parentContent = (row.parent_content as string | null) ?? "";
+  return {
+    id: postId,
+    communityId: (row.community_id as string | null) ?? fallbackCommunityId,
+    authorHandle: username ? `@${username}` : "",
+    authorName: displayNameFrom(username, row.display_name),
+    authorColor: (row.avatar_color as string | null) ?? Colors.mint,
+    content: (row.content as string | null) ?? "",
+    imageUrl: normalizeMediaUrl(row.image_url),
+    ticker: (row.ticker as string | null) ?? undefined,
+    changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
+    createdAt: row.created_at ? new Date(row.created_at as string).getTime() : Date.now(),
+    likes: Number(row.likes_count ?? 0),
+    comments: Number(row.comments_count ?? 0),
+    reposts: Number(row.reposts_count ?? 0),
+    liked: !!row.liked,
+    reposted: !!row.reposted,
+    bookmarked: !!row.bookmarked,
+    pinned: !!row.pinned,
+    parentPostId: parentId,
+    quotePostId: quoteId,
+    quote: quoteId
+      ? {
+          id: quoteId,
+          authorHandle: quoteUsername ? `@${quoteUsername}` : "",
+          authorName: displayNameFrom(quoteUsername, row.quote_author_display_name),
+          content: quoteContent,
+          imageUrl: normalizeMediaUrl(row.quote_image_url),
+          ticker: (row.quote_ticker as string | null) ?? undefined,
+          createdAt: row.quote_created_at
+            ? new Date(row.quote_created_at as string).getTime()
+            : undefined,
+        }
+      : null,
+    replyTo: parentId
+      ? {
+          id: parentId,
+          authorHandle: parentUsername ? `@${parentUsername}` : "",
+          authorName: displayNameFrom(parentUsername, row.parent_author_display_name),
+          content: parentContent,
+        }
+      : null,
   };
 }
 
@@ -575,27 +658,10 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           );
         }
         return rows.map((r): CommunityPost => {
-          const postId = String(r.id);
-          const username = (r.username as string | null) ?? "";
-          const display =
-            ((r.display_name as string | null) ?? username) || "User";
+          const post = communityPostFromRow(r, id);
           return {
-            id: postId,
-            communityId: (r.community_id as string) ?? id,
-            authorHandle: username ? `@${username}` : "",
-            authorName: display,
-            authorColor: (r.avatar_color as string | null) ?? Colors.mint,
-            content: (r.content as string) ?? "",
-            imageUrl: normalizeMediaUrl(r.image_url) ?? imageByPost.get(postId) ?? null,
-            ticker: (r.ticker as string) ?? undefined,
-            changePct: r.change_pct != null ? Number(r.change_pct) : undefined,
-            createdAt: r.created_at
-              ? new Date(r.created_at as string).getTime()
-              : Date.now(),
-            likes: Number(r.likes_count ?? 0),
-            comments: Number(r.comments_count ?? 0),
-            liked: !!r.liked,
-            pinned: !!r.pinned,
+            ...post,
+            imageUrl: post.imageUrl ?? imageByPost.get(post.id) ?? null,
           };
         });
       } catch (e) {
@@ -603,8 +669,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         try {
           const { data: directRows, error: directError } = await supabase
             .from("community_posts")
-            .select("id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,created_at")
+            .select("id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,reposts_count,parent_post_id,quote_post_id,created_at")
             .eq("community_id", id)
+            .is("parent_post_id", null)
             .order("created_at", { ascending: false })
             .limit(100);
           if (directError) throw directError;
@@ -654,7 +721,14 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
               createdAt: r.created_at ? new Date(r.created_at as string).getTime() : Date.now(),
               likes: Number(r.likes_count ?? 0),
               comments: Number(r.comments_count ?? 0),
+              reposts: Number(r.reposts_count ?? 0),
               liked: likedSet.has(postId),
+              reposted: false,
+              bookmarked: false,
+              parentPostId: (r.parent_post_id as string | null) ?? null,
+              quotePostId: (r.quote_post_id as string | null) ?? null,
+              quote: null,
+              replyTo: null,
             };
           });
         } catch (fallbackError) {
@@ -695,6 +769,102 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     [qc, postsByCommunityQuery],
   );
 
+  const patchCachedPost = useCallback(
+    (id: string, update: (post: CommunityPost) => CommunityPost) => {
+      const all = qc.getQueriesData<CommunityPost[]>({ queryKey: ["social"] });
+      for (const [key, list] of all) {
+        if (!list || !Array.isArray(list)) continue;
+        let changed = false;
+        const next = list.map((p) => {
+          if (p.id !== id) return p;
+          changed = true;
+          return update(p);
+        });
+        if (changed) qc.setQueryData(key, next);
+      }
+    },
+    [qc],
+  );
+
+  const listPostRepliesQuery = useCallback(
+    async (postId: string): Promise<CommunityPost[]> => {
+      try {
+        const { data, error } = await supabase.rpc("list_post_replies", {
+          target_post_id: postId,
+          max_rows: 100,
+        });
+        if (error) throw error;
+        return ((data ?? []) as PostRowRecord[]).map((r) =>
+          communityPostFromRow(r, (r.community_id as string | null) ?? ""),
+        );
+      } catch (e) {
+        console.log("[social] listPostReplies RPC failed, trying direct", e);
+        try {
+          const { data: directRows, error: directError } = await supabase
+            .from("community_posts")
+            .select("id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,reposts_count,parent_post_id,quote_post_id,created_at")
+            .eq("parent_post_id", postId)
+            .order("created_at", { ascending: true })
+            .limit(100);
+          if (directError) throw directError;
+          const rows = (directRows ?? []) as PostRowRecord[];
+          const authorIds = Array.from(
+            new Set(rows.map((r) => r.user_id).filter((v): v is string => typeof v === "string" && v.length > 0)),
+          );
+          let authorMap = new Map<string, Record<string, unknown>>();
+          if (authorIds.length > 0) {
+            const { data: profiles, error: profilesError } = await supabase
+              .from("profiles")
+              .select("id,user_id,username,display_name,avatar_color")
+              .or(`id.in.(${authorIds.join(",")}),user_id.in.(${authorIds.join(",")})`);
+            if (profilesError) console.log("[social] reply author enrich failed", profilesError.message);
+            authorMap = new Map(
+              (profiles ?? []).flatMap((p) => [
+                [String(p.id), p as Record<string, unknown>],
+                [String(p.user_id), p as Record<string, unknown>],
+              ]),
+            );
+          }
+          let likedSet = new Set<string>();
+          if (isAuthenticated && userId && rows.length > 0) {
+            const ids = rows.map((r) => String(r.id));
+            const { data: likes } = await supabase
+              .from("post_likes")
+              .select("post_id")
+              .eq("user_id", userId)
+              .in("post_id", ids);
+            likedSet = new Set((likes ?? []).map((r) => String(r.post_id)));
+          }
+          return rows.map((r): CommunityPost => {
+            const author = authorMap.get(String(r.user_id)) ?? {};
+            return communityPostFromRow(
+              {
+                ...r,
+                username: author.username,
+                display_name: author.display_name,
+                avatar_color: author.avatar_color,
+                liked: likedSet.has(String(r.id)),
+              },
+              (r.community_id as string | null) ?? "",
+            );
+          });
+        } catch (fallbackError) {
+          console.log("[social] listPostReplies direct failed", fallbackError);
+          return [];
+        }
+      }
+    },
+    [isAuthenticated, userId],
+  );
+
+  const usePostReplies = (postId: string | undefined) =>
+    useQuery<CommunityPost[]>({
+      queryKey: ["social", "post-replies", postId ?? ""],
+      queryFn: async () => (postId ? listPostRepliesQuery(postId) : []),
+      enabled: !!postId,
+      staleTime: 10_000,
+    });
+
   const addCommunityPost = useCallback(
     async (input: {
       communityId: string;
@@ -719,8 +889,13 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         createdAt: Date.now(),
         likes: 0,
         comments: 0,
+        reposts: 0,
         liked: false,
+        reposted: false,
+        bookmarked: false,
         imageUrl: null,
+        quote: null,
+        replyTo: null,
       };
 
       qc.setQueryData<CommunityPost[]>(
@@ -741,7 +916,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             ticker: input.ticker ?? null,
           })
           .select(
-            "id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,created_at",
+            "id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,reposts_count,parent_post_id,quote_post_id,created_at",
           )
           .single();
         if (error) throw error;
@@ -760,7 +935,14 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             : optimisticPost.createdAt,
           likes: Number(data.likes_count ?? 0),
           comments: Number(data.comments_count ?? 0),
+          reposts: Number(data.reposts_count ?? 0),
           liked: false,
+          reposted: false,
+          bookmarked: false,
+          parentPostId: (data.parent_post_id as string | null) ?? null,
+          quotePostId: (data.quote_post_id as string | null) ?? null,
+          quote: null,
+          replyTo: null,
         };
         qc.setQueryData<CommunityPost[]>(
           ["social", "community-posts", input.communityId],
@@ -786,33 +968,239 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
 
   const togglePostLike = useCallback(
     async (id: string) => {
+      if (!isAuthenticated || !userId) {
+        throw new Error("Sign in to like posts.");
+      }
+      patchCachedPost(id, (p) => ({
+        ...p,
+        liked: !p.liked,
+        likes: Math.max(0, p.likes + (p.liked ? -1 : 1)),
+      }));
       try {
-        const { data } = await supabase.rpc("toggle_post_like", { target_post_id: id });
+        const { data, error } = await supabase.rpc("toggle_post_like", { target_post_id: id });
+        if (error) throw error;
         const row = Array.isArray(data)
           ? (data[0] as { liked: boolean; likes_count: number } | undefined)
           : undefined;
-        // Patch any cached community lists that contain this post.
-        const all = qc.getQueriesData<CommunityPost[]>({
-          queryKey: ["social", "community-posts"],
-        });
-        for (const [key, list] of all) {
-          if (!list) continue;
-          const next = list.map((p) =>
-            p.id === id
-              ? {
-                  ...p,
-                  liked: row ? !!row.liked : !p.liked,
-                  likes: row ? Number(row.likes_count ?? p.likes) : p.likes + (p.liked ? -1 : 1),
-                }
-              : p,
-          );
-          qc.setQueryData(key, next);
+        if (row) {
+          patchCachedPost(id, (p) => ({
+            ...p,
+            liked: !!row.liked,
+            likes: Number(row.likes_count ?? p.likes),
+          }));
         }
       } catch (e) {
+        patchCachedPost(id, (p) => ({
+          ...p,
+          liked: !p.liked,
+          likes: Math.max(0, p.likes + (p.liked ? -1 : 1)),
+        }));
         console.log("[social] togglePostLike failed", e);
+        throw e instanceof Error ? e : new Error("Could not update like.");
       }
     },
-    [qc],
+    [isAuthenticated, patchCachedPost, userId],
+  );
+
+  const togglePostRepost = useCallback(
+    async (id: string) => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to repost.");
+      patchCachedPost(id, (p) => ({
+        ...p,
+        reposted: !p.reposted,
+        reposts: Math.max(0, p.reposts + (p.reposted ? -1 : 1)),
+      }));
+      try {
+        const { data, error } = await supabase.rpc("toggle_post_repost", { target_post_id: id });
+        if (error) throw error;
+        const row = Array.isArray(data)
+          ? (data[0] as { reposted: boolean; reposts_count: number } | undefined)
+          : undefined;
+        if (row) {
+          patchCachedPost(id, (p) => ({
+            ...p,
+            reposted: !!row.reposted,
+            reposts: Number(row.reposts_count ?? p.reposts),
+          }));
+        }
+      } catch (e) {
+        patchCachedPost(id, (p) => ({
+          ...p,
+          reposted: !p.reposted,
+          reposts: Math.max(0, p.reposts + (p.reposted ? -1 : 1)),
+        }));
+        console.log("[social] togglePostRepost failed", e);
+        throw e instanceof Error ? e : new Error("Could not repost.");
+      }
+    },
+    [isAuthenticated, patchCachedPost, userId],
+  );
+
+  const togglePostBookmark = useCallback(
+    async (id: string) => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to bookmark posts.");
+      patchCachedPost(id, (p) => ({ ...p, bookmarked: !p.bookmarked }));
+      try {
+        const { data, error } = await supabase.rpc("toggle_post_bookmark", { target_post_id: id });
+        if (error) throw error;
+        const row = Array.isArray(data) ? (data[0] as { bookmarked: boolean } | undefined) : undefined;
+        if (row) patchCachedPost(id, (p) => ({ ...p, bookmarked: !!row.bookmarked }));
+      } catch (e) {
+        patchCachedPost(id, (p) => ({ ...p, bookmarked: !p.bookmarked }));
+        console.log("[social] togglePostBookmark failed", e);
+        throw e instanceof Error ? e : new Error("Could not bookmark post.");
+      }
+    },
+    [isAuthenticated, patchCachedPost, userId],
+  );
+
+  const addPostReply = useCallback(
+    async (input: {
+      post: CommunityPost;
+      content: string;
+      authorHandle: string;
+      authorName: string;
+      authorColor: string;
+    }): Promise<CommunityPost> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to reply.");
+      const text = input.content.trim();
+      if (!text) throw new Error("Reply cannot be empty.");
+      const optimistic: CommunityPost = {
+        id: `local-reply-${Date.now()}`,
+        communityId: input.post.communityId,
+        authorHandle: input.authorHandle,
+        authorName: input.authorName,
+        authorColor: input.authorColor,
+        content: text,
+        createdAt: Date.now(),
+        likes: 0,
+        comments: 0,
+        reposts: 0,
+        liked: false,
+        reposted: false,
+        bookmarked: false,
+        parentPostId: input.post.id,
+        quotePostId: null,
+        quote: null,
+        replyTo: {
+          id: input.post.id,
+          authorHandle: input.post.authorHandle,
+          authorName: input.post.authorName,
+          content: input.post.content,
+        },
+      };
+      qc.setQueryData<CommunityPost[]>(["social", "post-replies", input.post.id], (prev) => [
+        ...(prev ?? []),
+        optimistic,
+      ]);
+      patchCachedPost(input.post.id, (p) => ({ ...p, comments: p.comments + 1 }));
+      try {
+        const { data, error } = await supabase.rpc("create_post_reply", {
+          target_post_id: input.post.id,
+          p_content: text,
+        });
+        if (error) throw error;
+        const row = Array.isArray(data) ? (data[0] as Record<string, unknown> | undefined) : undefined;
+        const reply: CommunityPost = {
+          ...optimistic,
+          id: String(row?.id ?? optimistic.id),
+          createdAt: row?.created_at ? new Date(row.created_at as string).getTime() : optimistic.createdAt,
+          parentPostId: (row?.parent_post_id as string | null) ?? input.post.id,
+        };
+        qc.setQueryData<CommunityPost[]>(["social", "post-replies", input.post.id], (prev) =>
+          (prev ?? []).map((p) => (p.id === optimistic.id ? reply : p)),
+        );
+        if (row?.comments_count != null) {
+          patchCachedPost(input.post.id, (p) => ({ ...p, comments: Number(row.comments_count ?? p.comments) }));
+        }
+        qc.invalidateQueries({ queryKey: ["social", "community-posts", input.post.communityId] });
+        return reply;
+      } catch (e) {
+        qc.setQueryData<CommunityPost[]>(["social", "post-replies", input.post.id], (prev) =>
+          (prev ?? []).filter((p) => p.id !== optimistic.id),
+        );
+        patchCachedPost(input.post.id, (p) => ({ ...p, comments: Math.max(0, p.comments - 1) }));
+        console.log("[social] addPostReply failed", e);
+        throw e instanceof Error ? e : new Error("Could not send reply.");
+      }
+    },
+    [isAuthenticated, patchCachedPost, qc, userId],
+  );
+
+  const quotePost = useCallback(
+    async (input: {
+      post: CommunityPost;
+      content: string;
+      authorHandle: string;
+      authorName: string;
+      authorColor: string;
+    }): Promise<CommunityPost> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to quote posts.");
+      const text = input.content.trim();
+      if (!text) throw new Error("Quote cannot be empty.");
+      const optimistic: CommunityPost = {
+        id: `local-quote-${Date.now()}`,
+        communityId: input.post.communityId,
+        authorHandle: input.authorHandle,
+        authorName: input.authorName,
+        authorColor: input.authorColor,
+        content: text,
+        createdAt: Date.now(),
+        likes: 0,
+        comments: 0,
+        reposts: 0,
+        liked: false,
+        reposted: false,
+        bookmarked: false,
+        parentPostId: null,
+        quotePostId: input.post.id,
+        quote: {
+          id: input.post.id,
+          authorHandle: input.post.authorHandle,
+          authorName: input.post.authorName,
+          content: input.post.content,
+          imageUrl: input.post.imageUrl,
+          ticker: input.post.ticker,
+          createdAt: input.post.createdAt,
+        },
+        replyTo: null,
+      };
+      qc.setQueryData<CommunityPost[]>(["social", "community-posts", input.post.communityId], (prev) => [
+        optimistic,
+        ...(prev ?? []),
+      ]);
+      patchCachedPost(input.post.id, (p) => ({ ...p, reposts: p.reposts + 1 }));
+      try {
+        const { data, error } = await supabase.rpc("quote_community_post", {
+          target_post_id: input.post.id,
+          p_content: text,
+        });
+        if (error) throw error;
+        const row = Array.isArray(data) ? (data[0] as Record<string, unknown> | undefined) : undefined;
+        const quote: CommunityPost = {
+          ...optimistic,
+          id: String(row?.id ?? optimistic.id),
+          createdAt: row?.created_at ? new Date(row.created_at as string).getTime() : optimistic.createdAt,
+          quotePostId: (row?.quote_post_id as string | null) ?? input.post.id,
+        };
+        qc.setQueryData<CommunityPost[]>(["social", "community-posts", input.post.communityId], (prev) =>
+          (prev ?? []).map((p) => (p.id === optimistic.id ? quote : p)),
+        );
+        if (row?.reposts_count != null) {
+          patchCachedPost(input.post.id, (p) => ({ ...p, reposts: Number(row.reposts_count ?? p.reposts) }));
+        }
+        qc.invalidateQueries({ queryKey: ["social", "communities"] });
+        return quote;
+      } catch (e) {
+        qc.setQueryData<CommunityPost[]>(["social", "community-posts", input.post.communityId], (prev) =>
+          (prev ?? []).filter((p) => p.id !== optimistic.id),
+        );
+        patchCachedPost(input.post.id, (p) => ({ ...p, reposts: Math.max(0, p.reposts - 1) }));
+        console.log("[social] quotePost failed", e);
+        throw e instanceof Error ? e : new Error("Could not quote post.");
+      }
+    },
+    [isAuthenticated, patchCachedPost, qc, userId],
   );
 
   const createCommunity = useCallback(
@@ -1029,8 +1417,13 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       updateCommunityMedia,
       postsByCommunity,
       usePostsForCommunity,
+      usePostReplies,
       addCommunityPost,
+      addPostReply,
+      quotePost,
       togglePostLike,
+      togglePostRepost,
+      togglePostBookmark,
       spaces,
       liveSpaces,
       upcomingSpaces,
@@ -1050,8 +1443,13 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       updateCommunityMedia,
       postsByCommunity,
       usePostsForCommunity,
+      usePostReplies,
       addCommunityPost,
+      addPostReply,
+      quotePost,
       togglePostLike,
+      togglePostRepost,
+      togglePostBookmark,
       spaces,
       liveSpaces,
       upcomingSpaces,

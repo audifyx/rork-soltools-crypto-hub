@@ -10,13 +10,17 @@ import {
   ArrowLeft,
   BadgeCheck,
   Bell,
+  Bookmark,
   Calendar,
   Camera,
+  Heart,
   Image as ImageIcon,
   Link as LinkIcon,
   MessageCircle,
   MoreVertical,
   Pin,
+  Quote,
+  Repeat2,
   Search,
   Send,
   Share2,
@@ -92,8 +96,13 @@ export default function CommunityDetailScreen() {
     toggleJoin,
     postsByCommunity,
     usePostsForCommunity,
+    usePostReplies,
     addCommunityPost,
+    addPostReply,
+    quotePost,
     togglePostLike,
+    togglePostRepost,
+    togglePostBookmark,
     updateCommunityMedia,
   } = useSocial();
   const { profile } = useApp();
@@ -106,9 +115,14 @@ export default function CommunityDetailScreen() {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [toast, setToast] = useState<string | null>(null);
   const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
+  const [activePost, setActivePost] = useState<CommunityPost | null>(null);
+  const [interactionMode, setInteractionMode] = useState<"thread" | "reply" | "quote" | null>(null);
+  const [interactionText, setInteractionText] = useState<string>("");
 
   const community = useMemo(() => (id ? getCommunity(id) : undefined), [id, getCommunity]);
   const postsQuery = usePostsForCommunity(community?.id);
+  const repliesQuery = usePostReplies(activePost?.id);
+  const replies = repliesQuery.data ?? [];
   const posts = useMemo(
     () => postsQuery.data ?? (community?.id ? postsByCommunity(community.id) : []),
     [community?.id, postsByCommunity, postsQuery.data],
@@ -180,28 +194,38 @@ export default function CommunityDetailScreen() {
     setTimeout(() => setToast(null), 1600);
   }, []);
 
+  const ensureSignedIn = useCallback((message: string): boolean => {
+    if (isAuthenticated) return true;
+    Alert.alert("Sign in", message);
+    return false;
+  }, [isAuthenticated]);
+
+  const viewer = useMemo(
+    () => ({
+      authorHandle: profile.handle || "@you",
+      authorName: profile.displayName || "You",
+      authorColor: profile.avatarColor,
+    }),
+    [profile.avatarColor, profile.displayName, profile.handle],
+  );
+
   const onSend = useCallback(async () => {
     const text = composer.trim();
     if (!community || text.length === 0) return;
-    if (!isAuthenticated) {
-      Alert.alert("Sign in", "Sign in to post in this community.");
-      return;
-    }
+    if (!ensureSignedIn("Sign in to post in this community.")) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
       await addCommunityPost({
         communityId: community.id,
         content: text,
-        authorHandle: profile.handle || "@you",
-        authorName: profile.displayName || "You",
-        authorColor: profile.avatarColor,
+        ...viewer,
       });
       setComposer("");
       setTab("recent");
     } catch (e) {
       Alert.alert("Failed to post", e instanceof Error ? e.message : "Try again.");
     }
-  }, [composer, community, isAuthenticated, addCommunityPost, profile]);
+  }, [composer, community, ensureSignedIn, addCommunityPost, viewer]);
 
   const shareLink = useMemo(
     () =>
@@ -332,6 +356,102 @@ export default function CommunityDetailScreen() {
     [canEditMedia, community, showToast, updateCommunityMedia],
   );
 
+  const closeInteraction = useCallback(() => {
+    setActivePost(null);
+    setInteractionMode(null);
+    setInteractionText("");
+  }, []);
+
+  const openThread = useCallback((post: CommunityPost) => {
+    Haptics.selectionAsync().catch(() => {});
+    setActivePost(post);
+    setInteractionMode("thread");
+    setInteractionText("");
+  }, []);
+
+  const openReply = useCallback((post: CommunityPost) => {
+    if (!ensureSignedIn("Sign in to reply to posts.")) return;
+    Haptics.selectionAsync().catch(() => {});
+    setActivePost(post);
+    setInteractionMode("reply");
+    setInteractionText("");
+  }, [ensureSignedIn]);
+
+  const openQuote = useCallback((post: CommunityPost) => {
+    if (!ensureSignedIn("Sign in to quote posts.")) return;
+    Haptics.selectionAsync().catch(() => {});
+    setActivePost(post);
+    setInteractionMode("quote");
+    setInteractionText("");
+  }, [ensureSignedIn]);
+
+  const onToggleLike = useCallback(async (post: CommunityPost) => {
+    if (!ensureSignedIn("Sign in to like posts.")) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    try {
+      await togglePostLike(post.id);
+    } catch (e) {
+      Alert.alert("Like failed", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [ensureSignedIn, togglePostLike]);
+
+  const onToggleRepost = useCallback(async (post: CommunityPost) => {
+    if (!ensureSignedIn("Sign in to repost.")) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    try {
+      await togglePostRepost(post.id);
+      showToast(post.reposted ? "Repost removed" : "Reposted");
+    } catch (e) {
+      Alert.alert("Repost failed", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [ensureSignedIn, showToast, togglePostRepost]);
+
+  const onToggleBookmark = useCallback(async (post: CommunityPost) => {
+    if (!ensureSignedIn("Sign in to bookmark posts.")) return;
+    Haptics.selectionAsync().catch(() => {});
+    try {
+      await togglePostBookmark(post.id);
+      showToast(post.bookmarked ? "Bookmark removed" : "Bookmarked");
+    } catch (e) {
+      Alert.alert("Bookmark failed", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [ensureSignedIn, showToast, togglePostBookmark]);
+
+  const onSharePost = useCallback(async (post: CommunityPost) => {
+    try {
+      await Share.share({
+        message: `${post.authorName} in ${community?.name ?? "SolTools"}: ${post.content}\n${shareLink}?post=${post.id}`,
+        url: `${shareLink}?post=${post.id}`,
+      });
+    } catch (e) {
+      console.log("[community] post share failed", e);
+    }
+  }, [community?.name, shareLink]);
+
+  const submitInteraction = useCallback(async () => {
+    const text = interactionText.trim();
+    if (!activePost || text.length === 0) return;
+    if (!ensureSignedIn(interactionMode === "quote" ? "Sign in to quote posts." : "Sign in to reply.")) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    try {
+      if (interactionMode === "quote") {
+        await quotePost({ post: activePost, content: text, ...viewer });
+        showToast("Quote posted");
+        closeInteraction();
+        return;
+      }
+      await addPostReply({ post: activePost, content: text, ...viewer });
+      setInteractionText("");
+      setInteractionMode("thread");
+      showToast("Reply sent");
+    } catch (e) {
+      Alert.alert(
+        interactionMode === "quote" ? "Quote failed" : "Reply failed",
+        e instanceof Error ? e.message : "Try again.",
+      );
+    }
+  }, [activePost, addPostReply, closeInteraction, ensureSignedIn, interactionMode, interactionText, quotePost, showToast, viewer]);
+
   if (!community) {
     return (
       <View style={styles.root}>
@@ -351,7 +471,16 @@ export default function CommunityDetailScreen() {
   const joined = isJoined(community.id);
 
   const renderPost: ListRenderItem<CommunityPost> = ({ item }) => (
-    <PostRow post={item} onLike={() => togglePostLike(item.id)} />
+    <PostRow
+      post={item}
+      onLike={() => void onToggleLike(item)}
+      onComment={() => openThread(item)}
+      onReply={() => openReply(item)}
+      onRepost={() => void onToggleRepost(item)}
+      onQuote={() => openQuote(item)}
+      onBookmark={() => void onToggleBookmark(item)}
+      onShare={() => void onSharePost(item)}
+    />
   );
 
   const dataForTab: CommunityPost[] =
@@ -847,6 +976,106 @@ export default function CommunityDetailScreen() {
         </SafeAreaView>
       </Modal>
 
+      <Modal
+        visible={!!activePost}
+        transparent
+        animationType="slide"
+        onRequestClose={closeInteraction}
+      >
+        <View style={styles.threadBackdrop}>
+          <SafeAreaView edges={["top", "bottom"]} style={styles.threadSheet}>
+            <View style={styles.threadHeader}>
+              <Pressable onPress={closeInteraction} style={styles.threadClose} hitSlop={8}>
+                <X color={Colors.text} size={18} strokeWidth={2.6} />
+              </Pressable>
+              <Text style={styles.threadTitle}>
+                {interactionMode === "quote" ? "Quote post" : interactionMode === "reply" ? "Reply" : "Thread"}
+              </Text>
+              <View style={styles.threadClose} />
+            </View>
+
+            {activePost ? (
+              <FlatList
+                data={interactionMode === "quote" ? [] : replies}
+                keyExtractor={(p) => p.id}
+                renderItem={({ item }) => (
+                  <PostRow
+                    post={item}
+                    compact
+                    onLike={() => void onToggleLike(item)}
+                    onComment={() => openThread(item)}
+                    onReply={() => openReply(item)}
+                    onRepost={() => void onToggleRepost(item)}
+                    onQuote={() => openQuote(item)}
+                    onBookmark={() => void onToggleBookmark(item)}
+                    onShare={() => void onSharePost(item)}
+                  />
+                )}
+                ListHeaderComponent={
+                  <View>
+                    <PostRow
+                      post={activePost}
+                      onLike={() => void onToggleLike(activePost)}
+                      onComment={() => openThread(activePost)}
+                      onReply={() => openReply(activePost)}
+                      onRepost={() => void onToggleRepost(activePost)}
+                      onQuote={() => openQuote(activePost)}
+                      onBookmark={() => void onToggleBookmark(activePost)}
+                      onShare={() => void onSharePost(activePost)}
+                    />
+                    {interactionMode === "quote" ? (
+                      <View style={styles.quoteComposerHint}>
+                        <Quote color={Colors.mint} size={15} strokeWidth={2.6} />
+                        <Text style={styles.quoteComposerText}>Add your take above the quoted post.</Text>
+                      </View>
+                    ) : null}
+                    {interactionMode !== "quote" && repliesQuery.isLoading ? (
+                      <ActivityIndicator color={Colors.mint} style={{ marginVertical: 18 }} />
+                    ) : null}
+                  </View>
+                }
+                ListEmptyComponent={
+                  interactionMode === "quote" || repliesQuery.isLoading ? null : (
+                    <View style={styles.threadEmpty}>
+                      <MessageCircle color={Colors.muted} size={22} strokeWidth={2.4} />
+                      <Text style={styles.threadEmptyText}>No replies yet. Start the thread.</Text>
+                    </View>
+                  )
+                }
+                contentContainerStyle={styles.threadList}
+                showsVerticalScrollIndicator={false}
+              />
+            ) : null}
+
+            {activePost ? (
+              <View style={styles.threadComposer}>
+                <View style={[styles.composerAvatar, { backgroundColor: profile.avatarColor }]}>
+                  <Text style={styles.composerInit}>{(profile.displayName || "Y").slice(0, 1).toUpperCase()}</Text>
+                </View>
+                <TextInput
+                  value={interactionText}
+                  onChangeText={setInteractionText}
+                  placeholder={interactionMode === "quote" ? "Add a quote..." : `Reply to ${activePost.authorName}...`}
+                  placeholderTextColor={Colors.muted}
+                  style={styles.threadInput}
+                  multiline
+                  autoFocus={interactionMode === "reply" || interactionMode === "quote"}
+                  testID="community-interaction-input"
+                />
+                <Pressable
+                  onPress={submitInteraction}
+                  disabled={interactionText.trim().length === 0}
+                  style={[styles.sendBtn, interactionText.trim().length === 0 && { opacity: 0.42 }]}
+                  testID="community-interaction-send"
+                >
+                  <Send color={Colors.ink} size={14} strokeWidth={2.8} />
+                </Pressable>
+              </View>
+            ) : null}
+          </SafeAreaView>
+        </View>
+      </Modal>
+
       {toast ? (
         <Animated.View style={styles.toast} pointerEvents="none">
           <Text style={styles.toastText}>{toast}</Text>
@@ -924,14 +1153,40 @@ function AboutStat({
   );
 }
 
-function PostRow({ post, onLike }: { post: CommunityPost; onLike: () => void }) {
+function PostRow({
+  post,
+  compact = false,
+  onLike,
+  onComment,
+  onReply,
+  onRepost,
+  onQuote,
+  onBookmark,
+  onShare,
+}: {
+  post: CommunityPost;
+  compact?: boolean;
+  onLike: () => void;
+  onComment: () => void;
+  onReply: () => void;
+  onRepost: () => void;
+  onQuote: () => void;
+  onBookmark: () => void;
+  onShare: () => void;
+}) {
+  const quote = post.quote;
   return (
-    <View style={styles.post} testID={`post-${post.id}`}>
+    <View style={[styles.post, compact && styles.postCompact]} testID={`post-${post.id}`}>
       {post.pinned ? (
         <View style={styles.pinnedTag}>
           <Pin color={Colors.orange} size={10} strokeWidth={2.8} />
           <Text style={styles.pinnedText}>PINNED</Text>
         </View>
+      ) : null}
+      {post.replyTo ? (
+        <Text style={styles.replyingTo}>
+          Replying to {post.replyTo.authorHandle || post.replyTo.authorName}
+        </Text>
       ) : null}
       <View style={styles.postHead}>
         <View style={[styles.postAvatar, { backgroundColor: post.authorColor }]}>
@@ -970,31 +1225,74 @@ function PostRow({ post, onLike }: { post: CommunityPost; onLike: () => void }) 
       {post.imageUrl ? (
         <Image source={{ uri: post.imageUrl }} style={styles.postImage} contentFit="cover" />
       ) : null}
+      {quote ? (
+        <View style={styles.quoteCard}>
+          <View style={styles.quoteTop}>
+            <Quote color={Colors.mint} size={13} strokeWidth={2.6} />
+            <Text style={styles.quoteAuthor} numberOfLines={1}>
+              {quote.authorName} {quote.authorHandle ? `· ${quote.authorHandle}` : ""}
+            </Text>
+            {quote.createdAt ? <Text style={styles.quoteTime}>· {timeAgo(quote.createdAt)}</Text> : null}
+          </View>
+          {quote.content ? <Text style={styles.quoteBody} numberOfLines={4}>{quote.content}</Text> : null}
+          {quote.imageUrl ? <Image source={{ uri: quote.imageUrl }} style={styles.quoteImage} contentFit="cover" /> : null}
+          {quote.ticker ? <Text style={styles.quoteTicker}>{quote.ticker}</Text> : null}
+        </View>
+      ) : null}
       <View style={styles.postFoot}>
+        <Pressable
+          onPress={onComment}
+          style={styles.postAction}
+          hitSlop={6}
+          testID={`comment-${post.id}`}
+        >
+          <MessageCircle color={Colors.muted} size={14} strokeWidth={2.5} />
+          <Text style={styles.postActionText}>{fmtCount(post.comments)}</Text>
+        </Pressable>
+        <Pressable
+          onPress={onRepost}
+          style={styles.postAction}
+          hitSlop={6}
+          testID={`repost-${post.id}`}
+        >
+          <Repeat2 color={post.reposted ? Colors.mint : Colors.muted} size={14} strokeWidth={2.5} />
+          <Text style={[styles.postActionText, post.reposted && { color: Colors.mint }]}>
+            {fmtCount(post.reposts)}
+          </Text>
+        </Pressable>
         <Pressable
           onPress={onLike}
           style={styles.postAction}
           hitSlop={6}
           testID={`like-${post.id}`}
         >
-          <Sparkles
+          <Heart
             color={post.liked ? Colors.rose : Colors.muted}
-            size={13}
-            strokeWidth={2.6}
+            fill={post.liked ? Colors.rose : "transparent"}
+            size={14}
+            strokeWidth={2.5}
           />
-          <Text
-            style={[
-              styles.postActionText,
-              post.liked && { color: Colors.rose },
-            ]}
-          >
-            {post.likes}
+          <Text style={[styles.postActionText, post.liked && { color: Colors.rose }]}>
+            {fmtCount(post.likes)}
           </Text>
         </Pressable>
-        <View style={styles.postAction}>
-          <MessageCircle color={Colors.muted} size={13} strokeWidth={2.6} />
-          <Text style={styles.postActionText}>{post.comments}</Text>
-        </View>
+        <Pressable onPress={onReply} style={styles.iconAction} hitSlop={6} testID={`reply-${post.id}`}>
+          <Send color={Colors.muted} size={13} strokeWidth={2.5} />
+        </Pressable>
+        <Pressable onPress={onQuote} style={styles.iconAction} hitSlop={6} testID={`quote-${post.id}`}>
+          <Quote color={Colors.muted} size={14} strokeWidth={2.5} />
+        </Pressable>
+        <Pressable onPress={onBookmark} style={styles.iconAction} hitSlop={6} testID={`bookmark-${post.id}`}>
+          <Bookmark
+            color={post.bookmarked ? Colors.orange : Colors.muted}
+            fill={post.bookmarked ? Colors.orange : "transparent"}
+            size={14}
+            strokeWidth={2.5}
+          />
+        </Pressable>
+        <Pressable onPress={onShare} style={styles.iconAction} hitSlop={6} testID={`share-post-${post.id}`}>
+          <Share2 color={Colors.muted} size={14} strokeWidth={2.5} />
+        </Pressable>
       </View>
     </View>
   );
@@ -1251,6 +1549,13 @@ const styles = StyleSheet.create({
 
   sep: { height: 1, marginHorizontal: 18, backgroundColor: "rgba(255,255,255,0.04)" },
   post: { paddingHorizontal: 18, paddingVertical: 14 },
+  postCompact: { paddingHorizontal: 14, paddingVertical: 12 },
+  replyingTo: {
+    color: Colors.mint,
+    fontSize: 11,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
   pinnedTag: {
     flexDirection: "row",
     alignItems: "center",
@@ -1299,9 +1604,109 @@ const styles = StyleSheet.create({
     marginTop: 12,
     backgroundColor: "rgba(255,255,255,0.05)",
   },
-  postFoot: { flexDirection: "row", gap: 18, marginTop: 12 },
+  quoteCard: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.18)",
+  },
+  quoteTop: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 7 },
+  quoteAuthor: { color: Colors.text, fontSize: 11, fontWeight: "900", flexShrink: 1 },
+  quoteTime: { color: Colors.muted, fontSize: 10, fontWeight: "700" },
+  quoteBody: { color: Colors.text, fontSize: 12, fontWeight: "600", lineHeight: 17 },
+  quoteImage: {
+    width: "100%",
+    height: 112,
+    borderRadius: 12,
+    marginTop: 9,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  quoteTicker: {
+    alignSelf: "flex-start",
+    color: Colors.mint,
+    fontSize: 10,
+    fontWeight: "900",
+    marginTop: 8,
+  },
+  postFoot: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 12, flexWrap: "wrap" },
   postAction: { flexDirection: "row", alignItems: "center", gap: 5 },
+  iconAction: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
   postActionText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
+
+  threadBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.62)",
+  },
+  threadSheet: {
+    height: "88%",
+    backgroundColor: Colors.ink,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  threadHeader: {
+    height: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  threadClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  threadTitle: { color: Colors.text, fontSize: 15, fontWeight: "900" },
+  threadList: { paddingBottom: 110 },
+  threadEmpty: { alignItems: "center", gap: 8, paddingVertical: 30 },
+  threadEmptyText: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  threadComposer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 16,
+    backgroundColor: "rgba(9,14,16,0.98)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+  },
+  threadInput: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "700",
+    minHeight: 34,
+    maxHeight: 110,
+    padding: 0,
+  },
+  quoteComposerHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 18,
+    marginTop: 4,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(85,245,178,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.18)",
+  },
+  quoteComposerText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
 
   aboutWrap: { paddingHorizontal: 18, marginTop: 14, gap: 10 },
   aboutCard: {
