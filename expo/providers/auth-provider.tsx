@@ -1,8 +1,9 @@
 import createContextHook from "@nkzw/create-context-hook";
 import type { Session, User } from "@supabase/supabase-js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { saveOwnProfilePatch } from "@/lib/profile-db";
 import { supabase } from "@/lib/supabase";
 import { clearAllUserCache } from "@/lib/user-cache";
 
@@ -11,6 +12,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const currentUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -18,9 +20,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       .getSession()
       .then(({ data }) => {
         if (!mounted) return;
+        const nextUser = data.session?.user ?? null;
+        currentUserIdRef.current = nextUser?.id ?? null;
         setSession(data.session ?? null);
-        setUser(data.session?.user ?? null);
-        console.log("[auth] initial session", data.session?.user?.email ?? "(none)");
+        setUser(nextUser);
+        console.log("[auth] initial session", nextUser?.email ?? "(none)");
       })
       .catch((e) => console.log("[auth] getSession error", e))
       .finally(() => {
@@ -29,12 +33,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       console.log("[auth] event", event, s?.user?.email ?? "(none)");
-      const prevId = user?.id ?? null;
-      const nextId = s?.user?.id ?? null;
+      const nextUser = s?.user ?? null;
+      const prevId = currentUserIdRef.current;
+      const nextId = nextUser?.id ?? null;
+      currentUserIdRef.current = nextId;
       setSession(s ?? null);
-      setUser(s?.user ?? null);
+      setUser(nextUser);
       // If the signed-in user changed, drop every cached query so the
-      // previous account's data can't bleed into the new session.
+      // previous account's data can't bleed into the new session. Token
+      // refreshes for the same user should only invalidate, not wipe queries.
       if (prevId !== nextId) {
         qc.removeQueries();
       } else {
@@ -70,14 +77,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       if (error) throw error;
       if (data.user && input.username) {
         try {
-          await supabase.from("profiles").upsert(
-            {
-              id: data.user.id,
-              user_id: data.user.id,
-              username: input.username.trim(),
-            },
-            { onConflict: "id" },
-          );
+          await saveOwnProfilePatch(data.user.id, {
+            username: input.username.trim(),
+            display_name: input.username.trim(),
+          });
         } catch (e) {
           console.log("[auth] profile create best-effort failed", e);
         }

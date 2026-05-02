@@ -39,6 +39,7 @@ export interface CommunityPost {
   authorName: string;
   authorColor: string;
   content: string;
+  imageUrl?: string | null;
   ticker?: string;
   changePct?: number;
   createdAt: number;
@@ -318,25 +319,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
   const communitiesQ = useQuery<Community[]>({
     queryKey: ["social", "communities", userId ?? "guest"],
     queryFn: async () => {
-      try {
-        const { data, error } = await supabase.rpc("list_public_communities", {
-          max_rows: 200,
-        });
-        if (!error) {
-          const rows = (data ?? []) as CommunityWithOwnerRow[];
-          return rows.map((r) =>
-            rowToCommunity(
-              r,
-              ownerHandleFromUsername(r.owner_username ?? r.owner_handle ?? null),
-            ),
-          );
-        }
-        console.log("[social] list_public_communities RPC failed, falling back", error.message);
-      } catch (e) {
-        console.log("[social] list_public_communities RPC crashed, falling back", e);
-      }
-
-      try {
+      const loadDirect = async (): Promise<Community[]> => {
         const { data, error } = await supabase
           .from("communities")
           .select(
@@ -354,20 +337,43 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         if (ownerIds.length > 0) {
           const { data: profs, error: profilesError } = await supabase
             .from("profiles")
-            .select("id,username")
-            .in("id", ownerIds);
+            .select("id,user_id,username")
+            .or(`id.in.(${ownerIds.join(",")}),user_id.in.(${ownerIds.join(",")})`);
           if (profilesError) {
             console.log("[social] community owner profiles fetch failed", profilesError.message);
           }
           ownerHandles = new Map(
-            (profs ?? []).map((p) => [
-              p.id as string,
-              ownerHandleFromUsername(p.username),
-            ]),
+            (profs ?? []).flatMap((p) => {
+              const handle = ownerHandleFromUsername(p.username);
+              return [
+                [p.id as string, handle] as [string, string],
+                [p.user_id as string, handle] as [string, string],
+              ];
+            }),
           );
         }
         return rows.map((r) =>
           rowToCommunity(r, r.owner_id ? ownerHandles.get(r.owner_id) ?? "" : ""),
+        );
+      };
+
+      try {
+        return await loadDirect();
+      } catch (e) {
+        console.log("[social] direct communities fetch failed, trying RPC", e);
+      }
+
+      try {
+        const { data, error } = await supabase.rpc("list_public_communities", {
+          max_rows: 200,
+        });
+        if (error) throw error;
+        const rows = (data ?? []) as CommunityWithOwnerRow[];
+        return rows.map((r) =>
+          rowToCommunity(
+            r,
+            ownerHandleFromUsername(r.owner_username ?? r.owner_handle ?? null),
+          ),
         );
       } catch (e) {
         console.log("[social] communities fetch failed", e);
@@ -529,17 +535,31 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         });
         if (error) throw error;
         const rows = (data ?? []) as Record<string, unknown>[];
+        const postIds = rows.map((r) => String(r.id)).filter(Boolean);
+        let imageByPost = new Map<string, string | null>();
+        if (postIds.length > 0) {
+          const { data: mediaRows, error: mediaError } = await supabase
+            .from("community_posts")
+            .select("id,image_url")
+            .in("id", postIds);
+          if (mediaError) console.log("[social] post image enrich failed", mediaError.message);
+          imageByPost = new Map(
+            (mediaRows ?? []).map((r) => [String(r.id), normalizeMediaUrl(r.image_url)]),
+          );
+        }
         return rows.map((r): CommunityPost => {
+          const postId = String(r.id);
           const username = (r.username as string | null) ?? "";
           const display =
             ((r.display_name as string | null) ?? username) || "User";
           return {
-            id: String(r.id),
+            id: postId,
             communityId: (r.community_id as string) ?? id,
             authorHandle: username ? `@${username}` : "",
             authorName: display,
             authorColor: (r.avatar_color as string | null) ?? Colors.mint,
             content: (r.content as string) ?? "",
+            imageUrl: normalizeMediaUrl(r.image_url) ?? imageByPost.get(postId) ?? null,
             ticker: (r.ticker as string) ?? undefined,
             changePct: r.change_pct != null ? Number(r.change_pct) : undefined,
             createdAt: r.created_at
@@ -552,11 +572,71 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           };
         });
       } catch (e) {
-        console.log("[social] postsByCommunity failed", e);
-        return [];
+        console.log("[social] postsByCommunity RPC failed, trying direct", e);
+        try {
+          const { data: directRows, error: directError } = await supabase
+            .from("community_posts")
+            .select("id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,created_at")
+            .eq("community_id", id)
+            .order("created_at", { ascending: false })
+            .limit(100);
+          if (directError) throw directError;
+          const rows = (directRows ?? []) as Record<string, unknown>[];
+          const authorIds = Array.from(
+            new Set(rows.map((r) => r.user_id).filter((v): v is string => typeof v === "string" && v.length > 0)),
+          );
+          let authorMap = new Map<string, Record<string, unknown>>();
+          if (authorIds.length > 0) {
+            const { data: profiles, error: profilesError } = await supabase
+              .from("profiles")
+              .select("id,user_id,username,display_name,avatar_color")
+              .or(`id.in.(${authorIds.join(",")}),user_id.in.(${authorIds.join(",")})`);
+            if (profilesError) console.log("[social] post author enrich failed", profilesError.message);
+            authorMap = new Map(
+              (profiles ?? []).flatMap((p) => [
+                [String(p.id), p as Record<string, unknown>],
+                [String(p.user_id), p as Record<string, unknown>],
+              ]),
+            );
+          }
+          let likedSet = new Set<string>();
+          if (isAuthenticated && userId && rows.length > 0) {
+            const ids = rows.map((r) => String(r.id));
+            const { data: likes } = await supabase
+              .from("post_likes")
+              .select("post_id")
+              .eq("user_id", userId)
+              .in("post_id", ids);
+            likedSet = new Set((likes ?? []).map((r) => String(r.post_id)));
+          }
+          return rows.map((r): CommunityPost => {
+            const postId = String(r.id);
+            const author = authorMap.get(String(r.user_id)) ?? {};
+            const username = (author.username as string | null) ?? "";
+            const display = ((author.display_name as string | null) ?? username) || "User";
+            return {
+              id: postId,
+              communityId: (r.community_id as string) ?? id,
+              authorHandle: username ? `@${username}` : "",
+              authorName: display,
+              authorColor: (author.avatar_color as string | null) ?? Colors.mint,
+              content: (r.content as string) ?? "",
+              imageUrl: normalizeMediaUrl(r.image_url),
+              ticker: (r.ticker as string) ?? undefined,
+              changePct: r.change_pct != null ? Number(r.change_pct) : undefined,
+              createdAt: r.created_at ? new Date(r.created_at as string).getTime() : Date.now(),
+              likes: Number(r.likes_count ?? 0),
+              comments: Number(r.comments_count ?? 0),
+              liked: likedSet.has(postId),
+            };
+          });
+        } catch (fallbackError) {
+          console.log("[social] postsByCommunity direct failed", fallbackError);
+          return [];
+        }
       }
     },
-    [],
+    [isAuthenticated, userId],
   );
 
   const usePostsForCommunity = (id: string | undefined) =>
@@ -630,6 +710,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           likes: 0,
           comments: 0,
           liked: false,
+          imageUrl: null,
         };
         qc.setQueryData<CommunityPost[]>(
           ["social", "community-posts", input.communityId],

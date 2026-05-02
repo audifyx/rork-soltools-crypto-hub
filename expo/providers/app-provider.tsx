@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
 import { normalizeMediaUrl } from "@/lib/media";
+import { fetchOwnProfileRow, saveOwnProfilePatch, type ProfilePatch } from "@/lib/profile-db";
 import { supabase } from "@/lib/supabase";
 import { uploadPostImage } from "@/lib/upload";
 import type { CustomBadge } from "@/providers/profile-provider";
@@ -396,14 +397,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
       const base = { ...DEFAULT_PROFILE, ...local } as UserProfile;
       if (isAuthenticated && userId) {
         try {
-          const { data, error } = await supabase
-            .from("profiles")
-            .select(
-              "id,user_id,username,display_name,bio,avatar_url,banner_url,avatar_color,banner_from,banner_to,wallet_address,twitter_handle,website,location,followers_count,following_count,badge,verified,custom_badges,trades_count,win_rate,pnl_pct,xp,created_at",
-            )
-            .eq("id", userId)
-            .maybeSingle();
-          if (error) throw error;
+          const data = await fetchOwnProfileRow<Record<string, unknown>>(
+            userId,
+            "id,user_id,username,display_name,bio,avatar_url,banner_url,avatar_color,banner_from,banner_to,wallet_address,twitter_handle,website,location,followers_count,following_count,badge,verified,custom_badges,trades_count,win_rate,pnl_pct,xp,created_at",
+          );
           if (data) {
             const rawBadges = (data as { custom_badges?: unknown }).custom_badges;
             const customBadges: CustomBadge[] = Array.isArray(rawBadges)
@@ -852,10 +849,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       qc.setQueryData(["app", "profile", userId ?? "guest"], next);
       await saveJson(PROFILE_KEY, next);
       if (isAuthenticated && userId) {
-        const dbPatch: Record<string, string | null> = {
-          id: userId,
-          user_id: userId,
-        };
+        const dbPatch: ProfilePatch = {};
         if ("handle" in patch) {
           const username = nonEmptyString(next.handle.replace(/^@/, ""));
           if (!username) throw new Error("Handle is required");
@@ -876,14 +870,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
         if ("twitterHandle" in patch) dbPatch.twitter_handle = next.twitterHandle || null;
         if ("website" in patch) dbPatch.website = next.website || null;
         if ("location" in patch) dbPatch.location = next.location || null;
-        if (Object.keys(dbPatch).length === 2) return;
+        if (Object.keys(dbPatch).length === 0) return;
 
-        const { error } = await supabase.from("profiles").upsert(dbPatch, { onConflict: "id" });
-        if (error) {
+        try {
+          await saveOwnProfilePatch(userId, dbPatch);
+        } catch (e) {
           qc.setQueryData(["app", "profile", userId], previous);
           await saveJson(PROFILE_KEY, previous);
-          console.log("[app] profile save failed", error.message);
-          throw new Error(error.message || "Could not save profile");
+          const message = e instanceof Error ? e.message : "Could not save profile";
+          console.log("[app] profile save failed", message);
+          throw new Error(message);
         }
       }
     },

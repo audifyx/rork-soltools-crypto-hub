@@ -91,6 +91,7 @@ export default function CommunityDetailScreen() {
     isJoined,
     toggleJoin,
     postsByCommunity,
+    usePostsForCommunity,
     addCommunityPost,
     togglePostLike,
     updateCommunityMedia,
@@ -104,7 +105,11 @@ export default function CommunityDetailScreen() {
   const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
 
   const community = useMemo(() => (id ? getCommunity(id) : undefined), [id, getCommunity]);
-  const posts = useMemo(() => (id ? postsByCommunity(id) : []), [id, postsByCommunity]);
+  const postsQuery = usePostsForCommunity(community?.id);
+  const posts = useMemo(
+    () => postsQuery.data ?? (community?.id ? postsByCommunity(community.id) : []),
+    [community?.id, postsByCommunity, postsQuery.data],
+  );
   const canEditMedia = useMemo(() => {
     if (!community || !isAuthenticated || !userId) return false;
     if (community.ownerId === userId) return true;
@@ -291,7 +296,7 @@ export default function CommunityDetailScreen() {
   }
 
   const joined = isJoined(community.id);
-  const mediaPosts = posts.filter((p) => p.ticker || p.pinned);
+  const mediaPosts = posts.filter((p) => p.imageUrl || p.ticker || p.pinned);
 
   const renderPost: ListRenderItem<CommunityPost> = ({ item }) => (
     <PostRow post={item} onLike={() => togglePostLike(item.id)} />
@@ -864,7 +869,10 @@ function PostRow({ post, onLike }: { post: CommunityPost; onLike: () => void }) 
           </View>
         ) : null}
       </View>
-      <Text style={styles.postBody}>{post.content}</Text>
+      {post.content.length > 0 ? <Text style={styles.postBody}>{post.content}</Text> : null}
+      {post.imageUrl ? (
+        <Image source={{ uri: post.imageUrl }} style={styles.postImage} contentFit="cover" />
+      ) : null}
       <View style={styles.postFoot}>
         <Pressable
           onPress={onLike}
@@ -1157,6 +1165,13 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: "500",
     marginTop: 10,
+  },
+  postImage: {
+    width: "100%",
+    height: 190,
+    borderRadius: 18,
+    marginTop: 12,
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
   postFoot: { flexDirection: "row", gap: 18, marginTop: 12 },
   postAction: { flexDirection: "row", alignItems: "center", gap: 5 },

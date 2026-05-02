@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 
 import { normalizeMediaUrl } from "@/lib/media";
+import { fetchOwnProfileRow, saveOwnProfilePatch } from "@/lib/profile-db";
 import { supabase } from "@/lib/supabase";
 import { uploadProfileMedia, type ProfileMediaKind } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
@@ -104,16 +105,13 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
     enabled: isAuthenticated && !!userId,
     queryFn: async () => {
       if (!userId) return [];
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("custom_badges")
-        .eq("id", userId)
-        .maybeSingle();
-      if (error) {
-        console.log("[profile] badges fetch error", error.message);
+      try {
+        const data = await fetchOwnProfileRow<{ custom_badges?: unknown }>(userId, "custom_badges");
+        return normalizeBadges(data?.custom_badges);
+      } catch (e) {
+        console.log("[profile] badges fetch error", e instanceof Error ? e.message : e);
         return [];
       }
-      return normalizeBadges((data as { custom_badges?: unknown } | null)?.custom_badges);
     },
     staleTime: 30_000,
   });
@@ -138,10 +136,7 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       // Write only the image column directly. A broken/older profile RPC can
       // treat omitted params as null and wipe username/display_name.
       const patch = input.kind === "avatar" ? { avatar_url: url } : { banner_url: url };
-      const { error: upErr } = await supabase
-        .from("profiles")
-        .upsert({ id: userId, user_id: userId, ...patch }, { onConflict: "id" });
-      if (upErr) throw upErr;
+      await saveOwnProfilePatch(userId, patch);
       return url;
     },
     onSuccess: (url, input) => {
