@@ -975,6 +975,38 @@ export default function CommunityDetailScreen() {
               />
             </View>
 
+            {tab !== "about" ? (
+              <View style={styles.communityFeedNotice}>
+                <View
+                  style={[
+                    styles.feedNoticeIcon,
+                    {
+                      backgroundColor: `${community.accent[0]}1A`,
+                      borderColor: `${community.accent[0]}55`,
+                    },
+                  ]}
+                >
+                  <Hash color={community.accent[0]} size={17} strokeWidth={2.8} />
+                </View>
+                <View style={styles.feedNoticeCopy}>
+                  <Text style={styles.feedNoticeTitle}>Community feed</Text>
+                  <Text style={styles.feedNoticeBody} numberOfLines={2}>
+                    Scoped to {community.name}: posts, replies, media, token scans, and saved posts stay inside this community.
+                  </Text>
+                </View>
+                <View style={styles.feedNoticeStats}>
+                  <View style={styles.feedNoticeStat}>
+                    <MessageCircle color={Colors.cyan} size={11} strokeWidth={2.6} />
+                    <Text style={styles.feedNoticeStatText}>{fmtCount(community.posts)}</Text>
+                  </View>
+                  <View style={styles.feedNoticeStat}>
+                    <Users color={Colors.mint} size={11} strokeWidth={2.6} />
+                    <Text style={styles.feedNoticeStatText}>{fmtCount(community.members)}</Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
+
             {tab === "recent" ? (
               <View style={styles.composer}>
                 <View
@@ -1916,6 +1948,52 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.08)",
   },
+  communityFeedNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 18,
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: "rgba(7,18,20,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.075)",
+  },
+  feedNoticeIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  feedNoticeCopy: { flex: 1, gap: 2 },
+  feedNoticeTitle: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: -0.1,
+  },
+  feedNoticeBody: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 15,
+  },
+  feedNoticeStats: { gap: 6, alignItems: "flex-end" },
+  feedNoticeStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.045)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+  },
+  feedNoticeStatText: { color: Colors.text, fontSize: 10, fontWeight: "900" },
   tabBtn: {
     flex: 1,
     paddingVertical: 14,

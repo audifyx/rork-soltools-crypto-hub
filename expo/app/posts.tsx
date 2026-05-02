@@ -110,6 +110,8 @@ export default function PostsFeedScreen() {
           .select(
             "id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at",
           )
+          .is("community_id", null)
+          .is("parent_post_id", null)
           .order("created_at", { ascending: false })
           .limit(300);
         if (error) throw error;

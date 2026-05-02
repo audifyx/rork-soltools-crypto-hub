@@ -198,6 +198,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
             .from("community_posts")
             .select("id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
             .eq("user_id", userId)
+            .is("community_id", null)
+            .is("parent_post_id", null)
             .order("created_at", { ascending: false })
             .limit(200);
           if (error) throw error;
