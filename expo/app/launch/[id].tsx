@@ -251,29 +251,11 @@ export default function LaunchDetailScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* Banner */}
           <View style={styles.bannerWrap}>
-            {token.bannerUrl ? (
-              <Image source={{ uri: token.bannerUrl }} style={styles.banner} contentFit="cover" />
-            ) : token.logoUrl ? (
-              <>
-                <Image
-                  source={{ uri: token.logoUrl }}
-                  style={styles.banner}
-                  contentFit="cover"
-                  blurRadius={Platform.OS === "web" ? 30 : 24}
-                />
-                <LinearGradient
-                  colors={["rgba(3,7,8,0.55)", "rgba(3,7,8,0.25)"]}
-                  style={styles.banner}
-                />
-              </>
-            ) : (
-              <LinearGradient
-                colors={["rgba(85,245,178,0.32)", "rgba(56,215,255,0.05)"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.banner}
-              />
-            )}
+            <Image
+              source={{ uri: getTokenBanner(token.bannerUrl, token.id || token.ticker) }}
+              style={styles.banner}
+              contentFit="cover"
+            />
             <LinearGradient
               colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.7)", Colors.ink]}
               style={styles.bannerFade}
@@ -311,18 +293,11 @@ export default function LaunchDetailScreen() {
           {/* Identity */}
           <View style={styles.headWrap}>
             <View style={styles.logoBlock}>
-              {token.logoUrl ? (
-                <Image source={{ uri: token.logoUrl }} style={styles.logo} contentFit="cover" />
-              ) : (
-                <LinearGradient
-                  colors={[Colors.mint, Colors.cyan]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.logo, styles.logoFallback]}
-                >
-                  <Text style={styles.logoText}>{token.ticker.slice(0, 2)}</Text>
-                </LinearGradient>
-              )}
+              <Image
+                source={{ uri: getTokenLogo(token.logoUrl, token.id || token.ticker) }}
+                style={styles.logo}
+                contentFit="cover"
+              />
               {token.status === "live" ? (
                 <View style={styles.logoLiveDot}>
                   <View style={styles.logoLiveDotInner} />

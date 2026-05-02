@@ -39,6 +39,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import TokenCard from "@/components/launchpad/TokenCard";
 import Colors from "@/constants/colors";
 import { useLaunchpad } from "@/providers/launchpad-provider";
+import { getTokenBanner, getTokenLogo } from "@/utils/token-art";
 import { LaunchSort, LaunchTab, LaunchToken, LaunchVenueFilter } from "@/types/launchpad";
 
 const TABS: { key: LaunchTab; label: string; Icon: typeof Rocket }[] = [
@@ -432,13 +433,11 @@ function TrendingChip({ token, rank, onPress }: { token: LaunchToken; rank: numb
         <View style={styles.trendRank}>
           <Text style={styles.trendRankText}>{rank}</Text>
         </View>
-        {token.logoUrl ? (
-          <Image source={{ uri: token.logoUrl }} style={styles.trendLogo} contentFit="cover" />
-        ) : (
-          <View style={[styles.trendLogo, styles.trendLogoFallback]}>
-            <Text style={styles.trendLogoText}>{token.ticker.replace("$", "").slice(0, 2)}</Text>
-          </View>
-        )}
+        <Image
+          source={{ uri: getTokenLogo(token.logoUrl, token.id || token.ticker) }}
+          style={styles.trendLogo}
+          contentFit="cover"
+        />
       </View>
       <View style={styles.trendInfo}>
         <Text style={styles.trendName} numberOfLines={1}>
@@ -510,16 +509,11 @@ function FeaturedCard({ token, onPress }: { token: LaunchToken; onPress: () => v
   return (
     <Pressable onPress={onPress} style={styles.featuredCard} testID={`featured-${token.id}`}>
       <View style={styles.featuredBanner}>
-        {token.bannerUrl ? (
-          <Image source={{ uri: token.bannerUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
-        ) : (
-          <LinearGradient
-            colors={["rgba(255,184,76,0.45)", "rgba(184,140,255,0.28)", "rgba(56,215,255,0.18)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        )}
+        <Image
+          source={{ uri: getTokenBanner(token.bannerUrl, token.id || token.ticker) }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+        />
         <LinearGradient
           colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.55)", "rgba(3,7,8,0.95)"]}
           style={StyleSheet.absoluteFill}
@@ -545,13 +539,11 @@ function FeaturedCard({ token, onPress }: { token: LaunchToken; onPress: () => v
         </View>
       </View>
       <View style={styles.featuredFoot}>
-        {token.logoUrl ? (
-          <Image source={{ uri: token.logoUrl }} style={styles.featuredLogo} contentFit="cover" />
-        ) : (
-          <View style={[styles.featuredLogo, styles.trendLogoFallback]}>
-            <Text style={styles.trendLogoText}>{token.ticker.replace("$", "").slice(0, 2)}</Text>
-          </View>
-        )}
+        <Image
+          source={{ uri: getTokenLogo(token.logoUrl, token.id || token.ticker) }}
+          style={styles.featuredLogo}
+          contentFit="cover"
+        />
         <View style={styles.featuredInfo}>
           <Text style={styles.featuredName} numberOfLines={1}>
             {token.name}

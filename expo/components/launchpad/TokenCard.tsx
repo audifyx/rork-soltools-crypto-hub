@@ -8,6 +8,7 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { LaunchToken } from "@/types/launchpad";
 import { fmtUsd, fmtPrice } from "@/utils/format";
+import { getTokenLogo } from "@/utils/token-art";
 
 interface Props {
   token: LaunchToken;
@@ -45,6 +46,11 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
   const positive = (token.change24hPct ?? 0) >= 0;
   const accent = positive ? Colors.mint : Colors.rose;
   const tickerText = `$${token.ticker.replace("$", "").toUpperCase()}`;
+
+  const logoSrc = useMemo(
+    () => getTokenLogo(token.logoUrl, token.id || token.ticker),
+    [token.logoUrl, token.id, token.ticker],
+  );
 
   const stars = useMemo<Star[]>(() => {
     const rand = seeded(token.id);
@@ -112,20 +118,7 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
         <View style={styles.headerRow}>
           <View style={styles.logoRing}>
             <View style={styles.logoInner}>
-              {token.logoUrl ? (
-                <Image source={{ uri: token.logoUrl }} style={styles.logo} contentFit="cover" />
-              ) : (
-                <LinearGradient
-                  colors={[Colors.cyan, Colors.violet]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.logoFallback}
-                >
-                  <Text style={styles.logoFallbackText} numberOfLines={1}>
-                    {token.ticker.replace("$", "").slice(0, 2).toUpperCase()}
-                  </Text>
-                </LinearGradient>
-              )}
+              <Image source={{ uri: logoSrc }} style={styles.logo} contentFit="cover" />
             </View>
           </View>
 

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { StyleSheet, Text, View, ViewStyle } from "react-native";
 
 import Colors from "@/constants/colors";
+import { getTokenLogo } from "@/utils/token-art";
 
 type Props = {
   uri?: string | null;
@@ -27,11 +28,15 @@ export default function TokenAvatar({
   const [errored, setErrored] = useState<boolean>(false);
   const r = radius ?? Math.round(size * 0.28);
   const colors = gradient ?? ([Colors.mint, Colors.cyan] as [string, string]);
-  const showImage = !!uri && uri.trim().length > 0 && !errored;
-  const initials = (ticker ?? "")
-    .replace("$", "")
-    .slice(0, 2)
-    .toUpperCase();
+  const hasUri = !!uri && uri.trim().length > 0;
+  const seed = (ticker ?? "").replace("$", "");
+  const resolvedUri = hasUri
+    ? (uri as string)
+    : seed.length > 0
+      ? getTokenLogo(null, seed)
+      : null;
+  const showImage = !!resolvedUri && !errored;
+  const initials = seed.slice(0, 2).toUpperCase();
   const tFont = textSize ?? Math.max(10, Math.round(size * 0.34));
 
   return (
@@ -44,13 +49,13 @@ export default function TokenAvatar({
     >
       {showImage ? (
         <Image
-          source={{ uri: uri as string }}
+          source={{ uri: resolvedUri as string }}
           style={{ width: size, height: size }}
           contentFit="cover"
           transition={120}
           onError={() => setErrored(true)}
           cachePolicy="memory-disk"
-          recyclingKey={uri ?? undefined}
+          recyclingKey={resolvedUri ?? undefined}
         />
       ) : (
         <LinearGradient
