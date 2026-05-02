@@ -79,7 +79,13 @@ export default function ComposeScreen() {
       router.back();
     } catch (e) {
       console.log("[compose] post failed", e);
-      Alert.alert("Failed", "Couldn't post right now.");
+      const msg =
+        e instanceof Error && e.message
+          ? e.message
+          : typeof e === "object" && e !== null && "message" in e
+            ? String((e as { message: unknown }).message)
+            : "Couldn't post right now.";
+      Alert.alert("Failed to post", msg);
     }
   }, [text, ticker, images, addPost, router]);
 

@@ -404,18 +404,33 @@ export const [AppProvider, useApp] = createContextHook(() => {
             console.log("[app] post image upload failed", e);
           }
         }
+        // content is NOT NULL on community_posts; ensure a non-empty string
+        // when the user posts only images.
+        const safeContent = input.text && input.text.trim().length > 0
+          ? input.text
+          : uploadedUrl
+            ? ""
+            : input.text;
         const { data, error } = await supabase
           .from("community_posts")
           .insert({
             user_id: userId,
-            content: input.text,
+            content: safeContent ?? "",
             image_url: uploadedUrl ?? null,
             ticker: input.ticker ?? null,
             change_pct: input.changePct ?? null,
           })
           .select("id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
           .single();
-        if (error) throw error;
+        if (error) {
+          console.log("[app] community_posts insert error", {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+          });
+          throw new Error(error.message || "Post failed");
+        }
         const post: UserPost = {
           id: data.id as string,
           text: (data.content as string) ?? input.text,
