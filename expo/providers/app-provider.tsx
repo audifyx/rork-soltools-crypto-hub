@@ -10,7 +10,7 @@ import { uploadPostImage } from "@/lib/upload";
 import type { CustomBadge } from "@/providers/profile-provider";
 import { useAuth } from "@/providers/auth-provider";
 
-import { userKeys } from "@/lib/user-cache";
+import { clearAllUserCache, userKeys } from "@/lib/user-cache";
 
 export { clearAllUserCache } from "@/lib/user-cache";
 

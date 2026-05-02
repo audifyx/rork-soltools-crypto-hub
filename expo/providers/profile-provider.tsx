@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 
 import { normalizeMediaUrl } from "@/lib/media";
-import { fetchOwnProfileRow, saveOwnProfilePatch } from "@/lib/profile-db";
+import { fetchOwnProfileRow, saveOwnProfilePatch, type ProfilePatch } from "@/lib/profile-db";
 import { supabase } from "@/lib/supabase";
 import { uploadProfileMedia, type ProfileMediaKind } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
@@ -135,7 +135,7 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       );
       // Write only the image column directly. A broken/older profile RPC can
       // treat omitted params as null and wipe username/display_name.
-      const patch = input.kind === "avatar" ? { avatar_url: url } : { banner_url: url };
+      const patch: ProfilePatch = input.kind === "avatar" ? { avatar_url: url } : { banner_url: url };
       await saveOwnProfilePatch(userId, patch);
       return url;
     },

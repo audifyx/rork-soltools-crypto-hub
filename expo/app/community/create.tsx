@@ -168,7 +168,7 @@ export default function CreateCommunityScreen() {
   const onNext = useCallback(() => {
     if (!canNext) return;
     Haptics.selectionAsync().catch(() => {});
-    setStep((s) => Math.min(3, (s + 1) as Step));
+    setStep((s) => Math.min(3, s + 1) as Step);
   }, [canNext]);
 
   const onBack = useCallback(() => {
@@ -177,7 +177,7 @@ export default function CreateCommunityScreen() {
       router.back();
       return;
     }
-    setStep((s) => Math.max(0, (s - 1) as Step));
+    setStep((s) => Math.max(0, s - 1) as Step);
   }, [router, step]);
 
   const onAddTag = useCallback(() => {

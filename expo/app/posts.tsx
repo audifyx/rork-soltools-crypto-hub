@@ -821,7 +821,7 @@ const styles = StyleSheet.create({
   feedSummaryBody: {
     color: Colors.muted,
     fontSize: 12,
-    fontWeight: "650",
+    fontWeight: "600",
     lineHeight: 17,
     marginTop: 3,
   },

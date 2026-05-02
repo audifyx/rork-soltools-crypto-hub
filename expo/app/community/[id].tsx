@@ -5,7 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -44,6 +44,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -54,6 +55,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import DexChart from "@/components/DexChart";
 import Colors from "@/constants/colors";
+import {
+  ADVANCED_COMMUNITY_FEATURES,
+  COMMUNITY_FEATURE_CATEGORIES,
+  COMMUNITY_FEATURE_CATEGORY_META,
+  createDefaultCommunityFeatureMap,
+  type AdvancedCommunityFeature,
+  type CommunityFeatureCategory,
+} from "@/lib/community-advanced-features";
 import {
   extractFirstSolanaAddress,
   scanCommunityToken,
@@ -126,6 +135,7 @@ type ComposerImage = {
 
 export default function CommunityDetailScreen() {
   const router = useRouter();
+  const featureQueryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
   const {
     getCommunity,
@@ -162,6 +172,7 @@ export default function CommunityDetailScreen() {
   const [interactionMode, setInteractionMode] = useState<"thread" | "reply" | "quote" | null>(null);
   const [interactionText, setInteractionText] = useState<string>("");
   const [activeChartToken, setActiveChartToken] = useState<CommunityTokenCard | null>(null);
+  const [activeFeatureCategory, setActiveFeatureCategory] = useState<CommunityFeatureCategory>("posting");
 
   const community = useMemo(() => (id ? getCommunity(id) : undefined), [id, getCommunity]);
   const postsQuery = usePostsForCommunity(community?.id);
@@ -205,6 +216,68 @@ export default function CommunityDetailScreen() {
     const myHandle = profile.handle.replace(/^@/, "").toLowerCase();
     return ownerHandle.length > 0 && myHandle.length > 0 && ownerHandle === myHandle;
   }, [community, isAuthenticated, profile.handle, userId]);
+  const canManageFeatures = canModeratePosts || canEditMedia;
+
+  const defaultFeatureMap = useMemo(() => createDefaultCommunityFeatureMap(), []);
+  const featureSettingsQ = useQuery<Record<string, boolean>>({
+    queryKey: ["community", "advanced-features", community?.id ?? ""],
+    enabled: !!community?.id,
+    queryFn: async () => {
+      if (!community?.id) return defaultFeatureMap;
+      try {
+        const { data, error } = await supabase
+          .from("community_feature_settings")
+          .select("feature_id,enabled")
+          .eq("community_id", community.id);
+        if (error) throw error;
+        const next = { ...defaultFeatureMap };
+        (data ?? []).forEach((row) => {
+          const featureId = String(row.feature_id ?? "");
+          if (featureId.length > 0) next[featureId] = !!row.enabled;
+        });
+        return next;
+      } catch (e) {
+        console.log("[community] feature settings fetch failed", e);
+        return defaultFeatureMap;
+      }
+    },
+    staleTime: 30_000,
+  });
+  const featureSettings = featureSettingsQ.data ?? defaultFeatureMap;
+  const enabledFeatureCount = useMemo(
+    () => ADVANCED_COMMUNITY_FEATURES.filter((feature) => featureSettings[feature.id]).length,
+    [featureSettings],
+  );
+  const toggleFeatureMut = useMutation({
+    mutationFn: async ({ featureId, enabled }: { featureId: string; enabled: boolean }) => {
+      if (!community?.id) throw new Error("Community not found.");
+      if (!canManageFeatures) throw new Error("Only community owners, admins, or moderators can change feature settings.");
+      const { error } = await supabase.rpc("toggle_community_feature", {
+        target_community_id: community.id,
+        target_feature_id: featureId,
+        p_enabled: enabled,
+      });
+      if (error) throw error;
+      return { featureId, enabled };
+    },
+    onMutate: async ({ featureId, enabled }) => {
+      const key = ["community", "advanced-features", community?.id ?? ""] as const;
+      await featureQueryClient.cancelQueries({ queryKey: key });
+      const prev = featureQueryClient.getQueryData<Record<string, boolean>>(key);
+      featureQueryClient.setQueryData<Record<string, boolean>>(key, {
+        ...(prev ?? defaultFeatureMap),
+        [featureId]: enabled,
+      });
+      return { prev, key };
+    },
+    onError: (error, _vars, ctx) => {
+      if (ctx?.prev) featureQueryClient.setQueryData(ctx.key, ctx.prev);
+      Alert.alert("Feature update failed", error instanceof Error ? error.message : "Try again.");
+    },
+    onSuccess: () => {
+      showToast("Feature settings updated");
+    },
+  });
 
   const membersQ = useQuery<CommunityMember[]>({
     queryKey: ["community", "members", community?.id ?? ""],
@@ -471,6 +544,21 @@ export default function CommunityDetailScreen() {
       showToast(kind === "avatar" ? "Community image removed" : "Community banner removed");
     },
     [canEditMedia, community, showToast, updateCommunityMedia],
+  );
+
+  const onToggleFeature = useCallback(
+    (feature: AdvancedCommunityFeature) => {
+      if (!canManageFeatures) {
+        showToast("Owner or moderator only");
+        return;
+      }
+      Haptics.selectionAsync().catch(() => {});
+      toggleFeatureMut.mutate({
+        featureId: feature.id,
+        enabled: !featureSettings[feature.id],
+      });
+    },
+    [canManageFeatures, featureSettings, showToast, toggleFeatureMut],
   );
 
   const closeInteraction = useCallback(() => {
@@ -1098,6 +1186,14 @@ export default function CommunityDetailScreen() {
                     tint={Colors.cyan}
                   />
                 </View>
+                <AdvancedFeaturesPanel
+                  activeCategory={activeFeatureCategory}
+                  canManage={canManageFeatures}
+                  enabledCount={enabledFeatureCount}
+                  featureSettings={featureSettings}
+                  onCategory={setActiveFeatureCategory}
+                  onToggle={onToggleFeature}
+                />
                 <View style={styles.aboutCard}>
                   <Text style={styles.aboutLabel}>Rules</Text>
                   {community.rules.length === 0 ? (
@@ -1491,6 +1587,136 @@ function AboutStat({
       <Icon color={c} size={14} strokeWidth={2.6} />
       <Text style={[styles.aboutStatValue, { color: c }]}>{value}</Text>
       <Text style={styles.aboutStatLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function AdvancedFeaturesPanel({
+  activeCategory,
+  canManage,
+  enabledCount,
+  featureSettings,
+  onCategory,
+  onToggle,
+}: {
+  activeCategory: CommunityFeatureCategory;
+  canManage: boolean;
+  enabledCount: number;
+  featureSettings: Record<string, boolean>;
+  onCategory: (category: CommunityFeatureCategory) => void;
+  onToggle: (feature: AdvancedCommunityFeature) => void;
+}) {
+  const selectedFeatures = ADVANCED_COMMUNITY_FEATURES.filter(
+    (feature) => feature.category === activeCategory,
+  );
+  const activeMeta = COMMUNITY_FEATURE_CATEGORY_META[activeCategory];
+
+  return (
+    <View style={styles.featurePanel} testID="advanced-community-features">
+      <LinearGradient
+        colors={["rgba(85,245,178,0.12)", "rgba(56,215,255,0.055)", "rgba(255,255,255,0.025)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.featureHeroRow}>
+        <View style={styles.featureHeroCopy}>
+          <Text style={styles.featureEyebrow}>100 ADVANCED FEATURES</Text>
+          <Text style={styles.featureTitle}>Community command center</Text>
+          <Text style={styles.featureBody}>
+            Live feature registry for posting, X-style interactions, token intelligence, voice lobbies, moderation, alerts, and alpha discovery.
+          </Text>
+        </View>
+        <View style={styles.featureScoreRing}>
+          <Text style={styles.featureScoreValue}>{enabledCount}</Text>
+          <Text style={styles.featureScoreLabel}>ON</Text>
+        </View>
+      </View>
+
+      <View style={styles.featureStatsGrid}>
+        <FeatureMiniStat label="Total" value="100" tone={Colors.mint} />
+        <FeatureMiniStat label="Categories" value="10" tone={Colors.cyan} />
+        <FeatureMiniStat label="Mode" value={canManage ? "Admin" : "View"} tone={canManage ? Colors.orange : Colors.muted} />
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.featureCategoryRow}>
+        {COMMUNITY_FEATURE_CATEGORIES.map((category) => {
+          const meta = COMMUNITY_FEATURE_CATEGORY_META[category];
+          const active = category === activeCategory;
+          const count = ADVANCED_COMMUNITY_FEATURES.filter(
+            (feature) => feature.category === category && featureSettings[feature.id],
+          ).length;
+          return (
+            <Pressable
+              key={category}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                onCategory(category);
+              }}
+              style={[
+                styles.featureCatChip,
+                active && { borderColor: meta.accent, backgroundColor: `${meta.accent}14` },
+              ]}
+              testID={`feature-category-${category}`}
+            >
+              <View style={[styles.featureCatDot, { backgroundColor: meta.accent }]} />
+              <Text style={[styles.featureCatText, active && { color: meta.accent }]}>{meta.shortLabel}</Text>
+              <Text style={styles.featureCatCount}>{count}/10</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <View style={[styles.featureSelectedHeader, { borderColor: `${activeMeta.accent}33` }]}> 
+        <Text style={[styles.featureSelectedTitle, { color: activeMeta.accent }]}>{activeMeta.label}</Text>
+        <Text style={styles.featureSelectedSub}>{selectedFeatures.length} advanced features</Text>
+      </View>
+
+      <View style={styles.featureList}>
+        {selectedFeatures.map((feature) => {
+          const enabled = !!featureSettings[feature.id];
+          const meta = COMMUNITY_FEATURE_CATEGORY_META[feature.category];
+          return (
+            <Pressable
+              key={feature.id}
+              onPress={() => onToggle(feature)}
+              style={styles.featureRow}
+              testID={`feature-${feature.id}`}
+            >
+              <View style={[styles.featureRowRail, { backgroundColor: enabled ? meta.accent : "rgba(255,255,255,0.12)" }]} />
+              <View style={styles.featureRowCopy}>
+                <View style={styles.featureRowTop}>
+                  <Text style={styles.featureRowTitle}>{feature.title}</Text>
+                  <View
+                    style={[
+                      styles.featureImpactPill,
+                      {
+                        borderColor: enabled ? `${meta.accent}55` : "rgba(255,255,255,0.1)",
+                        backgroundColor: enabled ? `${meta.accent}12` : "rgba(255,255,255,0.035)",
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.featureImpactText, enabled && { color: meta.accent }]}>{feature.impact}</Text>
+                  </View>
+                </View>
+                <Text style={styles.featureRowDesc}>{feature.description}</Text>
+              </View>
+              <View style={[styles.featureToggle, enabled && { backgroundColor: meta.accent }]}> 
+                <View style={[styles.featureToggleKnob, enabled && styles.featureToggleKnobOn]} />
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function FeatureMiniStat({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <View style={[styles.featureMiniStat, { borderColor: `${tone}2A` }]}> 
+      <Text style={[styles.featureMiniValue, { color: tone }]}>{value}</Text>
+      <Text style={styles.featureMiniLabel}>{label}</Text>
     </View>
   );
 }
@@ -2441,6 +2667,101 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.03)",
   },
   metaText: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+
+  featurePanel: {
+    borderRadius: 22,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.16)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    padding: 14,
+  },
+  featureHeroRow: { flexDirection: "row", gap: 12, alignItems: "center" },
+  featureHeroCopy: { flex: 1 },
+  featureEyebrow: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
+  featureTitle: { color: Colors.text, fontSize: 19, fontWeight: "900", marginTop: 5, letterSpacing: -0.4 },
+  featureBody: { color: Colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 17, marginTop: 6 },
+  featureScoreRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(85,245,178,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.35)",
+  },
+  featureScoreValue: { color: Colors.mint, fontSize: 22, fontWeight: "900", letterSpacing: -0.8 },
+  featureScoreLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
+  featureStatsGrid: { flexDirection: "row", gap: 8, marginTop: 12 },
+  featureMiniStat: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderWidth: 1,
+  },
+  featureMiniValue: { fontSize: 14, fontWeight: "900" },
+  featureMiniLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", textTransform: "uppercase", marginTop: 2 },
+  featureCategoryRow: { gap: 8, paddingTop: 12, paddingBottom: 4 },
+  featureCatChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.045)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  featureCatDot: { width: 7, height: 7, borderRadius: 999 },
+  featureCatText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
+  featureCatCount: { color: Colors.muted, fontSize: 10, fontWeight: "900" },
+  featureSelectedHeader: {
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderWidth: 1,
+  },
+  featureSelectedTitle: { fontSize: 13, fontWeight: "900" },
+  featureSelectedSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  featureList: { marginTop: 8, gap: 8 },
+  featureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 10,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.065)",
+  },
+  featureRowRail: { width: 4, alignSelf: "stretch", borderRadius: 999 },
+  featureRowCopy: { flex: 1 },
+  featureRowTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  featureRowTitle: { flex: 1, color: Colors.text, fontSize: 12, fontWeight: "900" },
+  featureRowDesc: { color: Colors.muted, fontSize: 11, fontWeight: "600", lineHeight: 15, marginTop: 4 },
+  featureImpactPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  featureImpactText: { color: Colors.muted, fontSize: 8, fontWeight: "900", textTransform: "uppercase" },
+  featureToggle: {
+    width: 40,
+    height: 24,
+    borderRadius: 999,
+    padding: 3,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    justifyContent: "center",
+  },
+  featureToggleKnob: { width: 18, height: 18, borderRadius: 999, backgroundColor: Colors.text },
+  featureToggleKnobOn: { alignSelf: "flex-end", backgroundColor: Colors.ink },
 
   emptyFeed: {
     paddingHorizontal: 32,

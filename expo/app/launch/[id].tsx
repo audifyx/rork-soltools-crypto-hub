@@ -45,6 +45,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type DimensionValue,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
@@ -1308,7 +1309,7 @@ function MarketMini({
 }
 
 function SignalBar({ label, value, color }: { label: string; value: number; color: string }) {
-  const width = `${Math.max(8, Math.min(100, value))}%`;
+  const width = `${Math.max(8, Math.min(100, value))}%` as DimensionValue;
   return (
     <View style={styles.signalBarItem}>
       <View style={styles.signalBarTop}>
