@@ -67,6 +67,8 @@ export default function LobbyDetailScreen() {
     leaveLobby,
     sendMessage,
     toggleMute,
+    toggleHand,
+    addReaction,
     addWatch,
     removeWatch,
   } = useLobbies();
@@ -76,8 +78,6 @@ export default function LobbyDetailScreen() {
 
   const [tab, setTab] = useState<Tab>("chat");
   const [text, setText] = useState<string>("");
-  const [hand, setHand] = useState<boolean>(false);
-  const [reactions, setReactions] = useState<number>(0);
   const [voiceConnected, setVoiceConnected] = useState<boolean>(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceLoading, setVoiceLoading] = useState<boolean>(false);
@@ -128,7 +128,7 @@ export default function LobbyDetailScreen() {
     try {
       const handle = (email ?? "you").split("@")[0];
       await getLiveKitToken({
-        room: lobby.id,
+        room: lobby.livekitRoom || lobby.id,
         identity: userId ?? handle,
         name: handle,
       });
@@ -150,21 +150,21 @@ export default function LobbyDetailScreen() {
   const onLeave = useCallback(() => {
     if (!lobby) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    leaveLobby(lobby.id);
+    leaveLobby(lobby.id).catch((e) => console.log("[lobby] leave failed", e));
     router.back();
   }, [lobby, leaveLobby, router]);
 
   const onSend = useCallback(() => {
     if (!lobby || !text.trim()) return;
     Haptics.selectionAsync().catch(() => {});
-    sendMessage(lobby.id, text);
+    sendMessage(lobby.id, text).catch((e) => console.log("[lobby] message failed", e));
     setText("");
   }, [lobby, text, sendMessage]);
 
   const onToggleMute = useCallback(() => {
     if (!lobby) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    toggleMute(lobby.id);
+    toggleMute(lobby.id).catch((e) => console.log("[lobby] mute failed", e));
   }, [lobby, toggleMute]);
 
   const onCopyId = useCallback(async () => {
@@ -182,7 +182,7 @@ export default function LobbyDetailScreen() {
       Alert.alert("Invalid", "Enter a valid address or ticker.");
       return;
     }
-    addWatch(lobby.id, { type: watchType, address: addr, label });
+    addWatch(lobby.id, { type: watchType, address: addr, label }).catch((e) => console.log("[lobby] add watch failed", e));
     setAddingWatch(false);
     setWatchAddress("");
     setWatchLabel("");
@@ -225,7 +225,9 @@ export default function LobbyDetailScreen() {
   }
 
   const muted = me?.muted ?? true;
+  const hand = me?.raisedHand ?? false;
   const speakingCount = lobby.members.filter((m) => m.speaking).length;
+  const listenerCount = lobby.members.filter((m) => m.role === "listener").length;
   const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.4] });
   const pulseOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] });
 
@@ -277,7 +279,7 @@ export default function LobbyDetailScreen() {
               style={styles.hero}
             >
               <Text style={styles.heroTitle}>{lobby.name}</Text>
-              <Text style={styles.heroTopic}>{lobby.topic}</Text>
+              <Text style={styles.heroTopic}>{lobby.topic || "No topic set"}</Text>
               <View style={styles.heroMeta}>
                 <View style={styles.metaItem}>
                   <UsersIcon color={Colors.cyan} size={11} strokeWidth={2.8} />
@@ -285,7 +287,11 @@ export default function LobbyDetailScreen() {
                 </View>
                 <View style={styles.metaItem}>
                   <Volume2 color={Colors.rose} size={11} strokeWidth={2.8} />
-                  <Text style={styles.metaText}>{speakingCount} live</Text>
+                  <Text style={styles.metaText}>{speakingCount} speaking</Text>
+                </View>
+                <View style={styles.metaItem}>
+                  <Hand color={Colors.orange} size={11} strokeWidth={2.8} />
+                  <Text style={styles.metaText}>{lobby.handCount} hands</Text>
                 </View>
                 <View style={styles.metaItem}>
                   <Hash color={Colors.muted} size={11} strokeWidth={2.8} />
@@ -360,15 +366,15 @@ export default function LobbyDetailScreen() {
                     active={hand}
                     onPress={() => {
                       Haptics.selectionAsync().catch(() => {});
-                      setHand((h) => !h);
+                      toggleHand(lobby.id).catch((e) => console.log("[lobby] hand failed", e));
                     }}
                   />
                   <ControlBtn
-                    label={`React · ${reactions}`}
+                    label={`React · ${lobby.reactionsCount}`}
                     icon={<Heart color={Colors.text} size={14} strokeWidth={2.8} />}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                      setReactions((r) => r + 1);
+                      addReaction(lobby.id, "🔥").catch((e) => console.log("[lobby] reaction failed", e));
                     }}
                   />
                   <ControlBtn
@@ -421,6 +427,7 @@ export default function LobbyDetailScreen() {
                     <Text style={styles.speakerName} numberOfLines={1}>
                       {m.handle}
                     </Text>
+                    {m.raisedHand ? <Text style={[styles.speakerRole, { color: Colors.orange }]}>HAND</Text> : null}
                     {m.isHost && <Text style={styles.speakerRole}>HOST</Text>}
                   </View>
                 ))}
@@ -448,7 +455,7 @@ export default function LobbyDetailScreen() {
                 onPress={() => setTab("members")}
                 Icon={UsersIcon}
                 label="Members"
-                count={lobby.members.length}
+                count={listenerCount}
               />
             </View>
 
@@ -546,7 +553,7 @@ export default function LobbyDetailScreen() {
                         <ChartLine color={Colors.mint} size={14} strokeWidth={2.6} />
                         <Pressable
                           hitSlop={8}
-                          onPress={() => removeWatch(lobby.id, w.id)}
+                          onPress={() => removeWatch(lobby.id, w.id).catch((e) => console.log("[lobby] remove watch failed", e))}
                           style={styles.removeBtn}
                         >
                           <X color={Colors.muted} size={14} strokeWidth={2.6} />
@@ -583,11 +590,11 @@ export default function LobbyDetailScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.memberHandle}>{m.handle}</Text>
                         <Text style={styles.memberRoleText}>
-                          {m.isHost ? "Host" : m.speaking ? "Speaking" : m.muted ? "Muted" : "Listener"}
+                          {m.isHost ? "Host" : m.raisedHand ? "Hand raised" : m.speaking ? "Speaking" : m.muted ? "Muted" : "Listener"}
                         </Text>
                       </View>
                       {m.muted ? (
-                        <MicOff color={Colors.muted} size={14} strokeWidth={2.6} />
+                        <MicOff color={m.raisedHand ? Colors.orange : Colors.muted} size={14} strokeWidth={2.6} />
                       ) : (
                         <Mic color={Colors.mint} size={14} strokeWidth={2.6} />
                       )}

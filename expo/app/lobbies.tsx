@@ -71,13 +71,13 @@ export default function LobbiesScreen() {
   const onOpen = useCallback(
     (id: string) => {
       Haptics.selectionAsync().catch(() => {});
-      joinLobby(id);
+      joinLobby(id).catch((e) => console.log("[lobbies] join failed", e));
       router.push({ pathname: "/lobby/[id]", params: { id } });
     },
     [joinLobby, router],
   );
 
-  const onCreate = useCallback(() => {
+  const onCreate = useCallback(async () => {
     if (!name.trim()) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     const tags = tagInput
@@ -85,7 +85,7 @@ export default function LobbiesScreen() {
       .map((t) => t.trim())
       .filter(Boolean)
       .slice(0, 5);
-    const id = createLobby({ name, topic, isPrivate, tags });
+    const id = await createLobby({ name, topic, isPrivate, tags });
     setCreating(false);
     setName("");
     setTopic("");
