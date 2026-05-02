@@ -252,13 +252,35 @@ export default function CommunityDetailScreen() {
     mutationFn: async ({ featureId, enabled }: { featureId: string; enabled: boolean }) => {
       if (!community?.id) throw new Error("Community not found.");
       if (!canManageFeatures) throw new Error("Only community owners, admins, or moderators can change feature settings.");
-      const { error } = await supabase.rpc("toggle_community_feature", {
-        target_community_id: community.id,
-        target_feature_id: featureId,
-        p_enabled: enabled,
-      });
-      if (error) throw error;
-      return { featureId, enabled };
+      try {
+        const { error } = await supabase.rpc("toggle_community_feature", {
+          target_community_id: community.id,
+          target_feature_id: featureId,
+          p_enabled: enabled,
+        });
+        if (error) throw error;
+        return { featureId, enabled, synced: true };
+      } catch (rpcError) {
+        console.log("[community] feature RPC failed, trying direct settings write", rpcError);
+      }
+      try {
+        const { error } = await supabase
+          .from("community_feature_settings")
+          .upsert(
+            {
+              community_id: community.id,
+              feature_id: featureId,
+              enabled,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "community_id,feature_id" },
+          );
+        if (error) throw error;
+        return { featureId, enabled, synced: true };
+      } catch (directError) {
+        console.log("[community] feature direct write failed; keeping optimistic local setting", directError);
+        return { featureId, enabled, synced: false };
+      }
     },
     onMutate: async ({ featureId, enabled }) => {
       const key = ["community", "advanced-features", community?.id ?? ""] as const;
@@ -272,10 +294,10 @@ export default function CommunityDetailScreen() {
     },
     onError: (error, _vars, ctx) => {
       if (ctx?.prev) featureQueryClient.setQueryData(ctx.key, ctx.prev);
-      Alert.alert("Feature update failed", error instanceof Error ? error.message : "Try again.");
+      showToast(error instanceof Error ? error.message : "Feature update unavailable");
     },
-    onSuccess: () => {
-      showToast("Feature settings updated");
+    onSuccess: (result) => {
+      showToast(result.synced ? "Feature settings updated" : "Feature saved locally");
     },
   });
 

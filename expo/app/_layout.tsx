@@ -14,7 +14,6 @@ import { LobbiesProvider } from "@/providers/lobbies-provider";
 import { MessagesProvider } from "@/providers/messages-provider";
 import { ProfileProvider } from "@/providers/profile-provider";
 import { SocialProvider } from "@/providers/social-provider";
-import { TradingWalletProvider } from "@/providers/trading-wallet-provider";
 
 SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
   console.log("SolTools splash hold skipped during boot", error);
@@ -83,11 +82,9 @@ export default function RootLayout() {
                 <SocialProvider>
                   <MessagesProvider>
                     <LobbiesProvider>
-                      <TradingWalletProvider>
-                        <GestureHandlerRootView style={styles.gestureRoot}>
-                          <RootLayoutNav />
-                        </GestureHandlerRootView>
-                      </TradingWalletProvider>
+                      <GestureHandlerRootView style={styles.gestureRoot}>
+                        <RootLayoutNav />
+                      </GestureHandlerRootView>
                     </LobbiesProvider>
                   </MessagesProvider>
                 </SocialProvider>

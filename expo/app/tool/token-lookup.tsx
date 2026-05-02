@@ -155,6 +155,14 @@ export default function TokenLookupScreen() {
     Linking.openURL(`https://dexscreener.com/solana/${contract}`).catch(() => {});
   }, [contract]);
 
+  const showTradingComingSoon = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    Alert.alert(
+      "Coming soon",
+      "Wallet connection, Phantom, Jupiter swaps, buying, and selling are paused until the App Store launch. Token research and charts still work here.",
+    );
+  }, []);
+
   const openFullPage = useCallback(() => {
     if (!contract) return;
     router.push({ pathname: "/launch/[id]", params: { id: contract } });
@@ -424,7 +432,7 @@ export default function TokenLookupScreen() {
 
               <View style={styles.actionDeck}>
                 <QuickAction Icon={Activity} label="Full room" sub="Open premium detail" color={Colors.mint} onPress={openFullPage} />
-                <QuickAction Icon={Wallet} label="Jupiter" sub="Swap route" color={Colors.cyan} onPress={() => Linking.openURL(`https://jup.ag/swap/SOL-${contract}`).catch(() => {})} />
+                <QuickAction Icon={Wallet} label="Jupiter" sub="Coming soon" color={Colors.cyan} onPress={showTradingComingSoon} />
                 <QuickAction Icon={ExternalLink} label="DEX" sub="External chart" color={Colors.neon} onPress={openDex} />
               </View>
 

@@ -298,6 +298,14 @@ export default function LaunchDetailScreen() {
     }
   }, []);
 
+  const showTradingComingSoon = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    Alert.alert(
+      "Coming soon",
+      "Wallet connection, Phantom, Jupiter swaps, buying, and selling are paused until the App Store launch. You can still research, track, and discuss tokens here.",
+    );
+  }, []);
+
   const onDelete = useCallback(() => {
     if (!token) return;
     Alert.alert("Remove listing?", "This will remove the token from your listings.", [
@@ -653,6 +661,7 @@ export default function LaunchDetailScreen() {
               extraSocials={dex?.socials ?? []}
               extraSites={dex?.websites ?? []}
               openLink={openLink}
+              onTradingComingSoon={showTradingComingSoon}
             />
           ) : null}
 
@@ -713,9 +722,7 @@ export default function LaunchDetailScreen() {
             {QUICK_BUYS.map((amt) => (
               <Pressable
                 key={amt}
-                onPress={() =>
-                  openLink(`https://jup.ag/swap/SOL-${token.contract}?amount=${amt}`)
-                }
+                onPress={showTradingComingSoon}
                 style={styles.quickBtn}
                 testID={`quick-buy-${amt}`}
               >
@@ -724,7 +731,7 @@ export default function LaunchDetailScreen() {
               </Pressable>
             ))}
             <Pressable
-              onPress={() => openLink(`https://jup.ag/swap/SOL-${token.contract}`)}
+              onPress={showTradingComingSoon}
               style={[styles.quickBtn, styles.quickCustom]}
               testID="quick-buy-custom"
             >
@@ -748,7 +755,7 @@ export default function LaunchDetailScreen() {
               <Bell color={Colors.cyan} size={15} strokeWidth={2.8} />
             </Pressable>
             <Pressable
-              onPress={() => openLink(`https://jup.ag/swap/SOL-${token.contract}`)}
+              onPress={showTradingComingSoon}
               style={[styles.stickyAction, styles.stickyBuy]}
               testID="sticky-buy"
             >
@@ -759,15 +766,15 @@ export default function LaunchDetailScreen() {
                 style={StyleSheet.absoluteFill}
               />
               <TrendingUp color={Colors.ink} size={15} strokeWidth={3} />
-              <Text style={styles.stickyBuyText}>Buy</Text>
+              <Text style={styles.stickyBuyText}>Soon</Text>
             </Pressable>
             <Pressable
-              onPress={() => openLink(`https://jup.ag/swap/${token.contract}-SOL`)}
+              onPress={showTradingComingSoon}
               style={[styles.stickyAction, styles.stickySell]}
               testID="sticky-sell"
             >
               <TrendingDown color={Colors.rose} size={15} strokeWidth={3} />
-              <Text style={styles.stickySellText}>Sell</Text>
+              <Text style={styles.stickySellText}>Soon</Text>
             </Pressable>
           </View>
         </View>
@@ -801,11 +808,12 @@ function OverviewTab(props: {
   extraSocials: { type: string; url: string }[];
   extraSites: string[];
   openLink: (url?: string) => void;
+  onTradingComingSoon: () => void;
 }) {
   const {
     liveMc, liveFdv, liveLiq, liveVol, tfLabel, liveHolders, upvotes, watchers,
     isUpvoted, onUpvote, description, tags, contract, copied, onCopy,
-    website, twitter, telegram, discord, extraSocials, extraSites, openLink,
+    website, twitter, telegram, discord, extraSocials, extraSites, openLink, onTradingComingSoon,
   } = props;
 
   const fdvRatio = liveMc && liveFdv ? liveMc / liveFdv : null;
@@ -897,7 +905,7 @@ function OverviewTab(props: {
       </View>
 
       <Pressable
-        onPress={() => openLink(`https://jup.ag/swap/SOL-${contract}`)}
+        onPress={onTradingComingSoon}
         style={styles.tradeBtn}
         testID="trade-btn"
       >
@@ -908,7 +916,7 @@ function OverviewTab(props: {
           style={styles.tradeGradient}
         >
           <ArrowUpRight color={Colors.ink} size={16} strokeWidth={3} />
-          <Text style={styles.tradeText}>Trade on Jupiter</Text>
+          <Text style={styles.tradeText}>Trading coming soon</Text>
           <ExternalLink color={Colors.ink} size={14} strokeWidth={3} />
         </LinearGradient>
       </Pressable>
