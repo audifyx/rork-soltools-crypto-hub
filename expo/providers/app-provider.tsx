@@ -136,6 +136,89 @@ const DEFAULT_PREFS: UserPrefs = {
   mevProtection: true,
 };
 
+const DEFAULT_FEED_COMMUNITY_SLUG = "soltools-feed";
+const DEFAULT_FEED_COMMUNITY_SLUGS = [
+  DEFAULT_FEED_COMMUNITY_SLUG,
+  "general",
+  "soltools",
+  "feed",
+];
+
+type FeedCommunityRow = { id: string; slug?: string | null };
+
+async function findDefaultFeedCommunityId(): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("communities")
+    .select("id,slug")
+    .in("slug", DEFAULT_FEED_COMMUNITY_SLUGS)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error && error.code !== "PGRST116") {
+    console.log("[app] default feed community lookup failed", error.message);
+  }
+  return ((data as FeedCommunityRow | null)?.id as string | undefined) ?? null;
+}
+
+async function ensureDefaultFeedCommunityId(userId: string): Promise<string> {
+  const existingId = await findDefaultFeedCommunityId();
+  if (existingId) return existingId;
+
+  try {
+    const { data, error } = await supabase.rpc("create_community", {
+      p_name: "SolTools Feed",
+      p_slug: DEFAULT_FEED_COMMUNITY_SLUG,
+      p_description: "The public SolTools timeline for alpha, charts, calls, and market takes.",
+      p_category: "alpha",
+      p_icon_emoji: "⚡",
+      p_accent_a: "#55F5B2",
+      p_accent_b: "#38D7FF",
+      p_rules: ["No scams or impersonation.", "Share sources for token calls.", "Keep it actionable."],
+      p_tags: ["feed", "alpha", "solana"],
+      p_is_private: false,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? (data[0] as FeedCommunityRow | undefined) : (data as FeedCommunityRow | null);
+    if (row?.id) return row.id;
+  } catch (e) {
+    console.log("[app] create default feed community RPC failed", e);
+  }
+
+  const raceId = await findDefaultFeedCommunityId();
+  if (raceId) return raceId;
+
+  try {
+    const { data, error } = await supabase
+      .from("communities")
+      .insert({
+        owner_id: userId,
+        name: "SolTools Feed",
+        slug: DEFAULT_FEED_COMMUNITY_SLUG,
+        description: "The public SolTools timeline for alpha, charts, calls, and market takes.",
+        category: "alpha",
+        icon_emoji: "⚡",
+        accent_a: "#55F5B2",
+        accent_b: "#38D7FF",
+        verified: true,
+        trending: true,
+        is_private: false,
+        rules: ["No scams or impersonation.", "Share sources for token calls.", "Keep it actionable."],
+        tags: ["feed", "alpha", "solana"],
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    const id = (data as FeedCommunityRow | null)?.id;
+    if (id) return id;
+  } catch (e) {
+    console.log("[app] insert default feed community failed", e);
+  }
+
+  const finalId = await findDefaultFeedCommunityId();
+  if (finalId) return finalId;
+  throw new Error("Could not connect this post to the SolTools Feed community.");
+}
+
 async function loadJson<T>(key: string, fallback: T): Promise<T> {
   try {
     const raw = await AsyncStorage.getItem(key);
@@ -445,16 +528,18 @@ export const [AppProvider, useApp] = createContextHook(() => {
           : uploadedUrl
             ? ""
             : input.text;
+        const communityId = await ensureDefaultFeedCommunityId(userId);
         const { data, error } = await supabase
           .from("community_posts")
           .insert({
             user_id: userId,
+            community_id: communityId,
             content: safeContent ?? "",
             image_url: uploadedUrl ?? null,
             ticker: input.ticker ?? null,
             change_pct: input.changePct ?? null,
           })
-          .select("id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
+          .select("id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
           .single();
         if (error) {
           console.log("[app] community_posts insert error", {
