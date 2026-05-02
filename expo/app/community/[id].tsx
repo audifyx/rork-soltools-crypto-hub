@@ -19,6 +19,7 @@ import {
   MessageCircle,
   MoreVertical,
   Pin,
+  Trash2,
   Quote,
   Repeat2,
   Search,
@@ -51,6 +52,7 @@ import Colors from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
+import { useAdmin } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
 import { CommunityPost, useSocial } from "@/providers/social-provider";
 
@@ -100,12 +102,15 @@ export default function CommunityDetailScreen() {
     addCommunityPost,
     addPostReply,
     quotePost,
+    deleteCommunityPost,
     togglePostLike,
     togglePostRepost,
     togglePostBookmark,
     updateCommunityMedia,
   } = useSocial();
   const { profile } = useApp();
+  const { role } = useAdmin();
+  const canModeratePosts = role === "superadmin" || role === "admin" || role === "moderator";
   const { isAuthenticated, userId } = useAuth();
   const [tab, setTab] = useState<Tab>("recent");
   const [composer, setComposer] = useState<string>("");
@@ -417,6 +422,11 @@ export default function CommunityDetailScreen() {
     }
   }, [ensureSignedIn, showToast, togglePostBookmark]);
 
+  const canDeletePost = useCallback(
+    (post: CommunityPost): boolean => isAuthenticated && (canModeratePosts || post.authorUserId === userId),
+    [canModeratePosts, isAuthenticated, userId],
+  );
+
   const onSharePost = useCallback(async (post: CommunityPost) => {
     try {
       await Share.share({
@@ -427,6 +437,41 @@ export default function CommunityDetailScreen() {
       console.log("[community] post share failed", e);
     }
   }, [community?.name, shareLink]);
+
+  const onDeletePost = useCallback(
+    (post: CommunityPost) => {
+      if (!canDeletePost(post)) {
+        Alert.alert("Not allowed", "You can only delete your own posts.");
+        return;
+      }
+      Alert.alert(
+        "Delete post?",
+        canModeratePosts && post.authorUserId !== userId
+          ? "This admin action permanently removes the post for everyone."
+          : "This permanently removes your post from the community.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+              void (async () => {
+                try {
+                  await deleteCommunityPost(post);
+                  if (activePost?.id === post.id) closeInteraction();
+                  showToast("Post deleted");
+                } catch (e) {
+                  Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+                }
+              })();
+            },
+          },
+        ],
+      );
+    },
+    [activePost?.id, canDeletePost, canModeratePosts, closeInteraction, deleteCommunityPost, showToast, userId],
+  );
 
   const submitInteraction = useCallback(async () => {
     const text = interactionText.trim();
@@ -480,6 +525,8 @@ export default function CommunityDetailScreen() {
       onQuote={() => openQuote(item)}
       onBookmark={() => void onToggleBookmark(item)}
       onShare={() => void onSharePost(item)}
+      canDelete={canDeletePost(item)}
+      onDelete={() => onDeletePost(item)}
     />
   );
 
@@ -1009,6 +1056,8 @@ export default function CommunityDetailScreen() {
                     onQuote={() => openQuote(item)}
                     onBookmark={() => void onToggleBookmark(item)}
                     onShare={() => void onSharePost(item)}
+                    canDelete={canDeletePost(item)}
+                    onDelete={() => onDeletePost(item)}
                   />
                 )}
                 ListHeaderComponent={
@@ -1022,6 +1071,8 @@ export default function CommunityDetailScreen() {
                       onQuote={() => openQuote(activePost)}
                       onBookmark={() => void onToggleBookmark(activePost)}
                       onShare={() => void onSharePost(activePost)}
+                      canDelete={canDeletePost(activePost)}
+                      onDelete={() => onDeletePost(activePost)}
                     />
                     {interactionMode === "quote" ? (
                       <View style={styles.quoteComposerHint}>
@@ -1163,6 +1214,8 @@ function PostRow({
   onQuote,
   onBookmark,
   onShare,
+  canDelete = false,
+  onDelete,
 }: {
   post: CommunityPost;
   compact?: boolean;
@@ -1173,6 +1226,8 @@ function PostRow({
   onQuote: () => void;
   onBookmark: () => void;
   onShare: () => void;
+  canDelete?: boolean;
+  onDelete?: () => void;
 }) {
   const quote = post.quote;
   return (
@@ -1202,6 +1257,16 @@ function PostRow({
             {post.authorHandle} · {timeAgo(post.createdAt)}
           </Text>
         </View>
+        {canDelete ? (
+          <Pressable
+            onPress={onDelete}
+            style={styles.deletePostBtn}
+            hitSlop={8}
+            testID={`delete-post-${post.id}`}
+          >
+            <Trash2 color={Colors.rose} size={14} strokeWidth={2.6} />
+          </Pressable>
+        ) : null}
         {post.ticker ? (
           <View style={styles.postTicker}>
             <Text style={styles.postTickerText}>{post.ticker}</Text>
@@ -1581,6 +1646,16 @@ const styles = StyleSheet.create({
   postInit: { color: Colors.ink, fontSize: 14, fontWeight: "900" },
   postName: { color: Colors.text, fontSize: 13, fontWeight: "900" },
   postMeta: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 1 },
+  deletePostBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,75,110,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,75,110,0.18)",
+  },
   postTicker: {
     paddingHorizontal: 8,
     paddingVertical: 5,

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Colors from "@/constants/colors";
 import { normalizeMediaUrl } from "@/lib/media";
 import { supabase } from "@/lib/supabase";
+import { useAdmin } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
 
 export interface Community {
@@ -52,6 +53,7 @@ export interface CommunityPostReplyRef {
 export interface CommunityPost {
   id: string;
   communityId: string;
+  authorUserId?: string | null;
   authorHandle: string;
   authorName: string;
   authorColor: string;
@@ -255,6 +257,7 @@ function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): 
   return {
     id: postId,
     communityId: (row.community_id as string | null) ?? fallbackCommunityId,
+    authorUserId: (row.user_id as string | null) ?? null,
     authorHandle: username ? `@${username}` : "",
     authorName: displayNameFrom(username, row.display_name),
     authorColor: (row.avatar_color as string | null) ?? Colors.mint,
@@ -373,6 +376,8 @@ async function saveJson<T>(key: string, value: T): Promise<void> {
 
 export const [SocialProvider, useSocial] = createContextHook(() => {
   const qc = useQueryClient();
+  const { role } = useAdmin();
+  const canModeratePosts = role === "superadmin" || role === "admin" || role === "moderator";
   const { userId, isAuthenticated } = useAuth();
   const scope = userId ?? "guest";
   const followKey = `${KEY_FOLLOW_SPACES}.${scope}`;
@@ -711,6 +716,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             return {
               id: postId,
               communityId: (r.community_id as string) ?? id,
+              authorUserId: (r.user_id as string | null) ?? null,
               authorHandle: username ? `@${username}` : "",
               authorName: display,
               authorColor: (author.avatar_color as string | null) ?? Colors.mint,
@@ -881,6 +887,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       const optimisticPost: CommunityPost = {
         id: `local-${Date.now()}`,
         communityId: input.communityId,
+        authorUserId: userId,
         authorHandle: input.authorHandle,
         authorName: input.authorName,
         authorColor: input.authorColor,
@@ -923,6 +930,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         const post: CommunityPost = {
           id: String(data.id),
           communityId: (data.community_id as string | null) ?? input.communityId,
+          authorUserId: (data.user_id as string | null) ?? userId,
           authorHandle: input.authorHandle,
           authorName: input.authorName,
           authorColor: input.authorColor,
@@ -1068,6 +1076,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       const optimistic: CommunityPost = {
         id: `local-reply-${Date.now()}`,
         communityId: input.post.communityId,
+        authorUserId: userId,
         authorHandle: input.authorHandle,
         authorName: input.authorName,
         authorColor: input.authorColor,
@@ -1141,6 +1150,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       const optimistic: CommunityPost = {
         id: `local-quote-${Date.now()}`,
         communityId: input.post.communityId,
+        authorUserId: userId,
         authorHandle: input.authorHandle,
         authorName: input.authorName,
         authorColor: input.authorColor,
@@ -1201,6 +1211,66 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       }
     },
     [isAuthenticated, patchCachedPost, qc, userId],
+  );
+
+  const deleteCommunityPost = useCallback(
+    async (post: CommunityPost): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to delete posts.");
+      const ownsPost = post.authorUserId === userId;
+      if (!ownsPost && !canModeratePosts) throw new Error("You can only delete your own posts.");
+
+      const postSnapshots = qc.getQueriesData<CommunityPost[]>({ queryKey: ["social", "community-posts"] });
+      const replySnapshots = qc.getQueriesData<CommunityPost[]>({ queryKey: ["social", "post-replies"] });
+      const snapshots = [...postSnapshots, ...replySnapshots];
+
+      for (const [key, list] of snapshots) {
+        if (!list || !Array.isArray(list)) continue;
+        qc.setQueryData(
+          key,
+          list.filter((p) => p.id !== post.id && p.parentPostId !== post.id),
+        );
+      }
+
+      if (!post.parentPostId) {
+        qc.setQueriesData<Community[]>({ queryKey: ["social", "communities"] }, (prev) =>
+          prev?.map((c) =>
+            c.id === post.communityId ? { ...c, posts: Math.max(0, c.posts - 1) } : c,
+          ),
+        );
+      }
+      if (post.parentPostId) {
+        patchCachedPost(post.parentPostId, (p) => ({
+          ...p,
+          comments: Math.max(0, p.comments - 1),
+        }));
+      }
+      if (post.quotePostId) {
+        patchCachedPost(post.quotePostId, (p) => ({
+          ...p,
+          reposts: Math.max(0, p.reposts - 1),
+        }));
+      }
+
+      try {
+        const { error } = await supabase.rpc("delete_community_post", {
+          target_post_id: post.id,
+        });
+        if (error) throw error;
+        qc.invalidateQueries({ queryKey: ["social", "community-posts", post.communityId] });
+        if (post.parentPostId) {
+          qc.invalidateQueries({ queryKey: ["social", "post-replies", post.parentPostId] });
+        }
+        qc.invalidateQueries({ queryKey: ["social", "communities"] });
+      } catch (e) {
+        for (const [key, list] of snapshots) {
+          qc.setQueryData(key, list);
+        }
+        qc.invalidateQueries({ queryKey: ["social", "communities"] });
+        console.log("[social] deleteCommunityPost failed", e);
+        throw e instanceof Error ? e : new Error("Could not delete post.");
+      }
+    },
+    [canModeratePosts, isAuthenticated, patchCachedPost, qc, userId],
   );
 
   const createCommunity = useCallback(
@@ -1421,6 +1491,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       addCommunityPost,
       addPostReply,
       quotePost,
+      deleteCommunityPost,
       togglePostLike,
       togglePostRepost,
       togglePostBookmark,
@@ -1447,6 +1518,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       addCommunityPost,
       addPostReply,
       quotePost,
+      deleteCommunityPost,
       togglePostLike,
       togglePostRepost,
       togglePostBookmark,
