@@ -379,9 +379,20 @@ export default function LaunchDetailScreen() {
     ],
   });
 
+  const liquidityPulse = Math.max(8, Math.min(100, ((liveLiq ?? 0) / 1_000_000) * 100));
+  const volumePulse = Math.max(8, Math.min(100, ((liveVol ?? 0) / 1_000_000) * 100));
+  const holderPulse = Math.max(8, Math.min(100, ((liveHolders ?? 0) / 10_000) * 100));
+  const momentumPulse = Math.max(8, Math.min(100, Math.abs(liveChange ?? 0) * 2.5));
+  const commandScore = Math.round(
+    (liquidityPulse + volumePulse + holderPulse + Math.max(8, 100 - momentumPulse / 2)) / 4,
+  );
+  const traderTone = liveChange == null ? "Watching" : positive ? "Accumulation" : "Distribution";
+
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
+      <View style={styles.bgOrbTop} pointerEvents="none" />
+      <View style={styles.bgOrbBottom} pointerEvents="none" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* Banner */}
@@ -392,9 +403,24 @@ export default function LaunchDetailScreen() {
               contentFit="cover"
             />
             <LinearGradient
-              colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.7)", Colors.ink]}
+              colors={["rgba(3,7,8,0.02)", "rgba(3,7,8,0.58)", Colors.ink]}
               style={styles.bannerFade}
             />
+            <LinearGradient
+              colors={[`${accent}1F`, "rgba(217,70,255,0.14)", "rgba(3,7,8,0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.bannerColorWash}
+            />
+            <View style={[styles.bannerGlow, { backgroundColor: `${accent}24` }]} pointerEvents="none" />
+            <View style={styles.heroStamp}>
+              <View style={[styles.heroLiveBadge, { borderColor: `${accent}44`, backgroundColor: `${accent}12` }]}> 
+                <View style={[styles.heroLiveDot, { backgroundColor: accent }]} />
+                <Text style={[styles.heroLiveText, { color: accent }]}>{traderTone}</Text>
+              </View>
+              <Text style={styles.heroStampTitle}>Token command center</Text>
+              <Text style={styles.heroStampSub}>Live routing · chart · risk · pools</Text>
+            </View>
             <View style={styles.headerBar}>
               <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8} testID="back-btn">
                 <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
@@ -471,15 +497,32 @@ export default function LaunchDetailScreen() {
             </View>
           </View>
 
+          <View style={styles.commandDock}>
+            <MarketMini Icon={Droplet} label="Liquidity" value={fmtUsd(liveLiq)} color={Colors.cyan} />
+            <MarketMini Icon={Activity} label={`Vol ${tf.toUpperCase()}`} value={fmtUsd(liveVol)} color={Colors.mint} />
+            <MarketMini Icon={Users} label="Holders" value={liveHolders ? fmtNum(liveHolders) : "—"} color={Colors.violet} />
+            <MarketMini Icon={ShieldCheck} label="Score" value={`${commandScore}`} color={accent} />
+          </View>
+
           {/* Live price hero with flash + timeframe selector */}
-          <Animated.View style={[styles.priceCard, { backgroundColor: flashBg }]}>
+          <Animated.View style={[styles.priceCard, { backgroundColor: flashBg, borderColor: `${accent}33` }]}>
             <View style={styles.priceCardInner}>
+              <LinearGradient
+                colors={[`${accent}18`, "rgba(56,215,255,0.06)", "rgba(255,255,255,0.015)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
               <View style={styles.priceTopRow}>
-                <View>
-                  <Text style={styles.priceLabel}>Price</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.priceLabelRow}>
+                    <View style={[styles.pricePulseDot, { backgroundColor: accent }]} />
+                    <Text style={styles.priceLabel}>Live price</Text>
+                  </View>
                   <Text style={styles.priceValue}>
                     {livePrice != null && livePrice > 0 ? fmtPrice(livePrice) : "—"}
                   </Text>
+                  <Text style={styles.priceCaption}>DEX-indexed route · updates while open</Text>
                 </View>
                 {liveChange != null ? (
                   <View
@@ -489,13 +532,33 @@ export default function LaunchDetailScreen() {
                     ]}
                   >
                     {positive ? (
-                      <TrendingUp color={accent} size={12} strokeWidth={3} />
+                      <TrendingUp color={accent} size={14} strokeWidth={3} />
                     ) : (
-                      <TrendingDown color={accent} size={12} strokeWidth={3} />
+                      <TrendingDown color={accent} size={14} strokeWidth={3} />
                     )}
                     <Text style={[styles.changeText, { color: accent }]}>{fmtPct(liveChange)}</Text>
+                    <Text style={styles.changeBadgeSub}>{tf.toUpperCase()}</Text>
                   </View>
                 ) : null}
+              </View>
+
+              <View style={styles.commandScoreCard}>
+                <View style={styles.commandScoreTop}>
+                  <View>
+                    <Text style={styles.commandScoreLabel}>Market signal</Text>
+                    <Text style={styles.commandScoreSub}>Liquidity, holders, volume and momentum blend</Text>
+                  </View>
+                  <Text style={[styles.commandScoreValue, { color: accent }]}>{commandScore}</Text>
+                </View>
+                <View style={styles.commandScoreTrack}>
+                  <View style={[styles.commandScoreFill, { width: `${commandScore}%`, backgroundColor: accent }]} />
+                </View>
+                <View style={styles.signalBarsRow}>
+                  <SignalBar label="Liq" value={liquidityPulse} color={Colors.cyan} />
+                  <SignalBar label="Vol" value={volumePulse} color={Colors.mint} />
+                  <SignalBar label="Hold" value={holderPulse} color={Colors.violet} />
+                  <SignalBar label="Move" value={momentumPulse} color={accent} />
+                </View>
               </View>
 
               <View style={styles.tfRow}>
@@ -528,7 +591,13 @@ export default function LaunchDetailScreen() {
               </View>
 
               <View style={styles.chartEmbed} testID="chart-embed">
-                <DexChart contract={token.contract} pairAddress={pairAddress ?? undefined} height={300} />
+                <View style={styles.chartChrome}>
+                  <View style={styles.chartDotRed} />
+                  <View style={styles.chartDotYellow} />
+                  <View style={styles.chartDotGreen} />
+                  <Text style={styles.chartChromeText}>DEX live terminal</Text>
+                </View>
+                <DexChart contract={token.contract} pairAddress={pairAddress ?? undefined} height={318} />
               </View>
             </View>
           </Animated.View>
@@ -1214,14 +1283,100 @@ function LinkRow({
   );
 }
 
+function MarketMini({
+  Icon,
+  label,
+  value,
+  color,
+}: {
+  Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <View style={styles.marketMini}>
+      <View style={[styles.marketMiniIcon, { backgroundColor: `${color}16`, borderColor: `${color}33` }]}> 
+        <Icon color={color} size={13} strokeWidth={2.8} />
+      </View>
+      <Text style={styles.marketMiniLabel}>{label}</Text>
+      <Text style={styles.marketMiniValue} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function SignalBar({ label, value, color }: { label: string; value: number; color: string }) {
+  const width = `${Math.max(8, Math.min(100, value))}%`;
+  return (
+    <View style={styles.signalBarItem}>
+      <View style={styles.signalBarTop}>
+        <Text style={styles.signalBarLabel}>{label}</Text>
+        <Text style={[styles.signalBarValue, { color }]}>{Math.round(value)}</Text>
+      </View>
+      <View style={styles.signalBarTrack}>
+        <View style={[styles.signalBarFill, { width, backgroundColor: color }]} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
   safe: { flex: 1 },
   scroll: { paddingBottom: 200 },
+  bgOrbTop: {
+    position: "absolute",
+    top: -120,
+    right: -90,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: "rgba(56,215,255,0.13)",
+  },
+  bgOrbBottom: {
+    position: "absolute",
+    top: 310,
+    left: -130,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: "rgba(217,70,255,0.09)",
+  },
 
-  bannerWrap: { height: 200, position: "relative" },
+  bannerWrap: { height: 232, position: "relative" },
   banner: { ...StyleSheet.absoluteFillObject },
   bannerFade: { ...StyleSheet.absoluteFillObject },
+  bannerColorWash: { ...StyleSheet.absoluteFillObject },
+  bannerGlow: {
+    position: "absolute",
+    right: -64,
+    bottom: -86,
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+  },
+  heroStamp: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: 28,
+  },
+  heroLiveBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  heroLiveDot: { width: 7, height: 7, borderRadius: 4 },
+  heroLiveText: { fontSize: 10, fontWeight: "900", letterSpacing: 1.1, textTransform: "uppercase" },
+  heroStampTitle: { color: Colors.text, fontSize: 28, fontWeight: "900", letterSpacing: -1, marginTop: 9 },
+  heroStampSub: { color: Colors.muted, fontSize: 12, fontWeight: "800", letterSpacing: 0.3, marginTop: 3 },
   headerBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -1272,24 +1427,78 @@ const styles = StyleSheet.create({
   },
   ageText: { color: Colors.cyan, fontSize: 10, fontWeight: "900" },
 
+  commandDock: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    marginTop: 16,
+  },
+  marketMini: {
+    flex: 1,
+    minHeight: 98,
+    borderRadius: 17,
+    padding: 10,
+    backgroundColor: "rgba(11,24,26,0.86)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  marketMiniIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  marketMiniLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.7, marginTop: 9, textTransform: "uppercase" },
+  marketMiniValue: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.3, marginTop: 3 },
+
   priceCard: {
-    marginHorizontal: 16, marginTop: 18,
-    borderRadius: 18, overflow: "hidden",
+    marginHorizontal: 16, marginTop: 14,
+    borderRadius: 24, overflow: "hidden",
+    borderWidth: 1,
   },
   priceCardInner: {
-    padding: 16, borderRadius: 18,
-    backgroundColor: Colors.card,
+    padding: 16, borderRadius: 24,
+    backgroundColor: "rgba(11,24,26,0.92)",
     borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
   },
-  priceTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  priceTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
+  priceLabelRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  pricePulseDot: { width: 7, height: 7, borderRadius: 4 },
   priceLabel: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1.2, textTransform: "uppercase" },
-  priceValue: { color: Colors.text, fontSize: 30, fontWeight: "900", letterSpacing: -0.6, marginTop: 4 },
+  priceValue: { color: Colors.text, fontSize: 34, fontWeight: "900", letterSpacing: -1, marginTop: 5 },
+  priceCaption: { color: Colors.muted, fontSize: 11, fontWeight: "800", marginTop: 4 },
   changeBadge: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    paddingHorizontal: 11, paddingVertical: 7,
-    borderRadius: 12, borderWidth: 1,
+    alignItems: "center", gap: 3,
+    paddingHorizontal: 12, paddingVertical: 9,
+    borderRadius: 15, borderWidth: 1,
+    minWidth: 78,
   },
   changeText: { fontSize: 13, fontWeight: "900" },
+  changeBadgeSub: { color: Colors.muted, fontSize: 8, fontWeight: "900", letterSpacing: 1 },
+  commandScoreCard: {
+    marginTop: 15,
+    padding: 13,
+    borderRadius: 18,
+    backgroundColor: "rgba(3,7,8,0.34)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  commandScoreTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  commandScoreLabel: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.1 },
+  commandScoreSub: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 3 },
+  commandScoreValue: { fontSize: 29, fontWeight: "900", letterSpacing: -0.8 },
+  commandScoreTrack: { height: 9, borderRadius: 6, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.08)", marginTop: 12 },
+  commandScoreFill: { height: "100%", borderRadius: 6 },
+  signalBarsRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  signalBarItem: { flex: 1 },
+  signalBarTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  signalBarLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
+  signalBarValue: { fontSize: 10, fontWeight: "900" },
+  signalBarTrack: { height: 5, borderRadius: 4, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.07)", marginTop: 5 },
+  signalBarFill: { height: "100%", borderRadius: 4 },
 
   tfRow: { flexDirection: "row", gap: 6, marginTop: 14 },
   tfBtn: {
@@ -1306,7 +1515,28 @@ const styles = StyleSheet.create({
   tfLabelActive: { color: Colors.mint },
   tfChange: { fontSize: 11, fontWeight: "900" },
 
-  chartEmbed: { marginTop: 14, borderRadius: 14, overflow: "hidden" },
+  chartEmbed: {
+    marginTop: 14,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+    backgroundColor: "rgba(0,0,0,0.28)",
+  },
+  chartChrome: {
+    height: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(3,7,8,0.72)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  chartDotRed: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.rose },
+  chartDotYellow: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.orange },
+  chartDotGreen: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.mint },
+  chartChromeText: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 0.8, marginLeft: 4, textTransform: "uppercase" },
 
   tabsBar: {
     flexDirection: "row", gap: 6,
