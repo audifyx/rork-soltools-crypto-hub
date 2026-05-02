@@ -755,7 +755,7 @@ function OpsSection() {
       </View>
 
       {overviewQuery.isError || sourcesQuery.isError || moderationQuery.isError ? (
-        <Text style={styles.errorText}>Ops data is not fully connected yet. Run sql/020, sql/021, and sql/022.</Text>
+        <Text style={styles.errorText}>Ops data is unavailable. Confirm the admin database functions are applied and your account has admin access.</Text>
       ) : null}
     </ScrollView>
   );
