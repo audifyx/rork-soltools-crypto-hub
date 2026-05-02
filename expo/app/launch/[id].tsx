@@ -102,9 +102,49 @@ export default function LaunchDetailScreen() {
   const [tab, setTab] = useState<TabKey>("overview");
   const [tf, setTf] = useState<"5m" | "1h" | "6h" | "24h">("24h");
 
-  const token = id ? getById(id) : null;
-  const { data: dex } = useDexToken(token?.contract ?? null);
-  const { data: overview } = useTokenOverview(token?.contract ?? null);
+  const stored = id ? getById(id) : null;
+  // If the id looks like a Solana mint address, treat it as a contract so users
+  // can deep-link to any token even when it isn't in the launchpad listings.
+  const looksLikeMint = !!id && id.length >= 32 && id.length <= 64 && !id.includes("-");
+  const lookupAddress = stored?.contract ?? (looksLikeMint ? id! : null);
+  const { data: dex } = useDexToken(lookupAddress);
+  const { data: overview } = useTokenOverview(lookupAddress);
+
+  // Synthesize a token shell from DexScreener data when we don't have a stored
+  // listing yet — this prevents the dreaded "Token not found" screen for any
+  // valid Solana mint pasted into a deep link or routed from another tab.
+  const token = useMemo(() => {
+    if (stored) return stored;
+    if (!lookupAddress) return null;
+    if (!dex || !dex.pair) return null;
+    const base = dex.pair.baseToken;
+    const synth: NonNullable<ReturnType<typeof getById>> = {
+      id: lookupAddress,
+      name: base?.name || base?.symbol || "Unknown token",
+      ticker: (base?.symbol || "").toUpperCase(),
+      description: "",
+      logoUrl: dex.imageUrl ?? null,
+      bannerUrl: null,
+      contract: lookupAddress,
+      venue: "other",
+      status: "live",
+      tags: dex.pair.labels ?? [],
+      featured: false,
+      hot: false,
+      verified: false,
+      createdAt: dex.pairCreatedAt ?? Date.now(),
+      submittedBy: "system",
+      price: dex.priceUsd ?? null,
+      change24hPct: dex.priceChange24hPct ?? null,
+      liquidityUsd: dex.liquidityUsd ?? null,
+      marketCapUsd: dex.marketCapUsd ?? null,
+      volume24hUsd: dex.volume24hUsd ?? null,
+      holders: null,
+      upvotes: 0,
+      watchers: 0,
+    };
+    return synth;
+  }, [stored, lookupAddress, dex, getById]);
 
   const livePrice = dex?.priceUsd ?? overview?.price ?? token?.price ?? null;
   const changeByTf: Record<string, number | null> = {
