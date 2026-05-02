@@ -2,6 +2,7 @@ import type { LaunchToken } from "@/types/launchpad";
 
 export const ALPHA_MIN_24H_VOLUME_USD = 1_000_000;
 export const ALPHA_MAX_MARKET_CAP_USD = 50_000_000;
+export const NEW_CHARITY_WINDOW_MS = 1000 * 60 * 60 * 24 * 120;
 
 const BLOCKED_LARGE_CAP_TERMS = new Set([
   "fartcoin",
@@ -25,6 +26,12 @@ function normalizedTicker(token: LaunchToken): string {
   return token.ticker.replace("$", "").trim().toLowerCase();
 }
 
+function tokenHaystack(token: LaunchToken): string {
+  return [token.name, token.ticker, token.description ?? "", token.venue, ...(token.tags ?? [])]
+    .join(" ")
+    .toLowerCase();
+}
+
 function looksBlockedLargeCap(token: LaunchToken): boolean {
   const ticker = normalizedTicker(token);
   const words = [ticker, ...token.name.toLowerCase().split(/[^a-z0-9]+/)].filter(Boolean);
@@ -46,6 +53,35 @@ export function isDailyAlphaRunner(token: LaunchToken): boolean {
   if (typeof change === "number" && change < 0) return false;
 
   return true;
+}
+
+export function getTokenLaunchYear(token: LaunchToken): number | null {
+  if (!Number.isFinite(token.createdAt) || token.createdAt <= 0) return null;
+  return new Date(token.createdAt).getUTCFullYear();
+}
+
+export function isRunnerFromYear(token: LaunchToken, year: number): boolean {
+  return getTokenLaunchYear(token) === year && isDailyAlphaRunner(token);
+}
+
+export function isUtilityToken(token: LaunchToken): boolean {
+  const text = tokenHaystack(token);
+  if (/\bmeme\b|doge|shib|wif|bonk|pepe|frog|cat|dog|fart|troll|trump|wojak|inu/.test(text)) {
+    return false;
+  }
+  return /\butility\b|\bdepin\b|\brwa\b|oracle|infra|protocol|network|wallet|payments?|payfi|trading|terminal|analytics|data|compute|storage|privacy|security|identity|launchpad|staking|yield|lend|perp|dex|swap|bridge|bot|agent|ai agent|tool|sdk|api/.test(text);
+}
+
+export function isUtilityRunner(token: LaunchToken): boolean {
+  return isDailyAlphaRunner(token) && isUtilityToken(token);
+}
+
+export function isNewCharityCoin(token: LaunchToken): boolean {
+  const text = tokenHaystack(token);
+  const looksCharity = /charity|donat(e|ion|ions)|giving|relief|non\s?profit|foundation|philanthropy|fundraiser|aid\b|rescue|humanitarian|cause|impact|water|cancer|children|animals|shelter/.test(text);
+  const isFresh = Date.now() - token.createdAt <= NEW_CHARITY_WINDOW_MS;
+  const hasMarket = (token.volume24hUsd ?? 0) >= 25_000 || (token.liquidityUsd ?? 0) >= 10_000;
+  return looksCharity && (isFresh || hasMarket);
 }
 
 /** Ranks alpha runners by today's volume first, then momentum and liquidity. */

@@ -13,15 +13,12 @@ import {
   ChartLine,
   Compass,
   Crosshair,
-  Diamond,
   Eye,
   Filter,
   Flame,
-  Gamepad2,
-  Gem,
   Hash,
-  Layers,
-  Plus,
+  Heart,
+  Pickaxe,
   RefreshCcw,
   Rocket,
   Search,
@@ -54,7 +51,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import TokenAvatar from "@/components/TokenAvatar";
 import AlphaInsightsCard from "@/components/discover/AlphaInsightsCard";
 import Colors from "@/constants/colors";
-import { getAlphaRunnerScore, getDailyAlphaRunners } from "@/lib/alpha-runners";
+import {
+  getAlphaRunnerScore,
+  getDailyAlphaRunners,
+  isDailyAlphaRunner,
+  isNewCharityCoin,
+  isRunnerFromYear,
+  isUtilityRunner,
+} from "@/lib/alpha-runners";
 import { fmtUsd } from "@/utils/format";
 import { useApp } from "@/providers/app-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
@@ -71,7 +75,7 @@ const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "gainers", label: "Gainers", Icon: TrendingUp },
   { id: "losers", label: "Losers", Icon: TrendingDown },
   { id: "whales", label: "Whales", Icon: Waves },
-  { id: "ai", label: "AI Picks", Icon: Bot },
+  { id: "ai", label: "Daily Runners", Icon: Bot },
 ];
 
 type Category = {
@@ -88,73 +92,50 @@ function tokenHaystack(t: LaunchToken): string {
     .toLowerCase();
 }
 
-function hasTag(t: LaunchToken, ...needles: string[]): boolean {
-  const tags = (t.tags ?? []).map((x) => x.toLowerCase());
-  return needles.some((n) => tags.includes(n.toLowerCase()));
-}
-
 const CATEGORIES: Category[] = [
   {
-    id: "memes",
-    label: "Memes",
-    Icon: Flame,
+    id: "runners-2025",
+    label: "2025 Runners",
+    Icon: Trophy,
     tone: Colors.orange,
-    match: (t) =>
-      hasTag(t, "meme", "pump", "moonshot", "pumpfun") ||
-      /\bmeme\b|\bdog\b|\bcat\b|pepe|frog|\binu\b|shib|\bwif\b|bonk|popcat|\bmoon\b|chad|wojak|doge|fart|trump|\bmog\b/i.test(
-        tokenHaystack(t),
-      ),
+    match: (t) => isRunnerFromYear(t, 2025),
   },
   {
-    id: "ai",
-    label: "AI",
-    Icon: Bot,
-    tone: Colors.cyan,
-    match: (t) =>
-      hasTag(t, "ai", "agent") ||
-      /\bai\b|agent|\bgpt\b|\bllm\b|neural|gemini|claude|grok|brain|robot|machine/i.test(
-        tokenHaystack(t),
-      ),
-  },
-  {
-    id: "gaming",
-    label: "Gaming",
-    Icon: Gamepad2,
+    id: "runners-2026",
+    label: "2026 Runners",
+    Icon: Rocket,
     tone: Colors.mint,
-    match: (t) =>
-      hasTag(t, "gaming", "game", "gamefi") ||
-      /\bgame|gaming|\bplay\b|p2e|arcade|quest|guild|esports|pixel/i.test(tokenHaystack(t)),
+    match: (t) => isRunnerFromYear(t, 2026),
   },
   {
-    id: "defi",
-    label: "DeFi",
-    Icon: Layers,
-    tone: Colors.cyan,
-    match: (t) =>
-      hasTag(t, "defi", "lst", "stablecoin", "lifinity", "raydium", "orca", "jupiter") ||
-      /\bdefi\b|swap|lend|yield|liquid|stake|vault|perp|\bamm\b|\bdex\b|usd[ct]|sol\b/i.test(
-        tokenHaystack(t),
-      ),
-  },
-  {
-    id: "nft",
-    label: "NFT",
-    Icon: Gem,
+    id: "daily-runners",
+    label: "Daily Runners",
+    Icon: Flame,
     tone: Colors.rose,
-    match: (t) =>
-      hasTag(t, "nft", "collectible") ||
-      /\bnft\b|collectible|\bart\b|\bpfp\b|jpeg|metaplex/i.test(tokenHaystack(t)),
+    match: (t) => isDailyAlphaRunner(t),
   },
   {
-    id: "infra",
-    label: "Infra",
+    id: "utility-runners",
+    label: "Utility Runners",
+    Icon: Pickaxe,
+    tone: Colors.cyan,
+    match: (t) => isUtilityRunner(t),
+  },
+  {
+    id: "charity-coins",
+    label: "New Charity",
+    Icon: Heart,
+    tone: Colors.magenta,
+    match: (t) => isNewCharityCoin(t),
+  },
+  {
+    id: "infra-tools",
+    label: "Infra Tools",
     Icon: Shield,
-    tone: Colors.mint,
+    tone: Colors.violet,
     match: (t) =>
-      hasTag(t, "infra", "depin", "oracle", "bridge") ||
-      /infra|\bsdk\b|\bnode\b|\brpc\b|bridge|oracle|depin|\bdata\b|protocol|network/i.test(
-        tokenHaystack(t),
-      ),
+      isUtilityRunner(t) &&
+      /infra|depin|oracle|bridge|rpc|data|protocol|network|sdk|api/i.test(tokenHaystack(t)),
   },
 ];
 
@@ -311,8 +292,8 @@ export default function DiscoverScreen() {
             <Text style={styles.title}>Discover</Text>
             <Text style={styles.sub}>
               {listings.length > 0
-                ? `${stats.total} tokens · ${stats.hot} hot`
-                : "Trending pairs, whales, AI picks"}
+                ? `${stats.total} live tokens · daily runners, utility, charity`
+                : "Live runners from Solana market feeds"}
             </Text>
           </View>
           <View style={styles.headerActions}>
@@ -597,6 +578,7 @@ function DiscoverHeader({
       </View>
 
       <AlphaInsightsCard />
+      <RunnerSourceStrip />
 
       {featuredSpotlight.length > 0 ? (
         <View style={styles.spotlightWrap}>
@@ -630,7 +612,7 @@ function DiscoverHeader({
       ) : null}
 
       <View style={styles.categoriesWrap}>
-        <Text style={styles.sectionLabel}>EXPLORE BY CATEGORY</Text>
+        <Text style={styles.sectionLabel}>LIVE RUNNER CATEGORIES</Text>
         <View style={styles.categoriesGrid}>
           {CATEGORIES.map((c) => {
             const active = activeCat === c.id;
@@ -822,6 +804,32 @@ function StatTile({
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
+  );
+}
+
+function RunnerSourceStrip() {
+  const sources = [
+    { label: "Pump.fun", sub: "new pairs", tone: Colors.orange },
+    { label: "Birdeye", sub: "24h volume", tone: Colors.cyan },
+    { label: "DexScreener", sub: "charts + boosts", tone: Colors.rose },
+    { label: "Jupiter", sub: "top traded", tone: Colors.mint },
+  ];
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.sourceRow}
+    >
+      {sources.map((source) => (
+        <View key={source.label} style={[styles.sourcePill, { borderColor: `${source.tone}33` }]}> 
+          <View style={[styles.sourceDot, { backgroundColor: source.tone }]} />
+          <View>
+            <Text style={styles.sourceLabel}>{source.label}</Text>
+            <Text style={styles.sourceSub}>{source.sub}</Text>
+          </View>
+        </View>
+      ))}
+    </ScrollView>
   );
 }
 
@@ -1351,6 +1359,21 @@ const styles = StyleSheet.create({
   statIcon: { width: 24, height: 24, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   statValue: { color: Colors.text, fontSize: 18, fontWeight: "900", marginTop: 8, letterSpacing: -0.4 },
   statLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1, marginTop: 2 },
+
+  sourceRow: { paddingHorizontal: 20, paddingTop: 12, gap: 8 },
+  sourcePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+  },
+  sourceDot: { width: 7, height: 7, borderRadius: 4 },
+  sourceLabel: { color: Colors.text, fontSize: 11, fontWeight: "900" },
+  sourceSub: { color: Colors.muted, fontSize: 9, fontWeight: "800", marginTop: 1 },
 
   sectionHead: {
     flexDirection: "row",

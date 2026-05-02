@@ -169,6 +169,28 @@ interface DexProfileEntry {
  * token profiles + boosts feeds, then enriches with /tokens to get price,
  * liquidity, MC, and pairCreatedAt. Sorted youngest pair first.
  */
+export async function searchSolanaPairs(query: string, limit: number = 20): Promise<DexPair[]> {
+  const res = await fetch(`${BASE}/search?q=${encodeURIComponent(query)}`);
+  if (!res.ok) {
+    throw new Error(`dexscreener search ${res.status}`);
+  }
+  const json = (await res.json()) as { pairs?: DexPair[] | null };
+  const pairs = Array.isArray(json.pairs) ? json.pairs : [];
+  return pairs
+    .filter((p) => p.chainId === "solana")
+    .filter((p) =>
+      isSafeToken({
+        marketCapUsd: p.marketCap ?? p.fdv ?? null,
+        liquidityUsd: p.liquidity?.usd ?? null,
+        priceChange24hPct: p.priceChange?.h24 ?? null,
+        labels: p.labels,
+        launchpad: p.dexId,
+      }),
+    )
+    .sort((a, b) => (b.volume?.h24 ?? 0) - (a.volume?.h24 ?? 0))
+    .slice(0, limit);
+}
+
 export async function getNewSolanaPairs(limit: number = 20): Promise<DexPair[]> {
   const addresses = new Set<string>();
   await Promise.all(

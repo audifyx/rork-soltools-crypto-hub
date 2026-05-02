@@ -1,5 +1,7 @@
-import { LaunchToken, LaunchVenue } from "@/types/launchpad";
+import { getTrending, type TokenOverview } from "@/lib/api/birdeye";
+import { getNewSolanaPairs, searchSolanaPairs, type DexPair } from "@/lib/api/dexscreener";
 import { isSafeToken } from "@/lib/safety";
+import { LaunchToken, LaunchVenue } from "@/types/launchpad";
 
 const JUP_LITE = "https://lite-api.jup.ag";
 
@@ -44,7 +46,8 @@ type JupTokenV2 = {
 
 function mapVenue(launchpad?: string): LaunchVenue {
   const v = (launchpad ?? "").toLowerCase();
-  if (v.includes("pump")) return "pumpfun";
+  if (v.includes("pumpswap")) return "pumpswap";
+  if (v.includes("pump.fun") || v === "pumpfun" || v === "pump") return "pumpfun";
   if (v.includes("raydium")) return "raydium";
   if (v.includes("meteora")) return "meteora";
   if (v.includes("jupiter")) return "jupiter";
@@ -80,6 +83,93 @@ function toLaunchToken(t: JupTokenV2, opts: { hot?: boolean; featured?: boolean 
     holders: t.holderCount ?? null,
     upvotes: Math.max(0, Math.round((t.organicScore ?? 0) * 10)),
     watchers: 0,
+  };
+}
+
+function dexPairToLaunchToken(pair: DexPair): LaunchToken | null {
+  const address = pair.baseToken?.address;
+  if (!address) return null;
+  const volume = pair.volume?.h24 ?? null;
+  const marketCap = pair.marketCap ?? pair.fdv ?? null;
+  const venue = mapVenue(pair.dexId);
+  return {
+    id: address,
+    name: pair.baseToken?.name ?? pair.baseToken?.symbol ?? "Unknown",
+    ticker: (pair.baseToken?.symbol ?? "TOKEN").toUpperCase(),
+    description: "Live Solana market pair from DexScreener.",
+    logoUrl: pair.info?.imageUrl ?? null,
+    bannerUrl: pair.info?.header ?? null,
+    contract: address,
+    venue,
+    status: "live",
+    tags: [pair.dexId, ...(pair.labels ?? [])].filter(Boolean),
+    featured: false,
+    hot: (volume ?? 0) >= MIN_RETAIN_VOLUME_USD,
+    verified: (pair.liquidity?.usd ?? 0) >= 100_000,
+    createdAt: pair.pairCreatedAt ?? Date.now(),
+    submittedBy: "system",
+    price: pair.priceUsd ? Number(pair.priceUsd) : null,
+    change24hPct: pair.priceChange?.h24 ?? null,
+    liquidityUsd: pair.liquidity?.usd ?? null,
+    marketCapUsd: marketCap,
+    volume24hUsd: volume,
+    holders: null,
+    upvotes: Math.round(((pair.txns?.h24?.buys ?? 0) + (pair.txns?.h24?.sells ?? 0)) / 10),
+    watchers: 0,
+  };
+}
+
+function overviewToLaunchToken(t: TokenOverview): LaunchToken | null {
+  if (!t.address) return null;
+  return {
+    id: t.address,
+    name: t.name || t.symbol || "Unknown",
+    ticker: (t.symbol || "TOKEN").toUpperCase(),
+    description: "Live Solana volume signal from Birdeye.",
+    logoUrl: t.logoURI ?? null,
+    bannerUrl: null,
+    contract: t.address,
+    venue: "other",
+    status: "live",
+    tags: ["birdeye", "volume"],
+    featured: false,
+    hot: (t.volume24hUSD ?? 0) >= MIN_RETAIN_VOLUME_USD,
+    verified: typeof t.rank === "number" && t.rank <= 250,
+    createdAt: Date.now(),
+    submittedBy: "system",
+    price: t.price || null,
+    change24hPct: t.priceChange24h ?? null,
+    liquidityUsd: t.liquidity ?? null,
+    marketCapUsd: t.marketCap ?? null,
+    volume24hUsd: t.volume24hUSD ?? null,
+    holders: t.holder ?? null,
+    upvotes: Math.max(0, Math.round(1000 - (t.rank ?? 1000))),
+    watchers: 0,
+  };
+}
+
+function mergeToken(existing: LaunchToken, incoming: LaunchToken): LaunchToken {
+  return {
+    ...existing,
+    name: existing.name || incoming.name,
+    ticker: existing.ticker || incoming.ticker,
+    description: existing.description || incoming.description,
+    logoUrl: existing.logoUrl ?? incoming.logoUrl,
+    bannerUrl: existing.bannerUrl ?? incoming.bannerUrl,
+    venue: existing.venue === "other" ? incoming.venue : existing.venue,
+    tags: Array.from(new Set([...existing.tags, ...incoming.tags])).slice(0, 12),
+    hot: existing.hot || incoming.hot,
+    featured: false,
+    verified: existing.verified || incoming.verified,
+    createdAt: Math.min(existing.createdAt, incoming.createdAt),
+    price: incoming.price ?? existing.price ?? null,
+    change24hPct: incoming.change24hPct ?? existing.change24hPct ?? null,
+    liquidityUsd: incoming.liquidityUsd ?? existing.liquidityUsd ?? null,
+    marketCapUsd: incoming.marketCapUsd ?? existing.marketCapUsd ?? null,
+    volume24hUsd: Math.max(existing.volume24hUsd ?? 0, incoming.volume24hUsd ?? 0) || null,
+    holders: incoming.holders ?? existing.holders ?? null,
+    upvotes: Math.max(existing.upvotes, incoming.upvotes),
+    watchers: Math.max(existing.watchers, incoming.watchers),
   };
 }
 
@@ -155,30 +245,71 @@ export async function fetchTopOrganic(): Promise<LaunchToken[]> {
  * Featured flag is intentionally never set here.
  */
 export async function fetchLivePairs(): Promise<LaunchToken[]> {
-  const [newp, top, organic] = await Promise.all([
+  const [newp, top, organic, birdeyeVolume, dexFresh, dexRunnerSearches] = await Promise.all([
     fetchNewPairs(),
     fetchTopTraded(),
     fetchTopOrganic(),
+    (async () => {
+      try {
+        return await getTrending({
+          limit: 80,
+          sort_by: "volume24hUSD",
+          sort_type: "desc",
+          timeframe: "24h",
+        });
+      } catch (e) {
+        console.log("[pairs] birdeye volume feed failed", e);
+        return [] as TokenOverview[];
+      }
+    })(),
+    (async () => {
+      try {
+        return await getNewSolanaPairs(80);
+      } catch (e) {
+        console.log("[pairs] dexscreener fresh feed failed", e);
+        return [] as DexPair[];
+      }
+    })(),
+    (async () => {
+      const terms = ["utility", "depin", "rwa", "ai agent", "charity", "donation"];
+      const results = await Promise.all(
+        terms.map(async (term) => {
+          try {
+            return await searchSolanaPairs(term, 12);
+          } catch (e) {
+            console.log("[pairs] dexscreener search failed", term, e);
+            return [] as DexPair[];
+          }
+        }),
+      );
+      return results.flat();
+    })(),
   ]);
   const map = new Map<string, LaunchToken>();
-  // High-volume retained pool + top organic, then today's new pairs. Keep this wide so
-  // AI Alpha can find $1M+ small-cap runners even when large caps dominate the top slots.
-  const retained = [...top, ...organic].filter(
+  const birdTokens = birdeyeVolume
+    .map(overviewToLaunchToken)
+    .filter((t): t is LaunchToken => t != null);
+  const dexTokens = [...dexFresh, ...dexRunnerSearches]
+    .map(dexPairToLaunchToken)
+    .filter((t): t is LaunchToken => t != null);
+
+  // Retain high-volume daily runners from Jupiter + Birdeye + DexScreener, then
+  // layer in newest Pump/Jupiter/Dex pairs so fresh charity/utility launches can appear.
+  const retained = [...top, ...organic, ...birdTokens, ...dexTokens].filter(
     (t) => (t.volume24hUsd ?? 0) >= MIN_RETAIN_VOLUME_USD,
   );
-  [...retained, ...newp].forEach((t) => {
+  [...retained, ...newp, ...dexTokens].forEach((t) => {
     if (!t.contract) return;
+    const safe = isSafeToken({
+      marketCapUsd: t.marketCapUsd,
+      liquidityUsd: t.liquidityUsd,
+      priceChange24hPct: t.change24hPct,
+      venue: t.venue,
+      tags: t.tags,
+    });
+    if (!safe) return;
     const existing = map.get(t.contract);
-    if (existing) {
-      map.set(t.contract, {
-        ...existing,
-        hot: existing.hot || t.hot,
-        // never auto-promote to featured
-        featured: false,
-      });
-    } else {
-      map.set(t.contract, { ...t, featured: false });
-    }
+    map.set(t.contract, existing ? mergeToken(existing, t) : { ...t, featured: false });
   });
   return Array.from(map.values());
 }
