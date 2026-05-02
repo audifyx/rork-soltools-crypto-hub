@@ -135,6 +135,36 @@ type CommunityRow = {
   created_at: string | null;
 };
 
+type CommunityWithOwnerRow = CommunityRow & {
+  owner_username?: string | null;
+  owner_handle?: string | null;
+};
+
+type PersistedCommunityRow = Partial<CommunityRow> & {
+  id?: string | null;
+  slug?: string | null;
+  created_at?: string | null;
+};
+
+function ownerHandleFromUsername(value: unknown): string {
+  const raw = typeof value === "string" ? value.trim().replace(/^@/, "") : "";
+  return raw.length > 0 ? `@${raw}` : "";
+}
+
+function applyPersistedCommunityRow(community: Community, row: PersistedCommunityRow): void {
+  if (typeof row.id === "string" && row.id.length > 0) community.id = row.id;
+  if (typeof row.slug === "string" && row.slug.length > 0) community.handle = row.slug;
+  if (typeof row.owner_id === "string" && row.owner_id.length > 0) community.ownerId = row.owner_id;
+  if (typeof row.member_count === "number") community.members = row.member_count;
+  if (typeof row.posts_count === "number") community.posts = row.posts_count;
+  if (typeof row.online_count === "number") community.online = row.online_count;
+  if (typeof row.created_at === "string" && row.created_at.length > 0) {
+    community.createdAt = new Date(row.created_at).getTime();
+  }
+  if (row.avatar_url !== undefined) community.avatarUrl = row.avatar_url ?? null;
+  if (row.banner_url !== undefined) community.bannerUrl = row.banner_url ?? null;
+}
+
 function rowToCommunity(row: CommunityRow, ownerHandle: string): Community {
   const seed = row.slug ?? row.id;
   const fallbackPalette = paletteFor(seed);
@@ -285,14 +315,33 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
   }, [followKey, localKey]);
 
   const communitiesQ = useQuery<Community[]>({
-    queryKey: ["social", "communities"],
+    queryKey: ["social", "communities", userId ?? "guest"],
     queryFn: async () => {
+      try {
+        const { data, error } = await supabase.rpc("list_public_communities", {
+          max_rows: 200,
+        });
+        if (!error) {
+          const rows = (data ?? []) as CommunityWithOwnerRow[];
+          return rows.map((r) =>
+            rowToCommunity(
+              r,
+              ownerHandleFromUsername(r.owner_username ?? r.owner_handle ?? null),
+            ),
+          );
+        }
+        console.log("[social] list_public_communities RPC failed, falling back", error.message);
+      } catch (e) {
+        console.log("[social] list_public_communities RPC crashed, falling back", e);
+      }
+
       try {
         const { data, error } = await supabase
           .from("communities")
           .select(
             "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,avatar_url,banner_url,created_at",
           )
+          .or(`is_private.eq.false,owner_id.eq.${userId ?? "00000000-0000-0000-0000-000000000000"}`)
           .order("created_at", { ascending: false })
           .limit(200);
         if (error) throw error;
@@ -302,14 +351,17 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         );
         let ownerHandles = new Map<string, string>();
         if (ownerIds.length > 0) {
-          const { data: profs } = await supabase
+          const { data: profs, error: profilesError } = await supabase
             .from("profiles")
             .select("id,username")
             .in("id", ownerIds);
+          if (profilesError) {
+            console.log("[social] community owner profiles fetch failed", profilesError.message);
+          }
           ownerHandles = new Map(
             (profs ?? []).map((p) => [
               p.id as string,
-              p.username ? `@${p.username as string}` : "",
+              ownerHandleFromUsername(p.username),
             ]),
           );
         }
@@ -663,7 +715,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         bannerUrl: input.bannerUrl ?? null,
       };
 
-      // Try persisting to Supabase if authenticated; ignore errors.
+      let persistedRemotely = false;
+
       if (isAuthenticated && userId) {
         try {
           const { data, error } = await supabase.rpc("create_community", {
@@ -681,12 +734,16 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             p_banner_url: community.bannerUrl ?? null,
           });
           if (error) throw error;
-          const row = Array.isArray(data) ? (data[0] as { id?: string } | undefined) : undefined;
-          if (row?.id) community.id = row.id;
+          const row = Array.isArray(data)
+            ? ((data[0] ?? null) as PersistedCommunityRow | null)
+            : ((data ?? null) as PersistedCommunityRow | null);
+          if (!row?.id) throw new Error("create_community returned no id");
+          applyPersistedCommunityRow(community, row);
+          persistedRemotely = true;
         } catch (e) {
           console.log("[social] create_community RPC failed, falling back", e);
           try {
-            const { data: inserted } = await supabase
+            const { data: inserted, error: insertError } = await supabase
               .from("communities")
               .insert({
                 name: community.name,
@@ -703,28 +760,52 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
                 avatar_url: community.avatarUrl ?? null,
                 banner_url: community.bannerUrl ?? null,
               })
-              .select("id")
+              .select(
+                "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,avatar_url,banner_url,created_at",
+              )
               .single();
-            if (inserted?.id) community.id = inserted.id as string;
-            await supabase
+            if (insertError) throw insertError;
+            if (!inserted?.id) throw new Error("communities insert returned no id");
+            applyPersistedCommunityRow(community, inserted as PersistedCommunityRow);
+            const { error: memberError } = await supabase
               .from("community_members")
-              .insert({ community_id: community.id, user_id: userId });
+              .insert({ community_id: community.id, user_id: userId, role: "owner" });
+            if (memberError) console.log("[social] owner auto-join failed", memberError.message);
+            persistedRemotely = true;
           } catch (e2) {
             console.log("[social] createCommunity fallback insert failed", e2);
+            throw e2;
           }
         }
       }
 
-      // Persist locally so it appears immediately.
-      const next = [community, ...localCommunities];
-      setLocalCommunities(next);
-      await saveJson(localKey, next);
+      if (persistedRemotely) {
+        const nextLocal = localCommunities.filter(
+          (c) => c.id !== community.id && c.handle !== community.handle,
+        );
+        if (nextLocal.length !== localCommunities.length) {
+          setLocalCommunities(nextLocal);
+          await saveJson(localKey, nextLocal);
+        }
+        qc.setQueryData<Community[]>(["social", "communities", userId ?? "guest"], (prev) => {
+          const existing = prev ?? [];
+          const without = existing.filter(
+            (c) => c.id !== community.id && c.handle !== community.handle,
+          );
+          return [community, ...without];
+        });
+      } else {
+        const next = [community, ...localCommunities];
+        setLocalCommunities(next);
+        await saveJson(localKey, next);
+      }
 
-      // Optimistically mark joined.
-      const nextJoined = [community.id, ...joined];
+      const nextJoined = joined.includes(community.id) ? joined : [community.id, ...joined];
       qc.setQueryData(["social", "memberships", userId ?? "guest"], nextJoined);
       if (!isAuthenticated) {
-        const gj = [community.id, ...guestJoined];
+        const gj = guestJoined.includes(community.id)
+          ? guestJoined
+          : [community.id, ...guestJoined];
         setGuestJoined(gj);
         await saveJson(KEY_JOINED_GUEST, gj);
       }
