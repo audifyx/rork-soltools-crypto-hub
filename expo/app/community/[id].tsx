@@ -1,5 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -239,10 +240,19 @@ export default function CommunityDetailScreen() {
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
               />
+              {community.bannerUrl ? (
+                <Image
+                  source={{ uri: community.bannerUrl }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                />
+              ) : null}
               <View style={styles.bannerScrim} />
-              <View style={styles.bannerEmojiWrap}>
-                <Text style={styles.bannerEmoji}>{community.iconEmoji}</Text>
-              </View>
+              {community.bannerUrl ? null : (
+                <View style={styles.bannerEmojiWrap}>
+                  <Text style={styles.bannerEmoji}>{community.iconEmoji}</Text>
+                </View>
+              )}
               <SafeAreaView edges={["top"]} style={styles.bannerSafe}>
                 <View style={styles.bannerBar}>
                   <Pressable
@@ -272,6 +282,50 @@ export default function CommunityDetailScreen() {
             </View>
 
             <View style={styles.headInfo}>
+              <View style={styles.headAvatarRow}>
+                <View style={styles.headAvatar}>
+                  <LinearGradient
+                    colors={[community.accent[0], community.accent[1]]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  {community.avatarUrl ? (
+                    <Image
+                      source={{ uri: community.avatarUrl }}
+                      style={StyleSheet.absoluteFill}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <Text style={styles.headAvatarEmoji}>{community.iconEmoji}</Text>
+                  )}
+                </View>
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                    toggleJoin(community.id);
+                  }}
+                  style={[
+                    styles.joinPrimary,
+                    joined && styles.joinPrimaryActive,
+                  ]}
+                  testID="community-join-primary"
+                >
+                  <UserPlus
+                    color={joined ? Colors.mint : Colors.ink}
+                    size={14}
+                    strokeWidth={3}
+                  />
+                  <Text
+                    style={[
+                      styles.joinPrimaryText,
+                      joined && { color: Colors.mint },
+                    ]}
+                  >
+                    {joined ? "Joined" : "Join community"}
+                  </Text>
+                </Pressable>
+              </View>
               <View style={styles.nameRow}>
                 <Text style={styles.name} numberOfLines={1}>
                   {community.name}
@@ -682,7 +736,46 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   listContent: { paddingBottom: 140 },
 
-  bannerWrap: { height: 280, overflow: "hidden" },
+  bannerWrap: { height: 240, overflow: "hidden" },
+  headAvatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: -34,
+    marginBottom: 8,
+  },
+  headAvatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: Colors.ink,
+  },
+  headAvatarEmoji: { fontSize: 36 },
+  joinPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: Colors.mint,
+    marginLeft: "auto",
+  },
+  joinPrimaryActive: {
+    backgroundColor: "rgba(85,245,178,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.4)",
+  },
+  joinPrimaryText: {
+    color: Colors.ink,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+  },
   bannerScrim: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.35)",

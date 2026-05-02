@@ -1,4 +1,6 @@
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -6,8 +8,10 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  Camera,
   Check,
   Hash,
+  Image as ImageIcon,
   Lock,
   Palette,
   Plus,
@@ -21,6 +25,8 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
   KeyboardAvoidingView,
   Platform,
@@ -35,6 +41,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
 import { Community, useSocial } from "@/providers/social-provider";
 
@@ -116,6 +123,41 @@ export default function CreateCommunityScreen() {
   ]);
   const [ruleInput, setRuleInput] = useState<string>("");
   const [isPrivate, setIsPrivate] = useState<boolean>(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+  const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
+
+  const onPickImage = useCallback(
+    async (kind: "avatar" | "banner") => {
+      try {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert("Permission needed", "Allow photo access to upload images.");
+          return;
+        }
+        const res = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.85,
+          allowsEditing: true,
+          aspect: kind === "avatar" ? [1, 1] : [3, 1],
+          base64: true,
+        });
+        if (res.canceled || !res.assets[0]?.uri) return;
+        const asset = res.assets[0];
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        setUploadingKind(kind);
+        const slug = handle.trim().toLowerCase() || `c-${Date.now().toString(36)}`;
+        const url = await uploadCommunityMedia(slug, kind, asset.uri, asset.base64 ?? null);
+        if (kind === "avatar") setAvatarUrl(url);
+        else setBannerUrl(url);
+      } catch (e) {
+        Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");
+      } finally {
+        setUploadingKind(null);
+      }
+    },
+    [handle],
+  );
 
   const palette = useMemo(
     () => PALETTES.find((p) => p.id === paletteId)?.colors ?? PALETTES[0].colors,
@@ -192,6 +234,8 @@ export default function CreateCommunityScreen() {
         rules,
         isPrivate,
         ownerHandle: profile.handle || "",
+        avatarUrl,
+        bannerUrl,
       });
       router.replace({ pathname: "/community/[id]", params: { id: created.id } });
     } catch (e) {
@@ -212,6 +256,8 @@ export default function CreateCommunityScreen() {
     isPrivate,
     profile.handle,
     router,
+    avatarUrl,
+    bannerUrl,
   ]);
 
   return (
@@ -264,6 +310,8 @@ export default function CreateCommunityScreen() {
               members={1}
               tags={tags}
               isPrivate={isPrivate}
+              avatarUrl={avatarUrl}
+              bannerUrl={bannerUrl}
             />
 
             {step === 0 ? (
@@ -278,6 +326,13 @@ export default function CreateCommunityScreen() {
                 handleTaken={handleTaken}
                 emoji={emoji}
                 onChangeEmoji={setEmoji}
+                avatarUrl={avatarUrl}
+                bannerUrl={bannerUrl}
+                uploadingKind={uploadingKind}
+                onPickAvatar={() => onPickImage("avatar")}
+                onPickBanner={() => onPickImage("banner")}
+                onClearAvatar={() => setAvatarUrl(null)}
+                onClearBanner={() => setBannerUrl(null)}
               />
             ) : null}
 
@@ -378,6 +433,8 @@ function PreviewCard({
   members,
   tags,
   isPrivate,
+  avatarUrl,
+  bannerUrl,
 }: {
   name: string;
   handle: string;
@@ -387,6 +444,8 @@ function PreviewCard({
   members: number;
   tags: string[];
   isPrivate: boolean;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
 }) {
   const pulse = React.useRef(new Animated.Value(0)).current;
   React.useEffect(() => {
@@ -411,11 +470,18 @@ function PreviewCard({
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
+        {bannerUrl ? (
+          <Image
+            source={{ uri: bannerUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
+        ) : null}
         <Animated.View
           style={[styles.previewBlob, { transform: [{ scale }] }]}
           pointerEvents="none"
         >
-          <Text style={styles.previewBlobText}>{emoji}</Text>
+          {bannerUrl ? null : <Text style={styles.previewBlobText}>{emoji}</Text>}
         </Animated.View>
         {isPrivate ? (
           <View style={styles.privateBadge}>
@@ -432,7 +498,15 @@ function PreviewCard({
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-          <Text style={styles.previewAvatarEmoji}>{emoji}</Text>
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+            />
+          ) : (
+            <Text style={styles.previewAvatarEmoji}>{emoji}</Text>
+          )}
         </View>
         <Text style={styles.previewName} numberOfLines={1}>
           {name}
@@ -468,6 +542,13 @@ function StepIdentity({
   handleTaken,
   emoji,
   onChangeEmoji,
+  avatarUrl,
+  bannerUrl,
+  uploadingKind,
+  onPickAvatar,
+  onPickBanner,
+  onClearAvatar,
+  onClearBanner,
 }: {
   name: string;
   onChangeName: (t: string) => void;
@@ -477,6 +558,13 @@ function StepIdentity({
   handleTaken: boolean;
   emoji: string;
   onChangeEmoji: (t: string) => void;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+  uploadingKind: "avatar" | "banner" | null;
+  onPickAvatar: () => void;
+  onPickBanner: () => void;
+  onClearAvatar: () => void;
+  onClearBanner: () => void;
 }) {
   return (
     <View style={styles.card}>
@@ -522,6 +610,77 @@ function StepIdentity({
               ? "That handle is already taken."
               : "Looks good — handle is available."}
       </Text>
+
+      <FieldLabel icon={ImageIcon}>Banner image (optional)</FieldLabel>
+      <Pressable
+        onPress={onPickBanner}
+        style={styles.bannerPick}
+        testID="pick-banner"
+        disabled={uploadingKind !== null}
+      >
+        {bannerUrl ? (
+          <Image source={{ uri: bannerUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        ) : null}
+        <View style={styles.bannerPickOverlay}>
+          {uploadingKind === "banner" ? (
+            <ActivityIndicator color={Colors.text} />
+          ) : (
+            <>
+              <Camera color={Colors.text} size={18} strokeWidth={2.6} />
+              <Text style={styles.bannerPickText}>
+                {bannerUrl ? "Change banner" : "Tap to upload banner"}
+              </Text>
+            </>
+          )}
+        </View>
+        {bannerUrl ? (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onClearBanner();
+            }}
+            hitSlop={8}
+            style={styles.clearBtn}
+            testID="clear-banner"
+          >
+            <X color={Colors.text} size={12} strokeWidth={3} />
+          </Pressable>
+        ) : null}
+      </Pressable>
+
+      <FieldLabel icon={ImageIcon}>Profile image (optional)</FieldLabel>
+      <View style={styles.avatarPickRow}>
+        <Pressable
+          onPress={onPickAvatar}
+          style={styles.avatarPick}
+          testID="pick-avatar"
+          disabled={uploadingKind !== null}
+        >
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          ) : null}
+          <View style={styles.avatarPickOverlay}>
+            {uploadingKind === "avatar" ? (
+              <ActivityIndicator color={Colors.text} />
+            ) : (
+              <Camera color={Colors.text} size={20} strokeWidth={2.6} />
+            )}
+          </View>
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.avatarHelpTitle}>
+            {avatarUrl ? "Looking sharp." : "Add a profile picture"}
+          </Text>
+          <Text style={styles.avatarHelpBody}>
+            Square image, shown on cards and headers. You can skip and use just the emoji vibe.
+          </Text>
+          {avatarUrl ? (
+            <Pressable onPress={onClearAvatar} hitSlop={6} style={styles.removeLink}>
+              <Text style={styles.removeLinkText}>Remove image</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
 
       <FieldLabel icon={Sparkles}>Pick a vibe</FieldLabel>
       <View style={styles.emojiGrid}>
@@ -1068,6 +1227,77 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  bannerPick: {
+    marginTop: 8,
+    height: 110,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderStyle: "dashed",
+  },
+  bannerPickOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+  bannerPickText: {
+    color: Colors.text,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  clearBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  avatarPickRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 8,
+  },
+  avatarPick: {
+    width: 76,
+    height: 76,
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  avatarPickOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.2)",
+  },
+  avatarHelpTitle: { color: Colors.text, fontSize: 13, fontWeight: "800" },
+  avatarHelpBody: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 4,
+    lineHeight: 15,
+  },
+  removeLink: { marginTop: 6 },
+  removeLinkText: {
+    color: Colors.rose,
+    fontSize: 11,
+    fontWeight: "800",
+  },
   emojiGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

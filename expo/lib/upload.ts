@@ -4,8 +4,10 @@ import { supabase } from "@/lib/supabase";
 
 const BUCKET = "profile-media";
 const POSTS_BUCKET = "post-images";
+const COMMUNITY_BUCKET = "community-images";
 
 export type ProfileMediaKind = "avatar" | "banner";
+export type CommunityMediaKind = "avatar" | "banner";
 
 function extFromUri(uri: string, fallback = "jpg"): string {
   const m = uri.match(/\.([a-zA-Z0-9]+)(?:\?|$)/);
@@ -140,3 +142,38 @@ export async function uploadPostImage(
   return data.publicUrl;
 }
 
+/**
+ * Uploads a community avatar/banner image. Returns a public URL.
+ * `scope` is the community id (or a temporary key when creating before insert).
+ */
+export async function uploadCommunityMedia(
+  scope: string,
+  kind: CommunityMediaKind,
+  uri: string,
+  base64?: string | null,
+): Promise<string> {
+  const ext = extFromUri(uri, "jpg");
+  const safeScope = scope.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const path = `${safeScope}/${kind}-${Date.now()}.${ext}`;
+  const ct = contentType(ext);
+
+  let body: ArrayBuffer | Blob;
+  try {
+    body = await readBody(uri, base64);
+  } catch (e) {
+    console.log("[upload] community read failed", e);
+    throw new Error(e instanceof Error ? e.message : "Could not read selected image");
+  }
+
+  const { error } = await supabase.storage
+    .from(COMMUNITY_BUCKET)
+    .upload(path, body as ArrayBuffer, { contentType: ct, upsert: true });
+
+  if (error) {
+    console.log("[upload] community storage error", error.message);
+    throw new Error(error.message);
+  }
+
+  const { data } = supabase.storage.from(COMMUNITY_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}

@@ -23,9 +23,12 @@ export interface Community {
   bannerSeed: string;
   pinnedTicker?: string;
   ownerHandle: string;
+  ownerId?: string;
   createdAt: number;
   rules: string[];
   tags: string[];
+  avatarUrl?: string | null;
+  bannerUrl?: string | null;
 }
 
 export interface CommunityPost {
@@ -127,6 +130,8 @@ type CommunityRow = {
   rules: unknown;
   tags: unknown;
   is_private: boolean | null;
+  avatar_url: string | null;
+  banner_url: string | null;
   created_at: string | null;
 };
 
@@ -159,9 +164,12 @@ function rowToCommunity(row: CommunityRow, ownerHandle: string): Community {
     bannerSeed: seed,
     pinnedTicker: row.pinned_ticker ?? undefined,
     ownerHandle: ownerHandle,
+    ownerId: row.owner_id ?? undefined,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     rules,
     tags,
+    avatarUrl: row.avatar_url ?? null,
+    bannerUrl: row.banner_url ?? null,
   };
 }
 
@@ -275,9 +283,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         const { data, error } = await supabase
           .from("communities")
           .select(
-            "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,created_at",
+            "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,avatar_url,banner_url,created_at",
           )
-          .order("member_count", { ascending: false })
+          .order("created_at", { ascending: false })
           .limit(200);
         if (error) throw error;
         const rows = (data ?? []) as CommunityRow[];
@@ -617,6 +625,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       rules: string[];
       isPrivate?: boolean;
       ownerHandle?: string;
+      avatarUrl?: string | null;
+      bannerUrl?: string | null;
     }): Promise<Community> => {
       const slug = input.handle.replace(/^@/, "").toLowerCase();
       const id = `local-${Date.now().toString(36)}-${Math.random()
@@ -637,38 +647,63 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         iconEmoji: input.iconEmoji,
         bannerSeed: slug || id,
         ownerHandle: input.ownerHandle ?? "",
+        ownerId: userId ?? undefined,
         createdAt: Date.now(),
         rules: input.rules.filter((r) => r.trim().length > 0),
         tags: input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean),
+        avatarUrl: input.avatarUrl ?? null,
+        bannerUrl: input.bannerUrl ?? null,
       };
 
       // Try persisting to Supabase if authenticated; ignore errors.
       if (isAuthenticated && userId) {
         try {
-          const { data } = await supabase
-            .from("communities")
-            .insert({
-              name: community.name,
-              slug: community.handle,
-              description: community.description,
-              owner_id: userId,
-              category: community.category,
-              icon_emoji: community.iconEmoji,
-              accent_a: community.accent[0],
-              accent_b: community.accent[1],
-              rules: community.rules,
-              tags: community.tags,
-              is_private: !!input.isPrivate,
-            })
-            .select("id")
-            .single();
-          if (data?.id) community.id = data.id as string;
-          // Auto-join owner.
-          await supabase
-            .from("community_members")
-            .insert({ community_id: community.id, user_id: userId });
+          const { data, error } = await supabase.rpc("create_community", {
+            p_name: community.name,
+            p_slug: community.handle,
+            p_description: community.description,
+            p_category: community.category,
+            p_icon_emoji: community.iconEmoji,
+            p_accent_a: community.accent[0],
+            p_accent_b: community.accent[1],
+            p_rules: community.rules,
+            p_tags: community.tags,
+            p_is_private: !!input.isPrivate,
+            p_avatar_url: community.avatarUrl ?? null,
+            p_banner_url: community.bannerUrl ?? null,
+          });
+          if (error) throw error;
+          const row = Array.isArray(data) ? (data[0] as { id?: string } | undefined) : undefined;
+          if (row?.id) community.id = row.id;
         } catch (e) {
-          console.log("[social] createCommunity remote insert failed", e);
+          console.log("[social] create_community RPC failed, falling back", e);
+          try {
+            const { data: inserted } = await supabase
+              .from("communities")
+              .insert({
+                name: community.name,
+                slug: community.handle,
+                description: community.description,
+                owner_id: userId,
+                category: community.category,
+                icon_emoji: community.iconEmoji,
+                accent_a: community.accent[0],
+                accent_b: community.accent[1],
+                rules: community.rules,
+                tags: community.tags,
+                is_private: !!input.isPrivate,
+                avatar_url: community.avatarUrl ?? null,
+                banner_url: community.bannerUrl ?? null,
+              })
+              .select("id")
+              .single();
+            if (inserted?.id) community.id = inserted.id as string;
+            await supabase
+              .from("community_members")
+              .insert({ community_id: community.id, user_id: userId });
+          } catch (e2) {
+            console.log("[social] createCommunity fallback insert failed", e2);
+          }
         }
       }
 
@@ -697,6 +732,39 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     [communities, joined],
   );
 
+  const updateCommunityMedia = useCallback(
+    async (communityId: string, patch: { avatarUrl?: string | null; bannerUrl?: string | null }) => {
+      try {
+        const update: Record<string, string | null> = {};
+        if (patch.avatarUrl !== undefined) update.avatar_url = patch.avatarUrl;
+        if (patch.bannerUrl !== undefined) update.banner_url = patch.bannerUrl;
+        if (Object.keys(update).length === 0) return;
+        if (isAuthenticated && userId && !communityId.startsWith("local-")) {
+          const { error } = await supabase
+            .from("communities")
+            .update(update)
+            .eq("id", communityId);
+          if (error) throw error;
+        }
+        const next = localCommunities.map((c) =>
+          c.id === communityId
+            ? {
+                ...c,
+                avatarUrl: patch.avatarUrl ?? c.avatarUrl,
+                bannerUrl: patch.bannerUrl ?? c.bannerUrl,
+              }
+            : c,
+        );
+        setLocalCommunities(next);
+        await saveJson(KEY_LOCAL_COMMUNITIES, next);
+        qc.invalidateQueries({ queryKey: ["social", "communities"] });
+      } catch (e) {
+        console.log("[social] updateCommunityMedia failed", e);
+      }
+    },
+    [isAuthenticated, userId, localCommunities, qc],
+  );
+
   const trendingCommunities = useMemo(
     () =>
       communities
@@ -723,6 +791,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       toggleJoin,
       getCommunity,
       createCommunity,
+      updateCommunityMedia,
       postsByCommunity,
       usePostsForCommunity,
       addCommunityPost,
@@ -743,6 +812,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       toggleJoin,
       getCommunity,
       createCommunity,
+      updateCommunityMedia,
       postsByCommunity,
       usePostsForCommunity,
       addCommunityPost,

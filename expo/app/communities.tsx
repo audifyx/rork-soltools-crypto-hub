@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -249,9 +250,18 @@ function CommunityCard({
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <View style={styles.bannerEmojiWrap}>
-          <Text style={styles.bannerEmoji}>{community.iconEmoji}</Text>
-        </View>
+        {community.bannerUrl ? (
+          <Image
+            source={{ uri: community.bannerUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
+        ) : null}
+        {community.bannerUrl ? null : (
+          <View style={styles.bannerEmojiWrap}>
+            <Text style={styles.bannerEmoji}>{community.iconEmoji}</Text>
+          </View>
+        )}
         <LinearGradient
           colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.5)"]}
           style={[StyleSheet.absoluteFill, { top: "60%" }]}
@@ -275,7 +285,15 @@ function CommunityCard({
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-          <Text style={styles.cardAvatarEmoji}>{community.iconEmoji}</Text>
+          {community.avatarUrl ? (
+            <Image
+              source={{ uri: community.avatarUrl }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+            />
+          ) : (
+            <Text style={styles.cardAvatarEmoji}>{community.iconEmoji}</Text>
+          )}
         </View>
         <View style={styles.cardMid}>
           <Text style={styles.cardName} numberOfLines={1}>
