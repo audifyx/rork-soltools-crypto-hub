@@ -61,6 +61,7 @@ function RootLayoutNav() {
       <Stack.Screen name="lobbies" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="lobby/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="notifications" options={{ presentation: "card", animation: "slide_from_right" }} />
+      <Stack.Screen name="posts" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

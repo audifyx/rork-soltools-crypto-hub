@@ -16,6 +16,7 @@ import {
   ImagePlus,
   Inbox,
   MessageCircle,
+  MessageSquareText,
   Radio,
   Repeat2,
   Rocket,
@@ -319,6 +320,16 @@ export default function HomeFeedScreen() {
               testID="search-btn"
             >
               <Search color={Colors.text} size={18} strokeWidth={2.4} />
+            </Pressable>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                router.push("/posts");
+              }}
+              testID="posts-btn"
+            >
+              <MessageSquareText color={Colors.mint} size={18} strokeWidth={2.4} />
             </Pressable>
             <Pressable
               style={styles.iconBtn}
