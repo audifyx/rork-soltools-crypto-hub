@@ -54,7 +54,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import TokenAvatar from "@/components/TokenAvatar";
 import AlphaInsightsCard from "@/components/discover/AlphaInsightsCard";
 import Colors from "@/constants/colors";
-import { fmtUsd, fmtPrice } from "@/utils/format";
+import { getAlphaRunnerScore, getDailyAlphaRunners } from "@/lib/alpha-runners";
+import { fmtUsd } from "@/utils/format";
 import { useApp } from "@/providers/app-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchToken } from "@/types/launchpad";
@@ -180,7 +181,7 @@ export default function DiscoverScreen() {
         .sort((a, b) => (a.change24hPct ?? 0) - (b.change24hPct ?? 0));
     if (section === "whales")
       items = items.filter((t) => (t.holders ?? 0) > 100 || (t.volume24hUsd ?? 0) > 50_000);
-    if (section === "ai") items = items.filter((t) => t.featured || t.upvotes > 0);
+    if (section === "ai") items = getDailyAlphaRunners(items, 50);
     if (activeCat) {
       const cat = CATEGORIES.find((c) => c.id === activeCat);
       if (cat) items = items.filter(cat.match);
@@ -264,11 +265,7 @@ export default function DiscoverScreen() {
   );
 
   const aiPicks = useMemo(
-    () =>
-      listings
-        .filter((t) => t.featured || t.upvotes > 0)
-        .sort((a, b) => b.upvotes - a.upvotes)
-        .slice(0, 5),
+    () => getDailyAlphaRunners(listings, 5),
     [listings],
   );
 
@@ -684,9 +681,9 @@ function DiscoverHeader({
           <View style={styles.sectionHead}>
             <View style={styles.sectionHeadLeft}>
               <Bot color={Colors.cyan} size={15} strokeWidth={2.6} />
-              <Text style={styles.sectionTitle}>AI Picks</Text>
+              <Text style={styles.sectionTitle}>AI Daily Runners</Text>
               <View style={styles.aiBadge}>
-                <Text style={styles.aiBadgeText}>BETA</Text>
+                <Text style={styles.aiBadgeText}>$1M+ VOL</Text>
               </View>
             </View>
             <Pressable
@@ -1016,7 +1013,7 @@ function AiPickRow({
   token: LaunchToken;
   onPress: () => void;
 }) {
-  const score = Math.min(99, 60 + (token.upvotes ?? 0) * 3 + (token.featured ? 15 : 0));
+  const score = getAlphaRunnerScore(token);
   return (
     <Pressable onPress={onPress} style={styles.aiRow} testID={`ai-${token.id}`}>
       <View style={styles.aiRank}>
@@ -1036,6 +1033,9 @@ function AiPickRow({
         </View>
         <Text style={styles.aiName} numberOfLines={1}>
           {token.name}
+        </Text>
+        <Text style={styles.aiMeta} numberOfLines={1}>
+          VOL {formatUsd(token.volume24hUsd)} · MC {formatUsd(token.marketCapUsd)}
         </Text>
         <View style={styles.aiBar}>
           <View style={[styles.aiBarFill, { width: `${score}%` }]} />
@@ -1524,6 +1524,7 @@ const styles = StyleSheet.create({
   aiTopRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   aiTicker: { color: Colors.text, fontSize: 13, fontWeight: "900" },
   aiName: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 1 },
+  aiMeta: { color: Colors.cyan, fontSize: 9.5, fontWeight: "800", marginTop: 2 },
   aiBar: { marginTop: 6, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.06)", overflow: "hidden" },
   aiBarFill: { height: 4, backgroundColor: Colors.cyan, borderRadius: 2 },
   aiScore: { alignItems: "center", paddingHorizontal: 4 },

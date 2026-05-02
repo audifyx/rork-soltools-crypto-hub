@@ -131,7 +131,7 @@ export async function fetchTopTraded(): Promise<LaunchToken[]> {
   return items
     .map((t) => ({ t, lt: toLaunchToken(t, { hot: true }) }))
     .filter(({ t, lt }) => safeFromJupiter(t, lt))
-    .slice(0, 40)
+    .slice(0, 120)
     .map(({ lt }) => lt);
 }
 
@@ -161,7 +161,8 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
     fetchTopOrganic(),
   ]);
   const map = new Map<string, LaunchToken>();
-  // High-volume retained pool (300k+ daily vol) + top organic, then today's new pairs
+  // High-volume retained pool + top organic, then today's new pairs. Keep this wide so
+  // AI Alpha can find $1M+ small-cap runners even when large caps dominate the top slots.
   const retained = [...top, ...organic].filter(
     (t) => (t.volume24hUsd ?? 0) >= MIN_RETAIN_VOLUME_USD,
   );

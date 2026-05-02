@@ -14,7 +14,9 @@ import React, { useMemo, useRef, useEffect } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 
 import Colors from "@/constants/colors";
+import { getDailyAlphaRunners } from "@/lib/alpha-runners";
 import { useLaunchpad } from "@/providers/launchpad-provider";
+import { fmtUsd } from "@/utils/format";
 
 interface InsightItem {
   id: string;
@@ -31,60 +33,32 @@ export default function AlphaInsightsCard() {
   const { listings } = useLaunchpad();
 
   const insights = useMemo<InsightItem[]>(() => {
-    const out: InsightItem[] = [];
-    const sortedGain = listings
-      .filter((t) => (t.change24hPct ?? 0) > 0)
-      .sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0));
-    const top = sortedGain[0];
-    if (top) {
-      out.push({
-        id: `gain-${top.id}`,
-        emoji: "🚀",
-        title: `$${top.ticker.replace("$", "")} pumping ${(top.change24hPct ?? 0).toFixed(0)}%`,
-        body: `Volume confirms breakout — sentiment skewing bullish across socials.`,
-        tag: "MOMENTUM",
-        tagColor: Colors.mint,
-        href: { pathname: "/launch/[id]", params: { id: top.id } },
-      });
-    }
-    const newest = listings.slice().sort((a, b) => b.createdAt - a.createdAt)[0];
-    if (newest && newest.id !== top?.id) {
-      const ageMin = Math.max(1, Math.floor((Date.now() - newest.createdAt) / 60_000));
-      out.push({
-        id: `new-${newest.id}`,
-        emoji: "⚡",
-        title: `New on Sol Tools · ${newest.ticker.replace("$", "")}`,
-        body: `Listed on Sol Tools ${ageMin}m ago. Pair may be older — this means newly indexed here, not a fresh LP.`,
-        tag: "NEW LISTING",
-        tagColor: Colors.orange,
-        href: { pathname: "/launch/[id]", params: { id: newest.id } },
-      });
-    }
-    const whaley = listings
-      .filter((t) => (t.holders ?? 0) > 100 || (t.volume24hUsd ?? 0) > 50_000)
-      .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0))[0];
-    if (whaley && whaley.id !== top?.id && whaley.id !== newest?.id) {
-      out.push({
-        id: `whale-${whaley.id}`,
-        emoji: "🐋",
-        title: `Whale activity in $${whaley.ticker.replace("$", "")}`,
-        body: `${(whaley.holders ?? 0).toLocaleString()} holders & strong liquidity — accumulation pattern detected.`,
-        tag: "WHALES",
-        tagColor: Colors.cyan,
-        href: { pathname: "/launch/[id]", params: { id: whaley.id } },
-      });
-    }
+    const runners = getDailyAlphaRunners(listings, 3);
+    const out: InsightItem[] = runners.map((token, index) => {
+      const ticker = token.ticker.replace("$", "");
+      const changeText = token.change24hPct != null ? ` · ${token.change24hPct >= 0 ? "+" : ""}${token.change24hPct.toFixed(1)}%` : "";
+      return {
+        id: `runner-${token.id}`,
+        emoji: index === 0 ? "🔥" : index === 1 ? "⚡" : "📈",
+        title: `${ticker} leading small-cap volume`,
+        body: `24h vol ${fmtUsd(token.volume24hUsd)} · MC ${fmtUsd(token.marketCapUsd)} · LIQ ${fmtUsd(token.liquidityUsd)}${changeText}`,
+        tag: "1M+ VOL",
+        tagColor: index === 0 ? Colors.orange : Colors.cyan,
+        href: { pathname: "/launch/[id]", params: { id: token.id } },
+      };
+    });
+
     if (out.length === 0) {
       out.push({
         id: "warming",
         emoji: "🧠",
-        title: "AI is scanning the market",
-        body: "Once tokens hit the launch pad, alpha insights will surface here in real time.",
-        tag: "WARMING UP",
+        title: "Scanning for today's small-cap runners",
+        body: "AI Alpha only shows small caps with $1M+ 24h volume, positive momentum, and major-cap names filtered out.",
+        tag: "NO RUNNERS YET",
         tagColor: Colors.violet,
       });
     }
-    return out.slice(0, 3);
+    return out;
   }, [listings]);
 
   const pulse = useRef(new Animated.Value(0)).current;
@@ -134,7 +108,7 @@ export default function AlphaInsightsCard() {
             </View>
             <View style={styles.subRow}>
               <Animated.View style={[styles.statusDot, { opacity: dotOpacity }]} />
-              <Text style={styles.sub}>Live · scanning {listings.length} tokens</Text>
+              <Text style={styles.sub}>Live · $1M+ small-cap volume scanner</Text>
             </View>
           </View>
         </View>
@@ -174,7 +148,7 @@ export default function AlphaInsightsCard() {
                 {it.body}
               </Text>
               <View style={[styles.tag, { borderColor: `${it.tagColor}55`, backgroundColor: `${it.tagColor}1A` }]}>
-                {it.tag === "MOMENTUM" ? (
+                {it.tag === "MOMENTUM" || it.tag === "1M+ VOL" ? (
                   <TrendingUp color={it.tagColor} size={9} strokeWidth={3} />
                 ) : it.tag === "NEW LISTING" ? (
                   <Zap color={it.tagColor} size={9} strokeWidth={3} />
