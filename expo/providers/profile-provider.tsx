@@ -221,43 +221,88 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
 /**
  * Hook for loading another user's profile by handle (X-style).
  */
+function publicProfileFromRow(row: Record<string, unknown>): PublicProfile {
+  return {
+    id: String(row.id ?? row.user_id),
+    username: (row.username as string | null) ?? null,
+    display_name: (row.display_name as string | null) ?? null,
+    bio: (row.bio as string | null) ?? null,
+    avatar_url: (row.avatar_url as string | null) ?? null,
+    banner_url: (row.banner_url as string | null) ?? null,
+    avatar_color: (row.avatar_color as string | null) ?? null,
+    banner_from: (row.banner_from as string | null) ?? null,
+    banner_to: (row.banner_to as string | null) ?? null,
+    wallet_address: (row.wallet_address as string | null) ?? null,
+    twitter_handle: (row.twitter_handle as string | null) ?? null,
+    website: (row.website as string | null) ?? null,
+    location: (row.location as string | null) ?? null,
+    badge: (row.badge as string | null) ?? null,
+    verified: !!row.verified,
+    custom_badges: normalizeBadges(row.custom_badges),
+    followers_count: Number(row.followers_count ?? 0),
+    following_count: Number(row.following_count ?? 0),
+    trades_count: Number(row.trades_count ?? 0),
+    win_rate: Number(row.win_rate ?? 0),
+    pnl_pct: Number(row.pnl_pct ?? 0),
+    xp: Number(row.xp ?? 0),
+    created_at: (row.created_at as string) ?? new Date().toISOString(),
+    is_following: !!row.is_following,
+  };
+}
+
+function profileSummaryFromRow(row: Record<string, unknown>): ProfileSummary {
+  return {
+    user_id: String(row.user_id ?? row.id),
+    username: (row.username as string | null) ?? null,
+    display_name: (row.display_name as string | null) ?? null,
+    avatar_url: (row.avatar_url as string | null) ?? null,
+    verified: !!row.verified,
+    custom_badges: normalizeBadges(row.custom_badges),
+    followers_count: Number(row.followers_count ?? 0),
+  };
+}
+
+function platformUserFromRow(row: Record<string, unknown>): PlatformUser {
+  return {
+    user_id: String(row.user_id ?? row.id),
+    username: (row.username as string | null) ?? null,
+    display_name: (row.display_name as string | null) ?? null,
+    avatar_url: (row.avatar_url as string | null) ?? null,
+    banner_url: (row.banner_url as string | null) ?? null,
+    bio: (row.bio as string | null) ?? null,
+    verified: !!row.verified,
+    custom_badges: normalizeBadges(row.custom_badges),
+    followers_count: Number(row.followers_count ?? 0),
+    is_online: !!row.is_online,
+    last_seen: (row.last_seen as string | null) ?? null,
+    created_at: (row.created_at as string) ?? new Date().toISOString(),
+    is_following: !!row.is_following,
+  };
+}
+
 export function usePublicProfile(handle: string | null | undefined) {
   return useQuery<PublicProfile | null>({
     queryKey: ["profile", "public", (handle ?? "").toLowerCase()],
     enabled: !!handle && handle.length > 0,
     queryFn: async () => {
       if (!handle) return null;
-      const { data, error } = await supabase.rpc("get_profile_by_handle", { handle });
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : (data as unknown);
-      if (!row) return null;
-      const r = row as Record<string, unknown>;
-      return {
-        id: String(r.id),
-        username: (r.username as string | null) ?? null,
-        display_name: (r.display_name as string | null) ?? null,
-        bio: (r.bio as string | null) ?? null,
-        avatar_url: (r.avatar_url as string | null) ?? null,
-        banner_url: (r.banner_url as string | null) ?? null,
-        avatar_color: (r.avatar_color as string | null) ?? null,
-        banner_from: (r.banner_from as string | null) ?? null,
-        banner_to: (r.banner_to as string | null) ?? null,
-        wallet_address: (r.wallet_address as string | null) ?? null,
-        twitter_handle: (r.twitter_handle as string | null) ?? null,
-        website: (r.website as string | null) ?? null,
-        location: (r.location as string | null) ?? null,
-        badge: (r.badge as string | null) ?? null,
-        verified: !!r.verified,
-        custom_badges: normalizeBadges(r.custom_badges),
-        followers_count: Number(r.followers_count ?? 0),
-        following_count: Number(r.following_count ?? 0),
-        trades_count: Number(r.trades_count ?? 0),
-        win_rate: Number(r.win_rate ?? 0),
-        pnl_pct: Number(r.pnl_pct ?? 0),
-        xp: Number(r.xp ?? 0),
-        created_at: (r.created_at as string) ?? new Date().toISOString(),
-        is_following: !!r.is_following,
-      };
+      const cleanHandle = handle.replace(/^@/, "").trim();
+      const { data, error } = await supabase.rpc("get_profile_by_handle", { handle: cleanHandle });
+      if (!error) {
+        const row = Array.isArray(data) ? data[0] : (data as unknown);
+        return row ? publicProfileFromRow(row as Record<string, unknown>) : null;
+      }
+
+      console.log("[profile] get_profile_by_handle fallback", error.message);
+      const { data: fallback, error: fallbackError } = await supabase
+        .from("profiles")
+        .select(
+          "id,user_id,username,display_name,bio,avatar_url,banner_url,avatar_color,banner_from,banner_to,wallet_address,twitter_handle,website,location,followers_count,following_count,badge,verified,custom_badges,trades_count,win_rate,pnl_pct,xp,created_at",
+        )
+        .ilike("username", cleanHandle)
+        .maybeSingle();
+      if (fallbackError) throw fallbackError;
+      return fallback ? publicProfileFromRow(fallback as Record<string, unknown>) : null;
     },
     staleTime: 30_000,
   });
@@ -299,23 +344,7 @@ export function usePlatformUsers(opts: { q?: string; onlineOnly?: boolean }) {
         max_rows: 200,
       });
       if (error) throw error;
-      return ((data ?? []) as Record<string, unknown>[]).map(
-        (r): PlatformUser => ({
-          user_id: String(r.user_id),
-          username: (r.username as string | null) ?? null,
-          display_name: (r.display_name as string | null) ?? null,
-          avatar_url: (r.avatar_url as string | null) ?? null,
-          banner_url: (r.banner_url as string | null) ?? null,
-          bio: (r.bio as string | null) ?? null,
-          verified: !!r.verified,
-          custom_badges: normalizeBadges(r.custom_badges),
-          followers_count: Number(r.followers_count ?? 0),
-          is_online: !!r.is_online,
-          last_seen: (r.last_seen as string | null) ?? null,
-          created_at: (r.created_at as string) ?? new Date().toISOString(),
-          is_following: !!r.is_following,
-        }),
-      );
+      return ((data ?? []) as Record<string, unknown>[]).map(platformUserFromRow);
     },
     refetchInterval: onlineOnly ? 30_000 : 60_000,
     staleTime: 15_000,
@@ -327,13 +356,32 @@ export function useUsersOverview() {
     queryKey: ["users", "overview"],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("users_overview");
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : (data as unknown);
-      const r = (row ?? {}) as Record<string, unknown>;
+      if (!error) {
+        const row = Array.isArray(data) ? data[0] : (data as unknown);
+        const r = (row ?? {}) as Record<string, unknown>;
+        return {
+          total_users: Number(r.total_users ?? 0),
+          online_users: Number(r.online_users ?? 0),
+          new_today: Number(r.new_today ?? 0),
+        };
+      }
+
+      console.log("[users] overview fallback", error.message);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const [{ count: total }, { count: newToday }, onlineRes] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase
+          .from("profiles")
+          .select("id", { count: "exact", head: true })
+          .gte("created_at", today.toISOString()),
+        supabase.rpc("list_users", { q: "", online_only: true, max_rows: 200 }),
+      ]);
+      const onlineRows = onlineRes.error ? [] : ((onlineRes.data ?? []) as unknown[]);
       return {
-        total_users: Number(r.total_users ?? 0),
-        online_users: Number(r.online_users ?? 0),
-        new_today: Number(r.new_today ?? 0),
+        total_users: total ?? 0,
+        online_users: onlineRows.length,
+        new_today: newToday ?? 0,
       };
     },
     refetchInterval: 30_000,
@@ -346,22 +394,25 @@ export function useSearchProfiles(query: string) {
     queryKey: ["profile", "search", query],
     enabled: true,
     queryFn: async () => {
+      const q = (query ?? "").replace(/^@/, "").trim();
       const { data, error } = await supabase.rpc("search_profiles", {
-        q: query ?? "",
+        q,
         max_rows: 30,
       });
-      if (error) throw error;
-      return ((data ?? []) as Record<string, unknown>[]).map(
-        (r): ProfileSummary => ({
-          user_id: String(r.user_id),
-          username: (r.username as string | null) ?? null,
-          display_name: (r.display_name as string | null) ?? null,
-          avatar_url: (r.avatar_url as string | null) ?? null,
-          verified: !!r.verified,
-          custom_badges: normalizeBadges(r.custom_badges),
-          followers_count: Number(r.followers_count ?? 0),
-        }),
-      );
+      if (!error) return ((data ?? []) as Record<string, unknown>[]).map(profileSummaryFromRow);
+
+      console.log("[profile] search_profiles fallback", error.message);
+      let req = supabase
+        .from("profiles")
+        .select("id,user_id,username,display_name,avatar_url,verified,custom_badges,followers_count")
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (q.length > 0) {
+        req = req.or(`username.ilike.%${q}%,display_name.ilike.%${q}%`);
+      }
+      const { data: fallback, error: fallbackError } = await req;
+      if (fallbackError) throw fallbackError;
+      return ((fallback ?? []) as Record<string, unknown>[]).map(profileSummaryFromRow);
     },
     staleTime: 20_000,
   });

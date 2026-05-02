@@ -1,3 +1,4 @@
+import { fetchDexToken, getNewSolanaPairs, type DexPair } from "@/lib/api/dexscreener";
 import { supabase } from "@/lib/supabase";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
@@ -56,8 +57,77 @@ export type TrendingOpts = {
   timeframe?: TrendingTimeframe;
 };
 
+type JupiterTokenSearchRow = {
+  id?: string;
+  address?: string;
+  mint?: string;
+  name?: string;
+  symbol?: string;
+  decimals?: number;
+  icon?: string;
+  logoURI?: string;
+  holderCount?: number;
+  mcap?: number;
+  liquidity?: number;
+};
+
+async function fetchJupiterToken(address: string): Promise<JupiterTokenSearchRow | null> {
+  const url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(address)}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const json = (await res.json()) as JupiterTokenSearchRow[];
+  return Array.isArray(json) ? json[0] ?? null : null;
+}
+
+function pairToOverview(pair: DexPair, fallbackAddress: string, rank?: number): TokenOverview {
+  return {
+    address: pair.baseToken?.address ?? fallbackAddress,
+    symbol: pair.baseToken?.symbol ?? "TOKEN",
+    name: pair.baseToken?.name ?? pair.baseToken?.symbol ?? "Unknown token",
+    decimals: 0,
+    price: pair.priceUsd ? Number(pair.priceUsd) : 0,
+    priceChange1h: pair.priceChange?.h1,
+    priceChange24h: pair.priceChange?.h24,
+    liquidity: pair.liquidity?.usd,
+    marketCap: pair.marketCap ?? pair.fdv,
+    volume24hUSD: pair.volume?.h24,
+    logoURI: pair.info?.imageUrl,
+    rank,
+  };
+}
+
+async function fallbackTokenOverview(address: string): Promise<TokenOverview> {
+  const [dexResult, jupResult] = await Promise.allSettled([
+    fetchDexToken(address),
+    fetchJupiterToken(address),
+  ]);
+  const dex = dexResult.status === "fulfilled" ? dexResult.value : null;
+  const jup = jupResult.status === "fulfilled" ? jupResult.value : null;
+  const pair = dex?.pair ?? null;
+
+  return {
+    address,
+    symbol: jup?.symbol ?? pair?.baseToken?.symbol ?? "TOKEN",
+    name: jup?.name ?? pair?.baseToken?.name ?? "Unknown token",
+    decimals: Number(jup?.decimals ?? 0),
+    price: dex?.priceUsd ?? 0,
+    priceChange1h: dex?.priceChange1hPct ?? undefined,
+    priceChange24h: dex?.priceChange24hPct ?? undefined,
+    liquidity: dex?.liquidityUsd ?? jup?.liquidity ?? undefined,
+    marketCap: dex?.marketCapUsd ?? jup?.mcap ?? undefined,
+    volume24hUSD: dex?.volume24hUsd ?? undefined,
+    holder: jup?.holderCount,
+    logoURI: jup?.icon ?? jup?.logoURI ?? dex?.imageUrl ?? undefined,
+  };
+}
+
 export async function getTokenOverview(address: string): Promise<TokenOverview> {
-  return call<TokenOverview>("birdeye-token", { address });
+  try {
+    return await call<TokenOverview>("birdeye-token", { address });
+  } catch (e) {
+    console.log("[birdeye] token fallback", e instanceof Error ? e.message : e);
+    return fallbackTokenOverview(address);
+  }
 }
 
 export async function getTrending(
@@ -71,8 +141,14 @@ export async function getTrending(
     sort_type: opts.sort_type ?? "desc",
     timeframe: opts.timeframe ?? "24h",
   } as const;
-  const res = await call<{ data: TokenOverview[] }>("birdeye-trending", body);
-  return res.data ?? [];
+  try {
+    const res = await call<{ data: TokenOverview[] }>("birdeye-trending", body);
+    return res.data ?? [];
+  } catch (e) {
+    console.log("[birdeye] trending fallback", e instanceof Error ? e.message : e);
+    const pairs = await getNewSolanaPairs(body.limit);
+    return pairs.map((pair, index) => pairToOverview(pair, pair.baseToken?.address ?? "", index + 1));
+  }
 }
 
 export async function getTokenSecurity(address: string): Promise<{
@@ -83,5 +159,10 @@ export async function getTokenSecurity(address: string): Promise<{
   lpLocked?: boolean;
   topHoldersPct?: number;
 }> {
-  return call("birdeye-security", { address });
+  try {
+    return await call("birdeye-security", { address });
+  } catch (e) {
+    console.log("[birdeye] security fallback", e instanceof Error ? e.message : e);
+    return { riskScore: 50, isHoneypot: false };
+  }
 }

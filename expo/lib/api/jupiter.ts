@@ -18,6 +18,12 @@ const PRICE_FN =
 const RPC_PROXY_FN =
   process.env.EXPO_PUBLIC_RPC_PROXY_FUNCTION ??
   `${SUPABASE_URL}/functions/v1/rpc-proxy`;
+const JUPITER_PRICE_DIRECT = "https://lite-api.jup.ag/price/v3";
+const JUPITER_TOKENS_DIRECT = "https://lite-api.jup.ag/tokens/v2/search";
+const JUPITER_QUOTE_DIRECT = "https://lite-api.jup.ag/swap/v1/quote";
+const JUPITER_SWAP_DIRECT = "https://lite-api.jup.ag/swap/v1/swap";
+const RPC_DIRECT =
+  process.env.EXPO_PUBLIC_ALCHEMY_SOLANA_RPC ?? "https://api.mainnet-beta.solana.com";
 
 export type JupiterQuote = {
   inputMint: string;
@@ -85,6 +91,83 @@ async function callEdge<T>(url: string, body: unknown): Promise<T> {
   }
 }
 
+async function directQuote(params: {
+  inputMint: string;
+  outputMint: string;
+  amount: string | number;
+  slippageBps?: number;
+  onlyDirectRoutes?: boolean;
+}): Promise<JupiterQuote> {
+  const qs = new URLSearchParams({
+    inputMint: params.inputMint,
+    outputMint: params.outputMint,
+    amount: String(params.amount),
+    slippageBps: String(params.slippageBps ?? 50),
+  });
+  if (params.onlyDirectRoutes != null) qs.set("onlyDirectRoutes", String(params.onlyDirectRoutes));
+  const res = await fetch(`${JUPITER_QUOTE_DIRECT}?${qs.toString()}`);
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Jupiter quote ${res.status}: ${text}`);
+  return JSON.parse(text) as JupiterQuote;
+}
+
+async function directSwapOrder(params: {
+  quote: JupiterQuote;
+  userPublicKey: string;
+  wrapAndUnwrapSol?: boolean;
+}): Promise<{ swapTransaction: string; lastValidBlockHeight?: number }> {
+  const res = await fetch(JUPITER_SWAP_DIRECT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      quoteResponse: params.quote,
+      userPublicKey: params.userPublicKey,
+      wrapAndUnwrapSol: params.wrapAndUnwrapSol ?? true,
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Jupiter swap ${res.status}: ${text}`);
+  return JSON.parse(text) as { swapTransaction: string; lastValidBlockHeight?: number };
+}
+
+async function directTokens(query?: string): Promise<JupiterToken[]> {
+  const q = (query ?? "").trim() || "SOL,JUP,USDC,BONK";
+  const res = await fetch(`${JUPITER_TOKENS_DIRECT}?query=${encodeURIComponent(q)}`);
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Jupiter tokens ${res.status}: ${text}`);
+  const rows = JSON.parse(text) as Array<{
+    id?: string;
+    address?: string;
+    decimals?: number;
+    name?: string;
+    symbol?: string;
+    icon?: string;
+    logoURI?: string;
+    tags?: string[];
+  }>;
+  return rows.map((row): JupiterToken => ({
+    address: row.address ?? row.id ?? "",
+    decimals: Number(row.decimals ?? 0),
+    name: row.name ?? row.symbol ?? "Unknown token",
+    symbol: row.symbol ?? "TOKEN",
+    logoURI: row.logoURI ?? row.icon,
+    tags: row.tags,
+  })).filter((row) => row.address.length > 0);
+}
+
+async function directPrice(ids: string[]): Promise<Record<string, JupiterPrice>> {
+  if (ids.length === 0) return {};
+  const res = await fetch(`${JUPITER_PRICE_DIRECT}?ids=${encodeURIComponent(ids.join(","))}`);
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Jupiter price ${res.status}: ${text}`);
+  const rows = JSON.parse(text) as Record<string, { usdPrice?: number; price?: number }>;
+  const out: Record<string, JupiterPrice> = {};
+  Object.entries(rows).forEach(([id, row]) => {
+    out[id] = { id, price: Number(row.usdPrice ?? row.price ?? 0) };
+  });
+  return out;
+}
+
 export async function getQuote(params: {
   inputMint: string;
   outputMint: string;
@@ -92,7 +175,12 @@ export async function getQuote(params: {
   slippageBps?: number;
   onlyDirectRoutes?: boolean;
 }): Promise<JupiterQuote> {
-  return callEdge<JupiterQuote>(QUOTE_FN, params);
+  try {
+    return await callEdge<JupiterQuote>(QUOTE_FN, params);
+  } catch (e) {
+    console.log("[jupiter] quote direct fallback", e instanceof Error ? e.message : e);
+    return directQuote(params);
+  }
 }
 
 export async function buildSwapOrder(params: {
@@ -100,35 +188,63 @@ export async function buildSwapOrder(params: {
   userPublicKey: string;
   wrapAndUnwrapSol?: boolean;
 }): Promise<{ swapTransaction: string; lastValidBlockHeight?: number }> {
-  return callEdge(ORDER_FN, params);
+  try {
+    return await callEdge(ORDER_FN, params);
+  } catch (e) {
+    console.log("[jupiter] order direct fallback", e instanceof Error ? e.message : e);
+    return directSwapOrder(params);
+  }
 }
 
 export async function getTokens(query?: string): Promise<JupiterToken[]> {
-  return callEdge<JupiterToken[]>(TOKENS_FN, { query: query ?? "" });
+  try {
+    return await callEdge<JupiterToken[]>(TOKENS_FN, { query: query ?? "" });
+  } catch (e) {
+    console.log("[jupiter] tokens direct fallback", e instanceof Error ? e.message : e);
+    return directTokens(query);
+  }
 }
 
 export async function getPrice(ids: string[]): Promise<Record<string, JupiterPrice>> {
-  const res = await callEdge<{ data: Record<string, JupiterPrice> }>(PRICE_FN, {
-    ids,
-  });
-  return res.data ?? {};
+  try {
+    const res = await callEdge<{ data: Record<string, JupiterPrice> }>(PRICE_FN, {
+      ids,
+    });
+    return res.data ?? {};
+  } catch (e) {
+    console.log("[jupiter] price direct fallback", e instanceof Error ? e.message : e);
+    return directPrice(ids);
+  }
 }
 
 export async function rpcCall<T = unknown>(
   method: string,
   params: unknown[] = [],
 ): Promise<T> {
-  const res = await callEdge<{ result: T; error?: { message: string } }>(
-    RPC_PROXY_FN,
-    {
-      jsonrpc: "2.0",
-      id: 1,
-      method,
-      params,
-    },
-  );
-  if (res.error) throw new Error(res.error.message);
-  return res.result;
+  const payload = {
+    jsonrpc: "2.0",
+    id: 1,
+    method,
+    params,
+  };
+  try {
+    const res = await callEdge<{ result: T; error?: { message: string } }>(
+      RPC_PROXY_FN,
+      payload,
+    );
+    if (res.error) throw new Error(res.error.message);
+    return res.result;
+  } catch (e) {
+    console.log("[jupiter] rpc direct fallback", e instanceof Error ? e.message : e);
+    const res = await fetch(RPC_DIRECT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const json = (await res.json()) as { result: T; error?: { message: string } };
+    if (!res.ok || json.error) throw new Error(json.error?.message ?? `RPC ${res.status}`);
+    return json.result;
+  }
 }
 
 export const JUPITER_READY: boolean =
