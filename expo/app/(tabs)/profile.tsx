@@ -354,8 +354,8 @@ export default function ProfileScreen() {
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
 
   const myListings = useMemo(
-    () => listings.filter((l) => l.submittedBy === "user"),
-    [listings],
+    () => listings.filter((l) => !!userId && l.ownerId === userId),
+    [listings, userId],
   );
 
   const computedXp = useMemo(() => profile.xp, [profile.xp]);

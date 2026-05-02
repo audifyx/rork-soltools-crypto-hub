@@ -22,6 +22,8 @@ export interface LaunchToken {
   verified: boolean;
   createdAt: number;
   submittedBy: "user" | "system";
+  /** Auth user id of the submitter, when this token came from pump_v5_submissions. */
+  ownerId?: string | null;
   price?: number | null;
   change24hPct?: number | null;
   liquidityUsd?: number | null;

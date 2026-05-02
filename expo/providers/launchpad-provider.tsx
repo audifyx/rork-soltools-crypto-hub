@@ -73,7 +73,7 @@ const VALID_VENUES: LaunchVenue[] = [
   "other",
 ];
 
-function rowToToken(row: Record<string, unknown>, currentUserId: string | null): LaunchToken {
+function rowToToken(row: Record<string, unknown>, _currentUserId: string | null): LaunchToken {
   const venueRaw = String(row.status ?? "other").toLowerCase();
   const venue: LaunchVenue = (VALID_VENUES.includes(venueRaw as LaunchVenue)
     ? venueRaw
@@ -99,7 +99,11 @@ function rowToToken(row: Record<string, unknown>, currentUserId: string | null):
     createdAt: row.created_at
       ? new Date(row.created_at as string).getTime()
       : Date.now(),
-    submittedBy: currentUserId && row.user_id === currentUserId ? "user" : "system",
+    // Anything coming out of pump_v5_submissions is a real user submission;
+    // we keep the actual owner id so screens can still distinguish "mine" vs
+    // "other users". This is what allows users to see each other's listings.
+    submittedBy: "user",
+    ownerId: (row.user_id as string | null) ?? null,
     price: null,
     change24hPct: null,
     liquidityUsd: Number(row.liquidity_usd ?? 0) || null,
@@ -196,6 +200,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
           if (error) throw error;
           const token = rowToToken(data as Record<string, unknown>, userId);
           token.submittedBy = "user";
+          token.ownerId = userId;
           const prev =
             (queryClient.getQueryData<LaunchToken[]>([
               "launchpad",
@@ -219,6 +224,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
         hot: false,
         verified: false,
         submittedBy: "user",
+        ownerId: userId ?? null,
       };
       const prev =
         (queryClient.getQueryData<LaunchToken[]>([
@@ -333,7 +339,10 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
         }),
     );
     if (tab === "featured") items = items.filter((t) => t.featured);
-    if (tab === "mine") items = items.filter((t) => t.submittedBy === "user");
+    if (tab === "mine")
+      items = items.filter(
+        (t) => !!userId && t.ownerId === userId,
+      );
     if (venue !== "all") items = items.filter((t) => t.venue === venue);
     const q = search.trim().toLowerCase();
     if (q.length > 0) {
@@ -360,7 +369,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
       }
     });
     return items;
-  }, [listings, tab, venue, search, sort]);
+  }, [listings, tab, venue, search, sort, userId]);
 
   const stats = useMemo<LaunchpadStats>(
     () => ({

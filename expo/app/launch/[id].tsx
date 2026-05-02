@@ -54,6 +54,7 @@ import DexChart from "@/components/DexChart";
 import { useDexToken, type DexPair } from "@/lib/api/dexscreener";
 import { useTokenOverview } from "@/lib/api/market";
 import { getTokenSecurity } from "@/lib/api/birdeye";
+import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { fmtNum, fmtPct, fmtPrice, fmtUsd } from "@/utils/format";
 import { getTokenBanner, getTokenLogo } from "@/utils/token-art";
@@ -97,6 +98,7 @@ export default function LaunchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { getById, upvoted, toggleUpvote, remove } = useLaunchpad();
+  const { userId } = useAuth();
   const [copied, setCopied] = useState<boolean>(false);
   const [watching, setWatching] = useState<boolean>(false);
   const [tab, setTab] = useState<TabKey>("overview");
@@ -274,7 +276,7 @@ export default function LaunchDetailScreen() {
     );
   }
 
-  const isMine = token.submittedBy === "user";
+  const isMine = !!userId && token.ownerId === userId;
   const isUpvoted = !!upvoted[token.id];
 
   const flashBg = flash.interpolate({
