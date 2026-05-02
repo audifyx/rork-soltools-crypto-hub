@@ -1,13 +1,15 @@
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Clock, Plus, Radio, Sparkles } from "lucide-react-native";
+import { useRouter } from "expo-router";
+import { Plus, Sparkles } from "lucide-react-native";
 import React, { useMemo } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import Colors from "@/constants/colors";
-import { usePlatformUsers } from "@/providers/profile-provider";
 import { useApp } from "@/providers/app-provider";
+import { useAuth } from "@/providers/auth-provider";
+import { useStories, type StoryGroup } from "@/providers/stories-provider";
 
 interface StoriesRailProps {
   onCompose?: () => void;
@@ -23,18 +25,49 @@ const STORY_GRADIENTS: [string, string][] = [
   [Colors.mint, Colors.violet],
 ];
 
-/**
- * Horizontal stories rail at the top of the home feed: "Your Live", a "Go Live"
- * call to action, then real online users from the platform with gradient rings.
- */
-export default function StoriesRail({ onCompose, onOpenUser }: StoriesRailProps) {
-  const { profile } = useApp();
-  const onlineUsers = usePlatformUsers({ q: "", onlineOnly: true });
+const SEEN_RING: [string, string] = ["rgba(255,255,255,0.18)", "rgba(255,255,255,0.18)"];
 
-  const items = useMemo(
-    () => (onlineUsers.data ?? []).slice(0, 12),
-    [onlineUsers.data],
-  );
+function gradientFor(seed: string, seen: boolean): [string, string] {
+  if (seen) return SEEN_RING;
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
+  return STORY_GRADIENTS[Math.abs(h) % STORY_GRADIENTS.length];
+}
+
+/**
+ * Horizontal stories rail at the top of the home feed: tap your circle to
+ * post (or view your active story), then real story groups from other users.
+ */
+export default function StoriesRail({ onOpenUser }: StoriesRailProps) {
+  const router = useRouter();
+  const { profile } = useApp();
+  const { isAuthenticated } = useAuth();
+  const { myGroup, otherGroups, isLoading } = useStories();
+
+  const items = useMemo(() => otherGroups.slice(0, 24), [otherGroups]);
+
+  const goCreate = () => {
+    Haptics.selectionAsync().catch(() => {});
+    if (!isAuthenticated) {
+      router.push("/auth");
+      return;
+    }
+    router.push("/story/create");
+  };
+
+  const openMine = () => {
+    Haptics.selectionAsync().catch(() => {});
+    if (!myGroup) {
+      goCreate();
+      return;
+    }
+    router.push({ pathname: "/story/[id]", params: { id: myGroup.userId } });
+  };
+
+  const openGroup = (g: StoryGroup) => {
+    Haptics.selectionAsync().catch(() => {});
+    router.push({ pathname: "/story/[id]", params: { id: g.userId } });
+  };
 
   return (
     <ScrollView
@@ -43,9 +76,15 @@ export default function StoriesRail({ onCompose, onOpenUser }: StoriesRailProps)
       contentContainerStyle={styles.row}
       testID="stories-rail"
     >
-      <Pressable onPress={onCompose} style={styles.tile} testID="story-add">
+      {/* Your story tile */}
+      <Pressable
+        onPress={openMine}
+        onLongPress={goCreate}
+        style={styles.tile}
+        testID="story-add"
+      >
         <LinearGradient
-          colors={[Colors.mint, Colors.cyan]}
+          colors={myGroup ? gradientFor(myGroup.userId, false) : [Colors.mint, Colors.cyan]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.ring}
@@ -56,56 +95,37 @@ export default function StoriesRail({ onCompose, onOpenUser }: StoriesRailProps)
             ) : (
               <View style={[styles.avatar, { backgroundColor: profile.avatarColor }]}>
                 <Text style={styles.avatarText}>
-                  {profile.displayName.slice(0, 1).toUpperCase()}
+                  {(profile.displayName || "Y").slice(0, 1).toUpperCase()}
                 </Text>
               </View>
             )}
-            <View style={styles.plus}>
+            <Pressable
+              onPress={goCreate}
+              style={styles.plus}
+              hitSlop={6}
+              testID="story-add-btn"
+            >
               <Plus color={Colors.ink} size={10} strokeWidth={4} />
-            </View>
+            </Pressable>
           </View>
         </LinearGradient>
         <Text style={styles.label} numberOfLines={1}>
-          You
+          {myGroup ? "Your story" : "Add story"}
         </Text>
       </Pressable>
 
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync().catch(() => {});
-          Alert.alert(
-            "Live streams · Coming soon",
-            "Voice & video rooms are getting their own dedicated tab. We're polishing the experience — check back shortly.",
-          );
-        }}
-        style={styles.tile}
-        testID="story-live"
-      >
-        <View style={[styles.ring, styles.soonRing]}>
-          <View style={[styles.inner, { backgroundColor: "rgba(255,255,255,0.05)" }]}>
-            <View style={styles.live}>
-              <Radio color={Colors.muted} size={20} strokeWidth={2.4} />
-            </View>
-            <View style={styles.soonPill}>
-              <Clock color={Colors.ink} size={8} strokeWidth={3} />
-              <Text style={styles.soonText}>SOON</Text>
-            </View>
-          </View>
-        </View>
-        <Text style={[styles.label, { color: Colors.muted }]} numberOfLines={1}>
-          Live · soon
-        </Text>
-      </Pressable>
-
-      {items.map((u, i) => {
-        const grad = STORY_GRADIENTS[i % STORY_GRADIENTS.length];
-        const initial = (u.display_name ?? u.username ?? "?").slice(0, 1).toUpperCase();
+      {/* Other users' stories */}
+      {items.map((g) => {
+        const seen = !g.hasUnseen;
+        const grad = gradientFor(g.userId, seen);
+        const initial = (g.displayName ?? g.username ?? "?").slice(0, 1).toUpperCase();
         return (
           <Pressable
-            key={u.user_id}
-            onPress={() => u.username && onOpenUser?.(u.username)}
+            key={g.userId}
+            onPress={() => openGroup(g)}
+            onLongPress={() => g.username && onOpenUser?.(g.username)}
             style={styles.tile}
-            testID={`story-${u.user_id}`}
+            testID={`story-${g.userId}`}
           >
             <LinearGradient
               colors={grad}
@@ -114,11 +134,11 @@ export default function StoriesRail({ onCompose, onOpenUser }: StoriesRailProps)
               style={styles.ring}
             >
               <View style={styles.inner}>
-                {u.avatar_url ? (
-                  <Image source={{ uri: u.avatar_url }} style={styles.avatar} contentFit="cover" />
+                {g.avatarUrl ? (
+                  <Image source={{ uri: g.avatarUrl }} style={styles.avatar} contentFit="cover" />
                 ) : (
                   <LinearGradient
-                    colors={grad}
+                    colors={grad === SEEN_RING ? [Colors.cardSoft, Colors.card] : grad}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.avatar}
@@ -126,24 +146,28 @@ export default function StoriesRail({ onCompose, onOpenUser }: StoriesRailProps)
                     <Text style={styles.avatarText}>{initial}</Text>
                   </LinearGradient>
                 )}
-                {u.is_online ? <View style={styles.online} /> : null}
+                {g.stories.length > 1 ? (
+                  <View style={styles.countBadge}>
+                    <Text style={styles.countBadgeText}>{g.stories.length}</Text>
+                  </View>
+                ) : null}
               </View>
             </LinearGradient>
-            <Text style={styles.label} numberOfLines={1}>
-              {u.display_name ?? u.username ?? "user"}
+            <Text style={[styles.label, seen && { color: Colors.muted }]} numberOfLines={1}>
+              {g.displayName ?? g.username ?? "user"}
             </Text>
           </Pressable>
         );
       })}
 
-      {items.length === 0 ? (
+      {items.length === 0 && !isLoading ? (
         <View style={[styles.tile, styles.emptyTile]} testID="story-empty">
-          <View style={[styles.ring, { padding: 0 }]}>
+          <View style={[styles.ring, styles.soonRing]}>
             <View style={[styles.inner, { backgroundColor: "rgba(255,255,255,0.04)" }]}>
               <Sparkles color={Colors.muted} size={20} strokeWidth={2.4} />
             </View>
           </View>
-          <Text style={[styles.label, { color: Colors.muted }]}>No one online</Text>
+          <Text style={[styles.label, { color: Colors.muted }]}>No stories yet</Text>
         </View>
       ) : null}
     </ScrollView>
@@ -172,33 +196,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  liveRing: {
-    backgroundColor: "rgba(255,93,143,0.3)",
-    borderWidth: 1.5,
-    borderColor: Colors.rose,
-  },
   soonRing: {
     backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.12)",
     borderStyle: "dashed",
-  },
-  soonPill: {
-    position: "absolute",
-    bottom: -4,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 6,
-    backgroundColor: Colors.text,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  soonText: {
-    color: Colors.ink,
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 0.6,
   },
   inner: {
     width: "100%",
@@ -224,45 +226,33 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: -2,
     right: -2,
-    width: 18,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.mint,
+    borderWidth: 2.5,
+    borderColor: Colors.ink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 18,
     height: 18,
+    paddingHorizontal: 5,
     borderRadius: 9,
-    backgroundColor: Colors.mint,
-    borderWidth: 2,
-    borderColor: Colors.ink,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  online: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Colors.mint,
-    borderWidth: 2,
-    borderColor: Colors.ink,
-  },
-  live: {
-    width: "100%",
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  liveDot: {
-    position: "absolute",
-    bottom: -4,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 6,
     backgroundColor: Colors.rose,
+    borderWidth: 2,
+    borderColor: Colors.ink,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  liveText: {
+  countBadgeText: {
     color: Colors.text,
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "900",
-    letterSpacing: 0.6,
   },
   label: {
     color: Colors.text,

@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 
 const BUCKET = "profile-media";
 const POSTS_BUCKET = "post-images";
+const STORY_BUCKET = "story-media";
 
 export type ProfileMediaKind = "avatar" | "banner";
 
@@ -94,5 +95,41 @@ export async function uploadPostImage(userId: string, uri: string): Promise<stri
   }
 
   const { data } = supabase.storage.from(POSTS_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/**
+ * Uploads a local image URI to the story-media bucket. Returns a public URL.
+ * Stories are ephemeral but the underlying media is kept until the row expires.
+ */
+export async function uploadStoryMedia(userId: string, uri: string): Promise<string> {
+  const ext = extFromUri(uri, "jpg");
+  const path = `${userId}/story-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  const ct = contentType(ext);
+
+  let body: ArrayBuffer | Blob;
+  try {
+    if (Platform.OS === "web") {
+      const res = await fetch(uri);
+      body = await res.blob();
+    } else {
+      const res = await fetch(uri);
+      body = await res.arrayBuffer();
+    }
+  } catch (e) {
+    console.log("[upload] story fetch failed", e);
+    throw new Error("Could not read selected image");
+  }
+
+  const { error } = await supabase.storage
+    .from(STORY_BUCKET)
+    .upload(path, body as ArrayBuffer, { contentType: ct, upsert: true });
+
+  if (error) {
+    console.log("[upload] story storage error", error.message);
+    throw new Error(error.message);
+  }
+
+  const { data } = supabase.storage.from(STORY_BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
