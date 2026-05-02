@@ -53,9 +53,9 @@ export default function AlphaInsightsCard() {
       out.push({
         id: `new-${newest.id}`,
         emoji: "⚡",
-        title: `Fresh launch · $${newest.ticker.replace("$", "")}`,
-        body: `Listed ${ageMin}m ago. Snipe-window is closing — DYOR before aping.`,
-        tag: "NEW PAIR",
+        title: `New on Sol Tools · ${newest.ticker.replace("$", "")}`,
+        body: `Listed on Sol Tools ${ageMin}m ago. Pair may be older — this means newly indexed here, not a fresh LP.`,
+        tag: "NEW LISTING",
         tagColor: Colors.orange,
         href: { pathname: "/launch/[id]", params: { id: newest.id } },
       });
@@ -176,7 +176,7 @@ export default function AlphaInsightsCard() {
               <View style={[styles.tag, { borderColor: `${it.tagColor}55`, backgroundColor: `${it.tagColor}1A` }]}>
                 {it.tag === "MOMENTUM" ? (
                   <TrendingUp color={it.tagColor} size={9} strokeWidth={3} />
-                ) : it.tag === "NEW PAIR" ? (
+                ) : it.tag === "NEW LISTING" ? (
                   <Zap color={it.tagColor} size={9} strokeWidth={3} />
                 ) : it.tag === "WHALES" ? (
                   <Flame color={it.tagColor} size={9} strokeWidth={3} />
