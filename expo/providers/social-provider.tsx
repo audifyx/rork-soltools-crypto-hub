@@ -113,6 +113,14 @@ const VALID_SPACE_CATEGORIES: Space["category"][] = [
   "launches",
 ];
 
+const HIDDEN_COMMUNITY_SLUGS = new Set<string>(["soltools-feed"]);
+
+function isVisibleCommunityRow(row: Pick<CommunityRow, "slug" | "name">): boolean {
+  const slug = (row.slug ?? "").trim().toLowerCase();
+  const name = row.name.trim().toLowerCase();
+  return !HIDDEN_COMMUNITY_SLUGS.has(slug) && name !== "soltools feed";
+}
+
 type CommunityRow = {
   id: string;
   name: string;
@@ -352,9 +360,11 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             }),
           );
         }
-        return rows.map((r) =>
-          rowToCommunity(r, r.owner_id ? ownerHandles.get(r.owner_id) ?? "" : ""),
-        );
+        return rows
+          .filter(isVisibleCommunityRow)
+          .map((r) =>
+            rowToCommunity(r, r.owner_id ? ownerHandles.get(r.owner_id) ?? "" : ""),
+          );
       };
 
       try {
@@ -369,12 +379,14 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         });
         if (error) throw error;
         const rows = (data ?? []) as CommunityWithOwnerRow[];
-        return rows.map((r) =>
-          rowToCommunity(
-            r,
-            ownerHandleFromUsername(r.owner_username ?? r.owner_handle ?? null),
-          ),
-        );
+        return rows
+          .filter(isVisibleCommunityRow)
+          .map((r) =>
+            rowToCommunity(
+              r,
+              ownerHandleFromUsername(r.owner_username ?? r.owner_handle ?? null),
+            ),
+          );
       } catch (e) {
         console.log("[social] communities fetch failed", e);
         return [];
