@@ -3,6 +3,7 @@ import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
+import { normalizeMediaUrl } from "@/lib/media";
 import { supabase } from "@/lib/supabase";
 import { uploadPostImage } from "@/lib/upload";
 import type { CustomBadge } from "@/providers/profile-provider";
@@ -422,8 +423,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
               handle: data.username ? `@${data.username}` : base.handle,
               displayName: ((data.display_name as string) || (data.username as string)) ?? base.displayName,
               bio: (data.bio as string) ?? base.bio,
-              avatarUrl: (data.avatar_url as string) ?? base.avatarUrl,
-              bannerUrl: (data.banner_url as string) ?? base.bannerUrl,
+              avatarUrl: normalizeMediaUrl(data.avatar_url) ?? base.avatarUrl,
+              bannerUrl: normalizeMediaUrl(data.banner_url) ?? base.bannerUrl,
               avatarColor: (data.avatar_color as string) ?? base.avatarColor,
               bannerFrom: (data.banner_from as string) ?? base.bannerFrom,
               bannerTo: (data.banner_to as string) ?? base.bannerTo,
@@ -893,8 +894,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
             if ("handle" in patch) fallback.username = (next.handle.replace(/^@/, "").trim() || null) as string | null;
             if ("displayName" in patch) fallback.display_name = next.displayName || null;
             if ("bio" in patch) fallback.bio = next.bio || null;
-            if ("avatarUrl" in patch) fallback.avatar_url = next.avatarUrl && next.avatarUrl.trim() ? next.avatarUrl : null;
-            if ("bannerUrl" in patch) fallback.banner_url = next.bannerUrl && next.bannerUrl.trim() ? next.bannerUrl : null;
+            if ("avatarUrl" in patch) fallback.avatar_url = normalizeMediaUrl(next.avatarUrl);
+            if ("bannerUrl" in patch) fallback.banner_url = normalizeMediaUrl(next.bannerUrl);
             if ("avatarColor" in patch) fallback.avatar_color = next.avatarColor || null;
             if ("bannerFrom" in patch) fallback.banner_from = next.bannerFrom || null;
             if ("bannerTo" in patch) fallback.banner_to = next.bannerTo || null;

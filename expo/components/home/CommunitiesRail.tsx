@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { BadgeCheck, Flame, Plus, Users } from "lucide-react-native";
@@ -91,11 +92,19 @@ export default function CommunitiesRail() {
                 end={{ x: 1, y: 1 }}
                 style={styles.cardInner}
               >
+                {c.bannerUrl ? (
+                  <Image source={{ uri: c.bannerUrl }} style={styles.bannerImage} contentFit="cover" />
+                ) : null}
+                <View style={styles.bannerShade} pointerEvents="none" />
                 <View style={styles.cardTop}>
                   <View
                     style={[styles.avatar, { backgroundColor: `${c.accent[0]}26` }]}
                   >
-                    <Text style={styles.avatarEmoji}>{c.iconEmoji}</Text>
+                    {c.avatarUrl ? (
+                      <Image source={{ uri: c.avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                    ) : (
+                      <Text style={styles.avatarEmoji}>{c.iconEmoji}</Text>
+                    )}
                   </View>
                   <View style={styles.topRight}>
                     {c.verified ? (
@@ -230,6 +239,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(8,12,16,0.85)",
   },
   cardInner: { padding: 14, minHeight: 168 },
+  bannerImage: { ...StyleSheet.absoluteFillObject, opacity: 0.78 },
+  bannerShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(3,7,8,0.42)",
+  },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   avatar: {
     width: 42,
@@ -237,6 +251,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   avatarEmoji: { fontSize: 22 },
   topRight: { flexDirection: "row", alignItems: "center", gap: 6 },

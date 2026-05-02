@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Colors from "@/constants/colors";
+import { normalizeMediaUrl } from "@/lib/media";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -161,8 +162,8 @@ function applyPersistedCommunityRow(community: Community, row: PersistedCommunit
   if (typeof row.created_at === "string" && row.created_at.length > 0) {
     community.createdAt = new Date(row.created_at).getTime();
   }
-  if (row.avatar_url !== undefined) community.avatarUrl = row.avatar_url ?? null;
-  if (row.banner_url !== undefined) community.bannerUrl = row.banner_url ?? null;
+  if (row.avatar_url !== undefined) community.avatarUrl = normalizeMediaUrl(row.avatar_url);
+  if (row.banner_url !== undefined) community.bannerUrl = normalizeMediaUrl(row.banner_url);
 }
 
 function rowToCommunity(row: CommunityRow, ownerHandle: string): Community {
@@ -198,8 +199,8 @@ function rowToCommunity(row: CommunityRow, ownerHandle: string): Community {
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     rules,
     tags,
-    avatarUrl: row.avatar_url ?? null,
-    bannerUrl: row.banner_url ?? null,
+    avatarUrl: normalizeMediaUrl(row.avatar_url),
+    bannerUrl: normalizeMediaUrl(row.banner_url),
   };
 }
 
@@ -711,8 +712,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         createdAt: Date.now(),
         rules: input.rules.filter((r) => r.trim().length > 0),
         tags: input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean),
-        avatarUrl: input.avatarUrl ?? null,
-        bannerUrl: input.bannerUrl ?? null,
+        avatarUrl: normalizeMediaUrl(input.avatarUrl),
+        bannerUrl: normalizeMediaUrl(input.bannerUrl),
       };
 
       let persistedRemotely = false;
@@ -730,8 +731,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             p_rules: community.rules,
             p_tags: community.tags,
             p_is_private: !!input.isPrivate,
-            p_avatar_url: community.avatarUrl ?? null,
-            p_banner_url: community.bannerUrl ?? null,
+            p_avatar_url: normalizeMediaUrl(community.avatarUrl),
+            p_banner_url: normalizeMediaUrl(community.bannerUrl),
           });
           if (error) throw error;
           const row = Array.isArray(data)
@@ -757,8 +758,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
                 rules: community.rules,
                 tags: community.tags,
                 is_private: !!input.isPrivate,
-                avatar_url: community.avatarUrl ?? null,
-                banner_url: community.bannerUrl ?? null,
+                avatar_url: normalizeMediaUrl(community.avatarUrl),
+                banner_url: normalizeMediaUrl(community.bannerUrl),
               })
               .select(
                 "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,avatar_url,banner_url,created_at",
@@ -825,8 +826,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     async (communityId: string, patch: { avatarUrl?: string | null; bannerUrl?: string | null }) => {
       try {
         const update: Record<string, string | null> = {};
-        if (patch.avatarUrl !== undefined) update.avatar_url = patch.avatarUrl;
-        if (patch.bannerUrl !== undefined) update.banner_url = patch.bannerUrl;
+        if (patch.avatarUrl !== undefined) update.avatar_url = normalizeMediaUrl(patch.avatarUrl);
+        if (patch.bannerUrl !== undefined) update.banner_url = normalizeMediaUrl(patch.bannerUrl);
         if (Object.keys(update).length === 0) return;
         if (isAuthenticated && userId && !communityId.startsWith("local-")) {
           const { error } = await supabase
@@ -839,8 +840,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           c.id === communityId
             ? {
                 ...c,
-                avatarUrl: patch.avatarUrl !== undefined ? patch.avatarUrl : c.avatarUrl,
-                bannerUrl: patch.bannerUrl !== undefined ? patch.bannerUrl : c.bannerUrl,
+                avatarUrl: patch.avatarUrl !== undefined ? normalizeMediaUrl(patch.avatarUrl) : c.avatarUrl,
+                bannerUrl: patch.bannerUrl !== undefined ? normalizeMediaUrl(patch.bannerUrl) : c.bannerUrl,
               }
             : c;
         const next = localCommunities.map(applyPatch);
@@ -852,6 +853,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         qc.invalidateQueries({ queryKey: ["social", "communities"] });
       } catch (e) {
         console.log("[social] updateCommunityMedia failed", e);
+        throw e;
       }
     },
     [isAuthenticated, userId, localCommunities, qc, localKey],

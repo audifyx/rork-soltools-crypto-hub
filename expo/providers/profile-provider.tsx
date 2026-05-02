@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 
+import { normalizeMediaUrl } from "@/lib/media";
 import { supabase } from "@/lib/supabase";
 import { uploadProfileMedia, type ProfileMediaKind } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
@@ -247,8 +248,8 @@ function publicProfileFromRow(row: Record<string, unknown>): PublicProfile {
     username: (row.username as string | null) ?? null,
     display_name: (row.display_name as string | null) ?? null,
     bio: (row.bio as string | null) ?? null,
-    avatar_url: (row.avatar_url as string | null) ?? null,
-    banner_url: (row.banner_url as string | null) ?? null,
+    avatar_url: normalizeMediaUrl(row.avatar_url),
+    banner_url: normalizeMediaUrl(row.banner_url),
     avatar_color: (row.avatar_color as string | null) ?? null,
     banner_from: (row.banner_from as string | null) ?? null,
     banner_to: (row.banner_to as string | null) ?? null,
@@ -275,7 +276,7 @@ function profileSummaryFromRow(row: Record<string, unknown>): ProfileSummary {
     user_id: String(row.user_id ?? row.id),
     username: (row.username as string | null) ?? null,
     display_name: (row.display_name as string | null) ?? null,
-    avatar_url: (row.avatar_url as string | null) ?? null,
+    avatar_url: normalizeMediaUrl(row.avatar_url),
     verified: !!row.verified,
     custom_badges: normalizeBadges(row.custom_badges),
     followers_count: Number(row.followers_count ?? 0),
@@ -287,8 +288,8 @@ function platformUserFromRow(row: Record<string, unknown>): PlatformUser {
     user_id: String(row.user_id ?? row.id),
     username: (row.username as string | null) ?? null,
     display_name: (row.display_name as string | null) ?? null,
-    avatar_url: (row.avatar_url as string | null) ?? null,
-    banner_url: (row.banner_url as string | null) ?? null,
+    avatar_url: normalizeMediaUrl(row.avatar_url),
+    banner_url: normalizeMediaUrl(row.banner_url),
     bio: (row.bio as string | null) ?? null,
     verified: !!row.verified,
     custom_badges: normalizeBadges(row.custom_badges),
@@ -342,7 +343,7 @@ export function useFollowList(userId: string | null | undefined, kind: "follower
           user_id: String(r.user_id),
           username: (r.username as string | null) ?? null,
           display_name: (r.display_name as string | null) ?? null,
-          avatar_url: (r.avatar_url as string | null) ?? null,
+          avatar_url: normalizeMediaUrl(r.avatar_url),
           verified: !!r.verified,
           custom_badges: normalizeBadges(r.custom_badges),
         }),
