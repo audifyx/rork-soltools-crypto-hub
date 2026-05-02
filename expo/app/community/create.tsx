@@ -59,33 +59,6 @@ const CATEGORIES: { id: Category; label: string; emoji: string }[] = [
   { id: "alpha", label: "Alpha", emoji: "🔮" },
 ];
 
-const EMOJI_PICKS = [
-  "🚀",
-  "✨",
-  "🦄",
-  "🐋",
-  "🧠",
-  "📈",
-  "🎨",
-  "☀️",
-  "🔥",
-  "💎",
-  "🪐",
-  "⚡",
-  "🐸",
-  "🌈",
-  "🦊",
-  "🦅",
-  "🐉",
-  "🌊",
-  "👽",
-  "🛸",
-  "💀",
-  "🦾",
-  "🎯",
-  "🏴‍☠️",
-];
-
 const PALETTES: { id: string; colors: [string, string] }[] = [
   { id: "mint", colors: [Colors.mint, Colors.cyan] },
   { id: "cyan", colors: [Colors.cyan, Colors.violet] },
@@ -335,7 +308,6 @@ export default function CreateCommunityScreen() {
                 handleValid={handleValid}
                 handleTaken={handleTaken}
                 emoji={emoji}
-                onChangeEmoji={setEmoji}
                 avatarUrl={avatarUrl}
                 bannerUrl={bannerUrl}
                 uploadingKind={uploadingKind}
@@ -582,7 +554,6 @@ function StepIdentity({
   handleValid,
   handleTaken,
   emoji,
-  onChangeEmoji,
   avatarUrl,
   bannerUrl,
   uploadingKind,
@@ -598,7 +569,6 @@ function StepIdentity({
   handleValid: boolean;
   handleTaken: boolean;
   emoji: string;
-  onChangeEmoji: (t: string) => void;
   avatarUrl: string | null;
   bannerUrl: string | null;
   uploadingKind: "avatar" | "banner" | null;
@@ -689,59 +659,45 @@ function StepIdentity({
         ) : null}
       </Pressable>
 
-      <FieldLabel icon={ImageIcon}>Profile image (optional)</FieldLabel>
-      <View style={styles.avatarPickRow}>
-        <Pressable
-          onPress={onPickAvatar}
-          style={styles.avatarPick}
-          testID="pick-avatar"
-          disabled={uploadingKind !== null}
-        >
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
-          ) : null}
-          <View style={styles.avatarPickOverlay}>
-            {uploadingKind === "avatar" ? (
-              <ActivityIndicator color={Colors.text} />
-            ) : (
-              <Camera color={Colors.text} size={20} strokeWidth={2.6} />
-            )}
-          </View>
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.avatarHelpTitle}>
-            {avatarUrl ? "Looking sharp." : "Add a profile picture"}
-          </Text>
-          <Text style={styles.avatarHelpBody}>
-            Square image, shown on cards and headers. You can skip and use just the emoji vibe.
-          </Text>
-          {avatarUrl ? (
-            <Pressable onPress={onClearAvatar} hitSlop={6} style={styles.removeLink}>
-              <Text style={styles.removeLinkText}>Remove image</Text>
-            </Pressable>
-          ) : null}
+      <FieldLabel icon={ImageIcon}>Community image (optional)</FieldLabel>
+      <Pressable
+        onPress={onPickAvatar}
+        style={styles.communityImagePick}
+        testID="pick-avatar"
+        disabled={uploadingKind !== null}
+      >
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        ) : null}
+        <View style={styles.communityImagePickOverlay}>
+          {uploadingKind === "avatar" ? (
+            <ActivityIndicator color={Colors.text} />
+          ) : (
+            <>
+              <Camera color={Colors.text} size={22} strokeWidth={2.6} />
+              <Text style={styles.communityImagePickTitle}>
+                {avatarUrl ? "Change community image" : "Tap to upload community image"}
+              </Text>
+              <Text style={styles.communityImagePickBody}>
+                Square image shown on cards, headers, and search results.
+              </Text>
+            </>
+          )}
         </View>
-      </View>
-
-      <FieldLabel icon={Sparkles}>Pick a vibe</FieldLabel>
-      <View style={styles.emojiGrid}>
-        {EMOJI_PICKS.map((e) => {
-          const active = e === emoji;
-          return (
-            <Pressable
-              key={e}
-              onPress={() => {
-                Haptics.selectionAsync().catch(() => {});
-                onChangeEmoji(e);
-              }}
-              style={[styles.emojiBtn, active && styles.emojiBtnActive]}
-              testID={`emoji-${e}`}
-            >
-              <Text style={styles.emojiText}>{e}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+        {avatarUrl ? (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onClearAvatar();
+            }}
+            hitSlop={8}
+            style={styles.clearBtn}
+            testID="clear-avatar"
+          >
+            <X color={Colors.text} size={12} strokeWidth={3} />
+          </Pressable>
+        ) : null}
+      </Pressable>
     </View>
   );
 }
@@ -999,10 +955,6 @@ function StepReview({
       <View style={styles.reviewRow}>
         <Text style={styles.reviewLabel}>Handle</Text>
         <Text style={styles.reviewValue}>@{handle}</Text>
-      </View>
-      <View style={styles.reviewRow}>
-        <Text style={styles.reviewLabel}>Vibe</Text>
-        <Text style={styles.reviewValue}>{emoji}</Text>
       </View>
       <View style={styles.reviewRow}>
         <Text style={styles.reviewLabel}>Category</Text>
@@ -1332,62 +1284,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.18)",
   },
-  avatarPickRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+  communityImagePick: {
     marginTop: 8,
-  },
-  avatarPick: {
-    width: 76,
-    height: 76,
-    borderRadius: 22,
+    height: 148,
+    borderRadius: 18,
     overflow: "hidden",
     backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
+    borderStyle: "dashed",
   },
-  avatarPickOverlay: {
+  communityImagePickOverlay: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.2)",
+    gap: 6,
+    paddingHorizontal: 18,
+    backgroundColor: "rgba(0,0,0,0.28)",
   },
-  avatarHelpTitle: { color: Colors.text, fontSize: 13, fontWeight: "800" },
-  avatarHelpBody: {
+  communityImagePickTitle: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+  },
+  communityImagePickBody: {
     color: Colors.muted,
     fontSize: 11,
-    fontWeight: "600",
-    marginTop: 4,
+    fontWeight: "700",
+    textAlign: "center",
     lineHeight: 15,
   },
-  removeLink: { marginTop: 6 },
-  removeLinkText: {
-    color: Colors.rose,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  emojiGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 8,
-  },
-  emojiBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emojiBtnActive: {
-    backgroundColor: "rgba(85,245,178,0.16)",
-    borderColor: Colors.mint,
-  },
-  emojiText: { fontSize: 22 },
 
   chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   chip: {
