@@ -24,6 +24,7 @@ import {
   Skull,
   Sparkles,
   TrendingDown,
+  Users as UsersIcon,
   TrendingUp,
   Waves,
   Zap,
@@ -318,6 +319,16 @@ export default function HomeFeedScreen() {
               testID="search-btn"
             >
               <Search color={Colors.text} size={18} strokeWidth={2.4} />
+            </Pressable>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                router.push("/(tabs)/users");
+              }}
+              testID="users-btn"
+            >
+              <UsersIcon color={Colors.text} size={18} strokeWidth={2.4} />
             </Pressable>
             <Pressable
               style={styles.iconBtn}
