@@ -1145,6 +1145,17 @@ export default function ProfileScreen() {
         visible={editOpen}
         onClose={() => setEditOpen(false)}
         initial={profile}
+        avatarUrl={profile.avatarUrl ?? null}
+        bannerUrl={profile.bannerUrl ?? null}
+        isUploading={isUploading}
+        onPickAvatar={onPickAvatar}
+        onPickBanner={onPickBanner}
+        onClearAvatar={async () => {
+          await updateProfile({ avatarUrl: "" });
+        }}
+        onClearBanner={async () => {
+          await updateProfile({ bannerUrl: "" });
+        }}
         onSave={async (vals) => {
           await updateProfile(vals);
           setEditOpen(false);
@@ -1467,6 +1478,13 @@ function EditProfileModal({
   visible,
   onClose,
   initial,
+  avatarUrl,
+  bannerUrl,
+  isUploading,
+  onPickAvatar,
+  onPickBanner,
+  onClearAvatar,
+  onClearBanner,
   onSave,
 }: {
   visible: boolean;
@@ -1483,6 +1501,13 @@ function EditProfileModal({
     website: string;
     location: string;
   };
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+  isUploading: boolean;
+  onPickAvatar: () => Promise<void> | void;
+  onPickBanner: () => Promise<void> | void;
+  onClearAvatar: () => Promise<void> | void;
+  onClearBanner: () => Promise<void> | void;
   onSave: (vals: {
     displayName: string;
     handle: string;
@@ -1532,6 +1557,49 @@ function EditProfileModal({
 
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={styles.modalLabel}>BANNER</Text>
+            <Pressable
+              onPress={onPickBanner}
+              style={styles.uploadCard}
+              testID="upload-banner-card"
+              disabled={isUploading}
+            >
+              {bannerUrl ? (
+                <Image source={{ uri: bannerUrl }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+              ) : (
+                <LinearGradient
+                  colors={[initial.bannerFrom, initial.bannerTo]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              )}
+              <LinearGradient
+                colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.55)"]}
+                style={StyleSheet.absoluteFillObject}
+                pointerEvents="none"
+              />
+              <View style={styles.uploadCardOverlay}>
+                <Camera color={Colors.text} size={14} strokeWidth={2.8} />
+                <Text style={styles.uploadCardText}>
+                  {isUploading ? "Uploading\u2026" : bannerUrl ? "Change banner image" : "Upload custom banner"}
+                </Text>
+              </View>
+              {bannerUrl ? (
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onClearBanner();
+                  }}
+                  style={styles.uploadClearBtn}
+                  hitSlop={8}
+                  testID="clear-banner-image"
+                >
+                  <Trash2 color={Colors.text} size={12} strokeWidth={2.8} />
+                </Pressable>
+              ) : null}
+            </Pressable>
+
+            <Text style={[styles.modalLabel, { marginTop: 14 }]}>OR PICK A GRADIENT</Text>
             <View style={styles.bannerPickerRow}>
               {BANNERS.map((b) => {
                 const active = b.from === bannerFrom && b.to === bannerTo;
@@ -1555,6 +1623,52 @@ function EditProfileModal({
                   </Pressable>
                 );
               })}
+            </View>
+
+            <Text style={styles.modalLabel}>AVATAR</Text>
+            <View style={styles.avatarUploadRow}>
+              <Pressable
+                onPress={onPickAvatar}
+                style={styles.avatarUploadPreview}
+                testID="upload-avatar-card"
+                disabled={isUploading}
+              >
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+                ) : (
+                  <View style={[StyleSheet.absoluteFillObject, { backgroundColor: color, alignItems: "center", justifyContent: "center" }]}>
+                    <Text style={styles.avatarUploadInitial}>
+                      {(displayName || "S").slice(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.avatarUploadDot}>
+                  <Camera color={Colors.ink} size={11} strokeWidth={3} />
+                </View>
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Pressable
+                  onPress={onPickAvatar}
+                  style={styles.uploadBtn}
+                  testID="upload-avatar-btn"
+                  disabled={isUploading}
+                >
+                  <Camera color={Colors.text} size={13} strokeWidth={2.6} />
+                  <Text style={styles.uploadBtnText}>
+                    {isUploading ? "Uploading\u2026" : avatarUrl ? "Change photo" : "Upload photo"}
+                  </Text>
+                </Pressable>
+                {avatarUrl ? (
+                  <Pressable
+                    onPress={onClearAvatar}
+                    style={[styles.uploadBtn, styles.uploadBtnGhost]}
+                    testID="clear-avatar-image"
+                  >
+                    <Trash2 color={Colors.rose} size={12} strokeWidth={2.6} />
+                    <Text style={[styles.uploadBtnText, { color: Colors.rose }]}>Remove photo</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
 
             <Text style={styles.modalLabel}>AVATAR COLOR</Text>
@@ -2642,6 +2756,77 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 6,
   },
+  uploadCard: {
+    height: 110,
+    borderRadius: 16,
+    overflow: "hidden",
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    position: "relative",
+  },
+  uploadCardOverlay: {
+    position: "absolute",
+    left: 12,
+    bottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(3,7,8,0.55)",
+  },
+  uploadCardText: { color: Colors.text, fontSize: 12, fontWeight: "800", letterSpacing: 0.2 },
+  uploadClearBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(3,7,8,0.65)",
+  },
+  avatarUploadRow: { flexDirection: "row", gap: 12, marginTop: 8, alignItems: "center" },
+  avatarUploadPreview: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.10)",
+    position: "relative",
+  },
+  avatarUploadInitial: { color: Colors.ink, fontSize: 24, fontWeight: "900" },
+  avatarUploadDot: {
+    position: "absolute",
+    right: 2,
+    bottom: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.mint,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: Colors.ink,
+  },
+  uploadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.cardSoft,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    marginBottom: 6,
+  },
+  uploadBtnGhost: { backgroundColor: "transparent", borderColor: "rgba(255,93,143,0.25)" },
+  uploadBtnText: { color: Colors.text, fontSize: 13, fontWeight: "800" },
   bannerPickerRow: { flexDirection: "row", gap: 10, marginTop: 8, flexWrap: "wrap" },
   bannerPick: {
     width: 56,
