@@ -11,7 +11,7 @@
  *   5. Tokens flagged as honeypot / scam / unsafe / rug are dropped.
  *   6. Pump.fun bonding-curve tokens that never migrated to Raydium /
  *      Pumpswap / Meteora are hidden — only graduated, surviving devs.
- *   7. Severe price collapse (-90% in 24h) is treated as a likely rug.
+ *   7. Severe price collapse (-50% in 24h) is treated as a likely rug.
  *
  * The shape is intentionally permissive so any token-like object passes
  * through (Jupiter v2, DexScreener pair, internal LaunchToken, etc.).
@@ -20,7 +20,12 @@
 export const MIN_MARKET_CAP_USD = 10_000;
 export const MIN_LIQUIDITY_USD = 5_000;
 export const MAX_DEV_BALANCE_PCT = 5;
-export const RUG_DRAWDOWN_PCT = -90;
+/**
+ * Any token down 50% or more in 24h is considered a likely rug / dead coin
+ * and hidden from public feeds. Tightened from -90% after users were still
+ * seeing freshly collapsed coins (e.g. 2k MC at -71%).
+ */
+export const RUG_DRAWDOWN_PCT = -50;
 
 const SCAM_TAGS = new Set([
   "scam",
@@ -86,7 +91,9 @@ export function isSafeToken(s: SafetySignals): boolean {
   if (s.isHoneypot === true) return false;
   if (hasScamTag(s)) return false;
 
-  if ((s.marketCapUsd ?? 0) < MIN_MARKET_CAP_USD) return false;
+  // Missing market cap = fail. We never surface tokens we can't price.
+  if (typeof s.marketCapUsd !== "number" || s.marketCapUsd < MIN_MARKET_CAP_USD)
+    return false;
   if ((s.liquidityUsd ?? 0) < MIN_LIQUIDITY_USD) return false;
 
   if (looksUnmigrated(s)) return false;
