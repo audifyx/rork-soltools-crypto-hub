@@ -454,53 +454,32 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
   const postsByCommunityQuery = useCallback(
     async (id: string): Promise<CommunityPost[]> => {
       try {
-        const { data, error } = await supabase
-          .from("community_posts")
-          .select(
-            "id,user_id,community_id,content,ticker,change_pct,likes_count,comments_count,created_at",
-          )
-          .eq("community_id", id)
-          .order("created_at", { ascending: false })
-          .limit(100);
+        const { data, error } = await supabase.rpc("list_community_posts", {
+          target_community_id: id,
+          max_rows: 100,
+        });
         if (error) throw error;
-        const rows = data ?? [];
-        const userIds = Array.from(
-          new Set(rows.map((r) => r.user_id as string).filter(Boolean)),
-        );
-        let userMap = new Map<string, { handle: string; name: string; color: string }>();
-        if (userIds.length > 0) {
-          const { data: profs } = await supabase
-            .from("profiles")
-            .select("id,username,display_name,avatar_color")
-            .in("id", userIds);
-          userMap = new Map(
-            (profs ?? []).map((p) => [
-              p.id as string,
-              {
-                handle: p.username ? `@${p.username as string}` : "",
-                name:
-                  ((p.display_name as string | null) ?? (p.username as string | null) ?? "User") ||
-                  "User",
-                color: (p.avatar_color as string | null) ?? Colors.mint,
-              },
-            ]),
-          );
-        }
+        const rows = (data ?? []) as Record<string, unknown>[];
         return rows.map((r): CommunityPost => {
-          const u = userMap.get(r.user_id as string);
+          const username = (r.username as string | null) ?? "";
+          const display =
+            ((r.display_name as string | null) ?? username) || "User";
           return {
-            id: r.id as string,
+            id: String(r.id),
             communityId: (r.community_id as string) ?? id,
-            authorHandle: u?.handle ?? "",
-            authorName: u?.name ?? "User",
-            authorColor: u?.color ?? Colors.mint,
+            authorHandle: username ? `@${username}` : "",
+            authorName: display,
+            authorColor: (r.avatar_color as string | null) ?? Colors.mint,
             content: (r.content as string) ?? "",
             ticker: (r.ticker as string) ?? undefined,
             changePct: r.change_pct != null ? Number(r.change_pct) : undefined,
-            createdAt: r.created_at ? new Date(r.created_at as string).getTime() : Date.now(),
+            createdAt: r.created_at
+              ? new Date(r.created_at as string).getTime()
+              : Date.now(),
             likes: Number(r.likes_count ?? 0),
             comments: Number(r.comments_count ?? 0),
-            liked: false,
+            liked: !!r.liked,
+            pinned: !!r.pinned,
           };
         });
       } catch (e) {
