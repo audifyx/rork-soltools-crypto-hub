@@ -87,6 +87,11 @@ function tokenHaystack(t: LaunchToken): string {
     .toLowerCase();
 }
 
+function hasTag(t: LaunchToken, ...needles: string[]): boolean {
+  const tags = (t.tags ?? []).map((x) => x.toLowerCase());
+  return needles.some((n) => tags.includes(n.toLowerCase()));
+}
+
 const CATEGORIES: Category[] = [
   {
     id: "memes",
@@ -94,7 +99,8 @@ const CATEGORIES: Category[] = [
     Icon: Flame,
     tone: Colors.orange,
     match: (t) =>
-      /meme|dog|cat|pepe|frog|inu|shib|wif|bonk|popcat|moon|chad|wojak|doge/i.test(
+      hasTag(t, "meme", "pump", "moonshot", "pumpfun") ||
+      /\bmeme\b|\bdog\b|\bcat\b|pepe|frog|\binu\b|shib|\bwif\b|bonk|popcat|\bmoon\b|chad|wojak|doge|fart|trump|\bmog\b/i.test(
         tokenHaystack(t),
       ),
   },
@@ -103,35 +109,51 @@ const CATEGORIES: Category[] = [
     label: "AI",
     Icon: Bot,
     tone: Colors.cyan,
-    match: (t) => /\bai\b|agent|gpt|llm|neural|gemini|claude|grok|brain/i.test(tokenHaystack(t)),
+    match: (t) =>
+      hasTag(t, "ai", "agent") ||
+      /\bai\b|agent|\bgpt\b|\bllm\b|neural|gemini|claude|grok|brain|robot|machine/i.test(
+        tokenHaystack(t),
+      ),
   },
   {
     id: "gaming",
     label: "Gaming",
     Icon: Gamepad2,
     tone: Colors.mint,
-    match: (t) => /game|gaming|play|p2e|arcade|quest|guild|esports/i.test(tokenHaystack(t)),
+    match: (t) =>
+      hasTag(t, "gaming", "game", "gamefi") ||
+      /\bgame|gaming|\bplay\b|p2e|arcade|quest|guild|esports|pixel/i.test(tokenHaystack(t)),
   },
   {
     id: "defi",
     label: "DeFi",
     Icon: Layers,
     tone: Colors.cyan,
-    match: (t) => /defi|swap|lend|yield|liquid|stake|vault|perp|amm|dex/i.test(tokenHaystack(t)),
+    match: (t) =>
+      hasTag(t, "defi", "lst", "stablecoin", "lifinity", "raydium", "orca", "jupiter") ||
+      /\bdefi\b|swap|lend|yield|liquid|stake|vault|perp|\bamm\b|\bdex\b|usd[ct]|sol\b/i.test(
+        tokenHaystack(t),
+      ),
   },
   {
     id: "nft",
     label: "NFT",
     Icon: Gem,
     tone: Colors.rose,
-    match: (t) => /nft|collectible|art|pfp|jpeg|mint/i.test(tokenHaystack(t)),
+    match: (t) =>
+      hasTag(t, "nft", "collectible") ||
+      /\bnft\b|collectible|\bart\b|\bpfp\b|jpeg|metaplex/i.test(tokenHaystack(t)),
   },
   {
     id: "infra",
     label: "Infra",
     Icon: Shield,
     tone: Colors.mint,
-    match: (t) => /infra|tool|sdk|node|rpc|bridge|oracle|depin|data/i.test(tokenHaystack(t)),
+    match: (t) =>
+      hasTag(t, "infra", "depin", "oracle", "bridge") ||
+      /infra|\bsdk\b|\bnode\b|\brpc\b|bridge|oracle|depin|\bdata\b|protocol|network/i.test(
+        tokenHaystack(t),
+      ),
   },
 ];
 
@@ -273,6 +295,11 @@ export default function DiscoverScreen() {
   );
 
   const showSearchOnly = query.trim().length > 0;
+  const isFiltering = showSearchOnly || activeCat !== null || section !== "all";
+  const activeCategory = useMemo(
+    () => (activeCat ? CATEGORIES.find((c) => c.id === activeCat) ?? null : null),
+    [activeCat],
+  );
 
   return (
     <View style={styles.root} testID="discover-screen">
@@ -346,7 +373,7 @@ export default function DiscoverScreen() {
         </View>
 
         <FlatList
-          data={showSearchOnly ? filtered : []}
+          data={isFiltering ? filtered : []}
           keyExtractor={(t) => t.id}
           renderItem={renderRow}
           contentContainerStyle={styles.listContent}
@@ -362,6 +389,8 @@ export default function DiscoverScreen() {
           ListHeaderComponent={
             <DiscoverHeader
               showingSearch={showSearchOnly}
+              isFiltering={isFiltering}
+              activeCategory={activeCategory}
               query={query}
               filtered={filtered}
               section={section}
@@ -384,8 +413,18 @@ export default function DiscoverScreen() {
             />
           }
           ListEmptyComponent={
-            showSearchOnly ? (
-              <SearchEmpty query={query} />
+            isFiltering ? (
+              showSearchOnly ? (
+                <SearchEmpty query={query} />
+              ) : (
+                <FilterEmpty
+                  label={activeCategory ? activeCategory.label : SECTIONS.find((s) => s.id === section)?.label ?? ""}
+                  onClear={() => {
+                    setActiveCat(null);
+                    setSection("all");
+                  }}
+                />
+              )
             ) : null
           }
         />
@@ -396,6 +435,8 @@ export default function DiscoverScreen() {
 
 function DiscoverHeader({
   showingSearch,
+  isFiltering,
+  activeCategory,
   query,
   filtered,
   section,
@@ -417,6 +458,8 @@ function DiscoverHeader({
   onWatch,
 }: {
   showingSearch: boolean;
+  isFiltering: boolean;
+  activeCategory: Category | null;
   query: string;
   filtered: LaunchToken[];
   section: Section;
@@ -446,6 +489,65 @@ function DiscoverHeader({
           </Text>
           <Text style={styles.searchHeadSub}>for &quot;{query}&quot;</Text>
         </View>
+      </View>
+    );
+  }
+
+  if (isFiltering) {
+    const sectionMeta = SECTIONS.find((s) => s.id === section);
+    const filterTone = activeCategory?.tone ?? Colors.mint;
+    const FilterIcon = activeCategory?.Icon ?? sectionMeta?.Icon ?? Sparkles;
+    const filterLabel = activeCategory?.label ?? sectionMeta?.label ?? "All";
+    return (
+      <View>
+        <View style={styles.filterHeader}>
+          <View style={[styles.filterIcon, { backgroundColor: `${filterTone}1A`, borderColor: `${filterTone}33` }]}>
+            <FilterIcon color={filterTone} size={16} strokeWidth={2.6} />
+          </View>
+          <View style={styles.filterMid}>
+            <Text style={styles.filterTitle}>{filterLabel}</Text>
+            <Text style={styles.filterSub}>
+              {filtered.length} {filtered.length === 1 ? "token" : "tokens"}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setActiveCat(null);
+              setSection("all");
+            }}
+            style={styles.filterClear}
+            hitSlop={10}
+            testID="discover-clear-filter"
+          >
+            <X color={Colors.text} size={12} strokeWidth={2.8} />
+            <Text style={styles.filterClearText}>Clear</Text>
+          </Pressable>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+        >
+          {SECTIONS.map((s) => {
+            const active = section === s.id && !activeCategory;
+            return (
+              <Pressable
+                key={s.id}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setActiveCat(null);
+                  setSection(s.id);
+                }}
+                style={[styles.chip, active && styles.chipActive]}
+                testID={`discover-${s.id}`}
+              >
+                <s.Icon color={active ? Colors.ink : Colors.text} size={13} strokeWidth={2.6} />
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
     );
   }
@@ -1124,6 +1226,24 @@ function EmptyDiscover() {
   );
 }
 
+function FilterEmpty({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <View style={styles.searchEmpty} testID="filter-empty">
+      <View style={styles.emptyIcon}>
+        <Filter color={Colors.cyan} size={26} strokeWidth={2.4} />
+      </View>
+      <Text style={styles.emptyTitle}>No tokens in {label}</Text>
+      <Text style={styles.emptyBody}>
+        Nothing matches this filter right now. New pairs appear as Jupiter and DexScreener stream them in.
+      </Text>
+      <Pressable onPress={onClear} style={styles.emptyClear} testID="filter-empty-clear">
+        <X color={Colors.ink} size={12} strokeWidth={3} />
+        <Text style={styles.emptyClearText}>Clear filter</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function SearchEmpty({ query }: { query: string }) {
   return (
     <View style={styles.searchEmpty} testID="search-empty">
@@ -1580,6 +1700,53 @@ const styles = StyleSheet.create({
   emptyTagText: { color: Colors.text, fontSize: 11, fontWeight: "800" },
 
   searchEmpty: { marginTop: 40, alignItems: "center", paddingHorizontal: 24 },
+  emptyClear: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: Colors.mint,
+    marginTop: 16,
+  },
+  emptyClearText: { color: Colors.ink, fontSize: 12, fontWeight: "900" },
+
+  filterHeader: {
+    marginTop: 16,
+    marginHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  filterIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  filterMid: { flex: 1, minWidth: 0 },
+  filterTitle: { color: Colors.text, fontSize: 16, fontWeight: "900", letterSpacing: -0.3 },
+  filterSub: { color: Colors.muted, fontSize: 11, fontWeight: "800", marginTop: 2 },
+  filterClear: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  filterClearText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
   searchEmptyIcon: {
     width: 64,
     height: 64,
