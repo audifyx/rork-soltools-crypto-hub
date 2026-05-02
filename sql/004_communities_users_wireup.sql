@@ -122,9 +122,44 @@ begin
 end $$;
 
 -- 6. Re-sync follower / following counts -----------------------------------
-update public.profiles p
-   set followers_count = coalesce((select count(*) from public.followers f where f.followee_id = p.id), 0),
-       following_count = coalesce((select count(*) from public.followers f where f.follower_id = p.id), 0);
+-- Some older deployments use `following_id` instead of `followee_id` on the
+-- followers table. Detect the column at runtime so this block is portable.
+do $
+declare
+  followee_col text;
+begin
+  -- Make sure the counter columns exist on profiles
+  begin
+    alter table public.profiles add column if not exists followers_count integer not null default 0;
+  exception when others then null; end;
+  begin
+    alter table public.profiles add column if not exists following_count integer not null default 0;
+  exception when others then null; end;
+
+  if not exists (select 1 from information_schema.tables
+                  where table_schema = 'public' and table_name = 'followers') then
+    return;
+  end if;
+
+  select column_name into followee_col
+    from information_schema.columns
+   where table_schema = 'public'
+     and table_name   = 'followers'
+     and column_name in ('followee_id','following_id')
+   order by case column_name when 'followee_id' then 0 else 1 end
+   limit 1;
+
+  if followee_col is null then
+    -- Nothing we can sync against; bail out quietly.
+    return;
+  end if;
+
+  execute format($f$
+    update public.profiles p
+       set followers_count = coalesce((select count(*) from public.followers f where f.%I = p.id), 0),
+           following_count = coalesce((select count(*) from public.followers f where f.follower_id = p.id), 0)
+  $f$, followee_col);
+end $;
 
 -- 7. Whoami/current user posts cache helper for postsByCommunity -----------
 -- Returns the post + a `liked` flag for the caller. UI uses this to render
