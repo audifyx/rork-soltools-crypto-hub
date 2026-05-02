@@ -64,19 +64,21 @@ export default function TokenLookupScreen() {
 
   const enabled = contract.trim().length >= 32;
 
-  const overviewQ = useQuery<TokenOverview | null>({
+  const overviewQ = useQuery<TokenOverview>({
     queryKey: ["tokenLookup", "overview", contract],
     enabled,
     queryFn: async () => {
-      try {
-        return await getTokenOverview(contract.trim());
-      } catch (e) {
-        console.log("[token-lookup] overview failed", e);
-        throw e;
+      const res = await getTokenOverview(contract.trim());
+      if (!res || !res.address) {
+        throw new Error("Empty token response");
       }
+      return res;
     },
-    refetchInterval: 20_000,
-    staleTime: 10_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    staleTime: 15_000,
+    retry: 2,
+    placeholderData: (prev) => prev,
   });
 
   const onPaste = useCallback(async () => {
@@ -114,8 +116,8 @@ export default function TokenLookupScreen() {
   }, [contract]);
 
   const overview = overviewQ.data ?? null;
-  const loading = overviewQ.isFetching && !overview;
-  const errored = !!overviewQ.error && !overview;
+  const loading = overviewQ.isLoading && !overview;
+  const errored = !!overviewQ.error && !overview && !overviewQ.isFetching;
   const change = overview?.priceChange24h;
   const isUp = (change ?? 0) >= 0;
   const accent = isUp ? Colors.mint : Colors.rose;

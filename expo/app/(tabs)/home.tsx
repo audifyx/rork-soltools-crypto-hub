@@ -46,7 +46,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import TokenAvatar from "@/components/TokenAvatar";
 import LiveTicker from "@/components/ui/LiveTicker";
 import CommunitiesRail from "@/components/home/CommunitiesRail";
-import StoriesRail from "@/components/home/StoriesRail";
 import VoiceRoomsRail from "@/components/home/VoiceRoomsRail";
 import Colors from "@/constants/colors";
 import { fmtPrice } from "@/utils/format";
@@ -542,10 +541,6 @@ function FeedHeader({
           <View style={styles.tickerWrap}>
             <LiveTicker />
           </View>
-          <StoriesRail
-            onCompose={onCompose}
-            onOpenUser={(handle) => router.push({ pathname: "/u/[handle]", params: { handle } })}
-          />
           <MarketStrip />
           <VoiceRoomsRail />
           <CommunitiesRail />

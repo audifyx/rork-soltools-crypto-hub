@@ -14,7 +14,6 @@ import { LobbiesProvider } from "@/providers/lobbies-provider";
 import { MessagesProvider } from "@/providers/messages-provider";
 import { ProfileProvider } from "@/providers/profile-provider";
 import { SocialProvider } from "@/providers/social-provider";
-import { StoriesProvider } from "@/providers/stories-provider";
 
 SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
   console.log("SolTools splash hold skipped during boot", error);
@@ -45,8 +44,6 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="list-token" options={{ presentation: "modal" }} />
       <Stack.Screen name="compose" options={{ presentation: "modal" }} />
-      <Stack.Screen name="story/create" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
-      <Stack.Screen name="story/[id]" options={{ presentation: "modal", animation: "fade" }} />
       <Stack.Screen name="launch/[id]" />
       <Stack.Screen name="tool/[id]" />
       <Stack.Screen name="u/[handle]" />
@@ -82,15 +79,13 @@ export default function RootLayout() {
             <AppProvider>
               <LaunchpadProvider>
                 <SocialProvider>
-                  <StoriesProvider>
-                    <MessagesProvider>
-                      <LobbiesProvider>
+                  <MessagesProvider>
+                    <LobbiesProvider>
                       <GestureHandlerRootView style={styles.gestureRoot}>
                         <RootLayoutNav />
                       </GestureHandlerRootView>
-                      </LobbiesProvider>
-                    </MessagesProvider>
-                  </StoriesProvider>
+                    </LobbiesProvider>
+                  </MessagesProvider>
                 </SocialProvider>
               </LaunchpadProvider>
             </AppProvider>
