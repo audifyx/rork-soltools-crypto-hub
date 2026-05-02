@@ -8,10 +8,14 @@ import {
   Ban,
   Bell,
   Crown,
+  Database,
   Flame,
+  Gauge,
   LifeBuoy,
   Megaphone,
+  MessageCircle,
   Plus,
+  Radio,
   RefreshCw,
   Rocket,
   Search,
@@ -24,7 +28,9 @@ import {
   TrendingUp,
   UserPlus,
   Users,
+  Wallet,
   X,
+  Zap,
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -51,6 +57,7 @@ import { useAuth } from "@/providers/auth-provider";
 
 type Section =
   | "overview"
+  | "ops"
   | "admins"
   | "users"
   | "listings"
@@ -83,6 +90,18 @@ interface DashboardStats {
   support_open: number;
   support_pending: number;
   support_total: number;
+  online_now: number;
+  communities: number;
+  live_rooms_active: number;
+  comments_total: number;
+  tracked_tokens: number;
+  tracked_wallets: number;
+  active_alerts: number;
+  whale_events_24h: number;
+  broadcasts_active: number;
+  pending_moderation: number;
+  data_sources_total: number;
+  data_sources_degraded: number;
   banned_users: number;
   verified_users: number;
   new_users_24h: number;
@@ -169,6 +188,53 @@ interface TopUserRow {
   created_at: string;
 }
 
+interface PlatformOverview {
+  health_score?: number;
+  users_total?: number;
+  online_now?: number;
+  listings_total?: number;
+  listings_verified?: number;
+  communities_total?: number;
+  posts_total?: number;
+  tracked_tokens?: number;
+  tracked_wallets?: number;
+  active_alerts?: number;
+  open_tickets?: number;
+  pending_moderation?: number;
+  data_sources_degraded?: number;
+  live_rooms_active?: number;
+  whale_events_24h?: number;
+  volume_24h_usd?: number;
+  liquidity_usd?: number;
+  market_cap_usd?: number;
+  last_listing_at?: string | null;
+  last_signup_at?: string | null;
+}
+
+interface DataSourceRow {
+  provider: string;
+  status: "healthy" | "degraded" | "outage" | "unknown";
+  last_success_at: string | null;
+  last_error_at: string | null;
+  latency_ms: number | null;
+  request_count_24h: number;
+  error_count_24h: number;
+  meta: Record<string, unknown>;
+  updated_at: string;
+}
+
+interface ModerationRow {
+  id: string;
+  item_type: string;
+  item_id: string;
+  reason: string;
+  status: "open" | "reviewing" | "resolved" | "rejected";
+  reporter_id: string | null;
+  assigned_to: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
 const ROLES: AdminRole[] = ["superadmin", "admin", "moderator", "support"];
 const fmtUsd = sharedFmtUsd;
 
@@ -247,6 +313,7 @@ export default function AdminDashboard() {
           {(
             [
               { id: "overview", label: "Overview", Icon: Sparkles },
+              { id: "ops", label: "Ops", Icon: Gauge },
               { id: "admins", label: "Admins", Icon: Crown },
               { id: "users", label: "Users", Icon: Users },
               { id: "listings", label: "Listings", Icon: Rocket },
@@ -273,6 +340,7 @@ export default function AdminDashboard() {
 
         <View style={{ flex: 1 }}>
           {section === "overview" && <OverviewSection onJump={setSection} />}
+          {section === "ops" && <OpsSection />}
           {section === "admins" && <AdminsSection isSuperadmin={isSuperadmin} />}
           {section === "users" && <UsersSection isSuperadmin={isSuperadmin} />}
           {section === "listings" && <ListingsSection />}
@@ -374,7 +442,8 @@ function OverviewSection({ onJump }: { onJump: (s: Section) => void }) {
         <QuickAction Icon={Rocket} label="Launches" sub={`${s?.featured ?? "—"} featured`} accent={Colors.cyan} onPress={() => onJump("listings")} />
         <QuickAction Icon={LifeBuoy} label="Support" sub={`${s?.support_open ?? "—"} open`} accent={Colors.rose} onPress={() => onJump("tickets")} />
         <QuickAction Icon={Megaphone} label="Broadcasts" sub={`${s?.announcements ?? "—"} sent`} accent={Colors.orange} onPress={() => onJump("broadcasts")} />
-        <QuickAction Icon={SettingsIcon} label="Settings" sub="Platform flags" accent="#B88CFF" onPress={() => onJump("settings")} />
+        <QuickAction Icon={Gauge} label="Ops" sub={`${s?.data_sources_degraded ?? "—"} degraded`} accent="#B88CFF" onPress={() => onJump("ops")} />
+        <QuickAction Icon={SettingsIcon} label="Settings" sub="Platform flags" accent={Colors.cyan} onPress={() => onJump("settings")} />
       </View>
 
       <Text style={styles.sectionLabel}>TODAY</Text>
@@ -382,15 +451,21 @@ function OverviewSection({ onJump }: { onJump: (s: Section) => void }) {
         <StatCard label="NEW USERS · 24H" value={s?.new_users_24h} accent={Colors.mint} Icon={UserPlus} />
         <StatCard label="NEW LISTINGS · 24H" value={s?.new_listings_24h} accent={Colors.cyan} Icon={Rocket} />
         <StatCard label="POSTS · 24H" value={s?.posts_24h} accent="#B88CFF" Icon={Activity} />
+        <StatCard label="ONLINE NOW" value={s?.online_now} accent={Colors.mint} Icon={Radio} />
+        <StatCard label="ACTIVE ALERTS" value={s?.active_alerts} accent={Colors.orange} Icon={Bell} />
+        <StatCard label="WHALES · 24H" value={s?.whale_events_24h} accent={Colors.cyan} Icon={Zap} />
         <StatCard label="VERIFIED USERS" value={s?.verified_users} accent={Colors.cyan} Icon={BadgeCheck} />
         <StatCard label="BANNED USERS" value={s?.banned_users} accent={Colors.rose} Icon={Ban} />
         <StatCard label="HOT LAUNCHES" value={s?.hot} accent="#FF7A45" Icon={Flame} />
+        <StatCard label="COMMUNITIES" value={s?.communities} accent="#B88CFF" Icon={MessageCircle} />
       </View>
 
       <Text style={styles.sectionLabel}>WEEK · 7D GROWTH</Text>
       <View style={styles.statsGrid}>
         <StatCard label="USERS · 7D" value={s?.new_users_7d} accent={Colors.mint} Icon={TrendingUp} />
         <StatCard label="LISTINGS · 7D" value={s?.new_listings_7d} accent={Colors.cyan} Icon={Flame} />
+        <StatCard label="WATCHED TOKENS" value={s?.tracked_tokens} accent={Colors.orange} Icon={Wallet} />
+        <StatCard label="OPEN MODERATION" value={s?.pending_moderation} accent={Colors.rose} Icon={Shield} />
       </View>
 
       <Text style={styles.sectionLabel}>TOP TRADERS</Text>
@@ -500,6 +575,201 @@ function StatCard({
       <Text style={styles.statKey}>{label}</Text>
     </View>
   );
+}
+
+/* ------------------------------- OPS ----------------------------- */
+
+function OpsSection() {
+  const qc = useQueryClient();
+
+  const overviewQuery = useQuery<PlatformOverview>({
+    queryKey: ["admin", "platform-overview"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_platform_overview");
+      if (error) throw error;
+      return (data ?? {}) as PlatformOverview;
+    },
+    refetchInterval: 30_000,
+  });
+
+  const sourcesQuery = useQuery<DataSourceRow[]>({
+    queryKey: ["admin", "data-sources"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_data_sources_all");
+      if (error) throw error;
+      return (data ?? []) as DataSourceRow[];
+    },
+    refetchInterval: 45_000,
+  });
+
+  const moderationQuery = useQuery<ModerationRow[]>({
+    queryKey: ["admin", "moderation-queue"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_moderation_queue", {
+        max_rows: 50,
+        include_resolved: false,
+      });
+      if (error) throw error;
+      return (data ?? []) as ModerationRow[];
+    },
+    refetchInterval: 30_000,
+  });
+
+  const sourceMutation = useMutation({
+    mutationFn: async (input: { provider: string; status: DataSourceRow["status"] }) => {
+      const { error } = await supabase.rpc("admin_data_source_upsert", {
+        in_provider: input.provider,
+        in_status: input.status,
+        in_latency_ms: null,
+        in_meta: {},
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
+    onError: (e: Error) => Alert.alert("Source update failed", e.message),
+  });
+
+  const moderationMutation = useMutation({
+    mutationFn: async (input: { id: string; status: ModerationRow["status"] }) => {
+      const { error } = await supabase.rpc("admin_moderation_resolve", {
+        queue_id: input.id,
+        new_status: input.status,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
+    onError: (e: Error) => Alert.alert("Moderation update failed", e.message),
+  });
+
+  const o = overviewQuery.data;
+  const health = Math.max(0, Math.min(100, Number(o?.health_score ?? 0)));
+
+  return (
+    <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <LinearGradient colors={["#102225", "#071113"]} style={styles.opsHero}>
+        <View style={styles.listingHeader}>
+          <View style={[styles.avatar, { backgroundColor: "rgba(85,245,178,0.16)" }]}> 
+            <Gauge color={Colors.mint} size={16} strokeWidth={2.8} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerEyebrow}>Connected platform health</Text>
+            <Text style={styles.opsHeroTitle}>{health || "—"}% operational</Text>
+          </View>
+          <View style={[styles.statusPill, { backgroundColor: `${health >= 90 ? Colors.mint : health >= 70 ? Colors.orange : Colors.rose}22` }]}> 
+            <Text style={[styles.statusPillText, { color: health >= 90 ? Colors.mint : health >= 70 ? Colors.orange : Colors.rose }]}>LIVE</Text>
+          </View>
+        </View>
+        <View style={styles.healthTrack}>
+          <View style={[styles.healthFill, { width: `${health}%`, backgroundColor: health >= 90 ? Colors.mint : health >= 70 ? Colors.orange : Colors.rose }]} />
+        </View>
+        <View style={styles.listingMetrics}>
+          <Metric label="VOLUME 24H" value={fmtUsd(Number(o?.volume_24h_usd ?? 0))} />
+          <Metric label="LIQUIDITY" value={fmtUsd(Number(o?.liquidity_usd ?? 0))} />
+          <Metric label="MCAP" value={fmtUsd(Number(o?.market_cap_usd ?? 0))} />
+        </View>
+      </LinearGradient>
+
+      <Text style={styles.sectionLabel}>CONNECTED DATA</Text>
+      <View style={styles.statsGrid}>
+        <StatCard label="USERS" value={o?.users_total} accent={Colors.mint} Icon={Users} />
+        <StatCard label="ONLINE" value={o?.online_now} accent={Colors.mint} Icon={Radio} />
+        <StatCard label="LISTINGS" value={o?.listings_total} accent={Colors.cyan} Icon={Rocket} />
+        <StatCard label="VERIFIED TOKENS" value={o?.listings_verified} accent={Colors.cyan} Icon={BadgeCheck} />
+        <StatCard label="COMMUNITIES" value={o?.communities_total} accent="#B88CFF" Icon={MessageCircle} />
+        <StatCard label="POSTS" value={o?.posts_total} accent="#B88CFF" Icon={Activity} />
+        <StatCard label="WATCHED TOKENS" value={o?.tracked_tokens} accent={Colors.orange} Icon={Wallet} />
+        <StatCard label="WATCHED WALLETS" value={o?.tracked_wallets} accent={Colors.orange} Icon={Database} />
+        <StatCard label="OPEN TICKETS" value={o?.open_tickets} accent={Colors.rose} Icon={LifeBuoy} />
+        <StatCard label="MODERATION" value={o?.pending_moderation} accent={Colors.rose} Icon={Shield} />
+        <StatCard label="LIVE SPACES" value={o?.live_rooms_active} accent={Colors.mint} Icon={Radio} />
+        <StatCard label="WHALES · 24H" value={o?.whale_events_24h} accent={Colors.cyan} Icon={Zap} />
+      </View>
+
+      <Text style={styles.sectionLabel}>DATA SOURCES</Text>
+      <View style={styles.cardWrap}>
+        {sourcesQuery.isLoading ? (
+          <ActivityIndicator color={Colors.mint} style={{ padding: 20 }} />
+        ) : (sourcesQuery.data ?? []).length === 0 ? (
+          <Text style={styles.empty}>No data sources configured. Run the admin ops SQL.</Text>
+        ) : (
+          (sourcesQuery.data ?? []).map((src) => {
+            const tint = sourceStatusColor(src.status);
+            return (
+              <View key={src.provider} style={styles.sourceRow} testID={`source-${src.provider}`}>
+                <View style={[styles.sourceDot, { backgroundColor: tint }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle}>{sourceLabel(src.provider)}</Text>
+                  <Text style={styles.rowSub} numberOfLines={1}>
+                    {src.status.toUpperCase()} · {src.latency_ms ? `${src.latency_ms}ms` : "no latency"} · {src.error_count_24h} errors
+                  </Text>
+                </View>
+                <View style={styles.sourceActions}>
+                  {(["healthy", "degraded", "outage"] as const).map((status) => (
+                    <Pressable
+                      key={status}
+                      onPress={() => sourceMutation.mutate({ provider: src.provider, status })}
+                      style={[styles.sourceAction, src.status === status && { backgroundColor: sourceStatusColor(status), borderColor: sourceStatusColor(status) }]}
+                      testID={`source-${src.provider}-${status}`}
+                    >
+                      <Text style={[styles.sourceActionText, src.status === status && { color: Colors.ink }]}>{status.slice(0, 1).toUpperCase()}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            );
+          })
+        )}
+      </View>
+
+      <Text style={styles.sectionLabel}>MODERATION QUEUE</Text>
+      <View style={styles.cardWrap}>
+        {moderationQuery.isLoading ? (
+          <ActivityIndicator color={Colors.mint} style={{ padding: 20 }} />
+        ) : (moderationQuery.data ?? []).length === 0 ? (
+          <Text style={styles.empty}>No open moderation items.</Text>
+        ) : (
+          (moderationQuery.data ?? []).map((item) => (
+            <View key={item.id} style={styles.modRow} testID={`mod-${item.id}`}>
+              <View style={[styles.avatar, { backgroundColor: "rgba(255,93,143,0.16)" }]}> 
+                <Shield color={Colors.rose} size={13} strokeWidth={2.6} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle} numberOfLines={1}>{item.item_type} · {item.status}</Text>
+                <Text style={styles.rowSub} numberOfLines={2}>{item.reason || item.item_id}</Text>
+              </View>
+              <View style={styles.sourceActions}>
+                {(["reviewing", "resolved", "rejected"] as const).map((status) => (
+                  <Pressable
+                    key={status}
+                    onPress={() => moderationMutation.mutate({ id: item.id, status })}
+                    style={styles.sourceAction}
+                    testID={`mod-${item.id}-${status}`}
+                  >
+                    <Text style={styles.sourceActionText}>{status.slice(0, 1).toUpperCase()}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+
+      {overviewQuery.isError || sourcesQuery.isError || moderationQuery.isError ? (
+        <Text style={styles.errorText}>Ops data is not fully connected yet. Run sql/020, sql/021, and sql/022.</Text>
+      ) : null}
+    </ScrollView>
+  );
+}
+
+function sourceStatusColor(status: DataSourceRow["status"]): string {
+  if (status === "healthy") return Colors.mint;
+  if (status === "degraded") return Colors.orange;
+  if (status === "outage") return Colors.rose;
+  return Colors.muted;
+}
+
+function sourceLabel(provider: string): string {
+  return provider.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
 function relTime(iso: string): string {
@@ -1848,6 +2118,32 @@ const styles = StyleSheet.create({
     borderWidth: 1, gap: 10,
   },
   announceBody: { color: Colors.muted, fontSize: 13, lineHeight: 19 },
+
+  opsHero: {
+    borderRadius: 22, padding: 16, gap: 14,
+    borderWidth: 1, borderColor: "rgba(85,245,178,0.16)",
+  },
+  opsHeroTitle: { color: Colors.text, fontSize: 24, fontWeight: "900", marginTop: 2 },
+  healthTrack: { height: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
+  healthFill: { height: 8, borderRadius: 999 },
+  sourceRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 8, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.04)",
+  },
+  sourceDot: { width: 10, height: 10, borderRadius: 5 },
+  sourceActions: { flexDirection: "row", gap: 5, alignItems: "center" },
+  sourceAction: {
+    width: 26, height: 26, borderRadius: 9,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  sourceActionText: { color: Colors.text, fontSize: 10, fontWeight: "900" },
+  modRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 8, paddingVertical: 10,
+  },
 
   settingRow: {
     flexDirection: "row", alignItems: "center", gap: 12,
