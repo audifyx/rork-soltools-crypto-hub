@@ -1,12 +1,11 @@
 -- =====================================================================
--- STORIES — ephemeral 36h photo stories with viewer tracking
+-- STORIES FIX — recover from failed initial migration
 -- =====================================================================
--- Idempotent migration that adds:
---   • stories + story_views tables
---   • storage bucket `story-media`
---   • RPCs: list_active_stories, list_story_viewers, record_story_view,
---           delete_my_story, sweep_expired_stories
---   • RLS, indexes, realtime publication
+-- The original stories migration created a partial index using now(),
+-- which Postgres rejects ("functions in index predicate must be marked
+-- IMMUTABLE"). On failure, the entire migration aborted and the stories
+-- table + RPCs were never created. This migration recreates everything
+-- idempotently with a valid index.
 -- =====================================================================
 
 create extension if not exists "uuid-ossp";
@@ -22,9 +21,13 @@ create table if not exists public.stories (
   created_at  timestamptz not null default now(),
   expires_at  timestamptz not null default (now() + interval '36 hours')
 );
-create index if not exists stories_user_idx       on public.stories (user_id, created_at desc);
-create index if not exists stories_active_idx     on public.stories (expires_at);
-create index if not exists stories_created_idx    on public.stories (created_at desc);
+
+-- Drop the broken partial index if it somehow exists.
+drop index if exists public.stories_active_idx;
+
+create index if not exists stories_user_idx    on public.stories (user_id, created_at desc);
+create index if not exists stories_active_idx  on public.stories (expires_at);
+create index if not exists stories_created_idx on public.stories (created_at desc);
 
 create table if not exists public.story_views (
   story_id   uuid not null references public.stories(id) on delete cascade,
@@ -81,7 +84,7 @@ begin
     using (bucket_id = %L and (storage.foldername(name))[1] = auth.uid()::text)$p$, b||'_delete', b);
 end $$;
 
--- 4. Sweep helper (callers can run this opportunistically) -----------
+-- 4. RPCs -----------------------------------------------------------
 create or replace function public.sweep_expired_stories()
 returns integer language plpgsql security definer set search_path = public as $$
 declare n integer;
@@ -92,7 +95,6 @@ begin
 end $$;
 grant execute on function public.sweep_expired_stories() to authenticated, anon;
 
--- 5. List active stories with author + viewed_by_me ------------------
 create or replace function public.list_active_stories(max_rows int default 200)
 returns table (
   id           uuid,
@@ -137,7 +139,6 @@ begin
 end $$;
 grant execute on function public.list_active_stories(int) to authenticated, anon;
 
--- 6. Viewers for a story (only owner can call meaningfully) ----------
 create or replace function public.list_story_viewers(target_story_id uuid)
 returns table (
   user_id      uuid,
@@ -154,8 +155,6 @@ declare
 begin
   select user_id into owner from public.stories where id = target_story_id;
   if owner is null then return; end if;
-  -- Anyone can read viewer list (RLS allowed) but we still gate to owner
-  -- to avoid leaking viewers across users.
   if caller is null or caller <> owner then return; end if;
 
   return query
@@ -174,7 +173,6 @@ begin
 end $$;
 grant execute on function public.list_story_viewers(uuid) to authenticated;
 
--- 7. Record a view (idempotent, increments views_count once) ---------
 create or replace function public.record_story_view(target_story_id uuid)
 returns integer language plpgsql security definer set search_path = public as $$
 declare
@@ -209,7 +207,6 @@ begin
 end $$;
 grant execute on function public.record_story_view(uuid) to authenticated;
 
--- 8. Delete my story --------------------------------------------------
 create or replace function public.delete_my_story(target_story_id uuid)
 returns boolean language plpgsql security definer set search_path = public as $$
 declare caller uuid := auth.uid();
@@ -221,7 +218,37 @@ begin
 end $$;
 grant execute on function public.delete_my_story(uuid) to authenticated;
 
--- 9. Realtime publication --------------------------------------------
+-- 5. Server-side create_story RPC (defensive fallback) ---------------
+create or replace function public.create_story(
+  p_media_url text,
+  p_caption   text default null
+) returns table (
+  id          uuid,
+  user_id     uuid,
+  media_url   text,
+  caption     text,
+  views_count integer,
+  created_at  timestamptz,
+  expires_at  timestamptz
+) language plpgsql security definer set search_path = public as $$
+declare caller uuid := auth.uid();
+begin
+  if caller is null then
+    raise exception 'Sign in required';
+  end if;
+  if p_media_url is null or length(trim(p_media_url)) = 0 then
+    raise exception 'media_url is required';
+  end if;
+
+  return query
+    insert into public.stories (user_id, media_url, caption)
+    values (caller, p_media_url, nullif(trim(coalesce(p_caption, '')), ''))
+    returning stories.id, stories.user_id, stories.media_url, stories.caption,
+              stories.views_count, stories.created_at, stories.expires_at;
+end $$;
+grant execute on function public.create_story(text, text) to authenticated;
+
+-- 6. Realtime publication --------------------------------------------
 do $$
 declare
   t text;
@@ -236,7 +263,3 @@ begin
     end;
   end loop;
 end $$;
-
--- =====================================================================
--- DONE
--- =====================================================================

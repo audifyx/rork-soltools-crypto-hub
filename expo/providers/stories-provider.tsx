@@ -148,7 +148,33 @@ export const [StoriesProvider, useStories] = createContextHook(() => {
   const postStoryMut = useMutation({
     mutationFn: async (input: { uri: string; caption?: string }) => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to post a story");
-      const url = await uploadStoryMedia(userId, input.uri);
+      let url: string;
+      try {
+        url = await uploadStoryMedia(userId, input.uri);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Upload failed";
+        console.log("[stories] upload failed", msg);
+        throw new Error(`Upload failed: ${msg}`);
+      }
+
+      // Prefer the SECURITY DEFINER RPC so we get a clear error if the
+      // stories table or RLS isn't set up. Fall back to a direct insert.
+      const rpc = await supabase.rpc("create_story", {
+        p_media_url: url,
+        p_caption: input.caption?.trim() || null,
+      });
+      if (!rpc.error) {
+        const row = Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
+        if (row) return row;
+      } else {
+        console.log("[stories] create_story rpc error", {
+          message: rpc.error.message,
+          code: rpc.error.code,
+          details: rpc.error.details,
+          hint: rpc.error.hint,
+        });
+      }
+
       const { data, error } = await supabase
         .from("stories")
         .insert({
@@ -160,7 +186,15 @@ export const [StoriesProvider, useStories] = createContextHook(() => {
           "id,user_id,media_url,caption,views_count,created_at,expires_at",
         )
         .single();
-      if (error) throw error;
+      if (error) {
+        console.log("[stories] insert error", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
+        throw new Error(error.message || "Couldn't post story");
+      }
       return data;
     },
     onSuccess: () => {

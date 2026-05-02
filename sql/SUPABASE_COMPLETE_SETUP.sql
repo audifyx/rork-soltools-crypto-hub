@@ -4043,7 +4043,7 @@ create table if not exists public.stories (
   expires_at  timestamptz not null default (now() + interval '36 hours')
 );
 create index if not exists stories_user_idx       on public.stories (user_id, created_at desc);
-create index if not exists stories_active_idx     on public.stories (expires_at) where expires_at > now();
+create index if not exists stories_active_idx     on public.stories (expires_at);
 create index if not exists stories_created_idx    on public.stories (created_at desc);
 
 create table if not exists public.story_views (
