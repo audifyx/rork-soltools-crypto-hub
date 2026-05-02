@@ -16,6 +16,7 @@ import {
   ImagePlus,
   Inbox,
   MessageCircle,
+  Radio,
   Repeat2,
   Rocket,
   Search,
@@ -317,6 +318,17 @@ export default function HomeFeedScreen() {
               testID="search-btn"
             >
               <Search color={Colors.text} size={18} strokeWidth={2.4} />
+            </Pressable>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                router.push("/(tabs)/streams");
+              }}
+              testID="streams-btn"
+            >
+              <Radio color={Colors.text} size={18} strokeWidth={2.4} />
+              <View style={styles.bellDot} pointerEvents="none" />
             </Pressable>
             <Pressable
               style={styles.iconBtn}
