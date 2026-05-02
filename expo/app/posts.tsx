@@ -264,35 +264,53 @@ export default function PostsFeedScreen() {
       <StatusBar style="light" />
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
+        <LinearGradient
+          colors={["rgba(85,245,178,0.16)", "rgba(56,215,255,0.05)", "rgba(3,7,8,0)"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGlow}
+          pointerEvents="none"
+        />
         <View style={styles.topBar}>
           <Pressable
             style={styles.iconBtn}
             onPress={() => router.back()}
-            hitSlop={6}
+            hitSlop={8}
             testID="posts-back"
           >
-            <ArrowLeft color={Colors.text} size={20} strokeWidth={2.4} />
+            <ArrowLeft color={Colors.text} size={22} strokeWidth={2.6} />
           </Pressable>
           <View style={styles.titleWrap}>
-            <Text style={styles.title}>Posts</Text>
-            <View style={styles.algoPill}>
-              <Sparkles color={Colors.cyan} size={10} strokeWidth={3} />
-              <Text style={styles.algoText}>CUSTOM ALGO</Text>
+            <Text style={styles.eyebrow}>SolTools feed</Text>
+            <View style={styles.titleRow}>
+              <Text style={styles.title}>Posts</Text>
+              <View style={styles.algoPill}>
+                <Sparkles color={Colors.cyan} size={11} strokeWidth={3} />
+                <Text style={styles.algoText}>ALGO</Text>
+              </View>
             </View>
           </View>
           <Pressable
-            style={[styles.iconBtn, styles.composeBtn]}
+            style={styles.composeBtn}
             onPress={onCompose}
-            hitSlop={6}
+            hitSlop={8}
             testID="posts-compose"
           >
-            <Feather color={Colors.ink} size={18} strokeWidth={3} />
+            <LinearGradient
+              colors={[Colors.mint, Colors.cyan]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.composeBtnGrad}
+            >
+              <Feather color={Colors.ink} size={20} strokeWidth={3} />
+            </LinearGradient>
           </Pressable>
         </View>
 
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.tabsScroller}
           contentContainerStyle={styles.tabsRow}
         >
           {TABS.map((t) => {
@@ -304,10 +322,18 @@ export default function PostsFeedScreen() {
                 style={[styles.tab, active && styles.tabActive]}
                 testID={`posts-tab-${t.key}`}
               >
+                {active ? (
+                  <LinearGradient
+                    colors={["rgba(85,245,178,0.96)", "rgba(56,215,255,0.9)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                ) : null}
                 <t.Icon
                   color={active ? Colors.ink : Colors.muted}
-                  size={13}
-                  strokeWidth={2.6}
+                  size={15}
+                  strokeWidth={2.7}
                 />
                 <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
               </Pressable>
@@ -363,14 +389,39 @@ function ComposeBar({
   count: number;
 }) {
   const desc: Record<FeedSort, string> = {
-    "for-you": "Engagement-weighted hot ranking with follow & recency boosts",
-    latest: "Pure chronological — newest posts first",
-    top: "Highest engagement in the last 24 hours",
-    following: "Posts from people you follow",
-    media: "Posts with charts, screenshots and visuals",
+    "for-you": "Ranked by heat, freshness, follows, charts, and signal quality.",
+    latest: "Fresh drops in chronological order.",
+    top: "The strongest posts from the last 24 hours.",
+    following: "Only the traders and builders you follow.",
+    media: "Charts, screenshots, memes, and visual alpha.",
   };
+  const activeTab = TABS.find((t) => t.key === sort);
+  const ActiveIcon = activeTab?.Icon ?? Sparkles;
+
   return (
     <View style={styles.headerStack}>
+      <View style={styles.feedSummary}>
+        <LinearGradient
+          colors={["rgba(85,245,178,0.15)", "rgba(56,215,255,0.06)", "rgba(255,255,255,0.02)"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.feedSummaryTop}>
+          <View style={styles.feedSummaryIcon}>
+            <ActiveIcon color={Colors.mint} size={17} strokeWidth={2.8} />
+          </View>
+          <View style={styles.feedSummaryCopy}>
+            <Text style={styles.feedSummaryTitle}>{activeTab?.label ?? "For You"}</Text>
+            <Text style={styles.feedSummaryBody}>{desc[sort]}</Text>
+          </View>
+          <View style={styles.feedSummaryCount}>
+            <Text style={styles.feedSummaryCountValue}>{count}</Text>
+            <Text style={styles.feedSummaryCountLabel}>posts</Text>
+          </View>
+        </View>
+      </View>
+
       <Pressable style={styles.composer} onPress={onPress} testID="composer-prompt">
         <View style={[styles.composerAvatar, { backgroundColor: avatarColor }]}>
           {avatarUrl ? (
@@ -381,26 +432,14 @@ function ComposeBar({
             </Text>
           )}
         </View>
-        <Text style={styles.composerHint}>Drop alpha, charts, or a hot take…</Text>
+        <View style={styles.composerCopy}>
+          <Text style={styles.composerKicker}>Share a call</Text>
+          <Text style={styles.composerHint}>Drop alpha, charts, or a hot take…</Text>
+        </View>
         <View style={styles.composerCta}>
           <Feather color={Colors.ink} size={14} strokeWidth={3} />
         </View>
       </Pressable>
-
-      <View style={styles.algoBanner}>
-        <LinearGradient
-          colors={["rgba(85,245,178,0.18)", "rgba(56,215,255,0.06)"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.algoBannerHead}>
-          <Sparkles color={Colors.mint} size={14} strokeWidth={2.8} />
-          <Text style={styles.algoBannerTitle}>{TABS.find((t) => t.key === sort)?.label}</Text>
-          <Text style={styles.algoBannerCount}>· {count} posts</Text>
-        </View>
-        <Text style={styles.algoBannerBody}>{desc[sort]}</Text>
-      </View>
     </View>
   );
 }
@@ -629,98 +668,189 @@ function fmt(n: number): string {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
   safe: { flex: 1 },
+  headerGlow: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 190,
+  },
   topBar: {
-    paddingHorizontal: 14,
-    paddingTop: 4,
-    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.10)",
     alignItems: "center",
     justifyContent: "center",
   },
   composeBtn: {
-    backgroundColor: Colors.mint,
-    borderColor: Colors.mint,
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    overflow: "hidden",
+    shadowColor: Colors.mint,
+    shadowOpacity: 0.32,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
-  titleWrap: { flexDirection: "row", alignItems: "center", gap: 10 },
+  composeBtnGrad: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  titleWrap: { alignItems: "center", gap: 3 },
+  eyebrow: {
+    color: Colors.muted,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+  },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 9 },
   title: {
     color: Colors.text,
-    fontSize: 19,
+    fontSize: 24,
     fontWeight: "900",
-    letterSpacing: -0.4,
+    letterSpacing: -0.7,
   },
   algoPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(56,215,255,0.1)",
+    backgroundColor: "rgba(56,215,255,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.3)",
+    borderColor: "rgba(56,215,255,0.34)",
   },
   algoText: {
     color: Colors.cyan,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
-    letterSpacing: 1,
+    letterSpacing: 1.2,
   },
 
+  tabsScroller: {
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 54,
+    maxHeight: 54,
+  },
   tabsRow: {
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 5,
+    paddingBottom: 8,
+    gap: 9,
+    alignItems: "center",
   },
   tab: {
+    height: 40,
+    minWidth: 94,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
+    justifyContent: "center",
+    gap: 7,
+    paddingHorizontal: 14,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: "rgba(255,255,255,0.035)",
+    overflow: "hidden",
   },
   tabActive: {
-    backgroundColor: Colors.mint,
-    borderColor: Colors.mint,
+    borderColor: "rgba(85,245,178,0.80)",
   },
   tabText: {
     color: Colors.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.2,
   },
   tabTextActive: {
     color: Colors.ink,
-    fontWeight: "900",
   },
 
   listContent: { paddingBottom: 140 },
 
-  headerStack: { paddingTop: 6 },
+  headerStack: { paddingTop: 8, gap: 12 },
+  feedSummary: {
+    marginHorizontal: 14,
+    borderRadius: 22,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.18)",
+  },
+  feedSummaryTop: {
+    minHeight: 88,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+  },
+  feedSummaryIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: "rgba(85,245,178,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.24)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  feedSummaryCopy: { flex: 1 },
+  feedSummaryTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  feedSummaryBody: {
+    color: Colors.muted,
+    fontSize: 12,
+    fontWeight: "650",
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  feedSummaryCount: {
+    minWidth: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 15,
+    backgroundColor: "rgba(3,7,8,0.42)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+  },
+  feedSummaryCountValue: { color: Colors.text, fontSize: 16, fontWeight: "900" },
+  feedSummaryCountLabel: {
+    color: Colors.muted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
   composer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     marginHorizontal: 14,
-    marginTop: 4,
     padding: 12,
-    borderRadius: 18,
-    backgroundColor: Colors.card,
+    borderRadius: 20,
+    backgroundColor: "rgba(11,24,26,0.86)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.16)",
+    borderColor: "rgba(255,255,255,0.08)",
   },
   composerAvatar: {
     width: 38,
@@ -732,43 +862,21 @@ const styles = StyleSheet.create({
   },
   composerAvatarText: { color: Colors.ink, fontSize: 14, fontWeight: "900" },
   fillImg: { width: "100%", height: "100%" },
-  composerHint: { flex: 1, color: Colors.muted, fontSize: 14, fontWeight: "600" },
-  composerCta: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.mint,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  algoBanner: {
-    marginHorizontal: 14,
-    marginTop: 12,
-    padding: 14,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.22)",
-  },
-  algoBannerHead: { flexDirection: "row", alignItems: "center", gap: 8 },
-  algoBannerTitle: {
+  composerCopy: { flex: 1 },
+  composerKicker: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: "900",
-    letterSpacing: 0.3,
+    letterSpacing: -0.1,
   },
-  algoBannerCount: {
-    color: Colors.muted,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  algoBannerBody: {
-    color: Colors.muted,
-    fontSize: 12,
-    fontWeight: "600",
-    marginTop: 6,
-    lineHeight: 17,
+  composerHint: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  composerCta: {
+    width: 32,
+    height: 32,
+    borderRadius: 13,
+    backgroundColor: Colors.mint,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   divider: { height: 1, backgroundColor: "rgba(255,255,255,0.05)", marginHorizontal: 14 },
