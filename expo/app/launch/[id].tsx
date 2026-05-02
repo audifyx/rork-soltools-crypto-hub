@@ -56,6 +56,7 @@ import { useTokenOverview } from "@/lib/api/market";
 import { getTokenSecurity } from "@/lib/api/birdeye";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { fmtNum, fmtPct, fmtPrice, fmtUsd } from "@/utils/format";
+import { getTokenBanner, getTokenLogo } from "@/utils/token-art";
 
 function shortAddress(addr: string): string {
   if (addr.length <= 10) return addr;
