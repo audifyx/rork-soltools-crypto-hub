@@ -26,10 +26,23 @@ export interface DexPair {
   liquidity?: { usd?: number; base?: number; quote?: number };
   volume?: { h24?: number; h6?: number; h1?: number; m5?: number };
   priceChange?: { h24?: number; h6?: number; h1?: number; m5?: number };
+  txns?: {
+    h24?: { buys?: number; sells?: number };
+    h6?: { buys?: number; sells?: number };
+    h1?: { buys?: number; sells?: number };
+    m5?: { buys?: number; sells?: number };
+  };
   fdv?: number;
   marketCap?: number;
   pairCreatedAt?: number;
-  info?: { imageUrl?: string; header?: string; openGraph?: string };
+  info?: {
+    imageUrl?: string;
+    header?: string;
+    openGraph?: string;
+    websites?: { url: string }[];
+    socials?: { type: string; url: string }[];
+  };
+  labels?: string[];
 }
 
 export interface DexTokenSnapshot {
@@ -37,13 +50,25 @@ export interface DexTokenSnapshot {
   pair: DexPair | null;
   pairs: DexPair[];
   priceUsd: number | null;
+  priceChange5mPct: number | null;
+  priceChange1hPct: number | null;
+  priceChange6hPct: number | null;
   priceChange24hPct: number | null;
   liquidityUsd: number | null;
   marketCapUsd: number | null;
   fdvUsd: number | null;
+  volume5mUsd: number | null;
+  volume1hUsd: number | null;
+  volume6hUsd: number | null;
   volume24hUsd: number | null;
+  txns24h: { buys: number; sells: number } | null;
+  txns1h: { buys: number; sells: number } | null;
   pairAddress: string | null;
+  pairCreatedAt: number | null;
+  dexId: string | null;
   imageUrl: string | null;
+  websites: string[];
+  socials: { type: string; url: string }[];
 }
 
 /** Pick the Solana pair with the deepest USD liquidity. */
@@ -58,18 +83,32 @@ function pickBestPair(pairs: DexPair[]): DexPair | null {
 
 function toSnapshot(address: string, pairs: DexPair[]): DexTokenSnapshot {
   const best = pickBestPair(pairs);
+  const tx24 = best?.txns?.h24;
+  const tx1 = best?.txns?.h1;
   return {
     address,
     pair: best,
     pairs,
     priceUsd: best?.priceUsd ? Number(best.priceUsd) : null,
+    priceChange5mPct: typeof best?.priceChange?.m5 === "number" ? best!.priceChange!.m5! : null,
+    priceChange1hPct: typeof best?.priceChange?.h1 === "number" ? best!.priceChange!.h1! : null,
+    priceChange6hPct: typeof best?.priceChange?.h6 === "number" ? best!.priceChange!.h6! : null,
     priceChange24hPct: typeof best?.priceChange?.h24 === "number" ? best!.priceChange!.h24! : null,
     liquidityUsd: best?.liquidity?.usd ?? null,
     marketCapUsd: best?.marketCap ?? best?.fdv ?? null,
     fdvUsd: best?.fdv ?? null,
+    volume5mUsd: best?.volume?.m5 ?? null,
+    volume1hUsd: best?.volume?.h1 ?? null,
+    volume6hUsd: best?.volume?.h6 ?? null,
     volume24hUsd: best?.volume?.h24 ?? null,
+    txns24h: tx24 ? { buys: tx24.buys ?? 0, sells: tx24.sells ?? 0 } : null,
+    txns1h: tx1 ? { buys: tx1.buys ?? 0, sells: tx1.sells ?? 0 } : null,
     pairAddress: best?.pairAddress ?? null,
+    pairCreatedAt: best?.pairCreatedAt ?? null,
+    dexId: best?.dexId ?? null,
     imageUrl: best?.info?.imageUrl ?? null,
+    websites: (best?.info?.websites ?? []).map((w) => w.url).filter(Boolean),
+    socials: best?.info?.socials ?? [],
   };
 }
 

@@ -5,6 +5,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
+  Activity,
   ArrowLeft,
   ArrowUpRight,
   AtSign,
@@ -13,36 +14,83 @@ import {
   Check,
   Copy,
   Crown,
+  Droplet,
   ExternalLink,
   Eye,
   Flame,
   Globe2,
+  Layers,
   MessageCircle,
   Send,
   Share2,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  Sparkles,
   Trash2,
   TrendingDown,
   TrendingUp,
+  Twitter,
   Users,
+  Zap,
 } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
-import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  Animated,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import DexChart from "@/components/DexChart";
-import { useDexToken } from "@/lib/api/dexscreener";
+import { useDexToken, type DexPair } from "@/lib/api/dexscreener";
 import { useTokenOverview } from "@/lib/api/market";
+import { getTokenSecurity } from "@/lib/api/birdeye";
 import { useLaunchpad } from "@/providers/launchpad-provider";
-import { fmtPrice, fmtUsd } from "@/utils/format";
+import { fmtNum, fmtPct, fmtPrice, fmtUsd } from "@/utils/format";
 
 function shortAddress(addr: string): string {
   if (addr.length <= 10) return addr;
   return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 
-const formatUsd = fmtUsd;
-const formatPrice = fmtPrice;
+type TabKey = "overview" | "activity" | "pools" | "risk";
+
+const TABS: { key: TabKey; label: string; Icon: typeof Activity }[] = [
+  { key: "overview", label: "Overview", Icon: Sparkles },
+  { key: "activity", label: "Activity", Icon: Activity },
+  { key: "pools", label: "Pools", Icon: Layers },
+  { key: "risk", label: "Risk", Icon: Shield },
+];
+
+const TIMEFRAMES: { key: "5m" | "1h" | "6h" | "24h"; label: string }[] = [
+  { key: "5m", label: "5M" },
+  { key: "1h", label: "1H" },
+  { key: "6h", label: "6H" },
+  { key: "24h", label: "24H" },
+];
+
+const QUICK_BUYS = [0.1, 0.5, 1, 5];
+
+function ageString(ts?: number | null): string {
+  if (!ts) return "—";
+  const ms = Date.now() - ts;
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h`;
+}
 
 export default function LaunchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,19 +98,70 @@ export default function LaunchDetailScreen() {
   const { getById, upvoted, toggleUpvote, remove } = useLaunchpad();
   const [copied, setCopied] = useState<boolean>(false);
   const [watching, setWatching] = useState<boolean>(false);
+  const [tab, setTab] = useState<TabKey>("overview");
+  const [tf, setTf] = useState<"5m" | "1h" | "6h" | "24h">("24h");
 
   const token = id ? getById(id) : null;
-  // DexScreener is the source of truth for chart-aligned price/MC/liq.
-  // Birdeye is kept as fallback for holders + edge cases.
   const { data: dex } = useDexToken(token?.contract ?? null);
   const { data: overview } = useTokenOverview(token?.contract ?? null);
+
   const livePrice = dex?.priceUsd ?? overview?.price ?? token?.price ?? null;
-  const liveChange = dex?.priceChange24hPct ?? overview?.priceChange24h ?? token?.change24hPct ?? null;
+  const changeByTf: Record<string, number | null> = {
+    "5m": dex?.priceChange5mPct ?? null,
+    "1h": dex?.priceChange1hPct ?? overview?.priceChange1h ?? null,
+    "6h": dex?.priceChange6hPct ?? null,
+    "24h": dex?.priceChange24hPct ?? overview?.priceChange24h ?? token?.change24hPct ?? null,
+  };
+  const liveChange = changeByTf[tf];
+  const volByTf: Record<string, number | null> = {
+    "5m": dex?.volume5mUsd ?? null,
+    "1h": dex?.volume1hUsd ?? null,
+    "6h": dex?.volume6hUsd ?? null,
+    "24h": dex?.volume24hUsd ?? token?.volume24hUsd ?? null,
+  };
+  const liveVol = volByTf[tf];
   const liveLiq = dex?.liquidityUsd ?? overview?.liquidity ?? token?.liquidityUsd ?? null;
   const liveMc = dex?.marketCapUsd ?? overview?.marketCap ?? token?.marketCapUsd ?? null;
-  const liveVol = dex?.volume24hUsd ?? token?.volume24hUsd ?? null;
+  const liveFdv = dex?.fdvUsd ?? null;
   const liveHolders = overview?.holder ?? token?.holders ?? null;
   const pairAddress = dex?.pairAddress ?? null;
+  const pairCreated = dex?.pairCreatedAt ?? null;
+  const dexId = dex?.dexId ?? null;
+  const txns24 = dex?.txns24h;
+  const txns1h = dex?.txns1h;
+  const totalTx = (txns24?.buys ?? 0) + (txns24?.sells ?? 0);
+  const buyPressure = totalTx > 0 ? (txns24!.buys / totalTx) * 100 : 50;
+
+  // Live price flash animation
+  const flash = useRef(new Animated.Value(0)).current;
+  const lastPrice = useRef<number | null>(null);
+  const [flashUp, setFlashUp] = useState<boolean>(true);
+  useEffect(() => {
+    if (livePrice == null) return;
+    if (lastPrice.current != null && livePrice !== lastPrice.current) {
+      setFlashUp(livePrice > lastPrice.current);
+      Animated.sequence([
+        Animated.timing(flash, { toValue: 1, duration: 120, useNativeDriver: false }),
+        Animated.timing(flash, { toValue: 0, duration: 600, useNativeDriver: false }),
+      ]).start();
+    }
+    lastPrice.current = livePrice;
+  }, [livePrice, flash]);
+
+  // Security score (Birdeye)
+  const security = useQuery({
+    queryKey: ["security", token?.contract ?? ""],
+    enabled: !!token?.contract && tab === "risk",
+    queryFn: async () => {
+      try {
+        return await getTokenSecurity(token!.contract);
+      } catch (e) {
+        console.log("[detail] security fetch failed", e);
+        return null;
+      }
+    },
+    staleTime: 60_000,
+  });
 
   const onCopy = useCallback(async () => {
     if (!token) return;
@@ -107,6 +206,13 @@ export default function LaunchDetailScreen() {
     toggleUpvote(token.id);
   }, [token, toggleUpvote]);
 
+  const onTabPress = useCallback((k: TabKey) => {
+    if (Platform.OS !== "web") {
+      Haptics.selectionAsync().catch(() => {});
+    }
+    setTab(k);
+  }, []);
+
   const positive = useMemo(() => (liveChange ?? 0) >= 0, [liveChange]);
   const accent = positive ? Colors.mint : Colors.rose;
 
@@ -130,11 +236,20 @@ export default function LaunchDetailScreen() {
   const isMine = token.submittedBy === "user";
   const isUpvoted = !!upvoted[token.id];
 
+  const flashBg = flash.interpolate({
+    inputRange: [0, 1],
+    outputRange: [
+      "rgba(255,255,255,0)",
+      flashUp ? "rgba(85,245,178,0.18)" : "rgba(255,93,143,0.18)",
+    ],
+  });
+
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {/* Banner */}
           <View style={styles.bannerWrap}>
             {token.bannerUrl ? (
               <Image source={{ uri: token.bannerUrl }} style={styles.banner} contentFit="cover" />
@@ -193,6 +308,7 @@ export default function LaunchDetailScreen() {
             </View>
           </View>
 
+          {/* Identity */}
           <View style={styles.headWrap}>
             <View style={styles.logoBlock}>
               {token.logoUrl ? (
@@ -207,6 +323,11 @@ export default function LaunchDetailScreen() {
                   <Text style={styles.logoText}>{token.ticker.slice(0, 2)}</Text>
                 </LinearGradient>
               )}
+              {token.status === "live" ? (
+                <View style={styles.logoLiveDot}>
+                  <View style={styles.logoLiveDotInner} />
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.headInfo}>
@@ -221,198 +342,211 @@ export default function LaunchDetailScreen() {
                 <View style={styles.tickerPill}>
                   <Text style={styles.tickerText}>${token.ticker}</Text>
                 </View>
-                <View style={styles.venuePill}>
-                  <Text style={styles.venueText}>{token.venue}</Text>
+                {dexId ? (
+                  <View style={styles.venuePill}>
+                    <Text style={styles.venueText}>{dexId.toUpperCase()}</Text>
+                  </View>
+                ) : (
+                  <View style={styles.venuePill}>
+                    <Text style={styles.venueText}>{token.venue}</Text>
+                  </View>
+                )}
+                {pairCreated ? (
+                  <View style={styles.agePill}>
+                    <Zap color={Colors.cyan} size={9} strokeWidth={3} />
+                    <Text style={styles.ageText}>{ageString(pairCreated)}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </View>
+
+          {/* Live price hero with flash + timeframe selector */}
+          <Animated.View style={[styles.priceCard, { backgroundColor: flashBg }]}>
+            <View style={styles.priceCardInner}>
+              <View style={styles.priceTopRow}>
+                <View>
+                  <Text style={styles.priceLabel}>Price</Text>
+                  <Text style={styles.priceValue}>
+                    {livePrice != null && livePrice > 0 ? fmtPrice(livePrice) : "—"}
+                  </Text>
                 </View>
-                <View
-                  style={[
-                    styles.statusPill,
-                    {
-                      backgroundColor:
-                        token.status === "live" ? "rgba(85,245,178,0.14)" : "rgba(255,255,255,0.05)",
-                    },
-                  ]}
-                >
-                  {token.status === "live" ? <View style={styles.liveDot} /> : null}
-                  <Text
+                {liveChange != null ? (
+                  <View
                     style={[
-                      styles.statusText,
-                      { color: token.status === "live" ? Colors.mint : Colors.muted },
+                      styles.changeBadge,
+                      { backgroundColor: `${accent}1A`, borderColor: `${accent}55` },
                     ]}
                   >
-                    {token.status.toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.priceCard}>
-            <Text style={styles.priceLabel}>Market cap</Text>
-            <View style={styles.priceRow}>
-              <Text style={styles.priceValue}>
-                {liveMc != null && liveMc > 0 ? formatUsd(liveMc) : "—"}
-              </Text>
-              {liveChange != null ? (
-                <View style={[styles.changeBadge, { backgroundColor: `${accent}1A`, borderColor: `${accent}55` }]}>
-                  {positive ? (
-                    <TrendingUp color={accent} size={12} strokeWidth={3} />
-                  ) : (
-                    <TrendingDown color={accent} size={12} strokeWidth={3} />
-                  )}
-                  <Text style={[styles.changeText, { color: accent }]}>
-                    {positive ? "+" : ""}
-                    {liveChange.toFixed(2)}%
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={styles.priceSubLine}>
-              Price {livePrice != null && livePrice > 0 ? formatPrice(livePrice) : "—"}
-              {liveLiq != null && liveLiq > 0 ? `  ·  Liq ${formatUsd(liveLiq)}` : ""}
-            </Text>
-            <View style={styles.chartEmbed} testID="chart-embed">
-              <DexChart contract={token.contract} pairAddress={pairAddress ?? undefined} height={320} />
-            </View>
-            <View style={styles.chartCtaRow}>
-              <Pressable
-                onPress={() => openLink(`https://dexscreener.com/solana/${token.contract}`)}
-                style={styles.chartCta}
-                testID="open-dexscreener"
-              >
-                <Text style={styles.chartCtaText}>DexScreener →</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => openLink(`https://birdeye.so/token/${token.contract}?chain=solana`)}
-                style={styles.chartCta}
-                testID="open-birdeye"
-              >
-                <Text style={styles.chartCtaText}>Birdeye →</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.metricsGrid}>
-            <Metric label="Liquidity" value={formatUsd(liveLiq)} />
-            <Metric label="Market cap" value={formatUsd(liveMc)} />
-            <Metric label="24h volume" value={formatUsd(liveVol)} />
-            <Metric label="Holders" value={liveHolders ? liveHolders.toLocaleString() : "—"} />
-          </View>
-
-          <View style={styles.actionRow}>
-            <Pressable
-              onPress={onUpvote}
-              style={[styles.actionBtn, isUpvoted && styles.actionBtnOn]}
-              testID="upvote-btn"
-            >
-              <Flame
-                color={isUpvoted ? Colors.orange : Colors.text}
-                size={15}
-                strokeWidth={2.6}
-                fill={isUpvoted ? Colors.orange : "transparent"}
-              />
-              <Text style={[styles.actionText, isUpvoted && { color: Colors.orange }]}>
-                Boost · {token.upvotes}
-              </Text>
-            </Pressable>
-            <Pressable style={styles.actionBtn} testID="alerts-btn">
-              <Bell color={Colors.text} size={15} strokeWidth={2.6} />
-              <Text style={styles.actionText}>Alerts</Text>
-            </Pressable>
-            <Pressable style={styles.actionBtn} testID="watchers-btn">
-              <Users color={Colors.text} size={15} strokeWidth={2.6} />
-              <Text style={styles.actionText}>{token.watchers}</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Contract</Text>
-            <Pressable onPress={onCopy} style={styles.contractRow} testID="contract-copy">
-              <Text style={styles.contractText}>{shortAddress(token.contract)}</Text>
-              <View style={styles.copyBadge}>
-                {copied ? (
-                  <Check color={Colors.mint} size={12} strokeWidth={3} />
-                ) : (
-                  <Copy color={Colors.muted} size={12} strokeWidth={2.6} />
-                )}
-                <Text style={[styles.copyText, copied && { color: Colors.mint }]}>
-                  {copied ? "Copied" : "Copy"}
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-
-          {token.description.trim().length > 0 ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>About</Text>
-              <Text style={styles.descText}>{token.description}</Text>
-            </View>
-          ) : null}
-
-          {token.tags.length > 0 ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Tags</Text>
-              <View style={styles.tagRow}>
-                {token.tags.map((t) => (
-                  <View key={t} style={styles.tagPill}>
-                    <Text style={styles.tagText}>#{t}</Text>
+                    {positive ? (
+                      <TrendingUp color={accent} size={12} strokeWidth={3} />
+                    ) : (
+                      <TrendingDown color={accent} size={12} strokeWidth={3} />
+                    )}
+                    <Text style={[styles.changeText, { color: accent }]}>{fmtPct(liveChange)}</Text>
                   </View>
-                ))}
+                ) : null}
+              </View>
+
+              <View style={styles.tfRow}>
+                {TIMEFRAMES.map((t) => {
+                  const active = tf === t.key;
+                  const c = changeByTf[t.key];
+                  const up = (c ?? 0) >= 0;
+                  return (
+                    <Pressable
+                      key={t.key}
+                      onPress={() => {
+                        if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
+                        setTf(t.key);
+                      }}
+                      style={[styles.tfBtn, active && styles.tfBtnActive]}
+                      testID={`tf-${t.key}`}
+                    >
+                      <Text style={[styles.tfLabel, active && styles.tfLabelActive]}>{t.label}</Text>
+                      <Text
+                        style={[
+                          styles.tfChange,
+                          { color: c == null ? Colors.muted : up ? Colors.mint : Colors.rose },
+                        ]}
+                      >
+                        {c == null ? "—" : fmtPct(c, 1)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.chartEmbed} testID="chart-embed">
+                <DexChart contract={token.contract} pairAddress={pairAddress ?? undefined} height={300} />
               </View>
             </View>
-          ) : null}
+          </Animated.View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Links</Text>
-            <View style={styles.linksCol}>
-              <LinkRow Icon={Globe2} label="Website" value={token.website} onPress={() => openLink(token.website)} />
-              <LinkRow Icon={AtSign} label="Twitter" value={token.twitter} onPress={() => openLink(token.twitter)} />
-              <LinkRow
-                Icon={Send}
-                label="Telegram"
-                value={token.telegram}
-                onPress={() => openLink(token.telegram)}
-              />
-              <LinkRow
-                Icon={MessageCircle}
-                label="Discord"
-                value={token.discord}
-                onPress={() => openLink(token.discord)}
-              />
-            </View>
+          {/* Tabs */}
+          <View style={styles.tabsBar}>
+            {TABS.map((t) => {
+              const active = tab === t.key;
+              return (
+                <Pressable
+                  key={t.key}
+                  onPress={() => onTabPress(t.key)}
+                  style={[styles.tabBtn, active && styles.tabBtnActive]}
+                  testID={`tab-${t.key}`}
+                >
+                  <t.Icon
+                    color={active ? Colors.ink : Colors.muted}
+                    size={13}
+                    strokeWidth={2.8}
+                  />
+                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
 
-          <Pressable
-            onPress={() => openLink(`https://dexscreener.com/solana/${token.contract}`)}
-            style={styles.tradeBtn}
-            testID="trade-btn"
-          >
-            <LinearGradient
-              colors={[Colors.mint, Colors.cyan]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.tradeGradient}
-            >
-              <ArrowUpRight color={Colors.ink} size={16} strokeWidth={3} />
-              <Text style={styles.tradeText}>Open on DEXScreener</Text>
-              <ExternalLink color={Colors.ink} size={14} strokeWidth={3} />
-            </LinearGradient>
-          </Pressable>
+          {tab === "overview" ? (
+            <OverviewTab
+              liveMc={liveMc}
+              liveFdv={liveFdv}
+              liveLiq={liveLiq}
+              liveVol={liveVol}
+              tfLabel={tf.toUpperCase()}
+              liveHolders={liveHolders ?? null}
+              upvotes={token.upvotes}
+              watchers={token.watchers}
+              isUpvoted={isUpvoted}
+              onUpvote={onUpvote}
+              description={token.description}
+              tags={token.tags}
+              contract={token.contract}
+              copied={copied}
+              onCopy={onCopy}
+              website={token.website}
+              twitter={token.twitter}
+              telegram={token.telegram}
+              discord={token.discord}
+              extraSocials={dex?.socials ?? []}
+              extraSites={dex?.websites ?? []}
+              openLink={openLink}
+            />
+          ) : null}
+
+          {tab === "activity" ? (
+            <ActivityTab
+              txns24={txns24 ?? null}
+              txns1h={txns1h ?? null}
+              buyPressure={buyPressure}
+              vol5m={dex?.volume5mUsd ?? null}
+              vol1h={dex?.volume1hUsd ?? null}
+              vol6h={dex?.volume6hUsd ?? null}
+              vol24h={dex?.volume24hUsd ?? null}
+              chg5m={dex?.priceChange5mPct ?? null}
+              chg1h={dex?.priceChange1hPct ?? null}
+              chg6h={dex?.priceChange6hPct ?? null}
+              chg24h={dex?.priceChange24hPct ?? null}
+              pairAddress={pairAddress}
+              openLink={openLink}
+            />
+          ) : null}
+
+          {tab === "pools" ? (
+            <PoolsTab
+              pairs={dex?.pairs ?? []}
+              currentPair={pairAddress}
+              openLink={openLink}
+            />
+          ) : null}
+
+          {tab === "risk" ? (
+            <RiskTab
+              loading={security.isLoading}
+              data={security.data ?? null}
+              holders={liveHolders ?? null}
+              liquidity={liveLiq}
+              age={pairCreated}
+              labels={dex?.pair?.labels ?? []}
+            />
+          ) : null}
 
           <View style={styles.viewsRow}>
             <Eye color={Colors.muted} size={12} strokeWidth={2.4} />
             <Text style={styles.viewsText}>
               Listed {new Date(token.createdAt).toLocaleDateString()}
+              {pairCreated ? ` · Pair ${ageString(pairCreated)} old` : ""}
             </Text>
           </View>
         </ScrollView>
 
+        {/* Sticky buy/sell bar */}
         <View style={styles.stickyBar} pointerEvents="box-none">
           <LinearGradient
             colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.85)", Colors.ink]}
             style={styles.stickyFade}
             pointerEvents="none"
           />
+          <View style={styles.quickRow}>
+            {QUICK_BUYS.map((amt) => (
+              <Pressable
+                key={amt}
+                onPress={() =>
+                  openLink(`https://jup.ag/swap/SOL-${token.contract}?amount=${amt}`)
+                }
+                style={styles.quickBtn}
+                testID={`quick-buy-${amt}`}
+              >
+                <Text style={styles.quickAmt}>{amt}</Text>
+                <Text style={styles.quickSol}>SOL</Text>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => openLink(`https://jup.ag/swap/SOL-${token.contract}`)}
+              style={[styles.quickBtn, styles.quickCustom]}
+              testID="quick-buy-custom"
+            >
+              <Text style={styles.quickCustomText}>Custom</Text>
+            </Pressable>
+          </View>
           <View style={styles.stickyInner}>
             <Pressable
               onPress={() => setWatching((v) => !v)}
@@ -425,6 +559,9 @@ export default function LaunchDetailScreen() {
                 strokeWidth={2.6}
                 fill={watching ? Colors.mint : "transparent"}
               />
+            </Pressable>
+            <Pressable style={styles.stickyAlert} testID="sticky-alert">
+              <Bell color={Colors.cyan} size={15} strokeWidth={2.8} />
             </Pressable>
             <Pressable
               onPress={() => openLink(`https://jup.ag/swap/SOL-${token.contract}`)}
@@ -455,11 +592,479 @@ export default function LaunchDetailScreen() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+/* ---------------- Tabs ---------------- */
+
+function OverviewTab(props: {
+  liveMc: number | null;
+  liveFdv: number | null;
+  liveLiq: number | null;
+  liveVol: number | null;
+  tfLabel: string;
+  liveHolders: number | null;
+  upvotes: number;
+  watchers: number;
+  isUpvoted: boolean;
+  onUpvote: () => void;
+  description: string;
+  tags: string[];
+  contract: string;
+  copied: boolean;
+  onCopy: () => void;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
+  discord?: string;
+  extraSocials: { type: string; url: string }[];
+  extraSites: string[];
+  openLink: (url?: string) => void;
+}) {
+  const {
+    liveMc, liveFdv, liveLiq, liveVol, tfLabel, liveHolders, upvotes, watchers,
+    isUpvoted, onUpvote, description, tags, contract, copied, onCopy,
+    website, twitter, telegram, discord, extraSocials, extraSites, openLink,
+  } = props;
+
+  const fdvRatio = liveMc && liveFdv ? liveMc / liveFdv : null;
+
   return (
-    <View style={styles.metric}>
+    <View>
+      <View style={styles.metricsGrid}>
+        <Metric label="Market cap" value={fmtUsd(liveMc)} accent={Colors.mint} />
+        <Metric label="FDV" value={fmtUsd(liveFdv)} sub={fdvRatio ? `MC/FDV ${(fdvRatio * 100).toFixed(0)}%` : undefined} />
+        <Metric label="Liquidity" value={fmtUsd(liveLiq)} accent={Colors.cyan} />
+        <Metric label={`Volume ${tfLabel}`} value={fmtUsd(liveVol)} />
+        <Metric label="Holders" value={liveHolders ? fmtNum(liveHolders) : "—"} />
+        <Metric label="Watchers" value={`${watchers}`} sub={`${upvotes} boosts`} />
+      </View>
+
+      <View style={styles.actionRow}>
+        <Pressable
+          onPress={onUpvote}
+          style={[styles.actionBtn, isUpvoted && styles.actionBtnOn]}
+          testID="upvote-btn"
+        >
+          <Flame
+            color={isUpvoted ? Colors.orange : Colors.text}
+            size={15}
+            strokeWidth={2.6}
+            fill={isUpvoted ? Colors.orange : "transparent"}
+          />
+          <Text style={[styles.actionText, isUpvoted && { color: Colors.orange }]}>
+            Boost · {upvotes}
+          </Text>
+        </Pressable>
+        <Pressable style={styles.actionBtn} testID="alerts-btn">
+          <Bell color={Colors.text} size={15} strokeWidth={2.6} />
+          <Text style={styles.actionText}>Alerts</Text>
+        </Pressable>
+        <Pressable style={styles.actionBtn} testID="watchers-btn">
+          <Users color={Colors.text} size={15} strokeWidth={2.6} />
+          <Text style={styles.actionText}>{watchers}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Contract</Text>
+        <Pressable onPress={onCopy} style={styles.contractRow} testID="contract-copy">
+          <Text style={styles.contractText}>{shortAddress(contract)}</Text>
+          <View style={styles.copyBadge}>
+            {copied ? (
+              <Check color={Colors.mint} size={12} strokeWidth={3} />
+            ) : (
+              <Copy color={Colors.muted} size={12} strokeWidth={2.6} />
+            )}
+            <Text style={[styles.copyText, copied && { color: Colors.mint }]}>
+              {copied ? "Copied" : "Copy"}
+            </Text>
+          </View>
+        </Pressable>
+      </View>
+
+      {description.trim().length > 0 ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>About</Text>
+          <Text style={styles.descText}>{description}</Text>
+        </View>
+      ) : null}
+
+      {tags.length > 0 ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Tags</Text>
+          <View style={styles.tagRow}>
+            {tags.map((t) => (
+              <View key={t} style={styles.tagPill}>
+                <Text style={styles.tagText}>#{t}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Links</Text>
+        <View style={styles.linksCol}>
+          <LinkRow Icon={Globe2} label="Website" value={website ?? extraSites[0]} onPress={() => openLink(website ?? extraSites[0])} />
+          <LinkRow Icon={Twitter} label="Twitter" value={twitter ?? extraSocials.find((s) => /twitter|x/i.test(s.type))?.url} onPress={() => openLink(twitter ?? extraSocials.find((s) => /twitter|x/i.test(s.type))?.url)} />
+          <LinkRow Icon={Send} label="Telegram" value={telegram ?? extraSocials.find((s) => /telegram/i.test(s.type))?.url} onPress={() => openLink(telegram ?? extraSocials.find((s) => /telegram/i.test(s.type))?.url)} />
+          <LinkRow Icon={MessageCircle} label="Discord" value={discord ?? extraSocials.find((s) => /discord/i.test(s.type))?.url} onPress={() => openLink(discord ?? extraSocials.find((s) => /discord/i.test(s.type))?.url)} />
+          <LinkRow Icon={AtSign} label="Solscan" value={`solscan.io/token/${contract.slice(0, 8)}…`} onPress={() => openLink(`https://solscan.io/token/${contract}`)} />
+          <LinkRow Icon={ExternalLink} label="DexScreener" value="dexscreener.com" onPress={() => openLink(`https://dexscreener.com/solana/${contract}`)} />
+        </View>
+      </View>
+
+      <Pressable
+        onPress={() => openLink(`https://jup.ag/swap/SOL-${contract}`)}
+        style={styles.tradeBtn}
+        testID="trade-btn"
+      >
+        <LinearGradient
+          colors={[Colors.mint, Colors.cyan]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.tradeGradient}
+        >
+          <ArrowUpRight color={Colors.ink} size={16} strokeWidth={3} />
+          <Text style={styles.tradeText}>Trade on Jupiter</Text>
+          <ExternalLink color={Colors.ink} size={14} strokeWidth={3} />
+        </LinearGradient>
+      </Pressable>
+    </View>
+  );
+}
+
+function ActivityTab(props: {
+  txns24: { buys: number; sells: number } | null;
+  txns1h: { buys: number; sells: number } | null;
+  buyPressure: number;
+  vol5m: number | null;
+  vol1h: number | null;
+  vol6h: number | null;
+  vol24h: number | null;
+  chg5m: number | null;
+  chg1h: number | null;
+  chg6h: number | null;
+  chg24h: number | null;
+  pairAddress: string | null;
+  openLink: (url?: string) => void;
+}) {
+  const { txns24, txns1h, buyPressure, vol5m, vol1h, vol6h, vol24h, chg5m, chg1h, chg6h, chg24h, pairAddress, openLink } = props;
+  const rows: { label: string; vol: number | null; chg: number | null }[] = [
+    { label: "5M", vol: vol5m, chg: chg5m },
+    { label: "1H", vol: vol1h, chg: chg1h },
+    { label: "6H", vol: vol6h, chg: chg6h },
+    { label: "24H", vol: vol24h, chg: chg24h },
+  ];
+
+  return (
+    <View>
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Buy / Sell pressure (24h)</Text>
+        <View style={styles.pressureCard}>
+          <View style={styles.pressureBarTrack}>
+            <View
+              style={[styles.pressureBarFill, { width: `${Math.max(2, Math.min(98, buyPressure))}%` }]}
+            />
+          </View>
+          <View style={styles.pressureRow}>
+            <View>
+              <Text style={[styles.pressureSide, { color: Colors.mint }]}>BUYS</Text>
+              <Text style={styles.pressureCount}>{fmtNum(txns24?.buys ?? 0)}</Text>
+            </View>
+            <Text style={styles.pressurePct}>{buyPressure.toFixed(0)}%</Text>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={[styles.pressureSide, { color: Colors.rose }]}>SELLS</Text>
+              <Text style={styles.pressureCount}>{fmtNum(txns24?.sells ?? 0)}</Text>
+            </View>
+          </View>
+          {txns1h ? (
+            <Text style={styles.pressureSubtle}>
+              Last hour: {txns1h.buys} buys · {txns1h.sells} sells
+            </Text>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Volume & price by timeframe</Text>
+        <View style={styles.tableCard}>
+          {rows.map((r, i) => {
+            const up = (r.chg ?? 0) >= 0;
+            return (
+              <View key={r.label} style={[styles.tableRow, i < rows.length - 1 && styles.tableRowDiv]}>
+                <Text style={styles.tableLabel}>{r.label}</Text>
+                <Text style={styles.tableVol}>{fmtUsd(r.vol)}</Text>
+                <Text
+                  style={[
+                    styles.tableChg,
+                    { color: r.chg == null ? Colors.muted : up ? Colors.mint : Colors.rose },
+                  ]}
+                >
+                  {r.chg == null ? "—" : fmtPct(r.chg, 2)}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      <Pressable
+        onPress={() =>
+          openLink(
+            pairAddress
+              ? `https://dexscreener.com/solana/${pairAddress}`
+              : undefined
+          )
+        }
+        style={[styles.tradeBtn, { marginTop: 6 }]}
+        testID="open-trades"
+      >
+        <LinearGradient
+          colors={[Colors.mint, Colors.cyan]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.tradeGradient}
+        >
+          <Activity color={Colors.ink} size={16} strokeWidth={3} />
+          <Text style={styles.tradeText}>View live trades</Text>
+          <ExternalLink color={Colors.ink} size={14} strokeWidth={3} />
+        </LinearGradient>
+      </Pressable>
+    </View>
+  );
+}
+
+function PoolsTab({
+  pairs,
+  currentPair,
+  openLink,
+}: {
+  pairs: DexPair[];
+  currentPair: string | null;
+  openLink: (url?: string) => void;
+}) {
+  const sorted = useMemo(
+    () =>
+      pairs
+        .slice()
+        .sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))
+        .slice(0, 12),
+    [pairs]
+  );
+
+  if (sorted.length === 0) {
+    return (
+      <View style={styles.section}>
+        <View style={styles.emptyCard}>
+          <Droplet color={Colors.muted} size={18} strokeWidth={2.4} />
+          <Text style={styles.emptyTitle}>No pools indexed yet</Text>
+          <Text style={styles.emptyBody}>DexScreener hasn&apos;t indexed any liquidity pools for this token.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>{sorted.length} liquidity pool{sorted.length === 1 ? "" : "s"}</Text>
+      <View style={{ gap: 8 }}>
+        {sorted.map((p) => {
+          const isCurrent = p.pairAddress === currentPair;
+          const chg = p.priceChange?.h24 ?? null;
+          const up = (chg ?? 0) >= 0;
+          return (
+            <Pressable
+              key={p.pairAddress}
+              onPress={() => openLink(p.url)}
+              style={[styles.poolCard, isCurrent && styles.poolCardActive]}
+              testID={`pool-${p.pairAddress}`}
+            >
+              <View style={styles.poolTop}>
+                <View style={styles.poolBadge}>
+                  <Text style={styles.poolBadgeText}>{p.dexId.toUpperCase()}</Text>
+                </View>
+                <Text style={styles.poolPair}>
+                  {p.baseToken.symbol}/{p.quoteToken.symbol}
+                </Text>
+                {isCurrent ? (
+                  <View style={styles.poolCurrent}>
+                    <Text style={styles.poolCurrentText}>PRIMARY</Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.poolStatsRow}>
+                <PoolStat label="Liq" value={fmtUsd(p.liquidity?.usd ?? null)} />
+                <PoolStat label="Vol 24h" value={fmtUsd(p.volume?.h24 ?? null)} />
+                <PoolStat
+                  label="24h"
+                  value={chg == null ? "—" : fmtPct(chg, 1)}
+                  color={chg == null ? Colors.muted : up ? Colors.mint : Colors.rose}
+                />
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function PoolStat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Text style={styles.poolStatLabel}>{label}</Text>
+      <Text style={[styles.poolStatValue, color ? { color } : null]}>{value}</Text>
+    </View>
+  );
+}
+
+function RiskTab({
+  loading,
+  data,
+  holders,
+  liquidity,
+  age,
+  labels,
+}: {
+  loading: boolean;
+  data: {
+    riskScore: number;
+    isHoneypot: boolean;
+    buyTax?: number;
+    sellTax?: number;
+    lpLocked?: boolean;
+    topHoldersPct?: number;
+  } | null;
+  holders: number | null;
+  liquidity: number | null;
+  age: number | null;
+  labels: string[];
+}) {
+  // Compose a heuristic score even if Birdeye is unavailable
+  const heuristic = useMemo(() => {
+    let score = 50;
+    if ((liquidity ?? 0) > 250_000) score += 18;
+    else if ((liquidity ?? 0) > 50_000) score += 8;
+    else if ((liquidity ?? 0) < 5_000) score -= 20;
+    if ((holders ?? 0) > 5_000) score += 12;
+    else if ((holders ?? 0) > 500) score += 4;
+    else if ((holders ?? 0) < 50 && (holders ?? 0) > 0) score -= 12;
+    if (age && Date.now() - age > 30 * 24 * 3600 * 1000) score += 8;
+    if (age && Date.now() - age < 24 * 3600 * 1000) score -= 6;
+    return Math.max(0, Math.min(100, score));
+  }, [liquidity, holders, age]);
+
+  const score = data?.riskScore != null ? Math.max(0, Math.min(100, data.riskScore)) : heuristic;
+  const tier =
+    score >= 75 ? { label: "LOW RISK", color: Colors.mint, Icon: ShieldCheck } :
+    score >= 50 ? { label: "MEDIUM", color: Colors.orange, Icon: Shield } :
+    { label: "HIGH RISK", color: Colors.rose, Icon: ShieldAlert };
+
+  return (
+    <View>
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Risk score</Text>
+        <View style={[styles.riskCard, { borderColor: `${tier.color}55` }]}>
+          <View style={styles.riskTop}>
+            <View style={[styles.riskBadge, { backgroundColor: `${tier.color}1A`, borderColor: `${tier.color}55` }]}>
+              <tier.Icon color={tier.color} size={14} strokeWidth={2.8} />
+              <Text style={[styles.riskBadgeText, { color: tier.color }]}>{tier.label}</Text>
+            </View>
+            <Text style={[styles.riskScore, { color: tier.color }]}>{score}</Text>
+          </View>
+          <View style={styles.riskBarTrack}>
+            <View style={[styles.riskBarFill, { width: `${score}%`, backgroundColor: tier.color }]} />
+          </View>
+          <Text style={styles.riskHint}>
+            {data ? "Powered by on-chain checks" : loading ? "Computing risk…" : "Heuristic score (live data unavailable)"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Checks</Text>
+        <View style={styles.tableCard}>
+          <CheckRow label="Honeypot" value={data?.isHoneypot ? "Detected" : "Clear"} good={!data?.isHoneypot} />
+          <CheckRow
+            label="LP locked"
+            value={data?.lpLocked == null ? "Unknown" : data.lpLocked ? "Yes" : "No"}
+            good={data?.lpLocked === true}
+            neutral={data?.lpLocked == null}
+          />
+          <CheckRow
+            label="Buy tax"
+            value={data?.buyTax != null ? `${data.buyTax.toFixed(2)}%` : "—"}
+            good={data?.buyTax != null ? data.buyTax < 5 : undefined}
+            neutral={data?.buyTax == null}
+          />
+          <CheckRow
+            label="Sell tax"
+            value={data?.sellTax != null ? `${data.sellTax.toFixed(2)}%` : "—"}
+            good={data?.sellTax != null ? data.sellTax < 5 : undefined}
+            neutral={data?.sellTax == null}
+          />
+          <CheckRow
+            label="Top 10 holders"
+            value={data?.topHoldersPct != null ? `${data.topHoldersPct.toFixed(1)}%` : "—"}
+            good={data?.topHoldersPct != null ? data.topHoldersPct < 30 : undefined}
+            neutral={data?.topHoldersPct == null}
+          />
+          <CheckRow
+            label="Pool age"
+            value={age ? ageString(age) : "—"}
+            good={age ? Date.now() - age > 7 * 24 * 3600 * 1000 : undefined}
+            neutral={!age}
+            last
+          />
+        </View>
+      </View>
+
+      {labels.length > 0 ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Pair labels</Text>
+          <View style={styles.tagRow}>
+            {labels.map((l) => (
+              <View key={l} style={styles.tagPill}>
+                <Text style={styles.tagText}>{l}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function CheckRow({
+  label,
+  value,
+  good,
+  neutral,
+  last,
+}: {
+  label: string;
+  value: string;
+  good?: boolean;
+  neutral?: boolean;
+  last?: boolean;
+}) {
+  const color = neutral ? Colors.muted : good ? Colors.mint : Colors.rose;
+  return (
+    <View style={[styles.tableRow, !last && styles.tableRowDiv]}>
+      <Text style={styles.tableLabel}>{label}</Text>
+      <View style={{ flex: 1 }} />
+      <Text style={[styles.tableChg, { color }]}>{value}</Text>
+    </View>
+  );
+}
+
+/* ---------------- Atoms ---------------- */
+
+function Metric({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+  return (
+    <View style={[styles.metric, accent ? { borderColor: `${accent}33` } : null]}>
       <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={[styles.metricValue, accent ? { color: accent } : null]}>{value}</Text>
+      {sub ? <Text style={styles.metricSub}>{sub}</Text> : null}
     </View>
   );
 }
@@ -487,7 +1092,7 @@ function LinkRow({
         <View style={styles.linkIconBox}>
           <Icon color={has ? Colors.mint : Colors.muted} size={13} strokeWidth={2.6} />
         </View>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.linkLabel}>{label}</Text>
           <Text style={styles.linkValue} numberOfLines={1}>
             {has ? value : "Not provided"}
@@ -502,7 +1107,7 @@ function LinkRow({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
   safe: { flex: 1 },
-  scroll: { paddingBottom: 130 },
+  scroll: { paddingBottom: 200 },
 
   bannerWrap: { height: 200, position: "relative" },
   banner: { ...StyleSheet.absoluteFillObject },
@@ -516,146 +1121,128 @@ const styles = StyleSheet.create({
   },
   headerActions: { flexDirection: "row", gap: 8 },
   iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 38, height: 38, borderRadius: 12,
     backgroundColor: "rgba(0,0,0,0.45)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center", justifyContent: "center",
   },
 
   headWrap: {
-    marginTop: -32,
-    paddingHorizontal: 18,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 14,
+    marginTop: -32, paddingHorizontal: 18,
+    flexDirection: "row", alignItems: "flex-end", gap: 14,
   },
-  logoBlock: { borderRadius: 22, padding: 4, backgroundColor: Colors.ink },
+  logoBlock: { borderRadius: 22, padding: 4, backgroundColor: Colors.ink, position: "relative" },
   logo: { width: 76, height: 76, borderRadius: 18 },
   logoFallback: { alignItems: "center", justifyContent: "center" },
   logoText: { color: Colors.ink, fontSize: 18, fontWeight: "900" },
+  logoLiveDot: {
+    position: "absolute", bottom: 2, right: 2,
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: Colors.ink,
+    alignItems: "center", justifyContent: "center",
+  },
+  logoLiveDotInner: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.mint },
   headInfo: { flex: 1, paddingBottom: 4 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   title: { color: Colors.text, fontSize: 22, fontWeight: "900", letterSpacing: -0.5, flexShrink: 1 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" },
   tickerPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
     backgroundColor: "rgba(85,245,178,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.3)",
+    borderWidth: 1, borderColor: "rgba(85,245,178,0.3)",
   },
   tickerText: { color: Colors.mint, fontSize: 11, fontWeight: "900" },
   venuePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.05)" },
   venueText: { color: Colors.muted, fontSize: 10, fontWeight: "800" },
-  statusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+  agePill: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999,
+    backgroundColor: "rgba(56,215,255,0.12)",
+    borderWidth: 1, borderColor: "rgba(56,215,255,0.3)",
   },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.mint },
-  statusText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
+  ageText: { color: Colors.cyan, fontSize: 10, fontWeight: "900" },
 
   priceCard: {
-    marginHorizontal: 16,
-    marginTop: 18,
-    padding: 16,
-    borderRadius: 18,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    marginHorizontal: 16, marginTop: 18,
+    borderRadius: 18, overflow: "hidden",
   },
+  priceCardInner: {
+    padding: 16, borderRadius: 18,
+    backgroundColor: Colors.card,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
+  },
+  priceTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   priceLabel: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1.2, textTransform: "uppercase" },
-  priceRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 },
-  priceValue: { color: Colors.text, fontSize: 28, fontWeight: "900", letterSpacing: -0.6 },
-  priceSubLine: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 6, letterSpacing: 0.2 },
+  priceValue: { color: Colors.text, fontSize: 30, fontWeight: "900", letterSpacing: -0.6, marginTop: 4 },
   changeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 11, paddingVertical: 7,
+    borderRadius: 12, borderWidth: 1,
   },
-  changeText: { fontSize: 12, fontWeight: "900" },
-  chartEmbed: {
-    marginTop: 14,
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  chartImg: { ...StyleSheet.absoluteFillObject },
-  chartFade: { ...StyleSheet.absoluteFillObject },
-  chartCtaRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 10,
-  },
-  chartCta: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
-  },
-  chartCtaText: { color: Colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
+  changeText: { fontSize: 13, fontWeight: "900" },
 
-  metricsGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 12, gap: 8, marginTop: 12 },
-  metric: {
-    flexBasis: "47%",
-    flexGrow: 1,
-    padding: 12,
-    borderRadius: 14,
+  tfRow: { flexDirection: "row", gap: 6, marginTop: 14 },
+  tfBtn: {
+    flex: 1, paddingVertical: 9, borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
+    alignItems: "center", gap: 2,
+  },
+  tfBtnActive: {
+    backgroundColor: "rgba(85,245,178,0.14)",
+    borderColor: "rgba(85,245,178,0.45)",
+  },
+  tfLabel: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+  tfLabelActive: { color: Colors.mint },
+  tfChange: { fontSize: 11, fontWeight: "900" },
+
+  chartEmbed: { marginTop: 14, borderRadius: 14, overflow: "hidden" },
+
+  tabsBar: {
+    flexDirection: "row", gap: 6,
+    marginHorizontal: 16, marginTop: 16,
+    padding: 5, borderRadius: 14,
     backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+  },
+  tabBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 5, paddingVertical: 9, borderRadius: 10,
+  },
+  tabBtnActive: { backgroundColor: Colors.mint },
+  tabText: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
+  tabTextActive: { color: Colors.ink },
+
+  metricsGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 12, gap: 8, marginTop: 14 },
+  metric: {
+    flexBasis: "47%", flexGrow: 1, padding: 12, borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
   metricLabel: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
   metricValue: { color: Colors.text, fontSize: 16, fontWeight: "900", marginTop: 4 },
+  metricSub: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 2 },
 
   actionRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginTop: 14 },
   actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 11,
-    borderRadius: 12,
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 11, borderRadius: 12,
     backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
   },
   actionBtnOn: { backgroundColor: "rgba(255,184,76,0.1)", borderColor: "rgba(255,184,76,0.4)" },
   actionText: { color: Colors.text, fontSize: 12, fontWeight: "900" },
 
   section: { marginTop: 22, paddingHorizontal: 16 },
   sectionLabel: {
-    color: Colors.muted,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
-    marginBottom: 10,
+    color: Colors.muted, fontSize: 11, fontWeight: "900",
+    letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10,
   },
   contractRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
-    borderRadius: 12,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    padding: 14, borderRadius: 12,
     backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
   },
   contractText: { color: Colors.text, fontSize: 13, fontWeight: "800", letterSpacing: 0.4 },
   copyBadge: { flexDirection: "row", alignItems: "center", gap: 5 },
@@ -665,120 +1252,174 @@ const styles = StyleSheet.create({
 
   tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   tagPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
     backgroundColor: "rgba(85,245,178,0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.25)",
+    borderWidth: 1, borderColor: "rgba(85,245,178,0.25)",
   },
   tagText: { color: Colors.mint, fontSize: 11, fontWeight: "900" },
 
   linksCol: { gap: 8 },
   linkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 12,
-    borderRadius: 12,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    padding: 12, borderRadius: 12,
     backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
   linkRowDisabled: { opacity: 0.6 },
   linkLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   linkIconBox: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
+    width: 30, height: 30, borderRadius: 9,
     backgroundColor: "rgba(255,255,255,0.04)",
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "center", justifyContent: "center",
   },
   linkLabel: { color: Colors.text, fontSize: 12, fontWeight: "900" },
   linkValue: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2, maxWidth: 220 },
 
+  /* Pressure */
+  pressureCard: {
+    padding: 14, borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+  },
+  pressureBarTrack: {
+    height: 10, borderRadius: 6, overflow: "hidden",
+    backgroundColor: "rgba(255,93,143,0.18)",
+  },
+  pressureBarFill: { height: "100%", backgroundColor: Colors.mint },
+  pressureRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
+  pressureSide: { fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+  pressureCount: { color: Colors.text, fontSize: 16, fontWeight: "900", marginTop: 2 },
+  pressurePct: { color: Colors.text, fontSize: 22, fontWeight: "900" },
+  pressureSubtle: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 10, textAlign: "center" },
+
+  tableCard: {
+    borderRadius: 14, backgroundColor: Colors.card,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+    overflow: "hidden",
+  },
+  tableRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 14, paddingVertical: 13, gap: 10,
+  },
+  tableRowDiv: { borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.04)" },
+  tableLabel: { color: Colors.muted, fontSize: 12, fontWeight: "900", width: 90, letterSpacing: 0.4 },
+  tableVol: { color: Colors.text, fontSize: 14, fontWeight: "800", flex: 1 },
+  tableChg: { fontSize: 13, fontWeight: "900" },
+
+  /* Pools */
+  poolCard: {
+    padding: 12, borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+  },
+  poolCardActive: { borderColor: "rgba(85,245,178,0.45)" },
+  poolTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  poolBadge: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7,
+    backgroundColor: "rgba(56,215,255,0.12)",
+    borderWidth: 1, borderColor: "rgba(56,215,255,0.3)",
+  },
+  poolBadgeText: { color: Colors.cyan, fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
+  poolPair: { color: Colors.text, fontSize: 13, fontWeight: "900", flex: 1 },
+  poolCurrent: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7,
+    backgroundColor: "rgba(85,245,178,0.14)",
+  },
+  poolCurrentText: { color: Colors.mint, fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
+  poolStatsRow: { flexDirection: "row", marginTop: 10, gap: 8 },
+  poolStatLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
+  poolStatValue: { color: Colors.text, fontSize: 13, fontWeight: "900", marginTop: 3 },
+
+  emptyCard: {
+    padding: 22, borderRadius: 14, alignItems: "center", gap: 8,
+    backgroundColor: Colors.card,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+  },
+  emptyTitle: { color: Colors.text, fontSize: 14, fontWeight: "900" },
+  emptyBody: { color: Colors.muted, fontSize: 12, fontWeight: "600", textAlign: "center" },
+
+  /* Risk */
+  riskCard: {
+    padding: 16, borderRadius: 16,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+  },
+  riskTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  riskBadge: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 999, borderWidth: 1,
+  },
+  riskBadgeText: { fontSize: 11, fontWeight: "900", letterSpacing: 0.6 },
+  riskScore: { fontSize: 32, fontWeight: "900", letterSpacing: -0.5 },
+  riskBarTrack: {
+    height: 8, borderRadius: 5, overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.08)", marginTop: 14,
+  },
+  riskBarFill: { height: "100%" },
+  riskHint: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 10 },
+
+  /* Sticky bar */
   stickyBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingTop: 28,
-    paddingHorizontal: 16,
+    position: "absolute", left: 0, right: 0, bottom: 0,
+    paddingTop: 28, paddingHorizontal: 16,
     paddingBottom: Platform.OS === "ios" ? 22 : 16,
   },
-  stickyFade: {
-    ...StyleSheet.absoluteFillObject,
+  stickyFade: { ...StyleSheet.absoluteFillObject },
+  quickRow: { flexDirection: "row", gap: 6, marginBottom: 8 },
+  quickBtn: {
+    flex: 1, paddingVertical: 9, borderRadius: 11,
+    backgroundColor: "rgba(11,24,26,0.92)",
+    borderWidth: 1, borderColor: "rgba(85,245,178,0.25)",
+    alignItems: "center",
   },
+  quickAmt: { color: Colors.text, fontSize: 13, fontWeight: "900" },
+  quickSol: { color: Colors.muted, fontSize: 9, fontWeight: "900", marginTop: 1, letterSpacing: 0.6 },
+  quickCustom: { backgroundColor: "rgba(85,245,178,0.12)" },
+  quickCustomText: { color: Colors.mint, fontSize: 12, fontWeight: "900", paddingVertical: 3 },
   stickyInner: {
-    flexDirection: "row",
-    gap: 10,
-    padding: 8,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.25)",
+    flexDirection: "row", gap: 8, padding: 8, borderRadius: 22,
+    borderWidth: 1, borderColor: "rgba(85,245,178,0.25)",
     backgroundColor: "rgba(11,24,26,0.92)",
   },
   stickyWatch: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 48, height: 48, borderRadius: 14,
+    alignItems: "center", justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
   },
-  stickyWatchOn: {
-    backgroundColor: "rgba(85,245,178,0.14)",
-    borderColor: "rgba(85,245,178,0.45)",
+  stickyWatchOn: { backgroundColor: "rgba(85,245,178,0.14)", borderColor: "rgba(85,245,178,0.45)" },
+  stickyAlert: {
+    width: 48, height: 48, borderRadius: 14,
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(56,215,255,0.10)",
+    borderWidth: 1, borderColor: "rgba(56,215,255,0.35)",
   },
   stickyAction: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    height: 48,
-    borderRadius: 14,
-    overflow: "hidden",
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, height: 48, borderRadius: 14, overflow: "hidden",
   },
   stickyBuy: {},
   stickyBuyText: { color: Colors.ink, fontSize: 14, fontWeight: "900", letterSpacing: 0.4 },
   stickySell: {
     backgroundColor: "rgba(255,93,143,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(255,93,143,0.45)",
+    borderWidth: 1, borderColor: "rgba(255,93,143,0.45)",
   },
   stickySellText: { color: Colors.rose, fontSize: 14, fontWeight: "900", letterSpacing: 0.4 },
+
   tradeBtn: { marginHorizontal: 16, marginTop: 22, borderRadius: 14, overflow: "hidden" },
   tradeGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 15,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, paddingVertical: 15,
   },
   tradeText: { color: Colors.ink, fontSize: 14, fontWeight: "900", letterSpacing: 0.2 },
 
-  viewsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    marginTop: 18,
-  },
+  viewsRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 18 },
   viewsText: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
 
   notFoundWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
   notFoundTitle: { color: Colors.text, fontSize: 20, fontWeight: "900" },
   notFoundBody: { color: Colors.muted, fontSize: 13, fontWeight: "600", marginTop: 6, textAlign: "center" },
-  backBtnSolo: {
-    marginTop: 18,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    borderRadius: 12,
-    backgroundColor: Colors.mint,
-  },
+  backBtnSolo: { marginTop: 18, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: Colors.mint },
   backBtnText: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
 });
