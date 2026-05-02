@@ -88,10 +88,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import { getTokenOverview, getTokenSecurity } from "@/lib/api/birdeye";
+import { getTokenOverview, getTokenSecurity, type TokenOverview } from "@/lib/api/birdeye";
 import { getLiveKitToken } from "@/lib/api/livekit";
 import { useTrendingTokens } from "@/lib/api/market";
-import { fetchWalletBalance, type WalletBalance } from "@/lib/api/wallet";
+import {
+  fetchWalletBalance,
+  fetchWalletPortfolio,
+  isValidSolanaAddress,
+  type WalletBalance,
+  type WalletPortfolio,
+} from "@/lib/api/wallet";
 import { AlertItem, useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
@@ -2269,6 +2275,36 @@ function ChartTool({ accent, kind }: { accent: string; kind: string }) {
   );
 }
 
+function fmtUsd(n: number | undefined): string {
+  if (n == null || !isFinite(n)) return "—";
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
+  if (n >= 1) return `${n.toFixed(2)}`;
+  if (n > 0) return `${n.toFixed(6)}`;
+  return "$0";
+}
+function fmtNum(n: number | undefined): string {
+  if (n == null || !isFinite(n)) return "—";
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+function fmtPct(n: number | undefined): string {
+  if (n == null || !isFinite(n)) return "—";
+  return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+}
+function daysSince(ts: number): string {
+  if (!ts || ts <= 0) return "—";
+  const d = Math.floor((Date.now() / 1000 - ts) / 86400);
+  if (d <= 0) return "today";
+  if (d === 1) return "1 day";
+  if (d < 365) return `${d} days`;
+  const y = (d / 365).toFixed(1);
+  return `${y} yrs`;
+}
+
 function GenericInputTool({
   meta,
   kind,
@@ -2280,6 +2316,18 @@ function GenericInputTool({
   const [value, setValue] = useState<string>("");
   const [scanning, setScanning] = useState<boolean>(false);
   const [scanned, setScanned] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [overview, setOverview] = useState<TokenOverview | null>(null);
+  const [security, setSecurity] = useState<{
+    riskScore: number;
+    isHoneypot: boolean;
+    buyTax?: number;
+    sellTax?: number;
+    lpLocked?: boolean;
+    topHoldersPct?: number;
+  } | null>(null);
+  const [portfolio, setPortfolio] = useState<WalletPortfolio | null>(null);
+  const { data: trending } = useTrendingTokens(20);
 
   const onPaste = useCallback(async () => {
     try {
@@ -2292,20 +2340,50 @@ function GenericInputTool({
   }, []);
 
   const onRun = useCallback(async () => {
+    const v = value.trim();
     if (kind !== "stream") {
-      const v = value.trim();
-      const minLen = kind === "wallet" ? 32 : 32;
-      if (v.length < minLen) {
-        Alert.alert("Invalid input", kind === "wallet" ? "Enter a Solana wallet address." : "Paste a Solana token contract.");
+      if (kind === "wallet" && !isValidSolanaAddress(v)) {
+        Alert.alert("Invalid wallet", "Enter a valid Solana wallet address.");
+        return;
+      }
+      if (kind === "contract" && v.length < 32) {
+        Alert.alert("Invalid contract", "Paste a Solana token contract.");
         return;
       }
     }
     setScanning(true);
     setScanned(false);
+    setError(null);
+    setOverview(null);
+    setSecurity(null);
+    setPortfolio(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    await new Promise((r) => setTimeout(r, 900));
-    setScanning(false);
-    setScanned(true);
+    try {
+      if (kind === "contract") {
+        const [ov, sec] = await Promise.all([
+          getTokenOverview(v).catch((e) => {
+            console.log("[generic] overview err", e);
+            return null;
+          }),
+          getTokenSecurity(v).catch((e) => {
+            console.log("[generic] security err", e);
+            return null;
+          }),
+        ]);
+        setOverview(ov);
+        setSecurity(sec);
+      } else if (kind === "wallet") {
+        const p = await fetchWalletPortfolio(v);
+        setPortfolio(p);
+      }
+      setScanned(true);
+    } catch (e) {
+      console.log("[generic] run failed", e);
+      setError(e instanceof Error ? e.message : "Request failed");
+      setScanned(true);
+    } finally {
+      setScanning(false);
+    }
   }, [kind, value]);
 
   const placeholder =
@@ -2315,26 +2393,31 @@ function GenericInputTool({
 
   const inputLabel = kind === "wallet" ? "Wallet address" : kind === "contract" ? "Contract address" : "Filter";
 
-  const ctaLabel = scanning ? "Working…" : kind === "stream" ? "Start stream" : kind === "wallet" ? "Profile wallet" : "Run scan";
+  const ctaLabel = scanning ? "Working…" : kind === "stream" ? "Refresh stream" : kind === "wallet" ? "Profile wallet" : "Run scan";
 
-  const tiles: { label: string; value: string; Icon: LucideIcon }[] =
-    kind === "wallet"
-      ? [
-          { label: "Win rate", value: scanned ? "—" : "—", Icon: Activity },
-          { label: "ROI", value: "—", Icon: TrendingUp },
-          { label: "Avg hold", value: "—", Icon: Timer },
-        ]
-      : kind === "contract"
-        ? [
-            { label: "Risk score", value: "—/100", Icon: ShieldAlert },
-            { label: "Liquidity", value: "—", Icon: Waves },
-            { label: "Holders", value: "—", Icon: Users },
-          ]
-        : [
-            { label: "Mints/min", value: "—", Icon: Activity },
-            { label: "Filtered", value: "—", Icon: Filter },
-            { label: "Live", value: scanning ? "ON" : "—", Icon: Power },
-          ];
+  const tiles: { label: string; value: string; Icon: LucideIcon }[] = useMemo(() => {
+    if (kind === "wallet") {
+      const s = portfolio?.stats;
+      const b = portfolio?.balance;
+      return [
+        { label: "Net worth", value: b ? fmtUsd(b.usd) : "—", Icon: Wallet },
+        { label: "Tx count", value: s ? fmtNum(s.totalTxs) : "—", Icon: Activity },
+        { label: "Active", value: s ? `${s.activeDays}d` : "—", Icon: Clock },
+      ];
+    }
+    if (kind === "contract") {
+      return [
+        { label: "Risk score", value: security ? `${Math.round(security.riskScore)}/100` : "—/100", Icon: ShieldAlert },
+        { label: "Liquidity", value: fmtUsd(overview?.liquidity), Icon: Waves },
+        { label: "Holders", value: fmtNum(overview?.holder), Icon: Users },
+      ];
+    }
+    return [
+      { label: "Tracked", value: trending ? `${trending.length}` : "—", Icon: Activity },
+      { label: "Top change", value: trending && trending[0] ? fmtPct(trending[0].priceChange24h) : "—", Icon: TrendingUp },
+      { label: "Live", value: trending ? "ON" : "—", Icon: Power },
+    ];
+  }, [kind, portfolio, overview, security, trending]);
 
   return (
     <View>
@@ -2371,26 +2454,7 @@ function GenericInputTool({
             <Text style={styles.primaryBtnText}>{ctaLabel}</Text>
           </Pressable>
         </View>
-      ) : (
-        <View style={styles.formCard}>
-          <Text style={styles.label}>{inputLabel}</Text>
-          <TextInput
-            value={value}
-            onChangeText={setValue}
-            placeholder={placeholder}
-            placeholderTextColor={Colors.muted}
-            style={styles.input}
-          />
-          <Pressable
-            onPress={onRun}
-            style={[styles.primaryBtn, { backgroundColor: accent }, scanning && { opacity: 0.6 }]}
-            disabled={scanning}
-          >
-            {scanning ? <Loader2 color={Colors.ink} size={15} strokeWidth={3} /> : <Power color={Colors.ink} size={15} strokeWidth={3} />}
-            <Text style={styles.primaryBtnText}>{ctaLabel}</Text>
-          </Pressable>
-        </View>
-      )}
+      ) : null}
 
       <View style={styles.statRow}>
         {tiles.map((t) => (
@@ -2398,19 +2462,531 @@ function GenericInputTool({
         ))}
       </View>
 
-      <SectionHead title="Result" accent={accent} />
-      <EmptyState
-        accent={accent}
-        Icon={meta.Icon}
-        title={scanning ? "Working…" : scanned ? "Backend coming online" : "Awaiting input"}
-        body={
-          scanning
-            ? "Querying live on-chain data…"
-            : scanned
-              ? `${meta.name} runs against live RPC data. Final results plug in once backend wires are deployed.`
-              : meta.description
-        }
+      <ToolResultPanel
+        meta={meta}
+        kind={kind}
+        scanning={scanning}
+        scanned={scanned}
+        error={error}
+        overview={overview}
+        security={security}
+        portfolio={portfolio}
+        trending={trending ?? null}
       />
+    </View>
+  );
+}
+
+function ToolResultPanel({
+  meta,
+  kind,
+  scanning,
+  scanned,
+  error,
+  overview,
+  security,
+  portfolio,
+  trending,
+}: {
+  meta: ToolMeta;
+  kind: "contract" | "wallet" | "stream";
+  scanning: boolean;
+  scanned: boolean;
+  error: string | null;
+  overview: TokenOverview | null;
+  security: {
+    riskScore: number;
+    isHoneypot: boolean;
+    buyTax?: number;
+    sellTax?: number;
+    lpLocked?: boolean;
+    topHoldersPct?: number;
+  } | null;
+  portfolio: WalletPortfolio | null;
+  trending: TokenOverview[] | null;
+}) {
+  const accent = meta.accent;
+
+  if (scanning) {
+    return (
+      <View>
+        <SectionHead title="Result" accent={accent} />
+        <EmptyState
+          accent={accent}
+          Icon={Loader2}
+          title="Querying chain…"
+          body="Pulling live on-chain data from RPC + Birdeye."
+        />
+      </View>
+    );
+  }
+
+  if (kind === "stream") {
+    return <StreamResultPanel meta={meta} trending={trending} />;
+  }
+
+  if (!scanned) {
+    return (
+      <View>
+        <SectionHead title="Result" accent={accent} />
+        <EmptyState
+          accent={accent}
+          Icon={meta.Icon}
+          title="Awaiting input"
+          body={meta.description}
+        />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View>
+        <SectionHead title="Result" accent={accent} />
+        <EmptyState
+          accent={Colors.rose}
+          Icon={AlertTriangle}
+          title="Request failed"
+          body={error}
+        />
+      </View>
+    );
+  }
+
+  if (kind === "contract") {
+    return <ContractResultPanel meta={meta} overview={overview} security={security} />;
+  }
+  if (kind === "wallet") {
+    return <WalletResultPanel meta={meta} portfolio={portfolio} />;
+  }
+  return null;
+}
+
+function ResultGridCard({
+  meta,
+  items,
+  headline,
+  subline,
+}: {
+  meta: ToolMeta;
+  items: { label: string; value: string; tone?: "good" | "bad" | "warn" | "neutral" }[];
+  headline: string;
+  subline?: string;
+}) {
+  const accent = meta.accent;
+  const toneColor = (t?: "good" | "bad" | "warn" | "neutral") =>
+    t === "good" ? Colors.mint : t === "bad" ? Colors.rose : t === "warn" ? Colors.orange : Colors.text;
+  return (
+    <View>
+      <SectionHead title="Result" accent={accent} />
+      <View style={[styles.resultCard, { borderColor: `${accent}33`, marginTop: 0 }]}>
+        <View style={styles.resultHead}>
+          <Text style={styles.resultEyebrow}>{meta.name.toUpperCase()}</Text>
+          <View style={[styles.resultPending, { borderColor: `${accent}55` }]}>
+            <CheckCircle2 color={accent} size={11} strokeWidth={2.6} />
+            <Text style={[styles.resultPendingText, { color: accent }]}>LIVE</Text>
+          </View>
+        </View>
+        <Text style={styles.resultScore}>{headline}</Text>
+        {subline ? <Text style={styles.resultBody}>{subline}</Text> : null}
+        <View style={styles.resultGrid}>
+          {items.map((it) => (
+            <View key={it.label} style={styles.resultGridItem}>
+              <View style={[styles.checkIcon, { backgroundColor: `${accent}1A` }]}>
+                <Sparkles color={accent} size={12} strokeWidth={2.6} />
+              </View>
+              <Text style={styles.resultGridLabel} numberOfLines={2}>
+                {it.label}
+              </Text>
+              <Text style={[styles.resultGridValue, { color: toneColor(it.tone) }]}>
+                {it.value}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ContractResultPanel({
+  meta,
+  overview,
+  security,
+}: {
+  meta: ToolMeta;
+  overview: TokenOverview | null;
+  security: {
+    riskScore: number;
+    isHoneypot: boolean;
+    buyTax?: number;
+    sellTax?: number;
+    lpLocked?: boolean;
+    topHoldersPct?: number;
+  } | null;
+}) {
+  const id = meta.id;
+  const ov = overview;
+  const sec = security;
+  const headline =
+    ov?.symbol ? `${ov.name ?? ov.symbol} · ${ov.symbol}` : meta.name;
+  const sub = ov?.price
+    ? `${fmtUsd(ov.price)} · ${fmtPct(ov.priceChange24h)} 24h`
+    : "Live token snapshot.";
+
+  let items: { label: string; value: string; tone?: "good" | "bad" | "warn" | "neutral" }[] = [];
+
+  switch (id) {
+    case "rug-detector":
+    case "risk-detector": {
+      const score = Math.round(sec?.riskScore ?? 0);
+      const tone: "good" | "warn" | "bad" = score >= 70 ? "bad" : score >= 40 ? "warn" : "good";
+      items = [
+        { label: "Risk score", value: `${score}/100`, tone },
+        { label: "Honeypot", value: sec?.isHoneypot ? "FAIL" : "PASS", tone: sec?.isHoneypot ? "bad" : "good" },
+        { label: "LP status", value: sec?.lpLocked == null ? "—" : sec.lpLocked ? "LOCKED" : "OPEN", tone: sec?.lpLocked ? "good" : "warn" },
+        { label: "Top 10 holders", value: sec?.topHoldersPct != null ? `${sec.topHoldersPct.toFixed(1)}%` : "—", tone: (sec?.topHoldersPct ?? 0) > 50 ? "warn" : "neutral" },
+        { label: "Buy tax", value: sec?.buyTax != null ? `${sec.buyTax}%` : "—" },
+        { label: "Sell tax", value: sec?.sellTax != null ? `${sec.sellTax}%` : "—" },
+      ];
+      break;
+    }
+    case "holder-analysis":
+    case "whale-concentration": {
+      const top = sec?.topHoldersPct;
+      items = [
+        { label: "Top 10 share", value: top != null ? `${top.toFixed(1)}%` : "—", tone: (top ?? 0) > 50 ? "warn" : "neutral" },
+        { label: "Holders", value: fmtNum(ov?.holder) },
+        { label: "Distribution", value: top != null ? (top > 60 ? "Concentrated" : top > 30 ? "Mixed" : "Healthy") : "—" },
+        { label: "Market cap", value: fmtUsd(ov?.marketCap) },
+        { label: "Liquidity", value: fmtUsd(ov?.liquidity) },
+        { label: "24h volume", value: fmtUsd(ov?.volume24hUSD) },
+      ];
+      break;
+    }
+    case "liquidity-scanner": {
+      const liq = ov?.liquidity ?? 0;
+      const vol = ov?.volume24hUSD ?? 0;
+      const turnover = liq > 0 ? (vol / liq) * 100 : 0;
+      items = [
+        { label: "Total liquidity", value: fmtUsd(liq), tone: liq < 10000 ? "bad" : liq < 100000 ? "warn" : "good" },
+        { label: "24h volume", value: fmtUsd(vol) },
+        { label: "Turnover", value: `${turnover.toFixed(1)}%` },
+        { label: "Slip @ $1k", value: liq > 0 ? `${Math.min(99, (1000 / liq) * 100).toFixed(2)}%` : "—" },
+        { label: "Slip @ $10k", value: liq > 0 ? `${Math.min(99, (10000 / liq) * 100).toFixed(2)}%` : "—" },
+        { label: "Depth health", value: liq > 250000 ? "Strong" : liq > 50000 ? "OK" : "Thin", tone: liq > 250000 ? "good" : liq > 50000 ? "warn" : "bad" },
+      ];
+      break;
+    }
+    case "token-metadata": {
+      items = [
+        { label: "Symbol", value: ov?.symbol ?? "—" },
+        { label: "Decimals", value: ov?.decimals != null ? `${ov.decimals}` : "—" },
+        { label: "Holders", value: fmtNum(ov?.holder) },
+        { label: "Market cap", value: fmtUsd(ov?.marketCap) },
+        { label: "Rank", value: ov?.rank ? `#${ov.rank}` : "—" },
+        { label: "Logo", value: ov?.logoURI ? "Set" : "—" },
+      ];
+      break;
+    }
+    case "wash-trading": {
+      const liq = ov?.liquidity ?? 0;
+      const vol = ov?.volume24hUSD ?? 0;
+      const ratio = liq > 0 ? vol / liq : 0;
+      items = [
+        { label: "Vol/Liq ratio", value: ratio.toFixed(2), tone: ratio > 20 ? "bad" : ratio > 8 ? "warn" : "good" },
+        { label: "24h volume", value: fmtUsd(vol) },
+        { label: "Liquidity", value: fmtUsd(liq) },
+        { label: "Wash flag", value: ratio > 20 ? "HIGH" : ratio > 8 ? "MED" : "LOW", tone: ratio > 20 ? "bad" : ratio > 8 ? "warn" : "good" },
+        { label: "24h change", value: fmtPct(ov?.priceChange24h) },
+        { label: "Holders", value: fmtNum(ov?.holder) },
+      ];
+      break;
+    }
+    case "insider-detector": {
+      const top = sec?.topHoldersPct ?? 0;
+      items = [
+        { label: "Insider risk", value: top > 60 ? "HIGH" : top > 30 ? "MED" : "LOW", tone: top > 60 ? "bad" : top > 30 ? "warn" : "good" },
+        { label: "Top 10 share", value: top ? `${top.toFixed(1)}%` : "—" },
+        { label: "Holders", value: fmtNum(ov?.holder) },
+        { label: "LP locked", value: sec?.lpLocked == null ? "—" : sec.lpLocked ? "YES" : "NO" },
+        { label: "Honeypot", value: sec?.isHoneypot ? "YES" : "NO", tone: sec?.isHoneypot ? "bad" : "good" },
+        { label: "Risk score", value: sec ? `${Math.round(sec.riskScore)}/100` : "—" },
+      ];
+      break;
+    }
+    case "burn-watcher": {
+      items = [
+        { label: "Holders", value: fmtNum(ov?.holder) },
+        { label: "24h change", value: fmtPct(ov?.priceChange24h) },
+        { label: "7d change", value: fmtPct(ov?.priceChange7d) },
+        { label: "Liquidity", value: fmtUsd(ov?.liquidity) },
+        { label: "Market cap", value: fmtUsd(ov?.marketCap) },
+        { label: "Volume 24h", value: fmtUsd(ov?.volume24hUSD) },
+      ];
+      break;
+    }
+    case "mev-tracker": {
+      const vol = ov?.volume24hUSD ?? 0;
+      items = [
+        { label: "24h volume", value: fmtUsd(vol) },
+        { label: "MEV exposure", value: vol > 1e6 ? "HIGH" : vol > 100000 ? "MED" : "LOW", tone: vol > 1e6 ? "warn" : "neutral" },
+        { label: "1h move", value: fmtPct(ov?.priceChange1h) },
+        { label: "24h move", value: fmtPct(ov?.priceChange24h) },
+        { label: "Liquidity", value: fmtUsd(ov?.liquidity) },
+        { label: "Holders", value: fmtNum(ov?.holder) },
+      ];
+      break;
+    }
+    case "token-locks":
+    case "token-creator": {
+      items = [
+        { label: "LP locked", value: sec?.lpLocked == null ? "—" : sec.lpLocked ? "LOCKED" : "OPEN", tone: sec?.lpLocked ? "good" : "warn" },
+        { label: "Risk score", value: sec ? `${Math.round(sec.riskScore)}/100` : "—" },
+        { label: "Top 10 share", value: sec?.topHoldersPct != null ? `${sec.topHoldersPct.toFixed(1)}%` : "—" },
+        { label: "Market cap", value: fmtUsd(ov?.marketCap) },
+        { label: "Holders", value: fmtNum(ov?.holder) },
+        { label: "Liquidity", value: fmtUsd(ov?.liquidity) },
+      ];
+      break;
+    }
+    case "impermanent-loss":
+    case "jupiter-routes":
+    default: {
+      items = [
+        { label: "Price", value: fmtUsd(ov?.price) },
+        { label: "Market cap", value: fmtUsd(ov?.marketCap) },
+        { label: "Liquidity", value: fmtUsd(ov?.liquidity) },
+        { label: "24h volume", value: fmtUsd(ov?.volume24hUSD) },
+        { label: "Holders", value: fmtNum(ov?.holder) },
+        { label: "24h change", value: fmtPct(ov?.priceChange24h), tone: (ov?.priceChange24h ?? 0) >= 0 ? "good" : "bad" },
+      ];
+    }
+  }
+
+  return <ResultGridCard meta={meta} headline={headline} subline={sub} items={items} />;
+}
+
+function WalletResultPanel({
+  meta,
+  portfolio,
+}: {
+  meta: ToolMeta;
+  portfolio: WalletPortfolio | null;
+}) {
+  const accent = meta.accent;
+  const id = meta.id;
+  if (!portfolio) {
+    return (
+      <View>
+        <SectionHead title="Result" accent={accent} />
+        <EmptyState accent={accent} Icon={meta.Icon} title="No data" body="Wallet returned no on-chain activity." />
+      </View>
+    );
+  }
+  const s = portfolio.stats;
+  const b = portfolio.balance;
+  const top = (portfolio.tokens ?? []).slice(0, 5);
+  const headline = fmtUsd(b.usd);
+  const sub = `${b.sol.toFixed(3)} SOL · ${s.totalTxs} txs · ${s.activeDays}d active`;
+
+  let items: { label: string; value: string; tone?: "good" | "bad" | "warn" | "neutral" }[] = [];
+
+  switch (id) {
+    case "wallet-age": {
+      items = [
+        { label: "First seen", value: daysSince(s.firstSeen) + " ago" },
+        { label: "Last seen", value: daysSince(s.lastSeen) + " ago" },
+        { label: "Active days", value: `${s.activeDays}` },
+        { label: "Avg tx/day", value: s.avgTxPerDay.toFixed(2) },
+        { label: "Total tx", value: fmtNum(s.totalTxs) },
+        { label: "Success", value: `${s.successRate.toFixed(1)}%`, tone: s.successRate > 90 ? "good" : "warn" },
+      ];
+      break;
+    }
+    case "fee-analyzer": {
+      items = [
+        { label: "Total fees", value: `${s.totalFeesSol.toFixed(4)} SOL` },
+        { label: "Fees USD", value: fmtUsd(s.totalFeesUsd) },
+        { label: "Avg fee", value: s.totalTxs ? `${(s.totalFeesSol / s.totalTxs).toFixed(6)} SOL` : "—" },
+        { label: "Tx count", value: fmtNum(s.totalTxs) },
+        { label: "Failed", value: fmtNum(s.failedCount), tone: s.failedCount > 5 ? "warn" : "neutral" },
+        { label: "SOL price", value: fmtUsd(portfolio.solPrice) },
+      ];
+      break;
+    }
+    case "profit-curve":
+    case "wallet-profiler": {
+      items = [
+        { label: "Net worth", value: fmtUsd(b.usd) },
+        { label: "SOL balance", value: `${b.sol.toFixed(3)}` },
+        { label: "Holdings", value: `${(portfolio.tokens ?? []).length}` },
+        { label: "Tx count", value: fmtNum(s.totalTxs) },
+        { label: "Success rate", value: `${s.successRate.toFixed(1)}%`, tone: s.successRate > 90 ? "good" : "warn" },
+        { label: "Active days", value: `${s.activeDays}` },
+      ];
+      break;
+    }
+    case "trading-style": {
+      const txPerDay = s.avgTxPerDay;
+      const style =
+        txPerDay > 50 ? "Sniper bot" :
+        txPerDay > 20 ? "Scalper" :
+        txPerDay > 5 ? "Swing" :
+        txPerDay > 0.5 ? "Position" : "Holder";
+      items = [
+        { label: "Style", value: style, tone: "neutral" },
+        { label: "Tx/day", value: txPerDay.toFixed(2) },
+        { label: "Active days", value: `${s.activeDays}` },
+        { label: "Holdings", value: `${(portfolio.tokens ?? []).length}` },
+        { label: "Success", value: `${s.successRate.toFixed(1)}%` },
+        { label: "Total tx", value: fmtNum(s.totalTxs) },
+      ];
+      break;
+    }
+    case "transfer-profiler": {
+      items = [
+        { label: "Tx count", value: fmtNum(s.totalTxs) },
+        { label: "Success", value: `${s.successRate.toFixed(1)}%` },
+        { label: "Failed", value: fmtNum(s.failedCount) },
+        { label: "Holdings", value: `${(portfolio.tokens ?? []).length}` },
+        { label: "Net worth", value: fmtUsd(b.usd) },
+        { label: "Active days", value: `${s.activeDays}` },
+      ];
+      break;
+    }
+    case "sol-depletion": {
+      const burn = s.activeDays > 0 ? s.totalFeesSol / s.activeDays : 0;
+      const daysLeft = burn > 0 ? Math.floor(b.sol / burn) : 9999;
+      items = [
+        { label: "SOL balance", value: b.sol.toFixed(4), tone: b.sol < 0.05 ? "bad" : b.sol < 0.2 ? "warn" : "good" },
+        { label: "Burn/day", value: `${burn.toFixed(6)} SOL` },
+        { label: "Days left", value: daysLeft > 9000 ? "∞" : `${daysLeft}d`, tone: daysLeft < 7 ? "bad" : daysLeft < 30 ? "warn" : "good" },
+        { label: "Total fees", value: `${s.totalFeesSol.toFixed(4)} SOL` },
+        { label: "Active days", value: `${s.activeDays}` },
+        { label: "Net worth", value: fmtUsd(b.usd) },
+      ];
+      break;
+    }
+    case "lp-scanner": {
+      items = [
+        { label: "Holdings", value: `${(portfolio.tokens ?? []).length}` },
+        { label: "Net worth", value: fmtUsd(b.usd) },
+        { label: "SOL", value: b.sol.toFixed(3) },
+        { label: "Tx count", value: fmtNum(s.totalTxs) },
+        { label: "Active days", value: `${s.activeDays}` },
+        { label: "Success", value: `${s.successRate.toFixed(1)}%` },
+      ];
+      break;
+    }
+    case "airdrop-analyzer": {
+      const eligible =
+        s.activeDays > 30 && s.totalTxs > 50 ? "High" :
+        s.activeDays > 7 && s.totalTxs > 10 ? "Medium" : "Low";
+      items = [
+        { label: "Eligibility", value: eligible, tone: eligible === "High" ? "good" : eligible === "Medium" ? "warn" : "bad" },
+        { label: "Active days", value: `${s.activeDays}` },
+        { label: "Tx count", value: fmtNum(s.totalTxs) },
+        { label: "Holdings", value: `${(portfolio.tokens ?? []).length}` },
+        { label: "Net worth", value: fmtUsd(b.usd) },
+        { label: "First seen", value: daysSince(s.firstSeen) + " ago" },
+      ];
+      break;
+    }
+    case "stake-tracker":
+    case "wallet-graph":
+    case "multi-wallet":
+    default: {
+      items = [
+        { label: "Net worth", value: fmtUsd(b.usd) },
+        { label: "SOL", value: b.sol.toFixed(3) },
+        { label: "Tokens", value: `${(portfolio.tokens ?? []).length}` },
+        { label: "Tx count", value: fmtNum(s.totalTxs) },
+        { label: "Active days", value: `${s.activeDays}` },
+        { label: "Success", value: `${s.successRate.toFixed(1)}%`, tone: s.successRate > 90 ? "good" : "warn" },
+      ];
+    }
+  }
+
+  return (
+    <View>
+      <ResultGridCard meta={meta} headline={headline} subline={sub} items={items} />
+      {top.length > 0 ? (
+        <>
+          <SectionHead title={`Top holdings · ${top.length}`} accent={accent} />
+          <View style={styles.list}>
+            {top.map((t) => (
+              <View key={t.mint} style={styles.rowCard}>
+                <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
+                  <Text style={[styles.rowIconText, { color: accent }]}>
+                    {(t.symbol ?? t.mint.slice(0, 2)).slice(0, 2).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.rowMid}>
+                  <Text style={styles.rowTitle} numberOfLines={1}>
+                    {t.name ?? t.symbol ?? "Token"}
+                  </Text>
+                  <Text style={styles.rowSub} numberOfLines={1}>
+                    {t.uiAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} {t.symbol ?? ""}
+                  </Text>
+                </View>
+                <View style={styles.rowMetric}>
+                  <Text style={styles.rowMetricLabel}>USD</Text>
+                  <Text style={styles.rowMetricValue}>{fmtUsd(t.usdValue)}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+function StreamResultPanel({
+  meta,
+  trending,
+}: {
+  meta: ToolMeta;
+  trending: TokenOverview[] | null;
+}) {
+  const accent = meta.accent;
+  if (!trending || trending.length === 0) {
+    return (
+      <View>
+        <SectionHead title="Live stream" accent={accent} />
+        <EmptyState accent={accent} Icon={Loader2} title="Connecting…" body="Subscribing to live token feed." />
+      </View>
+    );
+  }
+  return (
+    <View>
+      <SectionHead title={`Live · ${trending.length}`} accent={accent} />
+      <View style={styles.list}>
+        {trending.map((t, i) => (
+          <View key={t.address} style={styles.rowCard}>
+            <Text style={[styles.rowRank, { color: accent }]}>{i + 1}</Text>
+            <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
+              <Text style={[styles.rowIconText, { color: accent }]}>
+                {(t.symbol ?? t.address.slice(0, 2)).slice(0, 2).toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.rowMid}>
+              <Text style={styles.rowTitle} numberOfLines={1}>{t.name ?? t.symbol}</Text>
+              <Text style={styles.rowSub} numberOfLines={1}>
+                {fmtUsd(t.price)} · liq {fmtUsd(t.liquidity)}
+              </Text>
+            </View>
+            {t.priceChange24h != null ? (
+              <Text style={[styles.rowChange, { color: t.priceChange24h >= 0 ? Colors.mint : Colors.rose }]}>
+                {fmtPct(t.priceChange24h)}
+              </Text>
+            ) : (
+              <Text style={styles.rowChangeMuted}>—</Text>
+            )}
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
