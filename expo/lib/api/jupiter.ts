@@ -219,7 +219,7 @@ export async function getPrice(ids: string[]): Promise<Record<string, JupiterPri
 
 export async function rpcCall<T = unknown>(
   method: string,
-  params: unknown[] = [],
+  params: unknown[] | Record<string, unknown> = [],
 ): Promise<T> {
   const payload = {
     jsonrpc: "2.0",

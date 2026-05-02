@@ -13,7 +13,10 @@ import {
   Bookmark,
   Calendar,
   Camera,
+  ChartCandlestick,
+  Copy,
   Flag,
+  Hash,
   Heart,
   Image as ImageIcon,
   Link as LinkIcon,
@@ -49,7 +52,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import DexChart from "@/components/DexChart";
 import Colors from "@/constants/colors";
+import {
+  extractFirstSolanaAddress,
+  scanCommunityToken,
+  type CommunityTokenCard,
+} from "@/lib/community-token";
 import { supabase } from "@/lib/supabase";
 import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
@@ -75,6 +84,26 @@ function fmtCount(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return n.toString();
+}
+
+function fmtUsd(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  if (value >= 1000000000) return `${(value / 1000000000).toFixed(2)}B`;
+  if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  if (value >= 1) return `${value.toFixed(2)}`;
+  if (value > 0) return `${value.toPrecision(3)}`;
+  return "$0";
+}
+
+function shortAddress(address: string): string {
+  if (address.length <= 12) return address;
+  return `${address.slice(0, 4)}…${address.slice(-4)}`;
+}
+
+function fmtPct(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
 function timeAgo(t: number): string {
@@ -132,6 +161,7 @@ export default function CommunityDetailScreen() {
   const [activePost, setActivePost] = useState<CommunityPost | null>(null);
   const [interactionMode, setInteractionMode] = useState<"thread" | "reply" | "quote" | null>(null);
   const [interactionText, setInteractionText] = useState<string>("");
+  const [activeChartToken, setActiveChartToken] = useState<CommunityTokenCard | null>(null);
 
   const community = useMemo(() => (id ? getCommunity(id) : undefined), [id, getCommunity]);
   const postsQuery = usePostsForCommunity(community?.id);
@@ -142,7 +172,7 @@ export default function CommunityDetailScreen() {
     [community?.id, postsByCommunity, postsQuery.data],
   );
   const mediaPosts = useMemo(
-    () => posts.filter((p) => p.imageUrl || p.ticker || p.pinned),
+    () => posts.filter((p) => p.imageUrl || p.token || p.ticker || p.pinned),
     [posts],
   );
   const bookmarkedPosts = useMemo(
@@ -153,7 +183,15 @@ export default function CommunityDetailScreen() {
   const matchesSearch = useCallback(
     (post: CommunityPost) => {
       if (query.length === 0) return true;
-      return [post.content, post.authorName, post.authorHandle, post.ticker ?? ""]
+      return [
+        post.content,
+        post.authorName,
+        post.authorHandle,
+        post.ticker ?? "",
+        post.token?.address ?? "",
+        post.token?.name ?? "",
+        post.token?.symbol ?? "",
+      ]
         .join(" ")
         .toLowerCase()
         .includes(query);
@@ -227,17 +265,49 @@ export default function CommunityDetailScreen() {
     [profile.avatarColor, profile.displayName, profile.handle],
   );
 
+  const detectedTokenAddress = useMemo(() => extractFirstSolanaAddress(composer), [composer]);
+  const tokenPreviewQ = useQuery<CommunityTokenCard | null>({
+    queryKey: ["community", "token-preview", detectedTokenAddress ?? ""],
+    enabled: !!detectedTokenAddress,
+    queryFn: async () => (detectedTokenAddress ? scanCommunityToken(detectedTokenAddress) : null),
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const tokenPreview = tokenPreviewQ.data ?? null;
+
+  const openTokenChart = useCallback((token: CommunityTokenCard) => {
+    Haptics.selectionAsync().catch(() => {});
+    setActiveChartToken(token);
+  }, []);
+
+  const copyTokenAddress = useCallback(async (address: string) => {
+    try {
+      await Clipboard.setStringAsync(address);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      showToast("Token CA copied");
+    } catch (e) {
+      console.log("[community] token copy failed", e);
+    }
+  }, [showToast]);
+
   const onSend = useCallback(async () => {
     const text = composer.trim();
     if (!community || (text.length === 0 && !composerImage)) return;
     if (!ensureSignedIn("Sign in to post in this community.")) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
+      let token = tokenPreview;
+      if (detectedTokenAddress && (!token || token.address !== detectedTokenAddress)) {
+        token = await scanCommunityToken(detectedTokenAddress, { persist: true });
+      } else if (token) {
+        token = await scanCommunityToken(token.address, { persist: true }).catch(() => token);
+      }
       await addCommunityPost({
         communityId: community.id,
         content: text,
         imageUri: composerImage?.uri ?? null,
         imageBase64: composerImage?.base64 ?? null,
+        token,
         ...viewer,
       });
       setComposer("");
@@ -246,7 +316,7 @@ export default function CommunityDetailScreen() {
     } catch (e) {
       Alert.alert("Failed to post", e instanceof Error ? e.message : "Try again.");
     }
-  }, [composer, community, composerImage, ensureSignedIn, addCommunityPost, viewer]);
+  }, [composer, community, composerImage, detectedTokenAddress, ensureSignedIn, addCommunityPost, tokenPreview, viewer]);
 
   const shareLink = useMemo(
     () =>
@@ -607,6 +677,7 @@ export default function CommunityDetailScreen() {
       onPin={() => void onTogglePin(item)}
       canDelete={canDeletePost(item)}
       onDelete={() => onDeletePost(item)}
+      onTokenChart={openTokenChart}
     />
   );
 
@@ -933,6 +1004,19 @@ export default function CommunityDetailScreen() {
                       </Pressable>
                     </View>
                   ) : null}
+                  {detectedTokenAddress ? (
+                    tokenPreview ? (
+                      <CommunityTokenPreviewCard token={tokenPreview} onPress={() => openTokenChart(tokenPreview)} compact />
+                    ) : (
+                      <View style={styles.tokenScanningCard}>
+                        <ActivityIndicator color={Colors.mint} size="small" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.tokenScanningTitle}>Scanning Solana CA</Text>
+                          <Text style={styles.tokenScanningBody}>{shortAddress(detectedTokenAddress)}</Text>
+                        </View>
+                      </View>
+                    )
+                  ) : null}
                 </View>
                 <Pressable
                   onPress={onPickPostImage}
@@ -1172,6 +1256,7 @@ export default function CommunityDetailScreen() {
                     onPin={() => void onTogglePin(item)}
                     canDelete={canDeletePost(item)}
                     onDelete={() => onDeletePost(item)}
+                    onTokenChart={openTokenChart}
                   />
                 )}
                 ListHeaderComponent={
@@ -1190,6 +1275,7 @@ export default function CommunityDetailScreen() {
                       onPin={() => void onTogglePin(activePost)}
                       canDelete={canDeletePost(activePost)}
                       onDelete={() => onDeletePost(activePost)}
+                      onTokenChart={openTokenChart}
                     />
                     {interactionMode === "quote" ? (
                       <View style={styles.quoteComposerHint}>
@@ -1239,6 +1325,62 @@ export default function CommunityDetailScreen() {
                   <Send color={Colors.ink} size={14} strokeWidth={2.8} />
                 </Pressable>
               </View>
+            ) : null}
+          </SafeAreaView>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!activeChartToken}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setActiveChartToken(null)}
+      >
+        <View style={styles.chartBackdrop}>
+          <SafeAreaView edges={["top", "bottom"]} style={styles.chartSheet}>
+            {activeChartToken ? (
+              <>
+                <View style={styles.chartHeader}>
+                  <View style={styles.chartIdentity}>
+                    <View style={styles.chartLogo}>
+                      {activeChartToken.logoUrl ? (
+                        <Image source={{ uri: activeChartToken.logoUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                      ) : (
+                        <Hash color={Colors.mint} size={18} strokeWidth={2.8} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.chartTitle} numberOfLines={1}>{activeChartToken.symbol}</Text>
+                      <Text style={styles.chartSub} numberOfLines={1}>{activeChartToken.name}</Text>
+                    </View>
+                  </View>
+                  <Pressable onPress={() => setActiveChartToken(null)} style={styles.threadClose} hitSlop={8}>
+                    <X color={Colors.text} size={18} strokeWidth={2.6} />
+                  </Pressable>
+                </View>
+                <View style={styles.chartStatsRow}>
+                  <ChartStat label="Price" value={fmtUsd(activeChartToken.priceUsd)} />
+                  <ChartStat
+                    label="24h"
+                    value={fmtPct(activeChartToken.change24h)}
+                    tone={(activeChartToken.change24h ?? 0) >= 0 ? "good" : "bad"}
+                  />
+                  <ChartStat label="MCap" value={fmtUsd(activeChartToken.marketCapUsd)} />
+                </View>
+                <DexChart
+                  contract={activeChartToken.address}
+                  pairAddress={activeChartToken.pairAddress ?? undefined}
+                  height={360}
+                  interval="60"
+                />
+                <View style={styles.chartAddressRow}>
+                  <Text style={styles.chartAddressText} numberOfLines={1}>{activeChartToken.address}</Text>
+                  <Pressable onPress={() => void copyTokenAddress(activeChartToken.address)} style={styles.chartCopyBtn}>
+                    <Copy color={Colors.ink} size={14} strokeWidth={2.8} />
+                    <Text style={styles.chartCopyText}>Copy CA</Text>
+                  </Pressable>
+                </View>
+              </>
             ) : null}
           </SafeAreaView>
         </View>
@@ -1321,6 +1463,82 @@ function AboutStat({
   );
 }
 
+function ChartStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "good" | "bad";
+}) {
+  const color = tone === "good" ? Colors.mint : tone === "bad" ? Colors.rose : Colors.text;
+  return (
+    <View style={styles.chartStat}>
+      <Text style={styles.chartStatLabel}>{label}</Text>
+      <Text style={[styles.chartStatValue, { color }]} numberOfLines={1}>{value}</Text>
+    </View>
+  );
+}
+
+function CommunityTokenPreviewCard({
+  token,
+  onPress,
+  compact = false,
+}: {
+  token: CommunityTokenCard;
+  onPress: () => void;
+  compact?: boolean;
+}) {
+  const changeColor = (token.change24h ?? 0) >= 0 ? Colors.mint : Colors.rose;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.tokenCard, compact && styles.tokenCardCompact]}
+      testID={`token-card-${token.address}`}
+    >
+      <LinearGradient
+        colors={["rgba(85,245,178,0.14)", "rgba(56,215,255,0.06)", "rgba(255,255,255,0.025)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.tokenTopRow}>
+        <View style={styles.tokenLogo}>
+          {token.logoUrl ? (
+            <Image source={{ uri: token.logoUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          ) : (
+            <Hash color={Colors.mint} size={16} strokeWidth={2.8} />
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.tokenSymbol} numberOfLines={1}>{token.symbol}</Text>
+          <Text style={styles.tokenName} numberOfLines={1}>{token.name}</Text>
+        </View>
+        <View style={styles.tokenChartPill}>
+          <ChartCandlestick color={Colors.ink} size={13} strokeWidth={2.8} />
+          <Text style={styles.tokenChartText}>Chart</Text>
+        </View>
+      </View>
+      <View style={styles.tokenMetricsRow}>
+        <View style={styles.tokenMetric}>
+          <Text style={styles.tokenMetricLabel}>Price</Text>
+          <Text style={styles.tokenMetricValue}>{fmtUsd(token.priceUsd)}</Text>
+        </View>
+        <View style={styles.tokenMetric}>
+          <Text style={styles.tokenMetricLabel}>24h</Text>
+          <Text style={[styles.tokenMetricValue, { color: changeColor }]}>{fmtPct(token.change24h)}</Text>
+        </View>
+        <View style={styles.tokenMetric}>
+          <Text style={styles.tokenMetricLabel}>Liq</Text>
+          <Text style={styles.tokenMetricValue}>{fmtUsd(token.liquidityUsd)}</Text>
+        </View>
+      </View>
+      <Text style={styles.tokenAddress} numberOfLines={1}>SOL CA · {shortAddress(token.address)}</Text>
+    </Pressable>
+  );
+}
+
 function PostRow({
   post,
   compact = false,
@@ -1336,6 +1554,7 @@ function PostRow({
   onPin,
   canDelete = false,
   onDelete,
+  onTokenChart,
 }: {
   post: CommunityPost;
   compact?: boolean;
@@ -1351,6 +1570,7 @@ function PostRow({
   onPin?: () => void;
   canDelete?: boolean;
   onDelete?: () => void;
+  onTokenChart?: (token: CommunityTokenCard) => void;
 }) {
   const quote = post.quote;
   return (
@@ -1422,6 +1642,9 @@ function PostRow({
       {post.content.length > 0 ? <Text style={styles.postBody}>{post.content}</Text> : null}
       {post.imageUrl ? (
         <Image source={{ uri: post.imageUrl }} style={styles.postImage} contentFit="cover" />
+      ) : null}
+      {post.token ? (
+        <CommunityTokenPreviewCard token={post.token} onPress={() => onTokenChart?.(post.token!)} />
       ) : null}
       {quote ? (
         <View style={styles.quoteCard}>
@@ -1564,8 +1787,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
   bannerEmojiWrap: {
-    position: "absolute",
-    inset: 0,
+    ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1783,6 +2005,65 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  tokenScanningCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(85,245,178,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.2)",
+  },
+  tokenScanningTitle: { color: Colors.text, fontSize: 12, fontWeight: "900" },
+  tokenScanningBody: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  tokenCard: {
+    marginTop: 12,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.18)",
+    backgroundColor: "rgba(255,255,255,0.035)",
+    padding: 12,
+  },
+  tokenCardCompact: { marginTop: 2, padding: 10 },
+  tokenTopRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  tokenLogo: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(85,245,178,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.25)",
+  },
+  tokenSymbol: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.2 },
+  tokenName: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 1 },
+  tokenChartPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: Colors.mint,
+  },
+  tokenChartText: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
+  tokenMetricsRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  tokenMetric: {
+    flex: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  tokenMetricLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", textTransform: "uppercase" },
+  tokenMetricValue: { color: Colors.text, fontSize: 12, fontWeight: "900", marginTop: 3 },
+  tokenAddress: { color: Colors.muted, fontSize: 10, fontWeight: "800", marginTop: 10 },
 
   sep: { height: 1, marginHorizontal: 18, backgroundColor: "rgba(255,255,255,0.04)" },
   post: { paddingHorizontal: 18, paddingVertical: 14 },
@@ -1958,6 +2239,75 @@ const styles = StyleSheet.create({
     borderColor: "rgba(85,245,178,0.18)",
   },
   quoteComposerText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
+
+  chartBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.72)",
+  },
+  chartSheet: {
+    height: "88%",
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    gap: 12,
+    backgroundColor: Colors.ink,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.14)",
+  },
+  chartHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  chartIdentity: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  chartLogo: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(85,245,178,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.25)",
+  },
+  chartTitle: { color: Colors.text, fontSize: 18, fontWeight: "900" },
+  chartSub: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  chartStatsRow: { flexDirection: "row", gap: 8 },
+  chartStat: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+  },
+  chartStatLabel: { color: Colors.muted, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  chartStatValue: { color: Colors.text, fontSize: 14, fontWeight: "900", marginTop: 4 },
+  chartAddressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+  },
+  chartAddressText: { flex: 1, color: Colors.muted, fontSize: 11, fontWeight: "800" },
+  chartCopyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: Colors.mint,
+  },
+  chartCopyText: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
 
   aboutWrap: { paddingHorizontal: 18, marginTop: 14, gap: 10 },
   aboutCard: {

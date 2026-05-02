@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Colors from "@/constants/colors";
+import type { CommunityTokenCard } from "@/lib/community-token";
 import { normalizeMediaUrl } from "@/lib/media";
 import { supabase } from "@/lib/supabase";
 import { uploadPostImage } from "@/lib/upload";
@@ -42,6 +43,7 @@ export interface CommunityPostQuote {
   imageUrl?: string | null;
   ticker?: string;
   createdAt?: number;
+  token?: CommunityTokenCard | null;
 }
 
 export interface CommunityPostReplyRef {
@@ -75,6 +77,7 @@ export interface CommunityPost {
   quotePostId?: string | null;
   quote?: CommunityPostQuote | null;
   replyTo?: CommunityPostReplyRef | null;
+  token?: CommunityTokenCard | null;
 }
 
 export interface Space {
@@ -247,6 +250,64 @@ function displayNameFrom(username: string, displayName: unknown): string {
   return ((displayName as string | null) ?? username) || "User";
 }
 
+function numberFrom(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function tokenFromRow(row: PostRowRecord): CommunityTokenCard | null {
+  const address = (row.token_address as string | null) ?? null;
+  if (!address) return null;
+  const metadataRaw = row.token_metadata;
+  const metadata =
+    metadataRaw && typeof metadataRaw === "object" && !Array.isArray(metadataRaw)
+      ? (metadataRaw as Record<string, unknown>)
+      : {};
+  return {
+    address,
+    chain: "solana",
+    symbol: (row.token_symbol as string | null) ?? (row.ticker as string | null) ?? "TOKEN",
+    name: (row.token_name as string | null) ?? "Unknown Solana token",
+    logoUrl: normalizeMediaUrl(row.token_logo_url),
+    priceUsd: numberFrom(row.token_price_usd),
+    change24h: numberFrom(row.token_change_24h),
+    marketCapUsd: numberFrom(row.token_market_cap_usd),
+    liquidityUsd: numberFrom(row.token_liquidity_usd),
+    volume24hUsd: numberFrom(row.token_volume_24h_usd),
+    pairAddress: (row.token_pair_address as string | null) ?? null,
+    decimals: numberFrom(row.token_decimals),
+    holderCount: numberFrom(row.token_holder_count),
+    metadata,
+    scannedAt: row.token_scanned_at ? new Date(row.token_scanned_at as string).getTime() : Date.now(),
+  };
+}
+
+function tokenInsertFields(token?: CommunityTokenCard | null): Record<string, unknown> {
+  if (!token) return {};
+  return {
+    token_address: token.address,
+    token_symbol: token.symbol,
+    token_name: token.name,
+    token_logo_url: normalizeMediaUrl(token.logoUrl),
+    token_price_usd: token.priceUsd ?? null,
+    token_change_24h: token.change24h ?? null,
+    token_market_cap_usd: token.marketCapUsd ?? null,
+    token_liquidity_usd: token.liquidityUsd ?? null,
+    token_volume_24h_usd: token.volume24hUsd ?? null,
+    token_pair_address: token.pairAddress ?? null,
+    token_decimals: token.decimals ?? null,
+    token_holder_count: token.holderCount ?? null,
+    token_metadata: token.metadata ?? {},
+    token_scanned_at: new Date(token.scannedAt).toISOString(),
+  };
+}
+
+const COMMUNITY_POST_SELECT = "id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,reposts_count,parent_post_id,quote_post_id,created_at,token_address,token_symbol,token_name,token_logo_url,token_price_usd,token_change_24h,token_market_cap_usd,token_liquidity_usd,token_volume_24h_usd,token_pair_address,token_decimals,token_holder_count,token_metadata,token_scanned_at";
+
 function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): CommunityPost {
   const postId = String(row.id);
   const username = (row.username as string | null) ?? "";
@@ -267,6 +328,7 @@ function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): 
     imageUrl: normalizeMediaUrl(row.image_url),
     ticker: (row.ticker as string | null) ?? undefined,
     changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
+    token: tokenFromRow(row),
     createdAt: row.created_at ? new Date(row.created_at as string).getTime() : Date.now(),
     likes: Number(row.likes_count ?? 0),
     comments: Number(row.comments_count ?? 0),
@@ -289,6 +351,7 @@ function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): 
           createdAt: row.quote_created_at
             ? new Date(row.quote_created_at as string).getTime()
             : undefined,
+          token: null,
         }
       : null,
     replyTo: parentId
@@ -706,7 +769,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         try {
           const { data: directRows, error: directError } = await supabase
             .from("community_posts")
-            .select("id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,reposts_count,parent_post_id,quote_post_id,created_at")
+            .select(COMMUNITY_POST_SELECT)
             .eq("community_id", id)
             .is("parent_post_id", null)
             .order("created_at", { ascending: false })
@@ -747,6 +810,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
               imageUrl: normalizeMediaUrl(r.image_url),
               ticker: (r.ticker as string) ?? undefined,
               changePct: r.change_pct != null ? Number(r.change_pct) : undefined,
+              token: tokenFromRow(r),
               createdAt: r.created_at ? new Date(r.created_at as string).getTime() : Date.now(),
               likes: Number(r.likes_count ?? 0),
               comments: Number(r.comments_count ?? 0),
@@ -832,7 +896,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         try {
           const { data: directRows, error: directError } = await supabase
             .from("community_posts")
-            .select("id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,reposts_count,parent_post_id,quote_post_id,created_at")
+            .select(COMMUNITY_POST_SELECT)
             .eq("parent_post_id", postId)
             .order("created_at", { ascending: true })
             .limit(100);
@@ -900,6 +964,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       ticker?: string;
       imageUri?: string | null;
       imageBase64?: string | null;
+      token?: CommunityTokenCard | null;
     }): Promise<CommunityPost> => {
       if (!isAuthenticated || !userId) {
         throw new Error("Sign in to post in communities.");
@@ -915,7 +980,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         authorName: input.authorName,
         authorColor: input.authorColor,
         content: text,
-        ticker: input.ticker,
+        ticker: input.ticker ?? input.token?.symbol,
+        token: input.token ?? null,
         createdAt: Date.now(),
         likes: 0,
         comments: 0,
@@ -949,11 +1015,11 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             community_id: input.communityId,
             content: text,
             image_url: uploadedUrl,
-            ticker: input.ticker ?? null,
+            ticker: input.ticker ?? input.token?.symbol ?? null,
+            change_pct: input.token?.change24h ?? null,
+            ...tokenInsertFields(input.token),
           })
-          .select(
-            "id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,reposts_count,parent_post_id,quote_post_id,created_at",
-          )
+          .select(COMMUNITY_POST_SELECT)
           .single();
         if (error) throw error;
         const post: CommunityPost = {
@@ -965,8 +1031,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           authorColor: input.authorColor,
           content: (data.content as string | null) ?? text,
           imageUrl: normalizeMediaUrl(data.image_url) ?? uploadedUrl,
-          ticker: (data.ticker as string | null) ?? input.ticker,
-          changePct: data.change_pct != null ? Number(data.change_pct) : undefined,
+          ticker: (data.ticker as string | null) ?? input.ticker ?? input.token?.symbol,
+          changePct: data.change_pct != null ? Number(data.change_pct) : input.token?.change24h ?? undefined,
+          token: tokenFromRow(data as PostRowRecord) ?? input.token ?? null,
           createdAt: data.created_at
             ? new Date(data.created_at as string).getTime()
             : optimisticPost.createdAt,
@@ -1202,6 +1269,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           imageUrl: input.post.imageUrl,
           ticker: input.post.ticker,
           createdAt: input.post.createdAt,
+          token: input.post.token ?? null,
         },
         replyTo: null,
       };
