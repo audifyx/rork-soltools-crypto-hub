@@ -238,6 +238,12 @@ async function saveJson<T>(key: string, value: T): Promise<void> {
   }
 }
 
+function nonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 type AlertCondition = "above" | "below" | "volume_spike" | "whale_buy";
 const alertTypeToCond: Record<AlertItem["type"], AlertCondition> = {
   "price-above": "above",
@@ -384,11 +390,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
     refetchOnReconnect: true,
     queryFn: async () => {
       const local = await loadJson<Partial<UserProfile>>(PROFILE_KEY, {});
-      // When signed in, server is the source of truth — only fall back to
-      // local cache for fields the server returns null for.
-      const base = isAuthenticated && userId
-        ? ({ ...DEFAULT_PROFILE } as UserProfile)
-        : ({ ...DEFAULT_PROFILE, ...local } as UserProfile);
+      // Keep the local cache as a safety net for signed-in users too. If the
+      // server returns null/empty profile fields during a failed or delayed
+      // write, the UI should not suddenly blank out.
+      const base = { ...DEFAULT_PROFILE, ...local } as UserProfile;
       if (isAuthenticated && userId) {
         try {
           const { data, error } = await supabase
@@ -418,10 +423,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
                   })
                   .filter((b): b is CustomBadge => b !== null)
               : [];
+            const username = nonEmptyString(data.username);
+            const displayName = nonEmptyString(data.display_name) ?? username ?? base.displayName;
             const merged: UserProfile = {
               ...base,
-              handle: data.username ? `@${data.username}` : base.handle,
-              displayName: ((data.display_name as string) || (data.username as string)) ?? base.displayName,
+              handle: username ? `@${username}` : base.handle,
+              displayName,
               bio: (data.bio as string) ?? base.bio,
               avatarUrl: normalizeMediaUrl(data.avatar_url) ?? base.avatarUrl,
               bannerUrl: normalizeMediaUrl(data.banner_url) ?? base.bannerUrl,
@@ -840,73 +847,43 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const updateProfile = useCallback(
     async (patch: Partial<UserProfile>) => {
+      const previous = profile;
       const next = { ...profile, ...patch };
       qc.setQueryData(["app", "profile", userId ?? "guest"], next);
       await saveJson(PROFILE_KEY, next);
       if (isAuthenticated && userId) {
-        // Only push the fields that actually changed in this patch so we
-        // never null-out unrelated columns (e.g. avatar_url when the user
-        // edits just their bio). Maps client field -> RPC arg.
-        const argMap: Record<keyof UserProfile, string | undefined> = {
-          handle: "set_username",
-          displayName: "set_display_name",
-          bio: "set_bio",
-          avatarUrl: "set_avatar_url",
-          bannerUrl: "set_banner_url",
-          avatarColor: "set_avatar_color",
-          bannerFrom: "set_banner_from",
-          bannerTo: "set_banner_to",
-          walletAddress: "set_wallet",
-          twitterHandle: "set_twitter",
-          website: "set_website",
-          location: "set_location",
-          verified: undefined,
-          joinedAt: undefined,
-          xp: undefined,
-          trades: undefined,
-          winRate: undefined,
-          pnlPct: undefined,
-          rank: undefined,
-          followers: undefined,
-          following: undefined,
-          customBadges: undefined,
+        const dbPatch: Record<string, string | null> = {
+          id: userId,
+          user_id: userId,
         };
-        const args: Record<string, string | null> = {};
-        for (const k of Object.keys(patch) as (keyof UserProfile)[]) {
-          const arg = argMap[k];
-          if (!arg) continue;
-          let v = patch[k] as unknown;
-          if (k === "handle" && typeof v === "string") v = v.replace(/^@/, "").trim();
-          if (typeof v === "string") args[arg] = v.length > 0 ? v : "";
-          else if (v == null) args[arg] = "";
+        if ("handle" in patch) {
+          const username = nonEmptyString(next.handle.replace(/^@/, ""));
+          if (!username) throw new Error("Handle is required");
+          dbPatch.username = username;
         }
-        if (Object.keys(args).length === 0) return;
-        try {
-          const { error } = await supabase.rpc("update_my_profile", args);
-          if (error) throw error;
-        } catch (e) {
-          console.log("[app] update_my_profile failed, falling back", e);
-          try {
-            const fallback: Record<string, string | null> = {
-              id: userId,
-              user_id: userId,
-            };
-            if ("handle" in patch) fallback.username = (next.handle.replace(/^@/, "").trim() || null) as string | null;
-            if ("displayName" in patch) fallback.display_name = next.displayName || null;
-            if ("bio" in patch) fallback.bio = next.bio || null;
-            if ("avatarUrl" in patch) fallback.avatar_url = normalizeMediaUrl(next.avatarUrl);
-            if ("bannerUrl" in patch) fallback.banner_url = normalizeMediaUrl(next.bannerUrl);
-            if ("avatarColor" in patch) fallback.avatar_color = next.avatarColor || null;
-            if ("bannerFrom" in patch) fallback.banner_from = next.bannerFrom || null;
-            if ("bannerTo" in patch) fallback.banner_to = next.bannerTo || null;
-            if ("walletAddress" in patch) fallback.wallet_address = next.walletAddress || null;
-            if ("twitterHandle" in patch) fallback.twitter_handle = next.twitterHandle || null;
-            if ("website" in patch) fallback.website = next.website || null;
-            if ("location" in patch) fallback.location = next.location || null;
-            await supabase.from("profiles").upsert(fallback, { onConflict: "id" });
-          } catch (e2) {
-            console.log("[app] profile upsert fallback failed", e2);
-          }
+        if ("displayName" in patch) {
+          const displayName = nonEmptyString(next.displayName);
+          if (!displayName) throw new Error("Display name is required");
+          dbPatch.display_name = displayName;
+        }
+        if ("bio" in patch) dbPatch.bio = next.bio || null;
+        if ("avatarUrl" in patch) dbPatch.avatar_url = normalizeMediaUrl(next.avatarUrl);
+        if ("bannerUrl" in patch) dbPatch.banner_url = normalizeMediaUrl(next.bannerUrl);
+        if ("avatarColor" in patch) dbPatch.avatar_color = next.avatarColor || null;
+        if ("bannerFrom" in patch) dbPatch.banner_from = next.bannerFrom || null;
+        if ("bannerTo" in patch) dbPatch.banner_to = next.bannerTo || null;
+        if ("walletAddress" in patch) dbPatch.wallet_address = next.walletAddress || null;
+        if ("twitterHandle" in patch) dbPatch.twitter_handle = next.twitterHandle || null;
+        if ("website" in patch) dbPatch.website = next.website || null;
+        if ("location" in patch) dbPatch.location = next.location || null;
+        if (Object.keys(dbPatch).length === 2) return;
+
+        const { error } = await supabase.from("profiles").upsert(dbPatch, { onConflict: "id" });
+        if (error) {
+          qc.setQueryData(["app", "profile", userId], previous);
+          await saveJson(PROFILE_KEY, previous);
+          console.log("[app] profile save failed", error.message);
+          throw new Error(error.message || "Could not save profile");
         }
       }
     },

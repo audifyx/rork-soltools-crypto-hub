@@ -1565,6 +1565,32 @@ function EditProfileModal({
   const [location, setLocation] = useState<string>(initial.location);
   const [saving, setSaving] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (!visible) return;
+    setDisplayName(initial.displayName);
+    setHandle(initial.handle);
+    setBio(initial.bio);
+    setColor(initial.avatarColor);
+    setBannerFrom(initial.bannerFrom);
+    setBannerTo(initial.bannerTo);
+    setWalletAddress(initial.walletAddress);
+    setTwitterHandle(initial.twitterHandle);
+    setWebsite(initial.website);
+    setLocation(initial.location);
+  }, [
+    visible,
+    initial.displayName,
+    initial.handle,
+    initial.bio,
+    initial.avatarColor,
+    initial.bannerFrom,
+    initial.bannerTo,
+    initial.walletAddress,
+    initial.twitterHandle,
+    initial.website,
+    initial.location,
+  ]);
+
   const COLORS = [Colors.mint, Colors.cyan, Colors.orange, Colors.rose, "#B88CFF", "#FFD56B", "#F4FFF9"];
   const BANNERS: { from: string; to: string }[] = [
     { from: Colors.rose, to: Colors.cyan },
@@ -1794,20 +1820,31 @@ function EditProfileModal({
             <Pressable
               disabled={saving}
               onPress={async () => {
+                const cleanDisplayName = displayName.trim();
+                const cleanHandle = handle.replace(/^@/, "").trim();
+                if (!cleanDisplayName || !cleanHandle) {
+                  Alert.alert("Missing profile info", "Display name and handle are required.");
+                  return;
+                }
                 setSaving(true);
-                await onSave({
-                  displayName,
-                  handle,
-                  bio,
-                  avatarColor: color,
-                  bannerFrom,
-                  bannerTo,
-                  walletAddress: walletAddress.trim(),
-                  twitterHandle: twitterHandle.trim(),
-                  website: website.trim(),
-                  location: location.trim(),
-                });
-                setSaving(false);
+                try {
+                  await onSave({
+                    displayName: cleanDisplayName,
+                    handle: `@${cleanHandle}`,
+                    bio: bio.trim(),
+                    avatarColor: color,
+                    bannerFrom,
+                    bannerTo,
+                    walletAddress: walletAddress.trim(),
+                    twitterHandle: twitterHandle.trim(),
+                    website: website.trim(),
+                    location: location.trim(),
+                  });
+                } catch (e) {
+                  Alert.alert("Save failed", e instanceof Error ? e.message : "Could not save profile.");
+                } finally {
+                  setSaving(false);
+                }
               }}
               style={styles.saveBtn}
               testID="save-profile"

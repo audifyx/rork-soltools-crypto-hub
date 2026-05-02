@@ -135,24 +135,13 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
         input.fileName ?? null,
         input.mimeType ?? null,
       );
-      // Use the partial-update RPC so we never wipe other profile fields,
-      // and so the row is created if the trigger somehow missed it.
-      const rpcArgs =
-        input.kind === "avatar"
-          ? { set_avatar_url: url }
-          : { set_banner_url: url };
-      const { error: rpcErr } = await supabase.rpc("update_my_profile", rpcArgs);
-      if (rpcErr) {
-        // Fallback to a direct upsert in case the RPC is missing.
-        const patch =
-          input.kind === "avatar"
-            ? { avatar_url: url }
-            : { banner_url: url };
-        const { error: upErr } = await supabase
-          .from("profiles")
-          .upsert({ id: userId, user_id: userId, ...patch }, { onConflict: "id" });
-        if (upErr) throw upErr;
-      }
+      // Write only the image column directly. A broken/older profile RPC can
+      // treat omitted params as null and wipe username/display_name.
+      const patch = input.kind === "avatar" ? { avatar_url: url } : { banner_url: url };
+      const { error: upErr } = await supabase
+        .from("profiles")
+        .upsert({ id: userId, user_id: userId, ...patch }, { onConflict: "id" });
+      if (upErr) throw upErr;
       return url;
     },
     onSuccess: (url, input) => {
