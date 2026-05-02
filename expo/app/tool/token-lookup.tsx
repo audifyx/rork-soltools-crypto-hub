@@ -57,29 +57,41 @@ export default function TokenLookupScreen() {
   const [input, setInput] = useState<string>(initial);
   const [contract, setContract] = useState<string>(initial);
   const [interval, setInterval] = useState<string>("60");
+  const [seenData, setSeenData] = useState<boolean>(false);
 
   useEffect(() => {
     if (initial && !contract) setContract(initial);
   }, [initial, contract]);
 
+  useEffect(() => {
+    setSeenData(false);
+  }, [contract]);
+
   const enabled = contract.trim().length >= 32;
 
-  const overviewQ = useQuery<TokenOverview>({
+  const overviewQ = useQuery<TokenOverview | null>({
     queryKey: ["tokenLookup", "overview", contract],
     enabled,
     queryFn: async () => {
-      const res = await getTokenOverview(contract.trim());
-      if (!res || !res.address) {
-        throw new Error("Empty token response");
+      try {
+        const res = await getTokenOverview(contract.trim());
+        if (res && res.address) return res;
+        return null;
+      } catch (e) {
+        console.log("[token-lookup] overview failed", e);
+        return null;
       }
-      return res;
     },
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     staleTime: 15_000,
-    retry: 2,
+    retry: 1,
     placeholderData: (prev) => prev,
   });
+
+  useEffect(() => {
+    if (overviewQ.data && overviewQ.data.address) setSeenData(true);
+  }, [overviewQ.data]);
 
   const onPaste = useCallback(async () => {
     try {
@@ -116,8 +128,8 @@ export default function TokenLookupScreen() {
   }, [contract]);
 
   const overview = overviewQ.data ?? null;
-  const loading = overviewQ.isLoading && !overview;
-  const errored = !!overviewQ.error && !overview && !overviewQ.isFetching;
+  const loading = overviewQ.isFetching && !overview && !seenData;
+  const errored = !overview && !seenData && !overviewQ.isFetching && enabled && overviewQ.isFetched;
   const change = overview?.priceChange24h;
   const isUp = (change ?? 0) >= 0;
   const accent = isUp ? Colors.mint : Colors.rose;
