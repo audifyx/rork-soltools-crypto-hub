@@ -100,6 +100,9 @@ export default function CommunityDetailScreen() {
   const { isAuthenticated, userId } = useAuth();
   const [tab, setTab] = useState<Tab>("recent");
   const [composer, setComposer] = useState<string>("");
+  const [searchOpen, setSearchOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [notifyOn, setNotifyOn] = useState<boolean>(true);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [toast, setToast] = useState<string | null>(null);
   const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
@@ -109,6 +112,21 @@ export default function CommunityDetailScreen() {
   const posts = useMemo(
     () => postsQuery.data ?? (community?.id ? postsByCommunity(community.id) : []),
     [community?.id, postsByCommunity, postsQuery.data],
+  );
+  const mediaPosts = useMemo(
+    () => posts.filter((p) => p.imageUrl || p.ticker || p.pinned),
+    [posts],
+  );
+  const query = searchQuery.trim().toLowerCase();
+  const matchesSearch = useCallback(
+    (post: CommunityPost) => {
+      if (query.length === 0) return true;
+      return [post.content, post.authorName, post.authorHandle, post.ticker ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    },
+    [query],
   );
   const canEditMedia = useMemo(() => {
     if (!community || !isAuthenticated || !userId) return false;
@@ -136,16 +154,16 @@ export default function CommunityDetailScreen() {
         if (userIds.length === 0) return [];
         const { data: profs } = await supabase
           .from("profiles")
-          .select("id,username,display_name,avatar_color")
-          .in("id", userIds);
+          .select("id,user_id,username,display_name,avatar_color")
+          .or(`id.in.(${userIds.join(",")}),user_id.in.(${userIds.join(",")})`);
         return (profs ?? []).map((p): CommunityMember => {
           const username = (p.username as string | null) ?? "";
           const display = (p.display_name as string | null) ?? username ?? "User";
           return {
-            id: p.id as string,
+            id: ((p.user_id as string | null) ?? (p.id as string)) || username,
             handle: username ? `@${username}` : "",
             name: display || "User",
-            color: (p.avatar_color as string | null) ?? memberColorFor(p.id as string),
+            color: (p.avatar_color as string | null) ?? memberColorFor(((p.user_id as string | null) ?? (p.id as string)) || username),
           };
         });
       } catch (e) {
@@ -165,16 +183,25 @@ export default function CommunityDetailScreen() {
   const onSend = useCallback(async () => {
     const text = composer.trim();
     if (!community || text.length === 0) return;
+    if (!isAuthenticated) {
+      Alert.alert("Sign in", "Sign in to post in this community.");
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    await addCommunityPost({
-      communityId: community.id,
-      content: text,
-      authorHandle: profile.handle || "@you",
-      authorName: profile.displayName || "You",
-      authorColor: profile.avatarColor,
-    });
-    setComposer("");
-  }, [composer, community, addCommunityPost, profile]);
+    try {
+      await addCommunityPost({
+        communityId: community.id,
+        content: text,
+        authorHandle: profile.handle || "@you",
+        authorName: profile.displayName || "You",
+        authorColor: profile.avatarColor,
+      });
+      setComposer("");
+      setTab("recent");
+    } catch (e) {
+      Alert.alert("Failed to post", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [composer, community, isAuthenticated, addCommunityPost, profile]);
 
   const shareLink = useMemo(
     () =>
@@ -208,11 +235,37 @@ export default function CommunityDetailScreen() {
     }
   }, [shareLink, showToast]);
 
-  const onInvite = useCallback(() => {
+  const onInvite = useCallback(async () => {
     setMenuOpen(false);
+    if (!community) return;
     Haptics.selectionAsync().catch(() => {});
-    showToast("Invite sheet coming soon");
-  }, [showToast]);
+    try {
+      await Share.share({
+        message: `Join ${community.name} on SolTools: ${shareLink}`,
+        url: shareLink,
+      });
+    } catch (e) {
+      console.log("[community] invite failed", e);
+    }
+  }, [community, shareLink]);
+
+  const onToggleNotify = useCallback(() => {
+    const next = !notifyOn;
+    setNotifyOn(next);
+    Haptics.selectionAsync().catch(() => {});
+    showToast(next ? "Community alerts on" : "Community alerts off");
+  }, [notifyOn, showToast]);
+
+  const onOpenHighlights = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    if (mediaPosts.length > 0) {
+      setTab("media");
+      showToast("Showing community highlights");
+      return;
+    }
+    setTab("about");
+    showToast("Showing community details");
+  }, [mediaPosts.length, showToast]);
 
   const onPickCommunityMedia = useCallback(
     async (kind: "avatar" | "banner") => {
@@ -296,14 +349,17 @@ export default function CommunityDetailScreen() {
   }
 
   const joined = isJoined(community.id);
-  const mediaPosts = posts.filter((p) => p.imageUrl || p.ticker || p.pinned);
 
   const renderPost: ListRenderItem<CommunityPost> = ({ item }) => (
     <PostRow post={item} onLike={() => togglePostLike(item.id)} />
   );
 
   const dataForTab: CommunityPost[] =
-    tab === "recent" ? posts : tab === "media" ? mediaPosts : [];
+    tab === "recent"
+      ? posts.filter(matchesSearch)
+      : tab === "media"
+        ? mediaPosts.filter(matchesSearch)
+        : [];
 
   return (
     <View style={styles.root} testID="community-detail">
@@ -349,8 +405,16 @@ export default function CommunityDetailScreen() {
                     <ArrowLeft color={Colors.text} size={20} strokeWidth={2.6} />
                   </Pressable>
                   <View style={styles.bannerActions}>
-                    <Pressable style={styles.bannerIcon} testID="community-search">
-                      <Search color={Colors.text} size={18} strokeWidth={2.4} />
+                    <Pressable
+                      style={[styles.bannerIcon, searchOpen && styles.bannerIconActive]}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setSearchOpen((v) => !v);
+                        setTab("recent");
+                      }}
+                      testID="community-search"
+                    >
+                      <Search color={searchOpen ? Colors.mint : Colors.text} size={18} strokeWidth={2.4} />
                     </Pressable>
                     <Pressable
                       style={styles.bannerIcon}
@@ -421,6 +485,7 @@ export default function CommunityDetailScreen() {
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
                     toggleJoin(community.id);
+                    showToast(joined ? "Left community" : "Joined community");
                   }}
                   style={[
                     styles.joinPrimary,
@@ -453,7 +518,15 @@ export default function CommunityDetailScreen() {
               </View>
 
               <View style={styles.memberRow}>
-                <View style={styles.memberStack}>
+                <Pressable
+                  style={styles.memberStack}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setTab("about");
+                    showToast(`${fmtCount(community.members)} community members`);
+                  }}
+                  testID="community-members"
+                >
                   {(members.length > 0 ? members.slice(0, 3) : placeholderMembers()).map(
                     (m, i) => (
                       <View
@@ -473,31 +546,32 @@ export default function CommunityDetailScreen() {
                       </View>
                     ),
                   )}
-                </View>
+                </Pressable>
                 <Text style={styles.memberCount}>
                   {fmtCount(community.members)} Members
                 </Text>
                 <View style={styles.headIcons}>
                   <Pressable
                     style={styles.headCircle}
-                    onPress={() => Haptics.selectionAsync().catch(() => {})}
+                    onPress={onOpenHighlights}
                     testID="community-ai"
                   >
-                    <Sparkles color={Colors.text} size={16} strokeWidth={2.4} />
+                    <Sparkles color={tab === "media" || tab === "about" ? Colors.mint : Colors.text} size={16} strokeWidth={2.4} />
                   </Pressable>
                   <Pressable
-                    style={styles.headCircle}
-                    onPress={() => Haptics.selectionAsync().catch(() => {})}
+                    style={[styles.headCircle, notifyOn && styles.headCircleActive]}
+                    onPress={onToggleNotify}
                     testID="community-bell"
                   >
-                    <Bell color={Colors.text} size={16} strokeWidth={2.4} />
-                    <View style={styles.bellDot} />
+                    <Bell color={notifyOn ? Colors.mint : Colors.text} size={16} strokeWidth={2.4} />
+                    {notifyOn ? <View style={styles.bellDot} /> : null}
                   </Pressable>
                   <Pressable
                     style={styles.headCircle}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                       toggleJoin(community.id);
+                      showToast(joined ? "Left community" : "Joined community");
                     }}
                     testID="community-join"
                   >
@@ -515,6 +589,27 @@ export default function CommunityDetailScreen() {
                   `${community.name} is the official community on SolTools.`}
               </Text>
             </View>
+
+            {searchOpen ? (
+              <View style={styles.searchBox}>
+                <Search color={Colors.muted} size={15} strokeWidth={2.4} />
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search posts, tickers, members..."
+                  placeholderTextColor={Colors.muted}
+                  style={styles.searchInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  testID="community-search-input"
+                />
+                {searchQuery.length > 0 ? (
+                  <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+                    <X color={Colors.muted} size={15} strokeWidth={2.6} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
 
             <View style={styles.tabsRow}>
               <TabBtn
@@ -653,9 +748,11 @@ export default function CommunityDetailScreen() {
                 {tab === "media" ? "No media yet" : "No posts yet"}
               </Text>
               <Text style={styles.emptyBody}>
-                {tab === "media"
-                  ? `Media posts will appear here.`
-                  : `Be the first to start the conversation in ${community.name}.`}
+                {query.length > 0
+                  ? "No posts matched your search."
+                  : tab === "media"
+                    ? `Media posts will appear here.`
+                    : `Be the first to start the conversation in ${community.name}.`}
               </Text>
             </View>
           )
@@ -989,6 +1086,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  bannerIconActive: {
+    borderColor: "rgba(85,245,178,0.55)",
+    backgroundColor: "rgba(85,245,178,0.12)",
+  },
   editBannerBtn: {
     position: "absolute",
     left: 18,
@@ -1041,6 +1142,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  headCircleActive: {
+    borderColor: "rgba(85,245,178,0.5)",
+    backgroundColor: "rgba(85,245,178,0.08)",
+  },
   bellDot: {
     position: "absolute",
     top: 8,
@@ -1058,6 +1163,27 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 14,
     opacity: 0.85,
+  },
+
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 18,
+    marginTop: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.045)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.18)",
+  },
+  searchInput: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "700",
+    padding: 0,
   },
 
   tabsRow: {

@@ -487,17 +487,32 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     },
     onMutate: (id: string) => {
       const prev = joined;
-      const next = prev.includes(id) ? prev.filter((j) => j !== id) : [id, ...prev];
+      const wasJoined = prev.includes(id);
+      const next = wasJoined ? prev.filter((j) => j !== id) : [id, ...prev];
       qc.setQueryData(["social", "memberships", userId ?? "guest"], next);
-      return { prev };
+      qc.setQueriesData<Community[]>({ queryKey: ["social", "communities"] }, (list) =>
+        list?.map((c) =>
+          c.id === id ? { ...c, members: Math.max(0, c.members + (wasJoined ? -1 : 1)) } : c,
+        ),
+      );
+      return { prev, wasJoined };
     },
-    onError: (_e, _vars, ctx) => {
-      const prev = (ctx as { prev?: string[] } | undefined)?.prev;
+    onError: (_e, id, ctx) => {
+      const prev = (ctx as { prev?: string[]; wasJoined?: boolean } | undefined)?.prev;
+      const wasJoined = (ctx as { prev?: string[]; wasJoined?: boolean } | undefined)?.wasJoined;
       if (prev) qc.setQueryData(["social", "memberships", userId ?? "guest"], prev);
+      if (typeof wasJoined === "boolean") {
+        qc.setQueriesData<Community[]>({ queryKey: ["social", "communities"] }, (list) =>
+          list?.map((c) =>
+            c.id === id ? { ...c, members: Math.max(0, c.members + (wasJoined ? 1 : -1)) } : c,
+          ),
+        );
+      }
     },
-    onSuccess: (next) => {
+    onSuccess: (next, id) => {
       qc.setQueryData(["social", "memberships", userId ?? "guest"], next);
       qc.invalidateQueries({ queryKey: ["social", "communities"] });
+      qc.invalidateQueries({ queryKey: ["community", "members", id] });
     },
   });
 
@@ -676,11 +691,34 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       authorName: string;
       authorColor: string;
       ticker?: string;
-    }) => {
+    }): Promise<CommunityPost> => {
       if (!isAuthenticated || !userId) {
-        console.log("[social] addCommunityPost requires auth");
-        return;
+        throw new Error("Sign in to post in communities.");
       }
+
+      const optimisticPost: CommunityPost = {
+        id: `local-${Date.now()}`,
+        communityId: input.communityId,
+        authorHandle: input.authorHandle,
+        authorName: input.authorName,
+        authorColor: input.authorColor,
+        content: input.content,
+        ticker: input.ticker,
+        createdAt: Date.now(),
+        likes: 0,
+        comments: 0,
+        liked: false,
+        imageUrl: null,
+      };
+
+      qc.setQueryData<CommunityPost[]>(
+        ["social", "community-posts", input.communityId],
+        (prev) => [optimisticPost, ...(prev ?? [])],
+      );
+      qc.setQueriesData<Community[]>({ queryKey: ["social", "communities"] }, (prev) =>
+        prev?.map((c) => (c.id === input.communityId ? { ...c, posts: c.posts + 1 } : c)),
+      );
+
       try {
         const { data, error } = await supabase
           .from("community_posts")
@@ -691,34 +729,44 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             ticker: input.ticker ?? null,
           })
           .select(
-            "id,user_id,community_id,content,ticker,change_pct,likes_count,comments_count,created_at",
+            "id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,comments_count,created_at",
           )
           .single();
         if (error) throw error;
         const post: CommunityPost = {
-          id: data.id as string,
-          communityId: input.communityId,
+          id: String(data.id),
+          communityId: (data.community_id as string | null) ?? input.communityId,
           authorHandle: input.authorHandle,
           authorName: input.authorName,
           authorColor: input.authorColor,
-          content: (data.content as string) ?? input.content,
-          ticker: (data.ticker as string) ?? input.ticker,
+          content: (data.content as string | null) ?? input.content,
+          imageUrl: normalizeMediaUrl(data.image_url),
+          ticker: (data.ticker as string | null) ?? input.ticker,
           changePct: data.change_pct != null ? Number(data.change_pct) : undefined,
           createdAt: data.created_at
             ? new Date(data.created_at as string).getTime()
-            : Date.now(),
-          likes: 0,
-          comments: 0,
+            : optimisticPost.createdAt,
+          likes: Number(data.likes_count ?? 0),
+          comments: Number(data.comments_count ?? 0),
           liked: false,
-          imageUrl: null,
         };
         qc.setQueryData<CommunityPost[]>(
           ["social", "community-posts", input.communityId],
-          (prev) => [post, ...(prev ?? [])],
+          (prev) => (prev ?? []).map((p) => (p.id === optimisticPost.id ? post : p)),
         );
         qc.invalidateQueries({ queryKey: ["social", "communities"] });
+        return post;
       } catch (e) {
+        qc.setQueryData<CommunityPost[]>(["social", "community-posts", input.communityId], (prev) =>
+          (prev ?? []).filter((p) => p.id !== optimisticPost.id),
+        );
+        qc.setQueriesData<Community[]>({ queryKey: ["social", "communities"] }, (prev) =>
+          prev?.map((c) =>
+            c.id === input.communityId ? { ...c, posts: Math.max(0, c.posts - 1) } : c,
+          ),
+        );
         console.log("[social] addCommunityPost failed", e);
+        throw e instanceof Error ? e : new Error("Could not post to this community.");
       }
     },
     [isAuthenticated, userId, qc],
