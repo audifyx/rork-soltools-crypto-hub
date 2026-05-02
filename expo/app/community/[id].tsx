@@ -13,6 +13,7 @@ import {
   Bookmark,
   Calendar,
   Camera,
+  Flag,
   Heart,
   Image as ImageIcon,
   Link as LinkIcon,
@@ -87,7 +88,12 @@ function timeAgo(t: number): string {
   return `${d}d`;
 }
 
-type Tab = "recent" | "media" | "about";
+type Tab = "recent" | "media" | "bookmarks" | "about";
+
+type ComposerImage = {
+  uri: string;
+  base64?: string | null;
+};
 
 export default function CommunityDetailScreen() {
   const router = useRouter();
@@ -103,6 +109,8 @@ export default function CommunityDetailScreen() {
     addPostReply,
     quotePost,
     deleteCommunityPost,
+    reportCommunityPost,
+    toggleCommunityPostPin,
     togglePostLike,
     togglePostRepost,
     togglePostBookmark,
@@ -114,6 +122,7 @@ export default function CommunityDetailScreen() {
   const { isAuthenticated, userId } = useAuth();
   const [tab, setTab] = useState<Tab>("recent");
   const [composer, setComposer] = useState<string>("");
+  const [composerImage, setComposerImage] = useState<ComposerImage | null>(null);
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [notifyOn, setNotifyOn] = useState<boolean>(true);
@@ -134,6 +143,10 @@ export default function CommunityDetailScreen() {
   );
   const mediaPosts = useMemo(
     () => posts.filter((p) => p.imageUrl || p.ticker || p.pinned),
+    [posts],
+  );
+  const bookmarkedPosts = useMemo(
+    () => posts.filter((p) => p.bookmarked),
     [posts],
   );
   const query = searchQuery.trim().toLowerCase();
@@ -216,21 +229,24 @@ export default function CommunityDetailScreen() {
 
   const onSend = useCallback(async () => {
     const text = composer.trim();
-    if (!community || text.length === 0) return;
+    if (!community || (text.length === 0 && !composerImage)) return;
     if (!ensureSignedIn("Sign in to post in this community.")) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
       await addCommunityPost({
         communityId: community.id,
         content: text,
+        imageUri: composerImage?.uri ?? null,
+        imageBase64: composerImage?.base64 ?? null,
         ...viewer,
       });
       setComposer("");
+      setComposerImage(null);
       setTab("recent");
     } catch (e) {
       Alert.alert("Failed to post", e instanceof Error ? e.message : "Try again.");
     }
-  }, [composer, community, ensureSignedIn, addCommunityPost, viewer]);
+  }, [composer, community, composerImage, ensureSignedIn, addCommunityPost, viewer]);
 
   const shareLink = useMemo(
     () =>
@@ -295,6 +311,32 @@ export default function CommunityDetailScreen() {
     setTab("about");
     showToast("Showing community details");
   }, [mediaPosts.length, showToast]);
+
+  const onPickPostImage = useCallback(async () => {
+    if (!ensureSignedIn("Sign in to add media to posts.")) return;
+    try {
+      if (Platform.OS !== "web") {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert("Permission needed", "Allow photo access to attach images to posts.");
+          return;
+        }
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.86,
+        allowsEditing: false,
+        base64: true,
+      });
+      if (res.canceled || !res.assets[0]?.uri) return;
+      const asset = res.assets[0];
+      setComposerImage({ uri: asset.uri, base64: asset.base64 ?? null });
+      Haptics.selectionAsync().catch(() => {});
+    } catch (e) {
+      console.log("[community] post media pick failed", e);
+      Alert.alert("Image failed", e instanceof Error ? e.message : "Try another photo.");
+    }
+  }, [ensureSignedIn]);
 
   const onPickCommunityMedia = useCallback(
     async (kind: "avatar" | "banner") => {
@@ -422,6 +464,41 @@ export default function CommunityDetailScreen() {
     }
   }, [ensureSignedIn, showToast, togglePostBookmark]);
 
+  const onReportPost = useCallback((post: CommunityPost) => {
+    if (!ensureSignedIn("Sign in to report posts.")) return;
+    if (post.reported) {
+      showToast("Already reported");
+      return;
+    }
+    Alert.alert("Report post?", "Moderators will review this for spam, scams, or abuse.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Report",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            try {
+              await reportCommunityPost(post, "reported from community screen");
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              showToast("Reported to moderators");
+            } catch (e) {
+              Alert.alert("Report failed", e instanceof Error ? e.message : "Try again.");
+            }
+          })();
+        },
+      },
+    ]);
+  }, [ensureSignedIn, reportCommunityPost, showToast]);
+
+  const onTogglePin = useCallback(async (post: CommunityPost) => {
+    try {
+      await toggleCommunityPostPin(post);
+      showToast(post.pinned ? "Post unpinned" : "Post pinned");
+    } catch (e) {
+      Alert.alert("Pin failed", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [showToast, toggleCommunityPostPin]);
+
   const canDeletePost = useCallback(
     (post: CommunityPost): boolean => isAuthenticated && (canModeratePosts || post.authorUserId === userId),
     [canModeratePosts, isAuthenticated, userId],
@@ -525,6 +602,9 @@ export default function CommunityDetailScreen() {
       onQuote={() => openQuote(item)}
       onBookmark={() => void onToggleBookmark(item)}
       onShare={() => void onSharePost(item)}
+      onReport={() => onReportPost(item)}
+      canPin={canModeratePosts}
+      onPin={() => void onTogglePin(item)}
       canDelete={canDeletePost(item)}
       onDelete={() => onDeletePost(item)}
     />
@@ -535,7 +615,9 @@ export default function CommunityDetailScreen() {
       ? posts.filter(matchesSearch)
       : tab === "media"
         ? mediaPosts.filter(matchesSearch)
-        : [];
+        : tab === "bookmarks"
+          ? bookmarkedPosts.filter(matchesSearch)
+          : [];
 
   return (
     <View style={styles.root} testID="community-detail">
@@ -805,6 +887,14 @@ export default function CommunityDetailScreen() {
                 }}
               />
               <TabBtn
+                label="Saved"
+                active={tab === "bookmarks"}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setTab("bookmarks");
+                }}
+              />
+              <TabBtn
                 label="About"
                 active={tab === "about"}
                 onPress={() => {
@@ -826,21 +916,38 @@ export default function CommunityDetailScreen() {
                     {(profile.displayName || "Y").slice(0, 1).toUpperCase()}
                   </Text>
                 </View>
-                <TextInput
-                  value={composer}
-                  onChangeText={setComposer}
-                  placeholder={`Post to ${community.name}...`}
-                  placeholderTextColor={Colors.muted}
-                  style={styles.composerInput}
-                  multiline
-                />
+                <View style={styles.composerMain}>
+                  <TextInput
+                    value={composer}
+                    onChangeText={setComposer}
+                    placeholder={`Post to ${community.name}...`}
+                    placeholderTextColor={Colors.muted}
+                    style={styles.composerInput}
+                    multiline
+                  />
+                  {composerImage ? (
+                    <View style={styles.composerImageWrap}>
+                      <Image source={{ uri: composerImage.uri }} style={styles.composerImage} contentFit="cover" />
+                      <Pressable onPress={() => setComposerImage(null)} style={styles.removeComposerImage} hitSlop={8}>
+                        <X color={Colors.text} size={12} strokeWidth={3} />
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+                <Pressable
+                  onPress={onPickPostImage}
+                  style={styles.attachBtn}
+                  testID="community-attach-image"
+                >
+                  <ImageIcon color={composerImage ? Colors.mint : Colors.muted} size={15} strokeWidth={2.6} />
+                </Pressable>
                 <Pressable
                   onPress={onSend}
                   style={[
                     styles.sendBtn,
-                    composer.trim().length === 0 && { opacity: 0.4 },
+                    composer.trim().length === 0 && !composerImage && { opacity: 0.4 },
                   ]}
-                  disabled={composer.trim().length === 0}
+                  disabled={composer.trim().length === 0 && !composerImage}
                   testID="community-send"
                 >
                   <Send color={Colors.ink} size={14} strokeWidth={2.8} />
@@ -916,19 +1023,23 @@ export default function CommunityDetailScreen() {
               >
                 {tab === "media" ? (
                   <ImageIcon color={community.accent[0]} size={24} strokeWidth={2.4} />
+                ) : tab === "bookmarks" ? (
+                  <Bookmark color={community.accent[0]} size={24} strokeWidth={2.4} />
                 ) : (
                   <MessageCircle color={community.accent[0]} size={24} strokeWidth={2.4} />
                 )}
               </View>
               <Text style={styles.emptyTitle}>
-                {tab === "media" ? "No media yet" : "No posts yet"}
+                {tab === "media" ? "No media yet" : tab === "bookmarks" ? "No saved posts" : "No posts yet"}
               </Text>
               <Text style={styles.emptyBody}>
                 {query.length > 0
                   ? "No posts matched your search."
                   : tab === "media"
                     ? `Media posts will appear here.`
-                    : `Be the first to start the conversation in ${community.name}.`}
+                    : tab === "bookmarks"
+                      ? `Bookmarked posts from ${community.name} will appear here.`
+                      : `Be the first to start the conversation in ${community.name}.`}
               </Text>
             </View>
           )
@@ -1056,6 +1167,9 @@ export default function CommunityDetailScreen() {
                     onQuote={() => openQuote(item)}
                     onBookmark={() => void onToggleBookmark(item)}
                     onShare={() => void onSharePost(item)}
+                    onReport={() => onReportPost(item)}
+                    canPin={canModeratePosts}
+                    onPin={() => void onTogglePin(item)}
                     canDelete={canDeletePost(item)}
                     onDelete={() => onDeletePost(item)}
                   />
@@ -1071,6 +1185,9 @@ export default function CommunityDetailScreen() {
                       onQuote={() => openQuote(activePost)}
                       onBookmark={() => void onToggleBookmark(activePost)}
                       onShare={() => void onSharePost(activePost)}
+                      onReport={() => onReportPost(activePost)}
+                      canPin={canModeratePosts}
+                      onPin={() => void onTogglePin(activePost)}
                       canDelete={canDeletePost(activePost)}
                       onDelete={() => onDeletePost(activePost)}
                     />
@@ -1214,6 +1331,9 @@ function PostRow({
   onQuote,
   onBookmark,
   onShare,
+  onReport,
+  canPin = false,
+  onPin,
   canDelete = false,
   onDelete,
 }: {
@@ -1226,6 +1346,9 @@ function PostRow({
   onQuote: () => void;
   onBookmark: () => void;
   onShare: () => void;
+  onReport?: () => void;
+  canPin?: boolean;
+  onPin?: () => void;
   canDelete?: boolean;
   onDelete?: () => void;
 }) {
@@ -1257,6 +1380,16 @@ function PostRow({
             {post.authorHandle} · {timeAgo(post.createdAt)}
           </Text>
         </View>
+        {canPin ? (
+          <Pressable
+            onPress={onPin}
+            style={[styles.deletePostBtn, styles.pinPostBtn]}
+            hitSlop={8}
+            testID={`pin-post-${post.id}`}
+          >
+            <Pin color={post.pinned ? Colors.orange : Colors.muted} size={14} strokeWidth={2.6} />
+          </Pressable>
+        ) : null}
         {canDelete ? (
           <Pressable
             onPress={onDelete}
@@ -1355,6 +1488,11 @@ function PostRow({
             strokeWidth={2.5}
           />
         </Pressable>
+        {onReport ? (
+          <Pressable onPress={onReport} style={styles.iconAction} hitSlop={6} testID={`report-post-${post.id}`}>
+            <Flag color={post.reported ? Colors.rose : Colors.muted} size={14} strokeWidth={2.5} />
+          </Pressable>
+        ) : null}
         <Pressable onPress={onShare} style={styles.iconAction} hitSlop={6} testID={`share-post-${post.id}`}>
           <Share2 color={Colors.muted} size={14} strokeWidth={2.5} />
         </Pressable>
@@ -1594,14 +1732,48 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   composerInit: { color: Colors.ink, fontSize: 14, fontWeight: "900" },
-  composerInput: {
+  composerMain: {
     flex: 1,
+    gap: 8,
+  },
+  composerInput: {
     color: Colors.text,
     fontSize: 13,
     fontWeight: "600",
     minHeight: Platform.OS === "ios" ? 32 : 36,
     maxHeight: 100,
     padding: 0,
+  },
+  composerImageWrap: {
+    width: 116,
+    height: 92,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  composerImage: { width: "100%", height: "100%" },
+  removeComposerImage: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  attachBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   sendBtn: {
     width: 32,
@@ -1655,6 +1827,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,75,110,0.08)",
     borderWidth: 1,
     borderColor: "rgba(255,75,110,0.18)",
+  },
+  pinPostBtn: {
+    backgroundColor: "rgba(255,184,76,0.08)",
+    borderColor: "rgba(255,184,76,0.18)",
   },
   postTicker: {
     paddingHorizontal: 8,

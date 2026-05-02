@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Colors from "@/constants/colors";
 import { normalizeMediaUrl } from "@/lib/media";
 import { supabase } from "@/lib/supabase";
+import { uploadPostImage } from "@/lib/upload";
 import { useAdmin } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -68,6 +69,7 @@ export interface CommunityPost {
   liked: boolean;
   reposted: boolean;
   bookmarked: boolean;
+  reported?: boolean;
   pinned?: boolean;
   parentPostId?: string | null;
   quotePostId?: string | null;
@@ -272,6 +274,7 @@ function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): 
     liked: !!row.liked,
     reposted: !!row.reposted,
     bookmarked: !!row.bookmarked,
+    reported: !!row.reported,
     pinned: !!row.pinned,
     parentPostId: parentId,
     quotePostId: quoteId,
@@ -640,6 +643,35 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
   );
   const getSpace = useCallback((id: string) => spaces.find((s) => s.id === id), [spaces]);
 
+  const loadViewerInteractions = useCallback(
+    async (postIds: string[]) => {
+      const empty = {
+        liked: new Set<string>(),
+        reposted: new Set<string>(),
+        bookmarked: new Set<string>(),
+        reported: new Set<string>(),
+      };
+      if (!isAuthenticated || !userId || postIds.length === 0) return empty;
+      const [likesRes, repostsRes, bookmarksRes, reportsRes] = await Promise.all([
+        supabase.from("post_likes").select("post_id").eq("user_id", userId).in("post_id", postIds),
+        supabase.from("post_reposts").select("post_id").eq("user_id", userId).in("post_id", postIds),
+        supabase.from("post_bookmarks").select("post_id").eq("user_id", userId).in("post_id", postIds),
+        supabase.from("post_reports").select("post_id").eq("reporter_id", userId).in("post_id", postIds),
+      ]);
+      if (likesRes.error) console.log("[social] viewer likes enrich failed", likesRes.error.message);
+      if (repostsRes.error) console.log("[social] viewer reposts enrich failed", repostsRes.error.message);
+      if (bookmarksRes.error) console.log("[social] viewer bookmarks enrich failed", bookmarksRes.error.message);
+      if (reportsRes.error) console.log("[social] viewer reports enrich failed", reportsRes.error.message);
+      return {
+        liked: new Set((likesRes.data ?? []).map((r) => String(r.post_id))),
+        reposted: new Set((repostsRes.data ?? []).map((r) => String(r.post_id))),
+        bookmarked: new Set((bookmarksRes.data ?? []).map((r) => String(r.post_id))),
+        reported: new Set((reportsRes.data ?? []).map((r) => String(r.post_id))),
+      };
+    },
+    [isAuthenticated, userId],
+  );
+
   // Posts for a single community — fetch on demand, cached per id.
   const postsByCommunityQuery = useCallback(
     async (id: string): Promise<CommunityPost[]> => {
@@ -698,16 +730,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
               ]),
             );
           }
-          let likedSet = new Set<string>();
-          if (isAuthenticated && userId && rows.length > 0) {
-            const ids = rows.map((r) => String(r.id));
-            const { data: likes } = await supabase
-              .from("post_likes")
-              .select("post_id")
-              .eq("user_id", userId)
-              .in("post_id", ids);
-            likedSet = new Set((likes ?? []).map((r) => String(r.post_id)));
-          }
+          const interactions = await loadViewerInteractions(rows.map((r) => String(r.id)));
           return rows.map((r): CommunityPost => {
             const postId = String(r.id);
             const author = authorMap.get(String(r.user_id)) ?? {};
@@ -728,9 +751,10 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
               likes: Number(r.likes_count ?? 0),
               comments: Number(r.comments_count ?? 0),
               reposts: Number(r.reposts_count ?? 0),
-              liked: likedSet.has(postId),
-              reposted: false,
-              bookmarked: false,
+              liked: interactions.liked.has(postId),
+              reposted: interactions.reposted.has(postId),
+              bookmarked: interactions.bookmarked.has(postId),
+              reported: interactions.reported.has(postId),
               parentPostId: (r.parent_post_id as string | null) ?? null,
               quotePostId: (r.quote_post_id as string | null) ?? null,
               quote: null,
@@ -743,7 +767,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         }
       }
     },
-    [isAuthenticated, userId],
+    [loadViewerInteractions],
   );
 
   const usePostsForCommunity = (id: string | undefined) =>
@@ -831,17 +855,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
               ]),
             );
           }
-          let likedSet = new Set<string>();
-          if (isAuthenticated && userId && rows.length > 0) {
-            const ids = rows.map((r) => String(r.id));
-            const { data: likes } = await supabase
-              .from("post_likes")
-              .select("post_id")
-              .eq("user_id", userId)
-              .in("post_id", ids);
-            likedSet = new Set((likes ?? []).map((r) => String(r.post_id)));
-          }
+          const interactions = await loadViewerInteractions(rows.map((r) => String(r.id)));
           return rows.map((r): CommunityPost => {
+            const postId = String(r.id);
             const author = authorMap.get(String(r.user_id)) ?? {};
             return communityPostFromRow(
               {
@@ -849,7 +865,10 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
                 username: author.username,
                 display_name: author.display_name,
                 avatar_color: author.avatar_color,
-                liked: likedSet.has(String(r.id)),
+                liked: interactions.liked.has(postId),
+                reposted: interactions.reposted.has(postId),
+                bookmarked: interactions.bookmarked.has(postId),
+                reported: interactions.reported.has(postId),
               },
               (r.community_id as string | null) ?? "",
             );
@@ -860,7 +879,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         }
       }
     },
-    [isAuthenticated, userId],
+    [loadViewerInteractions],
   );
 
   const usePostReplies = (postId: string | undefined) =>
@@ -879,10 +898,14 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       authorName: string;
       authorColor: string;
       ticker?: string;
+      imageUri?: string | null;
+      imageBase64?: string | null;
     }): Promise<CommunityPost> => {
       if (!isAuthenticated || !userId) {
         throw new Error("Sign in to post in communities.");
       }
+      const text = input.content.trim();
+      if (!text && !input.imageUri) throw new Error("Post cannot be empty.");
 
       const optimisticPost: CommunityPost = {
         id: `local-${Date.now()}`,
@@ -891,7 +914,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         authorHandle: input.authorHandle,
         authorName: input.authorName,
         authorColor: input.authorColor,
-        content: input.content,
+        content: text,
         ticker: input.ticker,
         createdAt: Date.now(),
         likes: 0,
@@ -900,7 +923,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         liked: false,
         reposted: false,
         bookmarked: false,
-        imageUrl: null,
+        reported: false,
+        imageUrl: input.imageUri ?? null,
         quote: null,
         replyTo: null,
       };
@@ -914,12 +938,17 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       );
 
       try {
+        let uploadedUrl: string | null = null;
+        if (input.imageUri) {
+          uploadedUrl = await uploadPostImage(userId, input.imageUri, input.imageBase64 ?? null);
+        }
         const { data, error } = await supabase
           .from("community_posts")
           .insert({
             user_id: userId,
             community_id: input.communityId,
-            content: input.content,
+            content: text,
+            image_url: uploadedUrl,
             ticker: input.ticker ?? null,
           })
           .select(
@@ -934,8 +963,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           authorHandle: input.authorHandle,
           authorName: input.authorName,
           authorColor: input.authorColor,
-          content: (data.content as string | null) ?? input.content,
-          imageUrl: normalizeMediaUrl(data.image_url),
+          content: (data.content as string | null) ?? text,
+          imageUrl: normalizeMediaUrl(data.image_url) ?? uploadedUrl,
           ticker: (data.ticker as string | null) ?? input.ticker,
           changePct: data.change_pct != null ? Number(data.change_pct) : undefined,
           createdAt: data.created_at
@@ -947,6 +976,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           liked: false,
           reposted: false,
           bookmarked: false,
+          reported: false,
           parentPostId: (data.parent_post_id as string | null) ?? null,
           quotePostId: (data.quote_post_id as string | null) ?? null,
           quote: null,
@@ -1211,6 +1241,48 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       }
     },
     [isAuthenticated, patchCachedPost, qc, userId],
+  );
+
+  const reportCommunityPost = useCallback(
+    async (post: CommunityPost, reason = "reported from app"): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to report posts.");
+      if (post.reported) throw new Error("You already reported this post.");
+      patchCachedPost(post.id, (p) => ({ ...p, reported: true }));
+      try {
+        const { error } = await supabase.rpc("report_community_post", {
+          target_post_id: post.id,
+          p_reason: reason,
+        });
+        if (error) throw error;
+      } catch (e) {
+        patchCachedPost(post.id, (p) => ({ ...p, reported: false }));
+        console.log("[social] reportCommunityPost failed", e);
+        throw e instanceof Error ? e : new Error("Could not report post.");
+      }
+    },
+    [isAuthenticated, patchCachedPost, userId],
+  );
+
+  const toggleCommunityPostPin = useCallback(
+    async (post: CommunityPost): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to pin posts.");
+      if (!canModeratePosts) throw new Error("Only moderators can pin posts.");
+      patchCachedPost(post.id, (p) => ({ ...p, pinned: !p.pinned }));
+      try {
+        const { data, error } = await supabase.rpc("toggle_community_post_pin", {
+          target_post_id: post.id,
+        });
+        if (error) throw error;
+        const row = Array.isArray(data) ? (data[0] as { pinned: boolean } | undefined) : undefined;
+        if (row) patchCachedPost(post.id, (p) => ({ ...p, pinned: !!row.pinned }));
+        qc.invalidateQueries({ queryKey: ["social", "community-posts", post.communityId] });
+      } catch (e) {
+        patchCachedPost(post.id, (p) => ({ ...p, pinned: !p.pinned }));
+        console.log("[social] toggleCommunityPostPin failed", e);
+        throw e instanceof Error ? e : new Error("Could not pin post.");
+      }
+    },
+    [canModeratePosts, isAuthenticated, patchCachedPost, qc, userId],
   );
 
   const deleteCommunityPost = useCallback(
@@ -1492,6 +1564,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       addPostReply,
       quotePost,
       deleteCommunityPost,
+      reportCommunityPost,
+      toggleCommunityPostPin,
       togglePostLike,
       togglePostRepost,
       togglePostBookmark,
@@ -1519,6 +1593,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       addPostReply,
       quotePost,
       deleteCommunityPost,
+      reportCommunityPost,
+      toggleCommunityPostPin,
       togglePostLike,
       togglePostRepost,
       togglePostBookmark,
