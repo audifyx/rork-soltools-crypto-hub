@@ -91,7 +91,8 @@ export default function HomeFeedScreen() {
   const router = useRouter();
   const { posts: userPosts, togglePostLike, deletePost, profile } = useApp();
   const { listings } = useLaunchpad();
-  const { data: trendingTokens } = useTrendingTokens(20);
+  const { data: trendingTokens } = useTrendingTokens(40);
+  const { data: newPairsData } = useNewSolanaPairs(40);
   const { userId, isAuthenticated } = useAuth();
   const { totalUnread: dmUnread } = useMessages();
   const [filter, setFilter] = useState<Filter>("For You");
@@ -220,16 +221,67 @@ export default function HomeFeedScreen() {
             change24hPct: t.priceChange24h ?? null,
             liquidityUsd: t.liquidity ?? null,
             marketCapUsd: t.marketCap ?? null,
-            volume24hUsd: null,
+            volume24hUsd: t.volume24hUSD ?? null,
             holders: t.holder ?? null,
             upvotes: 0,
             watchers: 0,
-          }));
-      const fallback = listings.slice().sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0));
+          }))
+          .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0))
+          .slice(0, 40);
+      const fallback = listings
+        .slice()
+        .filter((t) =>
+          isSafeToken({
+            marketCapUsd: t.marketCapUsd,
+            liquidityUsd: t.liquidityUsd,
+            priceChange24hPct: t.change24hPct,
+            venue: t.venue,
+            tags: t.tags,
+          }),
+        )
+        .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0));
       return (tokens.length > 0 ? tokens : fallback).map((t): FeedItem => ({ kind: "token", data: t }));
     }
     if (filter === "New Pairs") {
-      return listings
+      const fromDex: LaunchToken[] = (newPairsData ?? []).map((p): LaunchToken => {
+        const created = p.pairCreatedAt ?? Date.now();
+        const change = p.priceChange?.h24 ?? null;
+        return {
+          id: p.baseToken.address,
+          name: p.baseToken.name ?? p.baseToken.symbol ?? "Token",
+          ticker: (p.baseToken.symbol ?? "").toUpperCase(),
+          description: "",
+          logoUrl: p.info?.imageUrl ?? null,
+          bannerUrl: null,
+          contract: p.baseToken.address,
+          venue: "other",
+          status: "live",
+          tags: [],
+          featured: false,
+          hot: (Date.now() - created) < 86_400_000 || (change ?? 0) > 50,
+          verified: false,
+          createdAt: created,
+          submittedBy: "system",
+          price: p.priceUsd ? Number(p.priceUsd) : null,
+          change24hPct: change,
+          liquidityUsd: p.liquidity?.usd ?? null,
+          marketCapUsd: p.marketCap ?? p.fdv ?? null,
+          volume24hUsd: p.volume?.h24 ?? null,
+          holders: null,
+          upvotes: 0,
+          watchers: 0,
+        };
+      });
+      const safeDex = fromDex.filter((t) =>
+        isSafeToken({
+          marketCapUsd: t.marketCapUsd,
+          liquidityUsd: t.liquidityUsd,
+          priceChange24hPct: t.change24hPct,
+          venue: t.venue,
+          tags: t.tags,
+        }),
+      );
+      const localNew = listings
         .slice()
         .filter((t) =>
           t.submittedBy === "user" ||
@@ -240,9 +292,19 @@ export default function HomeFeedScreen() {
               venue: t.venue,
               tags: t.tags,
             }),
-        )
+        );
+      // De-dup by contract/id, prefer dex (live) over local listing
+      const seen = new Set<string>();
+      const merged: LaunchToken[] = [];
+      for (const t of [...safeDex, ...localNew]) {
+        const key = (t.contract ?? t.id).toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(t);
+      }
+      return merged
         .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, 30)
+        .slice(0, 40)
         .map((t): FeedItem => ({ kind: "token", data: t }));
     }
     if (filter === "Whales") {
@@ -258,7 +320,7 @@ export default function HomeFeedScreen() {
         .map((t): FeedItem => ({ kind: "token", data: t }));
     }
     return userPosts.map((p): FeedItem => ({ kind: "user", data: p }));
-  }, [filter, userPosts, followingPostsQ.data, listings, trendingTokens, whalesQ.data]);
+  }, [filter, userPosts, followingPostsQ.data, listings, trendingTokens, newPairsData, whalesQ.data]);
 
   const openCompose = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
