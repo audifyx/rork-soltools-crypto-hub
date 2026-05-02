@@ -582,12 +582,14 @@ export default function ProfileScreen() {
                 style={StyleSheet.absoluteFillObject}
               />
             )}
-            <LinearGradient
-              colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.18)", "rgba(3,7,8,0.55)"]}
-              locations={[0, 0.5, 1]}
-              style={StyleSheet.absoluteFillObject}
-              pointerEvents="none"
-            />
+            {!profile.bannerUrl ? (
+              <LinearGradient
+                colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.18)", "rgba(3,7,8,0.55)"]}
+                locations={[0, 0.5, 1]}
+                style={StyleSheet.absoluteFillObject}
+                pointerEvents="none"
+              />
+            ) : null}
             <View style={styles.bannerEditBtn}>
               <Camera color={Colors.text} size={12} strokeWidth={2.8} />
               <Text style={styles.bannerEditText}>EDIT</Text>

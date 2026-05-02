@@ -121,7 +121,7 @@ export default function PublicProfileScreen() {
               style={StyleSheet.absoluteFillObject}
             />
           )}
-          <View style={styles.bannerOverlay} />
+          {!profile.banner_url ? <View style={styles.bannerOverlay} /> : null}
           <SafeAreaView edges={["top"]} style={styles.bannerHeader}>
             <Pressable onPress={() => router.back()} style={styles.backBtn} testID="public-back">
               <ArrowLeft color={Colors.text} size={18} strokeWidth={2.4} />
