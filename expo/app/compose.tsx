@@ -27,6 +27,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
+import { navigateBack } from "@/lib/navigation";
 import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -86,7 +87,7 @@ export default function ComposeScreen() {
         images: images.length ? images : undefined,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      router.back();
+      navigateBack(router, "/(tabs)/home");
     } catch (e) {
       console.log("[compose] post failed", e);
       const msg =
@@ -110,7 +111,7 @@ export default function ComposeScreen() {
       <Stack.Screen options={{ headerShown: false, presentation: "modal" }} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.closeBtn} hitSlop={10} testID="compose-close">
+          <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.closeBtn} hitSlop={10} testID="compose-close">
             <X color={Colors.text} size={18} strokeWidth={2.6} />
           </Pressable>
           <Text style={styles.headerTitle}>New post</Text>

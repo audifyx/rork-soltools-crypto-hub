@@ -38,7 +38,14 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => voi
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: styles.stackContent }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: styles.stackContent,
+        gestureEnabled: true,
+        fullScreenGestureEnabled: true,
+      }}
+    >
       <Stack.Screen name="index" />
       <Stack.Screen name="auth" options={{ presentation: "modal" }} />
       <Stack.Screen name="(tabs)" />

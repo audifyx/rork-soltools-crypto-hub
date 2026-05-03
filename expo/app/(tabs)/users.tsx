@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Haptics from "expo-haptics";
 import {
+  ArrowLeft,
   ChevronRight,
   Crown,
   Flame,
@@ -34,6 +35,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
+import { navigateBack } from "@/lib/navigation";
 import LeaderboardCard from "@/components/users/LeaderboardCard";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -138,6 +140,9 @@ export default function UsersScreen() {
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
           <View style={styles.headerTop}>
+            <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.backBtn} hitSlop={8} testID="users-back">
+              <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
+            </Pressable>
             <View style={styles.headerIcon}>
               <UsersIcon color={Colors.mint} size={18} strokeWidth={2.6} />
             </View>
@@ -693,6 +698,16 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(85,245,178,0.08)",
   },
   headerTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
   headerIcon: {
     width: 38,
     height: 38,

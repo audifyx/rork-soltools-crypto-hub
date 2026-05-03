@@ -35,6 +35,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
+import { navigateBack } from "@/lib/navigation";
 import { Conversation, DMUser, useMessages } from "@/providers/messages-provider";
 
 type Tab = "inbox" | "requests";
@@ -107,7 +108,7 @@ export default function MessagesScreen() {
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => navigateBack(router, "/(tabs)/home")}
             style={styles.iconBtn}
             testID="messages-back"
           >

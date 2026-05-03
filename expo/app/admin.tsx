@@ -47,6 +47,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAdmin, type AdminRole } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
@@ -269,7 +270,7 @@ export default function AdminDashboard() {
       />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} testID="admin-back">
+          <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} testID="admin-back">
             <ArrowLeft color={Colors.text} size={18} strokeWidth={2.4} />
           </Pressable>
           <View style={styles.headerCopy}>

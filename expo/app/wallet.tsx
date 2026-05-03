@@ -23,6 +23,7 @@ import React, { useCallback } from "react";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
 
 const COMING_SOON_MESSAGE = SOLTOOLS_TRADING_DISABLED_MESSAGE;
@@ -43,7 +44,7 @@ export default function WalletScreen() {
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={styles.headerRow}>
-            <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8}>
+            <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.iconBtn} hitSlop={8}>
               <ArrowLeft color={Colors.text} size={19} strokeWidth={2.8} />
             </Pressable>
             <View style={styles.headerMid}>
@@ -102,7 +103,7 @@ export default function WalletScreen() {
               <Bell color={Colors.ink} size={16} strokeWidth={3} />
               <Text style={styles.primaryText}>Notify me when wallets open</Text>
             </Pressable>
-            <Pressable onPress={() => router.back()} style={styles.secondaryBtn}>
+            <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.secondaryBtn}>
               <Text style={styles.secondaryText}>Back to SolTools</Text>
             </Pressable>
           </View>

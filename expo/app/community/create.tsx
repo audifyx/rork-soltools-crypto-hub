@@ -41,6 +41,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
 import { Community, useSocial } from "@/providers/social-provider";
@@ -174,7 +175,7 @@ export default function CreateCommunityScreen() {
   const onBack = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
     if (step === 0) {
-      router.back();
+      navigateBack(router, "/communities");
       return;
     }
     setStep((s) => Math.max(0, s - 1) as Step);

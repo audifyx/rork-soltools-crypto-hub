@@ -3,6 +3,7 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Haptics from "expo-haptics";
 import {
+  ArrowLeft,
   ArrowRight,
   AtSign,
   Eye,
@@ -30,6 +31,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import { useAuth } from "@/providers/auth-provider";
 
 type Mode = "signin" | "signup";
@@ -99,6 +101,9 @@ export default function AuthScreen() {
       <View style={[styles.orb, styles.orbB]} />
 
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+        <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.backBtn} hitSlop={8} testID="auth-back">
+          <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
+        </Pressable>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.flex}
@@ -273,7 +278,19 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
   flex: { flex: 1 },
   safe: { flex: 1 },
-  scroll: { padding: 24, paddingBottom: 60 },
+  scroll: { padding: 24, paddingTop: 6, paddingBottom: 60 },
+  backBtn: {
+    marginLeft: 16,
+    marginTop: 4,
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
   orb: { position: "absolute", width: 320, height: 320, borderRadius: 160 },
   orbA: { top: -110, right: -120, backgroundColor: "rgba(85,245,178,0.12)" },
   orbB: { bottom: -120, left: -120, backgroundColor: "rgba(56,215,255,0.10)" },

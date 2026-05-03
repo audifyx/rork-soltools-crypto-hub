@@ -27,6 +27,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { fetchWalletPortfolio } from "@/lib/api/wallet";
+import { navigateBack } from "@/lib/navigation";
 import { isSolanaAddress, scanCommunityToken } from "@/lib/community-token";
 import { fmtNum, fmtPct, fmtUsd } from "@/utils/format";
 
@@ -139,7 +140,7 @@ export default function AIChatScreen() {
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.topBar}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Pressable onPress={() => navigateBack(router, "/(tabs)/tools")} style={styles.backBtn}>
             <ArrowLeft color={Colors.text} size={20} strokeWidth={2.6} />
           </Pressable>
           <View style={styles.topTitleWrap}>

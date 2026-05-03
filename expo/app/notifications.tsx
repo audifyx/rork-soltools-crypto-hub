@@ -34,6 +34,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
+import { navigateBack } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useApp } from "@/providers/app-provider";
@@ -273,7 +274,7 @@ export default function NotificationsScreen() {
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => navigateBack(router, "/(tabs)/home")}
             style={styles.iconBtn}
             hitSlop={8}
             testID="notif-back"

@@ -43,6 +43,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import { DMMessage, useMessages } from "@/providers/messages-provider";
 
 const QUICK_TICKERS = ["$SOL", "$BONK", "$WIF", "$JUP", "$AGNT", "$PYTH"];
@@ -168,7 +169,7 @@ export default function DMThreadScreen() {
         <SafeAreaView style={styles.safe}>
           <View style={styles.notFound}>
             <Text style={styles.notFoundTitle}>Conversation not found</Text>
-            <Pressable onPress={() => router.back()} style={styles.notFoundBtn}>
+            <Pressable onPress={() => navigateBack(router, "/messages")} style={styles.notFoundBtn}>
               <Text style={styles.notFoundBtnText}>Go back</Text>
             </Pressable>
           </View>
@@ -207,7 +208,7 @@ export default function DMThreadScreen() {
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => navigateBack(router, "/messages")}
             style={styles.iconBtn}
             testID="dm-back"
           >
@@ -411,7 +412,7 @@ export default function DMThreadScreen() {
                 style: "destructive",
                 onPress: async () => {
                   await deleteConversation(conv.id);
-                  router.back();
+                  navigateBack(router, "/messages");
                 },
               },
             ],

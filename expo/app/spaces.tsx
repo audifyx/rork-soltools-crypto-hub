@@ -42,6 +42,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { CreateSpaceInput, Space, useSocial } from "@/providers/social-provider";
 
@@ -192,7 +193,7 @@ export default function SpacesScreen() {
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn} testID="spaces-back">
+          <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.iconBtn} testID="spaces-back">
             <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
           </Pressable>
           <View style={styles.headerTitleWrap}>

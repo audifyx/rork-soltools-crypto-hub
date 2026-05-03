@@ -38,6 +38,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
 import { useAuth } from "@/providers/auth-provider";
 import { useMessages } from "@/providers/messages-provider";
@@ -119,7 +120,7 @@ export default function PublicProfileScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <Text style={styles.notFoundTitle}>Trader not found</Text>
         <Text style={styles.notFoundBody}>@{handle.replace("@", "")} doesn&apos;t exist on SolTools.</Text>
-        <Pressable onPress={() => router.back()} style={styles.backCta}>
+        <Pressable onPress={() => navigateBack(router, "/(tabs)/users")} style={styles.backCta}>
           <Text style={styles.backCtaText}>Go back</Text>
         </Pressable>
       </SafeAreaView>
@@ -153,7 +154,7 @@ export default function PublicProfileScreen() {
           )}
           {!profile.banner_url ? <View style={styles.bannerOverlay} /> : null}
           <SafeAreaView edges={["top"]} style={styles.bannerHeader}>
-            <Pressable onPress={() => router.back()} style={styles.backBtn} testID="public-back">
+            <Pressable onPress={() => navigateBack(router, "/(tabs)/users")} style={styles.backBtn} testID="public-back">
               <ArrowLeft color={Colors.text} size={18} strokeWidth={2.4} />
             </Pressable>
           </SafeAreaView>

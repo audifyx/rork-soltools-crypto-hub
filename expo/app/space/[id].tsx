@@ -43,6 +43,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { getLiveKitToken } from "@/lib/api/livekit";
+import { navigateBack } from "@/lib/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { SpaceMessage, SpaceParticipant, useSocial } from "@/providers/social-provider";
 
@@ -184,16 +185,16 @@ export default function SpaceDetailScreen() {
     try {
       if (isHost && space.isLive) {
         Alert.alert("End Space?", "You are hosting. End this Space for everyone?", [
-          { text: "Leave open", onPress: () => router.back() },
-          { text: "End Space", style: "destructive", onPress: () => endSpace(space.id).finally(() => router.back()) },
+          { text: "Leave open", onPress: () => navigateBack(router, "/spaces") },
+          { text: "End Space", style: "destructive", onPress: () => endSpace(space.id).finally(() => navigateBack(router, "/spaces")) },
         ]);
       } else {
         await leaveSpace(space.id);
-        router.back();
+        navigateBack(router, "/spaces");
       }
     } catch (e) {
       console.log("[space] leave failed", e);
-      router.back();
+      navigateBack(router, "/spaces");
     }
   }, [space, isHost, leaveSpace, endSpace, router]);
 
@@ -291,7 +292,7 @@ export default function SpaceDetailScreen() {
         <SafeAreaView style={styles.safe}>
           <View style={styles.notFound}>
             <Text style={styles.notFoundTitle}>Space not found</Text>
-            <Pressable onPress={() => router.back()} style={styles.notFoundBtn}>
+            <Pressable onPress={() => navigateBack(router, "/spaces")} style={styles.notFoundBtn}>
               <Text style={styles.notFoundBtnText}>Go back</Text>
             </Pressable>
           </View>
@@ -309,7 +310,7 @@ export default function SpaceDetailScreen() {
 
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn} testID="space-back">
+          <Pressable onPress={() => navigateBack(router, "/spaces")} style={styles.iconBtn} testID="space-back">
             <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
           </Pressable>
           <View style={styles.headerMid}>

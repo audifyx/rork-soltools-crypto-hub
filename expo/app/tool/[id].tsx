@@ -90,6 +90,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import { getTokenOverview, getTokenSecurity, type TokenOverview } from "@/lib/api/birdeye";
 import { getLiveKitToken } from "@/lib/api/livekit";
 import { useTrendingTokens } from "@/lib/api/market";
@@ -377,7 +378,7 @@ export default function ToolDetailScreen() {
         <SafeAreaView edges={["top"]} style={styles.safe}>
           <View style={styles.notFound}>
             <Text style={styles.notFoundTitle}>Tool not found</Text>
-            <Pressable onPress={() => router.back()} style={styles.backSolo}>
+            <Pressable onPress={() => navigateBack(router, "/(tabs)/tools")} style={styles.backSolo}>
               <Text style={styles.backSoloText}>Back</Text>
             </Pressable>
           </View>
@@ -392,7 +393,7 @@ export default function ToolDetailScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <ToolHeader meta={meta} onBack={() => router.back()} />
+          <ToolHeader meta={meta} onBack={() => navigateBack(router, "/(tabs)/tools")} />
           <ToolBody meta={meta} />
         </ScrollView>
       </SafeAreaView>

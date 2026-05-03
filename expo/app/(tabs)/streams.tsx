@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
+  ArrowLeft,
   Bell,
   Calendar,
   Clock,
@@ -31,6 +32,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 
 const NOTIFY_KEY = "streams.notifyMe.v1";
 
@@ -161,6 +163,9 @@ export default function StreamsScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.headerRow}>
+            <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.backBtn} hitSlop={8} testID="streams-back">
+              <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
+            </Pressable>
             <View style={{ flex: 1 }}>
               <View style={styles.eyebrow}>
                 <Radio color={Colors.rose} size={13} strokeWidth={2.8} />
@@ -428,6 +433,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     marginTop: 8,
+  },
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
   },
   eyebrow: { flexDirection: "row", alignItems: "center", gap: 6 },
   eyebrowText: {

@@ -33,6 +33,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
+import { navigateBack } from "@/lib/navigation";
 import { useLobbies } from "@/providers/lobbies-provider";
 
 export default function LobbiesScreen() {
@@ -102,7 +103,7 @@ export default function LobbiesScreen() {
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.topBar}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn}>
+          <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.iconBtn}>
             <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
           </Pressable>
           <View style={styles.topCenter}>

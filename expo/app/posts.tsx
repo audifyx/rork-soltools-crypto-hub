@@ -37,6 +37,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
+import { navigateBack } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useApp } from "@/providers/app-provider";
@@ -302,7 +303,7 @@ export default function PostsFeedScreen() {
         <View style={styles.topBar}>
           <Pressable
             style={styles.iconBtn}
-            onPress={() => router.back()}
+            onPress={() => navigateBack(router, "/(tabs)/home")}
             hitSlop={8}
             testID="posts-back"
           >

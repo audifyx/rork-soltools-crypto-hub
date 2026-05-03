@@ -31,6 +31,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { fetchWalletPortfolio, isValidSolanaAddress } from "@/lib/api/wallet";
+import { navigateBack } from "@/lib/navigation";
 import { fmtUsd } from "@/utils/format";
 
 const ACCENT = Colors.violet;
@@ -90,7 +91,7 @@ export default function PnlAnalyzerScreen() {
       <SafeAreaView edges={["top"]} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
           <View style={s.headerBar}>
-            <Pressable onPress={() => router.back()} style={s.iconBtn} hitSlop={8}>
+            <Pressable onPress={() => navigateBack(router, "/(tabs)/tools")} style={s.iconBtn} hitSlop={8}>
               <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
             </Pressable>
             <Text style={s.eyebrow}>SOL TOOLS</Text>

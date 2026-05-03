@@ -55,6 +55,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import DexChart from "@/components/DexChart";
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import {
   ADVANCED_COMMUNITY_FEATURES,
   COMMUNITY_FEATURE_CATEGORIES,
@@ -761,7 +762,7 @@ export default function CommunityDetailScreen() {
         <SafeAreaView style={styles.safe}>
           <View style={styles.notFound}>
             <Text style={styles.notFoundTitle}>Community not found</Text>
-            <Pressable onPress={() => router.back()} style={styles.notFoundBtn}>
+            <Pressable onPress={() => navigateBack(router, "/communities")} style={styles.notFoundBtn}>
               <Text style={styles.notFoundBtnText}>Go back</Text>
             </Pressable>
           </View>
@@ -837,7 +838,7 @@ export default function CommunityDetailScreen() {
               <SafeAreaView edges={["top"]} style={styles.bannerSafe}>
                 <View style={styles.bannerBar}>
                   <Pressable
-                    onPress={() => router.back()}
+                    onPress={() => navigateBack(router, "/communities")}
                     style={styles.bannerIcon}
                     testID="community-back"
                   >

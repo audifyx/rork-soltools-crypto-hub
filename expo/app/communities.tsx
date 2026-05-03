@@ -5,6 +5,7 @@ import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   Activity,
+  ArrowLeft,
   ChevronRight,
   Flame,
   Plus,
@@ -26,6 +27,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
+import { navigateBack } from "@/lib/navigation";
 import { Community, useSocial } from "@/providers/social-provider";
 
 type Tab = "discover" | "joined";
@@ -84,6 +86,9 @@ export default function CommunitiesScreen() {
           ListHeaderComponent={
             <View>
               <View style={styles.header}>
+                <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.backBtn} hitSlop={8} testID="communities-back">
+                  <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
+                </Pressable>
                 <View style={styles.headerLeft}>
                   <View style={styles.titleRow}>
                     <Users color={ACCENT} size={26} strokeWidth={2.6} />
@@ -337,6 +342,16 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
+  },
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
   },
   headerLeft: { flex: 1 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 10 },

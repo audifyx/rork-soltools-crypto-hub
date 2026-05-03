@@ -45,6 +45,7 @@ import Colors from "@/constants/colors";
 import DexChart from "@/components/DexChart";
 import AppBackground from "@/components/ui/AppBackground";
 import { getTokenOverview, type TokenOverview } from "@/lib/api/birdeye";
+import { navigateBack } from "@/lib/navigation";
 import { isSolanaAddress, scanCommunityToken, type CommunityTokenCard } from "@/lib/community-token";
 import { cleanTokenSearchQuery, extractSolanaAddress } from "@/lib/token-search";
 import { fmtNum, fmtPct, fmtPrice, fmtUsd } from "@/utils/format";
@@ -273,7 +274,7 @@ export default function TokenLookupScreen() {
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={styles.headerBar}>
-            <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8} testID="lookup-back">
+            <Pressable onPress={() => navigateBack(router, "/(tabs)/tools")} style={styles.iconBtn} hitSlop={8} testID="lookup-back">
               <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
             </Pressable>
             <View style={styles.headerCenter}>

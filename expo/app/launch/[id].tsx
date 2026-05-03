@@ -52,6 +52,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import DexChart from "@/components/DexChart";
+import { navigateBack } from "@/lib/navigation";
 import AppBackground from "@/components/ui/AppBackground";
 import { useDexToken, type DexPair } from "@/lib/api/dexscreener";
 import { useTokenOverview } from "@/lib/api/market";
@@ -325,7 +326,7 @@ export default function LaunchDetailScreen() {
         style: "destructive",
         onPress: () => {
           remove(token.id);
-          router.back();
+          navigateBack(router, "/(tabs)/discover");
         },
       },
     ]);
@@ -381,7 +382,7 @@ export default function LaunchDetailScreen() {
           <View style={styles.notFoundWrap}>
             <Text style={styles.notFoundTitle}>Token not found</Text>
             <Text style={styles.notFoundBody}>This listing may have been removed.</Text>
-            <Pressable onPress={() => router.back()} style={styles.backBtnSolo} testID="back-not-found">
+            <Pressable onPress={() => navigateBack(router, "/(tabs)/discover")} style={styles.backBtnSolo} testID="back-not-found">
               <Text style={styles.backBtnText}>Go back</Text>
             </Pressable>
           </View>
@@ -445,7 +446,7 @@ export default function LaunchDetailScreen() {
               <Text style={styles.heroStampSub}>Live routing · chart · risk · pools</Text>
             </View>
             <View style={styles.headerBar}>
-              <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8} testID="back-btn">
+              <Pressable onPress={() => navigateBack(router, "/(tabs)/discover")} style={styles.iconBtn} hitSlop={8} testID="back-btn">
                 <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
               </Pressable>
               <View style={styles.headerActions}>

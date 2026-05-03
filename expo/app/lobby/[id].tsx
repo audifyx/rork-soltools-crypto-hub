@@ -48,6 +48,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { getLiveKitToken } from "@/lib/api/livekit";
+import { navigateBack } from "@/lib/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import {
   type LobbyMessage,
@@ -151,7 +152,7 @@ export default function LobbyDetailScreen() {
     if (!lobby) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     leaveLobby(lobby.id).catch((e) => console.log("[lobby] leave failed", e));
-    router.back();
+    navigateBack(router, "/lobbies");
   }, [lobby, leaveLobby, router]);
 
   const onSend = useCallback(() => {
@@ -215,7 +216,7 @@ export default function LobbyDetailScreen() {
         <SafeAreaView edges={["top"]} style={styles.safe}>
           <View style={styles.notFound}>
             <Text style={styles.notFoundTitle}>Lobby closed</Text>
-            <Pressable onPress={() => router.back()} style={styles.backSolo}>
+            <Pressable onPress={() => navigateBack(router, "/lobbies")} style={styles.backSolo}>
               <Text style={styles.backSoloText}>Back</Text>
             </Pressable>
           </View>
@@ -237,7 +238,7 @@ export default function LobbyDetailScreen() {
       <StatusBar style="light" />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.topBar}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn}>
+          <Pressable onPress={() => navigateBack(router, "/lobbies")} style={styles.iconBtn}>
             <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
           </Pressable>
           <View style={{ flex: 1, alignItems: "center" }}>

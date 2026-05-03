@@ -33,6 +33,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchVenue } from "@/types/launchpad";
 import { SOLTOOLS_DEFAULT_BANNER } from "@/utils/token-art";
@@ -150,7 +151,7 @@ export default function ListTokenScreen() {
         holders: null,
       });
       Alert.alert("Submitted for review", "Your token was sent to the Discover featured queue. It will appear after admin approval.");
-      router.back();
+      navigateBack(router, "/(tabs)/discover");
     } catch (e) {
       console.log("[list-token] submit failed", e);
       Alert.alert("Submission failed", "Please try again in a moment.");
@@ -181,7 +182,7 @@ export default function ListTokenScreen() {
       <Stack.Screen options={{ headerShown: false, presentation: "modal" }} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.closeBtn} hitSlop={10} testID="close-list">
+          <Pressable onPress={() => navigateBack(router, "/(tabs)/discover")} style={styles.closeBtn} hitSlop={10} testID="close-list">
             <X color={Colors.text} size={18} strokeWidth={2.6} />
           </Pressable>
           <View style={styles.headerCenter}>

@@ -47,6 +47,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { navigateBack } from "@/lib/navigation";
 import {
   fetchWalletPortfolio,
   isValidSolanaAddress,
@@ -310,7 +311,7 @@ export default function WalletTrackerScreen() {
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.topBar}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => navigateBack(router, "/(tabs)/tools")}
             style={styles.backBtn}
             testID="back"
           >
