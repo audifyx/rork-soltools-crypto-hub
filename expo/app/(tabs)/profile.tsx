@@ -589,8 +589,11 @@ export default function ProfileScreen() {
             />
           }
         >
-          <View style={styles.headerRow}>
-            <Text style={styles.headerTitle}>Profile</Text>
+          <View style={styles.topBar}>
+            <View style={styles.topTitleBlock}>
+              <Text style={styles.headerKicker}>Profile</Text>
+              <Text style={styles.headerTitle}>{profile.handle}</Text>
+            </View>
             <View style={styles.headerActions}>
               <Pressable onPress={onShareProfile} style={styles.iconBtn} testID="share-profile">
                 <Share2 color={Colors.text} size={16} strokeWidth={2.4} />
@@ -610,23 +613,22 @@ export default function ProfileScreen() {
               />
             ) : (
               <LinearGradient
-                colors={[profile.bannerFrom, profile.bannerTo]}
+                colors={["#050505", "#15120A", "#000000"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFillObject}
               />
             )}
-            {!profile.bannerUrl ? (
-              <LinearGradient
-                colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.18)", "rgba(3,7,8,0.55)"]}
-                locations={[0, 0.5, 1]}
-                style={StyleSheet.absoluteFillObject}
-                pointerEvents="none"
-              />
-            ) : null}
+            {!profile.bannerUrl ? <View style={styles.bannerTexture} pointerEvents="none" /> : null}
+            <LinearGradient
+              colors={["rgba(0,0,0,0.02)", "rgba(0,0,0,0.20)", "rgba(0,0,0,0.82)"]}
+              locations={[0, 0.5, 1]}
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
+            />
             <View style={styles.bannerEditBtn}>
               <Camera color={Colors.text} size={12} strokeWidth={2.8} />
-              <Text style={styles.bannerEditText}>EDIT</Text>
+              <Text style={styles.bannerEditText}>BANNER</Text>
             </View>
             <View style={styles.bannerBadgeRow}>
               <View style={[styles.rankBadge, { borderColor: `${rank.color}88` }]}>
@@ -682,7 +684,7 @@ export default function ProfileScreen() {
               <View style={styles.heroActions}>
                 <Pressable onPress={() => setEditOpen(true)} style={styles.actionBtn} testID="edit-profile">
                   <Edit3 color={Colors.text} size={13} strokeWidth={2.6} />
-                  <Text style={styles.actionBtnText}>Edit</Text>
+                  <Text style={styles.actionBtnText}>Edit profile</Text>
                 </Pressable>
                 <Pressable onPress={onCopyAddress} style={styles.actionBtn} testID="copy-address">
                   <Copy color={Colors.text} size={13} strokeWidth={2.6} />
@@ -692,7 +694,14 @@ export default function ProfileScreen() {
                 </Pressable>
               </View>
 
-              <Text style={styles.displayName}>{profile.displayName}</Text>
+              <View style={styles.socialNameRow}>
+                <Text style={styles.displayName}>{profile.displayName}</Text>
+                {profile.verified ? (
+                  <View style={styles.socialVerified}>
+                    <ShieldCheck color={Colors.ink} size={12} strokeWidth={3} />
+                  </View>
+                ) : null}
+              </View>
               <View style={styles.handleRow}>
                 <Text style={styles.handle}>{profile.handle}</Text>
                 {profile.verified ? (
@@ -709,7 +718,9 @@ export default function ProfileScreen() {
                   ))}
                 </View>
               ) : null}
-              {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
+              <Text style={[styles.bio, !profile.bio && styles.socialBioEmpty]}>
+                {profile.bio || "Add a bio, links, and your best alpha so people know why they should follow."}
+              </Text>
 
               <View style={styles.metaRow}>
                 {profile.location ? (
@@ -766,6 +777,11 @@ export default function ProfileScreen() {
                   <Text style={[styles.followNum, { color: Colors.mint }]}>{computedXp}</Text>
                   <Text style={styles.followKey}>XP</Text>
                 </View>
+                <View style={styles.followDivider} />
+                <View style={styles.followItem}>
+                  <Text style={styles.followNum}>{stats.posts}</Text>
+                  <Text style={styles.followKey}>Posts</Text>
+                </View>
               </View>
 
               <View style={styles.xpBox}>
@@ -790,6 +806,19 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.highlightsRow}
+            style={styles.highlightsScroll}
+          >
+            <HighlightBubble label="Watchlist" value={stats.watching} accent={Colors.mint} Icon={Eye} onPress={() => setTab("watchlist")} />
+            <HighlightBubble label="Alerts" value={stats.alerts} accent={Colors.orange} Icon={Bell} onPress={() => setTab("alerts")} />
+            <HighlightBubble label="Wallets" value={stats.wallets} accent={Colors.cyan} Icon={Wallet} onPress={() => setTab("wallets")} />
+            <HighlightBubble label="Listed" value={stats.listed} accent={Colors.rose} Icon={Rocket} onPress={() => setTab("listings")} />
+            <HighlightBubble label="Badges" value={unlockedCount} accent={rank.color} Icon={Trophy} onPress={() => setTab("overview")} />
+          </ScrollView>
 
           <PortfolioCard />
 
@@ -1403,6 +1432,37 @@ function alertLabel(type: "price-above" | "price-below" | "volume-spike" | "whal
     case "whale-buy":
       return "Whale buy";
   }
+}
+
+function HighlightBubble({
+  label,
+  value,
+  accent,
+  Icon,
+  onPress,
+}: {
+  label: string;
+  value: number;
+  accent: string;
+  Icon: LucideIcon;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.highlightBubble} testID={`profile-highlight-${label.toLowerCase()}`}>
+      <LinearGradient
+        colors={[accent, "rgba(255,255,255,0.88)", accent]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.highlightRing}
+      >
+        <View style={styles.highlightInner}>
+          <Icon color={accent} size={18} strokeWidth={2.8} />
+          <Text style={styles.highlightValue}>{value}</Text>
+        </View>
+      </LinearGradient>
+      <Text style={styles.highlightLabel} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  );
 }
 
 function StatCard({
@@ -2295,15 +2355,24 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingTop: 6,
   },
-  headerTitle: { color: Colors.text, fontSize: 32, fontWeight: "900", letterSpacing: -1 },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 4,
+    paddingBottom: 10,
+  },
+  topTitleBlock: { flex: 1, minWidth: 0 },
+  headerKicker: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1.6, textTransform: "uppercase" },
+  headerTitle: { color: Colors.text, fontSize: 24, fontWeight: "900", letterSpacing: -0.7, marginTop: 2 },
   headerActions: { flexDirection: "row", gap: 8 },
   iconBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: Colors.card,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2317,21 +2386,36 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
   },
   bannerCard: {
-    marginTop: 14,
-    height: 156,
-    borderRadius: 24,
+    marginTop: 4,
+    height: 166,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     overflow: "hidden",
     position: "relative",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderBottomWidth: 0,
+    borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Colors.card,
   },
-  profileCard: {
-    marginTop: 12,
-    borderRadius: 24,
+  bannerTexture: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.48,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    backgroundColor: Colors.card,
+    borderColor: "rgba(216,183,90,0.20)",
+    transform: [{ rotate: "-4deg" }, { scale: 1.25 }],
+  },
+  profileCard: {
+    marginTop: 0,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(8,8,7,0.98)",
   },
   banner: { height: 148, position: "relative" },
   bannerOverlay: {
@@ -2357,32 +2441,32 @@ const styles = StyleSheet.create({
   rankBadgeText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
 
   heroBody: { padding: 16, paddingTop: 0 },
-  avatarWrap: { marginTop: -56, width: 96, height: 96 },
+  avatarWrap: { marginTop: -52, width: 106, height: 106 },
   avatarRingOuter: {
     position: "absolute",
     inset: 0,
-    width: 96,
-    height: 96,
-    borderRadius: 30,
+    width: 106,
+    height: 106,
+    borderRadius: 53,
     overflow: "hidden",
   },
   avatarRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 30,
+    width: 106,
+    height: 106,
+    borderRadius: 53,
     padding: 5,
-    backgroundColor: Colors.card,
-    borderWidth: 4,
-    borderColor: Colors.card,
+    backgroundColor: "#080807",
+    borderWidth: 5,
+    borderColor: "#080807",
   },
   avatar: {
     flex: 1,
-    borderRadius: 24,
+    borderRadius: 48,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { color: Colors.ink, fontSize: 30, fontWeight: "900" },
-  avatarImage: { flex: 1, borderRadius: 24 },
+  avatarText: { color: Colors.ink, fontSize: 34, fontWeight: "900" },
+  avatarImage: { flex: 1, borderRadius: 48 },
   avatarEditDot: {
     position: "absolute",
     left: -4,
@@ -2394,7 +2478,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,
-    borderColor: Colors.card,
+    borderColor: "#080807",
   },
   bannerEditBtn: {
     position: "absolute",
@@ -2431,6 +2515,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   customBadgeText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
+  highlightsScroll: { marginTop: 16, marginHorizontal: -20 },
+  highlightsRow: { flexDirection: "row", gap: 14, paddingHorizontal: 20, paddingRight: 30 },
+  highlightBubble: { width: 72, alignItems: "center" },
+  highlightRing: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    padding: 2,
+  },
+  highlightInner: {
+    flex: 1,
+    borderRadius: 31,
+    backgroundColor: "#080807",
+    borderWidth: 3,
+    borderColor: Colors.ink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  highlightValue: { color: Colors.text, fontSize: 13, fontWeight: "900", marginTop: 1, letterSpacing: -0.2 },
+  highlightLabel: { color: Colors.muted, fontSize: 10, fontWeight: "800", marginTop: 7, textAlign: "center" },
   findBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -2438,10 +2542,10 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 14,
     paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: Colors.cardSoft,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.045)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.10)",
   },
   findBtnText: { color: Colors.text, fontSize: 13, fontWeight: "900" },
   followRowItem: {
@@ -2469,14 +2573,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: -4,
     bottom: -4,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: Colors.cyan,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,
-    borderColor: Colors.card,
+    borderColor: "#080807",
   },
 
   heroActions: {
@@ -2484,24 +2588,33 @@ const styles = StyleSheet.create({
     gap: 8,
     position: "absolute",
     right: 16,
-    top: 12,
+    top: 14,
   },
   actionBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 13,
     paddingVertical: 9,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(255,255,255,0.14)",
   },
   actionBtnText: { color: Colors.text, fontSize: 12, fontWeight: "900" },
 
-  displayName: { color: Colors.text, fontSize: 22, fontWeight: "900", letterSpacing: -0.4, marginTop: 12 },
-  handleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
-  handle: { color: Colors.muted, fontSize: 13, fontWeight: "700" },
+  socialNameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14 },
+  socialVerified: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.cyan,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  displayName: { color: Colors.text, fontSize: 25, fontWeight: "900", letterSpacing: -0.7, flexShrink: 1 },
+  handleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 },
+  handle: { color: Colors.muted, fontSize: 14, fontWeight: "700" },
   verifiedPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -2514,26 +2627,27 @@ const styles = StyleSheet.create({
     borderColor: "rgba(229,231,235,0.20)",
   },
   verifiedPillText: { color: Colors.cyan, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  bio: { color: Colors.text, fontSize: 13, fontWeight: "600", lineHeight: 18, marginTop: 10 },
+  bio: { color: Colors.text, fontSize: 14, fontWeight: "600", lineHeight: 20, marginTop: 12 },
+  socialBioEmpty: { color: Colors.muted, fontStyle: "italic" },
 
-  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 12 },
+  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 13 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  metaText: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+  metaText: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
 
   followRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 14,
-    paddingVertical: 12,
-    backgroundColor: Colors.cardSoft,
-    borderRadius: 14,
+    marginTop: 16,
+    paddingVertical: 13,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.08)",
   },
   followItem: { flex: 1, alignItems: "center" },
-  followNum: { color: Colors.text, fontSize: 18, fontWeight: "900", letterSpacing: -0.4 },
-  followKey: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1, marginTop: 2 },
-  followDivider: { width: 1, height: 24, backgroundColor: "rgba(255,255,255,0.06)" },
+  followNum: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.4 },
+  followKey: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.7, marginTop: 3, textTransform: "uppercase" },
+  followDivider: { width: 1, height: 24, backgroundColor: "rgba(255,255,255,0.08)" },
 
   xpBox: { marginTop: 14 },
   xpHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
