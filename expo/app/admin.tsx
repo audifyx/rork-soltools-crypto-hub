@@ -406,7 +406,7 @@ function OverviewSection({ onJump }: { onJump: (s: Section) => void }) {
         <QuickAction Icon={Headphones} label="Support" sub="Realtime inbox" onPress={() => onJump("support")} />
       </View>
 
-      {statsQuery.isError ? <Text style={styles.errorText}>Overview failed to load. Run the admin-dashboard.sql migration first.</Text> : null}
+      {statsQuery.isError ? <Text style={styles.errorText}>Overview failed to load. Confirm the admin database migration has been applied.</Text> : null}
     </ScrollView>
   );
 }
