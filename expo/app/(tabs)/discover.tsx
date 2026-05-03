@@ -15,10 +15,12 @@ import {
   Crosshair,
   Eye,
   Filter,
+  ListChecks,
   Flame,
   Hash,
   Heart,
   Pickaxe,
+  Plus,
   RefreshCcw,
   Rocket,
   Search,
@@ -29,6 +31,7 @@ import {
   TrendingDown,
   TrendingUp,
   Trophy,
+  UserCircle2,
   Waves,
   X,
   Zap,
@@ -65,6 +68,7 @@ import {
 } from "@/lib/alpha-runners";
 import { fmtUsd } from "@/utils/format";
 import { useApp } from "@/providers/app-provider";
+import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import {
   extractSolanaAddress,
@@ -77,10 +81,13 @@ import { LaunchToken } from "@/types/launchpad";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number; fill?: string }>;
 
-type Section = "all" | "hot" | "new" | "gainers" | "losers" | "volume" | "whales" | "og" | "ai";
+type Section = "all" | "featured" | "tokens" | "mine" | "hot" | "new" | "gainers" | "losers" | "volume" | "whales" | "og" | "ai";
 
 const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "all", label: "All", Icon: Sparkles },
+  { id: "featured", label: "Featured", Icon: Star },
+  { id: "tokens", label: "Tokens", Icon: Rocket },
+  { id: "mine", label: "Mine", Icon: UserCircle2 },
   { id: "hot", label: "Hot", Icon: Flame },
   { id: "new", label: "New", Icon: Zap },
   { id: "gainers", label: "Gainers", Icon: TrendingUp },
@@ -97,6 +104,16 @@ type Category = {
   Icon: LucideIcon;
   tone: string;
   match: (t: LaunchToken) => boolean;
+};
+
+type DiscoverStats = {
+  hot: number;
+  tracked: number;
+  featured: number;
+  total: number;
+  totalVol: number;
+  listed: number;
+  pending: number;
 };
 
 function tokenHaystack(t: LaunchToken): string {
@@ -178,6 +195,7 @@ const CATEGORIES: Category[] = [
 export default function DiscoverScreen() {
   const router = useRouter();
   const { listings, refresh, isRefreshing } = useLaunchpad();
+  const { userId, isAuthenticated } = useAuth();
   const { watchlist, addWatch, removeWatch } = useApp();
   const [section, setSection] = useState<Section>("all");
   const [query, setQuery] = useState<string>("");
@@ -208,6 +226,11 @@ export default function DiscoverScreen() {
     };
   }, [query]);
 
+  const publicListings = useMemo<LaunchToken[]>(
+    () => listings.filter((t) => t.approvalStatus !== "pending" && t.approvalStatus !== "rejected"),
+    [listings],
+  );
+
   const searchableListings = useMemo<LaunchToken[]>(
     () => mergeTokenSearchResult(listings, searchResolvedToken),
     [listings, searchResolvedToken],
@@ -219,9 +242,10 @@ export default function DiscoverScreen() {
     let items = searchableListings.slice();
     if (pastedAddress) {
       return items
-        .filter((t) => tokenMatchesSearch(t, q))
+        .filter((t) => tokenMatchesSearch(t, q) && t.approvalStatus !== "rejected")
         .sort((a, b) => getTokenSearchRank(a, q) - getTokenSearchRank(b, q) || b.createdAt - a.createdAt);
     }
+    items = items.filter((t) => t.approvalStatus !== "rejected" && (t.approvalStatus !== "pending" || section === "mine"));
     if (section === "hot")
       items = items
         .filter((t) => hasRealMarket(t) && heatScore(t) > 0)
@@ -243,6 +267,9 @@ export default function DiscoverScreen() {
       items = items
         .filter((t) => (t.holders ?? 0) > 100 || (t.volume24hUsd ?? 0) > 50_000)
         .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0));
+    if (section === "featured") items = items.filter((t) => t.featured && t.approvalStatus !== "pending");
+    if (section === "tokens") items = items.filter((t) => t.submittedBy === "user" && t.approvalStatus !== "pending");
+    if (section === "mine") items = items.filter((t) => !!userId && t.ownerId === userId);
     if (section === "og") items = getOgMemeTokens(items, 80);
     if (section === "ai") items = getDailyAlphaRunners(items, 50);
     if (activeCat) {
@@ -258,7 +285,7 @@ export default function DiscoverScreen() {
         .sort((a, b) => getTokenSearchRank(a, q) - getTokenSearchRank(b, q));
     }
     return items;
-  }, [searchableListings, section, query, activeCat]);
+  }, [searchableListings, section, query, activeCat, userId]);
 
   const onOpen = useCallback(
     (id: string) => {
@@ -289,60 +316,71 @@ export default function DiscoverScreen() {
     setRecentSearches((prev) => [q, ...prev.filter((s) => s !== q)].slice(0, 6));
   }, [query]);
 
-  const stats = useMemo(() => {
-    const hot = listings.filter((t) => t.hot).length;
+  const onListToken = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    if (!isAuthenticated) {
+      router.push("/auth");
+      return;
+    }
+    router.push("/list-token");
+  }, [isAuthenticated, router]);
+
+  const stats = useMemo<DiscoverStats>(() => {
+    const hot = publicListings.filter((t) => t.hot).length;
     const tracked = watchlist.length;
-    const featured = listings.filter((t) => t.featured).length;
-    const total = listings.length;
-    const totalVol = listings.reduce((s, t) => s + (t.volume24hUsd ?? 0), 0);
-    return { hot, tracked, featured, total, totalVol };
-  }, [listings, watchlist]);
+    const featured = publicListings.filter((t) => t.featured).length;
+    const total = publicListings.length;
+    const totalVol = publicListings.reduce((s, t) => s + (t.volume24hUsd ?? 0), 0);
+    const listed = publicListings.filter((t) => t.submittedBy === "user").length;
+    const pending = listings.filter((t) => t.approvalStatus === "pending" && !!userId && t.ownerId === userId).length;
+    return { hot, tracked, featured, total, totalVol, listed, pending };
+  }, [listings, publicListings, watchlist, userId]);
 
   const featuredSpotlight = useMemo(
     () =>
-      listings
+      publicListings
         .filter((t) => t.featured || (hasRealMarket(t) && heatScore(t) > 0))
         .sort((a, b) => Number(b.featured) - Number(a.featured) || heatScore(b) - heatScore(a))
         .slice(0, 6),
-    [listings],
+    [publicListings],
   );
 
   const topGainers = useMemo(
     () =>
-      listings
+      publicListings
         .filter((t) => hasRealMarket(t) && (t.change24hPct ?? 0) > 0)
         .sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0))
         .slice(0, 5),
-    [listings],
+    [publicListings],
   );
 
   const topLosers = useMemo(
     () =>
-      listings
+      publicListings
         .filter((t) => hasRealMarket(t) && (t.change24hPct ?? 0) < 0)
         .sort((a, b) => (a.change24hPct ?? 0) - (b.change24hPct ?? 0))
         .slice(0, 5),
-    [listings],
+    [publicListings],
   );
 
   const newListings = useMemo(
-    () => listings.slice().sort((a, b) => b.createdAt - a.createdAt).slice(0, 8),
-    [listings],
+    () => publicListings.slice().sort((a, b) => b.createdAt - a.createdAt).slice(0, 8),
+    [publicListings],
   );
 
   const aiPicks = useMemo(
-    () => getDailyAlphaRunners(listings, 5),
-    [listings],
+    () => getDailyAlphaRunners(publicListings, 5),
+    [publicListings],
   );
 
   const trendingTags = useMemo(() => {
     const counts = new Map<string, number>();
-    listings.forEach((t) => t.tags.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1)));
+    publicListings.forEach((t) => t.tags.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1)));
     return Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([tag, count]) => ({ tag, count }));
-  }, [listings]);
+  }, [publicListings]);
 
   const renderRow: ListRenderItem<LaunchToken> = useCallback(
     ({ item, index }) => (
@@ -378,8 +416,8 @@ export default function DiscoverScreen() {
             <Text style={styles.title}>Discover</Text>
             <Text style={styles.sub}>
               {listings.length > 0
-                ? `${stats.total} live tokens · daily runners, utility, charity`
-                : "Live runners from Solana market feeds"}
+                ? `${stats.total} coins · tokens, AI runners, OG memes, live data`
+                : "Tokens, AI runners, OG memes, and Solana market feeds"}
             </Text>
           </View>
           <View style={styles.headerActions}>
@@ -437,7 +475,7 @@ export default function DiscoverScreen() {
         </View>
 
         <FlatList
-          data={isFiltering ? filtered : []}
+          data={filtered}
           keyExtractor={(t) => t.id}
           renderItem={renderRow}
           contentContainerStyle={styles.listContent}
@@ -474,6 +512,7 @@ export default function DiscoverScreen() {
               onOpen={onOpen}
               isWatching={isWatching}
               onWatch={onToggleWatch}
+              onListToken={onListToken}
             />
           }
           ListEmptyComponent={
@@ -520,6 +559,7 @@ function DiscoverHeader({
   onOpen,
   isWatching,
   onWatch,
+  onListToken,
 }: {
   showingSearch: boolean;
   isFiltering: boolean;
@@ -530,7 +570,7 @@ function DiscoverHeader({
   setSection: (s: Section) => void;
   activeCat: string | null;
   setActiveCat: (id: string | null) => void;
-  stats: { hot: number; tracked: number; featured: number; total: number; totalVol: number };
+  stats: DiscoverStats;
   featuredSpotlight: LaunchToken[];
   topGainers: LaunchToken[];
   topLosers: LaunchToken[];
@@ -543,6 +583,7 @@ function DiscoverHeader({
   onOpen: (id: string) => void;
   isWatching: (c: string) => boolean;
   onWatch: (t: LaunchToken) => void;
+  onListToken: () => void;
 }) {
   if (showingSearch) {
     return (
@@ -618,6 +659,8 @@ function DiscoverHeader({
 
   return (
     <View>
+      <DiscoverLaunchHero stats={stats} onListToken={onListToken} />
+
       {recentSearches.length > 0 ? (
         <View style={styles.recentWrap}>
           <View style={styles.recentHeader}>
@@ -648,18 +691,18 @@ function DiscoverHeader({
 
       <View style={styles.statsRow}>
         <StatTile label="HOT" value={stats.hot.toString()} accent={Colors.orange} Icon={Flame} />
-        <StatTile label="LISTED" value={stats.total.toString()} accent={Colors.mint} Icon={Rocket} />
+        <StatTile label="TOKENS" value={stats.listed.toString()} accent={Colors.mint} Icon={Rocket} />
         <StatTile
-          label="TRACKING"
-          value={stats.tracked.toString()}
+          label="FEATURED"
+          value={stats.featured.toString()}
           accent={Colors.cyan}
-          Icon={Eye}
+          Icon={Star}
         />
         <StatTile
-          label="FEAT"
-          value={stats.featured.toString()}
+          label="24H VOL"
+          value={fmtUsd(stats.totalVol)}
           accent={Colors.rose}
-          Icon={Sparkles}
+          Icon={BarChart3}
         />
       </View>
 
@@ -698,7 +741,7 @@ function DiscoverHeader({
       ) : null}
 
       <View style={styles.categoriesWrap}>
-        <Text style={styles.sectionLabel}>LIVE RUNNER CATEGORIES</Text>
+        <Text style={styles.sectionLabel}>DISCOVER CATEGORIES</Text>
         <View style={styles.categoriesGrid}>
           {CATEGORIES.map((c) => {
             const active = activeCat === c.id;
@@ -783,7 +826,7 @@ function DiscoverHeader({
           <View style={styles.sectionHead}>
             <View style={styles.sectionHeadLeft}>
               <Zap color={Colors.orange} size={15} strokeWidth={2.6} />
-              <Text style={styles.sectionTitle}>New Launches</Text>
+              <Text style={styles.sectionTitle}>New Tokens</Text>
             </View>
             <Pressable
               onPress={() => {
@@ -837,7 +880,7 @@ function DiscoverHeader({
         <View style={styles.sectionHead}>
           <View style={styles.sectionHeadLeft}>
             <BarChart3 color={Colors.text} size={15} strokeWidth={2.6} />
-            <Text style={styles.sectionTitle}>All tokens</Text>
+            <Text style={styles.sectionTitle}>All coins</Text>
             <Text style={styles.sectionCount}>{filtered.length}</Text>
           </View>
         </View>
@@ -867,6 +910,45 @@ function DiscoverHeader({
       </View>
 
       {filtered.length === 0 ? <EmptyDiscover /> : null}
+    </View>
+  );
+}
+
+function DiscoverLaunchHero({ stats, onListToken }: { stats: DiscoverStats; onListToken: () => void }) {
+  return (
+    <View style={styles.launchHero} testID="discover-listing-hero">
+      <LinearGradient
+        colors={["rgba(244,198,91,0.18)", "rgba(229,231,235,0.065)", "rgba(0,0,0,0.1)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.launchHeroTop}>
+        <View style={styles.launchHeroIcon}>
+          <Rocket color={Colors.ink} size={22} strokeWidth={3} />
+        </View>
+        <View style={styles.launchHeroCopy}>
+          <Text style={styles.launchHeroEyebrow}>FEATURED TOKEN QUEUE</Text>
+          <Text style={styles.launchHeroTitle}>List direct to Discover</Text>
+          <Text style={styles.launchHeroSub}>
+            Submit any Solana token for the Featured rail. Admin approval keeps the front page clean and protects users.
+          </Text>
+        </View>
+      </View>
+      <View style={styles.launchHeroMetaRow}>
+        <View style={styles.launchHeroMeta}>
+          <Star color={Colors.goldBright} size={12} strokeWidth={3} />
+          <Text style={styles.launchHeroMetaText}>{stats.featured} featured</Text>
+        </View>
+        <View style={styles.launchHeroMeta}>
+          <ListChecks color={Colors.cyan} size={12} strokeWidth={3} />
+          <Text style={styles.launchHeroMetaText}>{stats.pending} pending</Text>
+        </View>
+      </View>
+      <Pressable onPress={onListToken} style={({ pressed }) => [styles.launchHeroBtn, pressed && styles.launchHeroBtnPressed]} testID="discover-list-token">
+        <Plus color={Colors.ink} size={15} strokeWidth={3} />
+        <Text style={styles.launchHeroBtnText}>Submit token</Text>
+      </Pressable>
     </View>
   );
 }
@@ -1300,7 +1382,7 @@ function EmptyDiscover() {
       </View>
       <Text style={styles.emptyTitle}>No alpha yet</Text>
       <Text style={styles.emptyBody}>
-        Tokens listed on the launch pad will surface here, ranked by heat, volume, and AI score.
+        Tokens submitted through Discover surface here after admin approval, ranked by heat, volume, and AI score.
       </Text>
       <View style={styles.emptyTags}>
         <View style={styles.emptyTag}>
@@ -1410,6 +1492,62 @@ const styles = StyleSheet.create({
   searchHeadRow: { flexDirection: "row", alignItems: "baseline", gap: 8 },
   searchHeadTitle: { color: Colors.text, fontSize: 18, fontWeight: "900", letterSpacing: -0.3 },
   searchHeadSub: { color: Colors.muted, fontSize: 13, fontWeight: "700" },
+
+  launchHero: {
+    marginHorizontal: 16,
+    marginTop: 18,
+    borderRadius: 24,
+    overflow: "hidden",
+    padding: 16,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(244,198,91,0.22)",
+    shadowColor: Colors.goldBright,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 26,
+    elevation: 8,
+  },
+  launchHeroTop: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  launchHeroIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: Colors.goldBright,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  launchHeroCopy: { flex: 1, minWidth: 0 },
+  launchHeroEyebrow: { color: Colors.goldBright, fontSize: 9, fontWeight: "900", letterSpacing: 1.4 },
+  launchHeroTitle: { color: Colors.text, fontSize: 20, fontWeight: "900", letterSpacing: -0.6, marginTop: 4 },
+  launchHeroSub: { color: Colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 17, marginTop: 5 },
+  launchHeroMetaRow: { flexDirection: "row", gap: 8, marginTop: 14 },
+  launchHeroMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.055)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  launchHeroMetaText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
+  launchHeroBtn: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingVertical: 13,
+    borderRadius: 15,
+    backgroundColor: Colors.goldBright,
+    borderBottomWidth: 4,
+    borderBottomColor: Colors.gold,
+  },
+  launchHeroBtnPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },
+  launchHeroBtnText: { color: Colors.ink, fontSize: 14, fontWeight: "900", letterSpacing: 0.2 },
 
   recentWrap: { marginTop: 14 },
   recentHeader: {

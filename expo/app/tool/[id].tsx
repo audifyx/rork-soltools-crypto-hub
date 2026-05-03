@@ -1939,7 +1939,7 @@ function TokenStreamTool({ accent, kind }: { accent: string; kind: string }) {
           accent={accent}
           Icon={Zap}
           title={kind === "new-pairs" ? "No new pairs yet" : "No trending tokens"}
-          body="Once tokens are listed on the launch pad they'll surface here in real-time."
+          body="Once tokens are approved in Discover they'll surface here in real-time."
         />
       ) : (
         <View style={styles.list}>

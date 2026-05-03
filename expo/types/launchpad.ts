@@ -1,6 +1,6 @@
 export type LaunchVenue = "pumpfun" | "pumpswap" | "raydium" | "meteora" | "jupiter" | "other";
 
-export type LaunchStatus = "live" | "presale" | "graduated" | "scheduled";
+export type LaunchStatus = "live" | "presale" | "graduated" | "scheduled" | "pending" | "approved" | "rejected";
 
 export interface LaunchToken {
   id: string;
@@ -12,6 +12,8 @@ export interface LaunchToken {
   contract: string;
   venue: LaunchVenue;
   status: LaunchStatus;
+  /** Admin approval state for direct token listings before they become public/featured. */
+  approvalStatus?: "pending" | "approved" | "rejected" | "live";
   website?: string;
   twitter?: string;
   telegram?: string;

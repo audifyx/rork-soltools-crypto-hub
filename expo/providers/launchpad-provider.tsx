@@ -115,10 +115,17 @@ function getMarketHeatScore(token: LaunchToken): number {
 }
 
 function rowToToken(row: Record<string, unknown>, _currentUserId: string | null): LaunchToken {
-  const venueRaw = String(row.status ?? "other").toLowerCase();
+  const statusRaw = String(row.status ?? "approved").toLowerCase();
+  const approvalStatus = (["pending", "approved", "rejected", "live"].includes(statusRaw)
+    ? statusRaw
+    : "approved") as "pending" | "approved" | "rejected" | "live";
+  const rawTags = normalizeTags(row.tags);
+  const venueTag = rawTags.find((tag) => tag.toLowerCase().startsWith("venue:"));
+  const venueRaw = (venueTag?.slice("venue:".length) || (VALID_VENUES.includes(statusRaw as LaunchVenue) ? statusRaw : "other")).toLowerCase();
   const venue: LaunchVenue = (VALID_VENUES.includes(venueRaw as LaunchVenue)
     ? venueRaw
     : "other") as LaunchVenue;
+  const tags = rawTags.filter((tag) => !tag.toLowerCase().startsWith("venue:"));
   return {
     id: String(row.id ?? ""),
     name: (row.token_name as string) ?? "Unnamed",
@@ -128,12 +135,13 @@ function rowToToken(row: Record<string, unknown>, _currentUserId: string | null)
     bannerUrl: (row.banner_url as string) ?? null,
     contract: (row.contract_address as string) ?? "",
     venue,
-    status: "live",
+    status: approvalStatus === "pending" || approvalStatus === "rejected" ? approvalStatus : "live",
+    approvalStatus,
     website: (row.website as string) ?? undefined,
     twitter: (row.twitter as string) ?? undefined,
     telegram: (row.telegram as string) ?? undefined,
     discord: (row.discord as string) ?? undefined,
-    tags: normalizeTags(row.tags),
+    tags,
     featured: !!row.is_featured,
     hot: !!row.is_hot,
     verified: !!row.is_verified,
@@ -182,7 +190,12 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
               .order("created_at", { ascending: false })
               .limit(200);
             if (error) throw error;
-            return (data ?? []).map((row) => rowToToken(row as Record<string, unknown>, userId));
+            return (data ?? [])
+              .map((row) => rowToToken(row as Record<string, unknown>, userId))
+              .filter((token) =>
+                token.approvalStatus !== "rejected" &&
+                (token.approvalStatus !== "pending" || (!!userId && token.ownerId === userId)),
+              );
           } catch (e) {
             console.log("[launchpad] supabase fetch failed", e);
             return [] as LaunchToken[];
@@ -241,7 +254,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
               discord: input.discord ?? null,
               liquidity_usd: input.liquidityUsd ?? null,
               market_cap: input.marketCapUsd ?? null,
-              tags: input.tags,
+              tags: Array.from(new Set([...input.tags, `venue:${input.venue}`])).slice(0, 12),
               volume_24h_usd: input.volume24hUsd ?? null,
               holders: input.holders ?? null,
               price_usd: input.price ?? null,
@@ -249,7 +262,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
               is_featured: input.featured ?? false,
               is_hot: false,
               is_verified: false,
-              status: input.venue,
+              status: "pending",
             })
             .select(
               "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,tags,liquidity_usd,market_cap,volume_24h_usd,holders,price_usd,change_24h_pct,upvotes,watchers,is_featured,is_hot,is_verified,status,created_at",
@@ -269,31 +282,11 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
           console.log("[launchpad] supabase token submitted", token.ticker);
           return next;
         } catch (e) {
-          console.log("[launchpad] supabase submit failed, falling back", e);
+          console.log("[launchpad] supabase submit failed", e);
+          throw e;
         }
       }
-      const token: LaunchToken = {
-        ...input,
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        createdAt: Date.now(),
-        upvotes: 0,
-        watchers: 0,
-        featured: input.featured ?? false,
-        hot: false,
-        verified: false,
-        submittedBy: "user",
-        ownerId: userId ?? null,
-      };
-      const prev =
-        (queryClient.getQueryData<LaunchToken[]>([
-          "launchpad",
-          "listings",
-          userId ?? "guest",
-        ]) ?? []).slice();
-      const next = [token, ...prev];
-      await persistListings(keys.listings, next);
-      console.log("[launchpad] local token submitted", token.ticker);
-      return next;
+      throw new Error("Sign in to submit a token to Discover.");
     },
     onSuccess: (next) => {
       queryClient.setQueryData(["launchpad", "listings", userId ?? "guest"], next);

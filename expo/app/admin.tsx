@@ -547,7 +547,10 @@ function SubmissionsSection() {
       if (error) throw error;
       await logAction(input.action, "submission", input.row.id, input.row, input.patch);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "submissions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "submissions"] });
+      qc.invalidateQueries({ queryKey: ["launchpad", "listings"] });
+    },
     onError: (e: Error) => Alert.alert("Submission update failed", e.message),
   });
 

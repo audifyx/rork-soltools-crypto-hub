@@ -126,15 +126,18 @@ export default function LaunchDetailScreen() {
         const { data, error } = await supabase
           .from("pump_v5_submissions")
           .select(
-            "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,liquidity_usd,market_cap,is_featured,status,created_at",
+            "id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,tags,liquidity_usd,market_cap,is_featured,status,created_at",
           )
           .eq("id", id)
           .maybeSingle();
         if (error) throw error;
         if (!data) return null;
         const r = data as Record<string, unknown>;
-        const venueRaw = String(r.status ?? "other").toLowerCase();
+        const statusRaw = String(r.status ?? "approved").toLowerCase();
         const validVenues: LaunchVenue[] = ["pumpfun", "pumpswap", "raydium", "meteora", "jupiter", "other"];
+        const rawTags = Array.isArray(r.tags) ? (r.tags as unknown[]).map(String) : [];
+        const venueTag = rawTags.find((tag) => tag.toLowerCase().startsWith("venue:"));
+        const venueRaw = (venueTag?.slice("venue:".length) || (validVenues.includes(statusRaw as LaunchVenue) ? statusRaw : "other")).toLowerCase();
         const venue: LaunchVenue = (validVenues.includes(venueRaw as LaunchVenue)
           ? venueRaw
           : "other") as LaunchVenue;
@@ -147,12 +150,13 @@ export default function LaunchDetailScreen() {
           bannerUrl: (r.banner_url as string) ?? null,
           contract: (r.contract_address as string) ?? "",
           venue,
-          status: "live",
+          status: statusRaw === "pending" || statusRaw === "rejected" ? statusRaw : "live",
+          approvalStatus: (["pending", "approved", "rejected", "live"].includes(statusRaw) ? statusRaw : "approved") as "pending" | "approved" | "rejected" | "live",
           website: (r.website as string) ?? undefined,
           twitter: (r.twitter as string) ?? undefined,
           telegram: (r.telegram as string) ?? undefined,
           discord: (r.discord as string) ?? undefined,
-          tags: [],
+          tags: rawTags.filter((tag) => !tag.toLowerCase().startsWith("venue:")),
           featured: !!r.is_featured,
           hot: false,
           verified: false,

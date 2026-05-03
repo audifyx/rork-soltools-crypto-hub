@@ -643,12 +643,12 @@ function HomeCommandHero() {
           <Text style={styles.commandSecondaryText}>Tools</Text>
         </Pressable>
         <Pressable
-          onPress={() => router.push("/(tabs)/launches")}
+          onPress={() => router.push("/list-token")}
           style={({ pressed }) => [styles.commandSecondary, pressed && styles.pressed]}
-          testID="hero-open-launches"
+          testID="hero-list-token"
         >
           <Rocket color={Colors.silver} size={15} strokeWidth={2.8} />
-          <Text style={styles.commandSecondaryText}>Launches</Text>
+          <Text style={styles.commandSecondaryText}>List token</Text>
         </Pressable>
       </View>
     </View>
@@ -884,7 +884,7 @@ function TrendingPairsRail() {
   const { listings } = useLaunchpad();
   const goAll = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
-    router.push("/(tabs)/launches");
+    router.push("/(tabs)/discover");
   }, [router]);
 
   const pairs: LaunchToken[] = useMemo(

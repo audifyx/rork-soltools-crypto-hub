@@ -211,7 +211,7 @@ export default function SpacesScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.tagsRow}
                 >
-                  {["Memes", "AI", "Whales", "Launches", "DeFi", "TA"].map((t) => (
+                  {["Memes", "AI", "Whales", "New Pairs", "DeFi", "TA"].map((t) => (
                     <View key={t} style={styles.fTag}>
                       <Text style={styles.fTagText}>#{t.toLowerCase()}</Text>
                     </View>

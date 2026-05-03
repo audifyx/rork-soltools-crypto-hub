@@ -34,7 +34,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useLaunchpad } from "@/providers/launchpad-provider";
-import { LaunchStatus, LaunchVenue } from "@/types/launchpad";
+import { LaunchVenue } from "@/types/launchpad";
 import { SOLTOOLS_DEFAULT_BANNER } from "@/utils/token-art";
 
 const VENUES: { key: LaunchVenue; label: string }[] = [
@@ -46,13 +46,6 @@ const VENUES: { key: LaunchVenue; label: string }[] = [
   { key: "other", label: "other" },
 ];
 
-const STATUSES: { key: LaunchStatus; label: string }[] = [
-  { key: "live", label: "Live" },
-  { key: "presale", label: "Presale" },
-  { key: "graduated", label: "Graduated" },
-  { key: "scheduled", label: "Scheduled" },
-];
-
 export default function ListTokenScreen() {
   const router = useRouter();
   const { submit, isSubmitting } = useLaunchpad();
@@ -62,7 +55,6 @@ export default function ListTokenScreen() {
   const [contract, setContract] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [venue, setVenue] = useState<LaunchVenue>("pumpfun");
-  const [status, setStatus] = useState<LaunchStatus>("live");
   const [website, setWebsite] = useState<string>("");
   const [twitter, setTwitter] = useState<string>("");
   const [telegram, setTelegram] = useState<string>("");
@@ -75,7 +67,6 @@ export default function ListTokenScreen() {
   const [agree, setAgree] = useState<boolean>(false);
 
   const [venueOpen, setVenueOpen] = useState<boolean>(false);
-  const [statusOpen, setStatusOpen] = useState<boolean>(false);
 
   const canSubmit = useMemo(() => {
     return (
@@ -142,7 +133,7 @@ export default function ListTokenScreen() {
         contract: contract.trim(),
         description: description.trim(),
         venue,
-        status,
+        status: "pending",
         logoUrl: logoUri,
         bannerUrl: bannerUri,
         website: website.trim() || undefined,
@@ -158,7 +149,7 @@ export default function ListTokenScreen() {
         volume24hUsd: null,
         holders: null,
       });
-      Alert.alert("Submitted", "Your token has been listed on Sol Tools Launch Pad.");
+      Alert.alert("Submitted for review", "Your token was sent to the Discover featured queue. It will appear after admin approval.");
       router.back();
     } catch (e) {
       console.log("[list-token] submit failed", e);
@@ -172,7 +163,6 @@ export default function ListTokenScreen() {
     contract,
     description,
     venue,
-    status,
     logoUri,
     bannerUri,
     website,
@@ -185,7 +175,6 @@ export default function ListTokenScreen() {
   ]);
 
   const venueLabel = useMemo(() => VENUES.find((v) => v.key === venue)?.label ?? "Select", [venue]);
-  const statusLabel = useMemo(() => STATUSES.find((s) => s.key === status)?.label ?? "Select", [status]);
 
   return (
     <View style={styles.root}>
@@ -276,11 +265,10 @@ export default function ListTokenScreen() {
                   </Field>
                 </View>
                 <View style={styles.rowChild}>
-                  <Field label="Status">
-                    <Pressable onPress={() => setStatusOpen(true)} style={styles.select} testID="open-status">
-                      <Text style={styles.selectText}>{statusLabel}</Text>
-                      <ChevronDown color={Colors.muted} size={14} strokeWidth={2.4} />
-                    </Pressable>
+                  <Field label="Review state">
+                    <View style={styles.select} testID="review-state">
+                      <Text style={styles.selectText}>Admin approval required</Text>
+                    </View>
                   </Field>
                 </View>
               </View>
@@ -425,9 +413,9 @@ export default function ListTokenScreen() {
                     <Rocket color={Colors.orange} size={14} strokeWidth={2.6} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.toggleTitle}>Boost as Featured</Text>
+                    <Text style={styles.toggleTitle}>Request Featured placement</Text>
                     <Text style={styles.toggleBody}>
-                      Pin this listing to the Featured rail for 24 hours.
+                      Ask admin to pin this token to the Discover Featured rail after review.
                     </Text>
                   </View>
                 </View>
@@ -485,17 +473,6 @@ export default function ListTokenScreen() {
         onSelect={(k) => {
           setVenue(k);
           setVenueOpen(false);
-        }}
-      />
-      <PickerModal
-        visible={statusOpen}
-        title="Listing status"
-        onClose={() => setStatusOpen(false)}
-        options={STATUSES}
-        selected={status}
-        onSelect={(k) => {
-          setStatus(k);
-          setStatusOpen(false);
         }}
       />
     </View>

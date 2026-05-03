@@ -214,7 +214,7 @@ function buildAchievements(state: {
     {
       id: "listed",
       title: "Launch Ready",
-      desc: "List a token on Launch Pad",
+      desc: "List a token in Discover",
       Icon: Rocket,
       color: "#B8BEC8",
       unlocked: state.listedCount >= 1,
@@ -813,7 +813,7 @@ export default function ProfileScreen() {
               style={styles.ctaGrad}
             >
               <Rocket color={Colors.ink} size={16} strokeWidth={3} />
-              <Text style={styles.ctaText}>List a token on Launch Pad</Text>
+              <Text style={styles.ctaText}>List a token in Discover</Text>
             </LinearGradient>
           </Pressable>
 
@@ -1116,7 +1116,7 @@ export default function ProfileScreen() {
                 <EmptyTab
                   Icon={Rocket}
                   title="No listings yet"
-                  body="Submit your token to the Launch Pad and get discovered by traders."
+                  body="Submit your token to Discover and get in front of traders after admin approval."
                   ctaLabel="List a token"
                   onCta={() => router.push("/list-token")}
                 />

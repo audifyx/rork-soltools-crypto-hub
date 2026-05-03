@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { Compass, Home, Rocket, User, Wrench } from "lucide-react-native";
+import { Compass, Home, User, Wrench } from "lucide-react-native";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
@@ -56,8 +56,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="launches"
         options={{
-          title: "Launches",
-          tabBarIcon: ({ color, size }) => <Rocket color={color} size={size} strokeWidth={2.4} />,
+          href: null,
         }}
       />
       <Tabs.Screen
