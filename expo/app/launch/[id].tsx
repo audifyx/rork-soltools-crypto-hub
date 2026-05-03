@@ -185,7 +185,13 @@ export default function LaunchDetailScreen() {
   // listing yet — this prevents the dreaded "Token not found" screen for any
   // valid Solana mint pasted into a deep link or routed from another tab.
   const token = useMemo(() => {
-    if (resolved) return resolved;
+    if (resolved) {
+      return {
+        ...resolved,
+        logoUrl: resolved.logoUrl ?? dex?.imageUrl ?? null,
+        bannerUrl: resolved.bannerUrl ?? dex?.bannerUrl ?? null,
+      };
+    }
     if (!lookupAddress) return null;
     // If DexScreener has indexed pairs, use them. Otherwise fall back to a
     // minimal shell so the screen still renders for any pasted Solana mint —
@@ -197,7 +203,7 @@ export default function LaunchDetailScreen() {
       ticker: (base?.symbol || "").toUpperCase(),
       description: "",
       logoUrl: dex?.imageUrl ?? null,
-      bannerUrl: null,
+      bannerUrl: dex?.bannerUrl ?? null,
       contract: lookupAddress,
       venue: "other",
       status: "live",

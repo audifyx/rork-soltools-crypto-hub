@@ -77,6 +77,7 @@ export interface DexTokenSnapshot {
   pairCreatedAt: number | null;
   dexId: string | null;
   imageUrl: string | null;
+  bannerUrl: string | null;
   websites: string[];
   socials: { type: string; url: string }[];
 }
@@ -117,6 +118,7 @@ function toSnapshot(address: string, pairs: DexPair[]): DexTokenSnapshot {
     pairCreatedAt: best?.pairCreatedAt ?? null,
     dexId: best?.dexId ?? null,
     imageUrl: best?.info?.imageUrl ?? null,
+    bannerUrl: best?.info?.header ?? best?.info?.openGraph ?? null,
     websites: (best?.info?.websites ?? []).map((w) => w.url).filter(Boolean),
     socials: best?.info?.socials ?? [],
   };

@@ -1,21 +1,11 @@
 /**
  * Custom fallback art for tokens that don't ship with their own banner/logo.
- * Picks a deterministic image based on token id/ticker so the same token
- * always shows the same character.
+ * Banners use a single permanent stock asset so missing metadata never renders
+ * as a generic gradient block.
  */
 
 export const SOLTOOLS_DEFAULT_BANNER =
-  "https://r2-pub.rork.com/generated-images/8e1f2cdd-6aaa-4037-9e16-5544c98650a5.png";
-
-const FALLBACK_BANNERS: readonly string[] = [
-  "https://r2-pub.rork.com/generated-images/a00cc23b-17fc-4f04-a912-6e7b42ae424d.png", // pepe
-  "https://r2-pub.rork.com/generated-images/d8c599ea-ec58-44a6-95a1-61f5fd69104b.png", // doge
-  "https://r2-pub.rork.com/generated-images/376d5a4b-3a08-4061-b6d6-d2310dbdd8f4.png", // gigachad
-  "https://r2-pub.rork.com/generated-images/b6599ae0-8e87-459b-8699-8924cbad5a69.png", // wojak
-  "https://r2-pub.rork.com/generated-images/59f1a9b6-bbaf-44a5-9944-98fc579f3c50.png", // shiba astronaut
-  "https://r2-pub.rork.com/generated-images/da7b5fcb-1002-4244-ab73-32ddad56ee42.png", // popcat
-  "https://r2-pub.rork.com/generated-images/196caae5-ea14-4738-9a91-576b5044ae40.png", // bull vs bear
-] as const;
+  "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/o23za4or0jutesw13rqqp.jpg";
 
 const FALLBACK_LOGOS: readonly string[] = [
   "https://r2-pub.rork.com/generated-images/15db468b-0bef-4090-8922-8026e8557e00.png", // pepe
@@ -37,14 +27,10 @@ function hashString(input: string): number {
   return h >>> 0;
 }
 
-/** Resolve a banner URL: returns the explicit url, else a deterministic fallback. */
-export function getTokenBanner(
-  explicit: string | null | undefined,
-  seed: string,
-): string {
-  if (explicit && explicit.length > 0) return explicit;
-  if (!seed) return FALLBACK_BANNERS[0];
-  return FALLBACK_BANNERS[hashString(seed) % FALLBACK_BANNERS.length];
+/** Resolve a banner URL: returns metadata banner first, else the permanent stock banner. */
+export function getTokenBanner(explicit: string | null | undefined, _seed?: string): string {
+  const clean = explicit?.trim();
+  return clean && clean.length > 0 ? clean : SOLTOOLS_DEFAULT_BANNER;
 }
 
 /** Resolve a logo URL: returns the explicit url, else a deterministic fallback. */

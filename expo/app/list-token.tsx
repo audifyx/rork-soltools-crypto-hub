@@ -35,6 +35,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchStatus, LaunchVenue } from "@/types/launchpad";
+import { SOLTOOLS_DEFAULT_BANNER } from "@/utils/token-art";
 
 const VENUES: { key: LaunchVenue; label: string }[] = [
   { key: "pumpfun", label: "pump.fun" },
@@ -211,20 +212,18 @@ export default function ListTokenScreen() {
             showsVerticalScrollIndicator={false}
           >
             <Pressable onPress={onPickBanner} style={styles.bannerWrap} testID="pick-banner">
-              {bannerUri ? (
-                <Image source={{ uri: bannerUri }} style={styles.bannerImg} contentFit="cover" />
-              ) : (
-                <LinearGradient
-                  colors={["rgba(85,245,178,0.28)", "rgba(56,215,255,0.05)"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.bannerImg}
-                >
-                  <Camera color={Colors.mint} size={26} strokeWidth={2.2} />
-                  <Text style={styles.bannerText}>Tap to upload banner</Text>
-                  <Text style={styles.bannerSub}>16:9 — recommended 1200×675</Text>
-                </LinearGradient>
-              )}
+              <Image
+                source={{ uri: bannerUri ?? SOLTOOLS_DEFAULT_BANNER }}
+                style={styles.bannerImg}
+                contentFit="cover"
+              />
+              <LinearGradient
+                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.42)"]}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.bannerCameraChip}>
+                <Camera color={Colors.text} size={16} strokeWidth={2.5} />
+              </View>
               <Pressable
                 onPress={onPickLogo}
                 style={styles.logoFloat}
@@ -601,9 +600,20 @@ const styles = StyleSheet.create({
     borderColor: "rgba(85,245,178,0.18)",
     marginBottom: 36,
   },
-  bannerImg: { flex: 1, alignItems: "center", justifyContent: "center", gap: 6 },
-  bannerText: { color: Colors.text, fontSize: 14, fontWeight: "900" },
-  bannerSub: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+  bannerImg: { ...StyleSheet.absoluteFillObject },
+  bannerCameraChip: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.56)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
   logoFloat: {
     position: "absolute",
     bottom: -28,

@@ -405,6 +405,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
         marketCapUsd: live.marketCapUsd ?? t.marketCapUsd ?? null,
         volume24hUsd: live.volume24hUsd ?? t.volume24hUsd ?? null,
         logoUrl: t.logoUrl ?? live.imageUrl ?? null,
+        bannerUrl: t.bannerUrl ?? live.bannerUrl ?? null,
       };
     });
   }, [rawListings, dexMap]);
