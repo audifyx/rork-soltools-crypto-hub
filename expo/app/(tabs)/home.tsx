@@ -14,10 +14,10 @@ import {
   Gem,
   Heart,
   ImagePlus,
+  Headphones,
   Inbox,
   MessageCircle,
   MessageSquareText,
-  Radio,
   Repeat2,
   Rocket,
   Search,
@@ -442,11 +442,11 @@ export default function HomeFeedScreen() {
               style={styles.iconBtn}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                router.push("/(tabs)/streams");
+                router.push("/spaces");
               }}
-              testID="streams-btn"
+              testID="spaces-btn"
             >
-              <Radio color={Colors.text} size={18} strokeWidth={2.4} />
+              <Headphones color={Colors.text} size={18} strokeWidth={2.4} />
               <View style={styles.bellDot} pointerEvents="none" />
             </Pressable>
             <Pressable

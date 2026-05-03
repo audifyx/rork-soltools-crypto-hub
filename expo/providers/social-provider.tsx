@@ -85,18 +85,59 @@ export interface Space {
   title: string;
   topic: string;
   description: string;
+  hostId?: string | null;
   hostHandle: string;
   hostName: string;
+  livekitRoomName: string;
   coHosts: string[];
   speakers: number;
   listeners: number;
   isLive: boolean;
+  status: "scheduled" | "live" | "ended" | "cancelled";
   scheduledAt?: number;
   startedAt?: number;
+  endedAt?: number;
+  createdAt: number;
   category: "alpha" | "whales" | "ai" | "ta" | "memes" | "launches";
   accent: [string, string];
   recording: boolean;
   raisedHands: number;
+}
+
+export interface SpaceParticipant {
+  id: string;
+  roomId: string;
+  userId?: string | null;
+  identity: string;
+  handle: string;
+  name: string;
+  avatarColor: string;
+  role: "host" | "co-host" | "speaker" | "listener";
+  muted: boolean;
+  handRaised: boolean;
+  speaking: boolean;
+  joinedAt: number;
+}
+
+export interface SpaceMessage {
+  id: string;
+  roomId: string;
+  userId: string;
+  authorHandle: string;
+  authorName: string;
+  authorColor: string;
+  body: string;
+  type: "text" | "system" | "ticker" | "reaction";
+  createdAt: number;
+}
+
+export interface CreateSpaceInput {
+  title: string;
+  topic?: string;
+  description?: string;
+  category?: Space["category"];
+  scheduledAt?: number | null;
+  recording?: boolean;
 }
 
 const PALETTES: [string, string][] = [
@@ -372,6 +413,8 @@ type SpaceRow = {
   description: string | null;
   host_id: string | null;
   community_id: string | null;
+  livekit_room_name?: string | null;
+  status?: string | null;
   is_active: boolean | null;
   started_at: string | null;
   ended_at: string | null;
@@ -386,6 +429,36 @@ type SpaceRow = {
   created_at: string | null;
 };
 
+type SpaceParticipantRow = {
+  id: string;
+  room_id: string;
+  user_id: string | null;
+  identity: string;
+  display_name?: string | null;
+  role: string | null;
+  muted?: boolean | null;
+  hand_raised?: boolean | null;
+  speaking?: boolean | null;
+  joined_at: string | null;
+};
+
+type SpaceMessageRow = {
+  id: string;
+  room_id: string;
+  user_id: string;
+  body: string | null;
+  message_type: string | null;
+  created_at: string | null;
+};
+
+type ProfileMiniRow = {
+  id: string | null;
+  user_id?: string | null;
+  username: string | null;
+  display_name: string | null;
+  avatar_color?: string | null;
+};
+
 function rowToSpace(row: SpaceRow, hostHandle: string, hostName: string): Space {
   const seed = row.id;
   const fallbackPalette = paletteFor(seed);
@@ -397,25 +470,61 @@ function rowToSpace(row: SpaceRow, hostHandle: string, hostName: string): Space 
   const category: Space["category"] = (VALID_SPACE_CATEGORIES as string[]).includes(cat)
     ? (cat as Space["category"])
     : "alpha";
-  const isLive = !!row.is_active && !!row.started_at && !row.ended_at;
+  const statusRaw = (row.status ?? "scheduled").toLowerCase();
+  const status: Space["status"] =
+    statusRaw === "live" || statusRaw === "ended" || statusRaw === "cancelled" ? statusRaw : "scheduled";
+  const isLive = (status === "live" || !!row.is_active) && !!row.started_at && !row.ended_at;
   return {
     id: row.id,
     title: row.name,
     topic: (row.topic ?? "GENERAL").toUpperCase(),
     description: row.description ?? "",
+    hostId: row.host_id,
     hostHandle,
     hostName,
+    livekitRoomName: row.livekit_room_name ?? `space-${row.id.replace(/-/g, "")}`,
     coHosts: [],
     speakers: row.speakers_count ?? 0,
     listeners: row.listeners_count ?? 0,
     isLive,
+    status,
     scheduledAt: row.scheduled_at ? new Date(row.scheduled_at).getTime() : undefined,
     startedAt: row.started_at ? new Date(row.started_at).getTime() : undefined,
+    endedAt: row.ended_at ? new Date(row.ended_at).getTime() : undefined,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     category,
     accent,
     recording: !!row.recording,
     raisedHands: row.raised_hands ?? 0,
   };
+}
+
+function participantRole(value: unknown): SpaceParticipant["role"] {
+  const raw = typeof value === "string" ? value.toLowerCase() : "listener";
+  return raw === "host" || raw === "co-host" || raw === "speaker" ? raw : "listener";
+}
+
+function messageType(value: unknown): SpaceMessage["type"] {
+  const raw = typeof value === "string" ? value.toLowerCase() : "text";
+  return raw === "system" || raw === "ticker" || raw === "reaction" ? raw : "text";
+}
+
+function buildProfileMap(rows: ProfileMiniRow[] | null | undefined): Map<string, ProfileMiniRow> {
+  const map = new Map<string, ProfileMiniRow>();
+  for (const row of rows ?? []) {
+    if (row.id) map.set(row.id, row);
+    if (row.user_id) map.set(row.user_id, row);
+  }
+  return map;
+}
+
+function handleFromProfile(profile: ProfileMiniRow | undefined): string {
+  const username = profile?.username?.trim() ?? "";
+  return username ? `@${username.replace(/^@/, "")}` : "@soltools";
+}
+
+function nameFromProfile(profile: ProfileMiniRow | undefined, fallback: string): string {
+  return (profile?.display_name?.trim() || profile?.username?.trim() || fallback) ?? fallback;
 }
 
 const KEY_FOLLOW_SPACES = "soltools.social.followspaces.v1";
@@ -575,7 +684,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         const { data, error } = await supabase
           .from("livekit_rooms")
           .select(
-            "id,name,topic,description,host_id,community_id,is_active,started_at,ended_at,scheduled_at,category,accent_a,accent_b,recording,raised_hands,listeners_count,speakers_count,created_at",
+            "id,name,topic,description,host_id,community_id,livekit_room_name,status,is_active,started_at,ended_at,scheduled_at,category,accent_a,accent_b,recording,raised_hands,listeners_count,speakers_count,created_at",
           )
           .order("started_at", { ascending: false, nullsFirst: false })
           .limit(120);
@@ -588,17 +697,20 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         if (hostIds.length > 0) {
           const { data: profs } = await supabase
             .from("profiles")
-            .select("id,username,display_name")
-            .in("id", hostIds);
+            .select("id,user_id,username,display_name")
+            .or(`id.in.(${hostIds.join(",")}),user_id.in.(${hostIds.join(",")})`);
+          const profileMap = buildProfileMap((profs ?? []) as ProfileMiniRow[]);
           hostMap = new Map(
-            (profs ?? []).map((p) => [
-              p.id as string,
-              {
-                handle: p.username ? `@${p.username as string}` : "",
-                name:
-                  ((p.display_name as string | null) ?? (p.username as string | null) ?? "") || "Host",
-              },
-            ]),
+            hostIds.map((hostId) => {
+              const p = profileMap.get(hostId);
+              return [
+                hostId,
+                {
+                  handle: handleFromProfile(p),
+                  name: nameFromProfile(p, "Host"),
+                },
+              ];
+            }),
           );
         }
         return rows.map((r) => {
@@ -611,7 +723,27 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       }
     },
     staleTime: 15_000,
+    refetchInterval: 20_000,
   });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("social-spaces-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "livekit_rooms" }, () => {
+        qc.invalidateQueries({ queryKey: ["social", "spaces"] }).catch(() => {});
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "livekit_participants" }, () => {
+        qc.invalidateQueries({ queryKey: ["social", "spaces"] }).catch(() => {});
+        qc.invalidateQueries({ queryKey: ["space", "participants"] }).catch(() => {});
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "space_messages" }, () => {
+        qc.invalidateQueries({ queryKey: ["space", "messages"] }).catch(() => {});
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel).catch(() => {});
+    };
+  }, [qc]);
 
   const remoteCommunities = communitiesQ.data ?? [];
   const communities = useMemo<Community[]>(() => {
@@ -691,14 +823,256 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
 
   const toggleFollowSpace = useCallback(
     async (id: string) => {
-      const next = followingSpaces.includes(id)
-        ? followingSpaces.filter((j) => j !== id)
-        : [id, ...followingSpaces];
+      const willFollow = !followingSpaces.includes(id);
+      const next = willFollow
+        ? [id, ...followingSpaces]
+        : followingSpaces.filter((j) => j !== id);
       setFollowingSpaces(next);
       await saveJson(followKey, next);
+      if (isAuthenticated && userId) {
+        try {
+          const { error } = await supabase.rpc("follow_space", {
+            target_room_id: id,
+            p_follow: willFollow,
+          });
+          if (error) throw error;
+        } catch (e) {
+          console.log("[social] follow_space failed", e);
+        }
+      }
     },
-    [followingSpaces, followKey],
+    [followingSpaces, followKey, isAuthenticated, userId],
   );
+
+  const createSpace = useCallback(
+    async (input: CreateSpaceInput): Promise<string> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to start a Space.");
+      const title = input.title.trim();
+      if (title.length < 3) throw new Error("Give your Space a stronger title.");
+      const palette = paletteFor(`${title}-${Date.now()}`);
+      const { data, error } = await supabase.rpc("create_space", {
+        p_name: title,
+        p_topic: (input.topic?.trim() || "ALPHA").slice(0, 28),
+        p_description: (input.description?.trim() || "").slice(0, 500),
+        p_category: input.category ?? "alpha",
+        p_scheduled_at: input.scheduledAt ? new Date(input.scheduledAt).toISOString() : null,
+        p_recording: !!input.recording,
+        p_accent_a: palette[0],
+        p_accent_b: palette[1],
+      });
+      if (error) throw error;
+      const id = typeof data === "string" ? data : String(data ?? "");
+      if (!id) throw new Error("Space could not be created.");
+      await qc.invalidateQueries({ queryKey: ["social", "spaces"] });
+      return id;
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const startSpace = useCallback(
+    async (id: string): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to start this Space.");
+      const { error } = await supabase.rpc("start_space", { target_room_id: id });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["social", "spaces"] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const joinSpace = useCallback(
+    async (id: string): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to join Spaces.");
+      const { error } = await supabase.rpc("join_space", { target_room_id: id });
+      if (error) throw error;
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["social", "spaces"] }),
+        qc.invalidateQueries({ queryKey: ["space", "participants", id] }),
+      ]);
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const leaveSpace = useCallback(
+    async (id: string): Promise<void> => {
+      if (!isAuthenticated || !userId) return;
+      const { error } = await supabase.rpc("leave_space", { target_room_id: id });
+      if (error) throw error;
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["social", "spaces"] }),
+        qc.invalidateQueries({ queryKey: ["space", "participants", id] }),
+      ]);
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const setSpaceMute = useCallback(
+    async (id: string, muted: boolean): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to use mic controls.");
+      const { error } = await supabase.rpc("set_space_mute", {
+        target_room_id: id,
+        p_muted: muted,
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["space", "participants", id] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const setSpaceHand = useCallback(
+    async (id: string, raised: boolean): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to raise your hand.");
+      const { error } = await supabase.rpc("set_space_hand", {
+        target_room_id: id,
+        p_raised: raised,
+      });
+      if (error) throw error;
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["social", "spaces"] }),
+        qc.invalidateQueries({ queryKey: ["space", "participants", id] }),
+      ]);
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const sendSpaceMessage = useCallback(
+    async (id: string, body: string): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to chat in Spaces.");
+      const clean = body.trim();
+      if (!clean) return;
+      const { error } = await supabase.rpc("send_space_message", {
+        target_room_id: id,
+        p_body: clean,
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["space", "messages", id] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const addSpaceReaction = useCallback(
+    async (id: string, emoji: string = "🔥"): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to react.");
+      const { error } = await supabase.rpc("add_space_reaction", {
+        target_room_id: id,
+        p_emoji: emoji,
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["space", "reactions", id] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const endSpace = useCallback(
+    async (id: string): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to end this Space.");
+      const { error } = await supabase.rpc("end_space", { target_room_id: id });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["social", "spaces"] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const useSpaceParticipants = (id: string | undefined) =>
+    useQuery<SpaceParticipant[]>({
+      queryKey: ["space", "participants", id ?? ""],
+      enabled: !!id,
+      queryFn: async () => {
+        if (!id) return [];
+        try {
+          const { data, error } = await supabase
+            .from("livekit_participants")
+            .select("id,room_id,user_id,identity,display_name,role,muted,hand_raised,speaking,joined_at")
+            .eq("room_id", id)
+            .is("left_at", null)
+            .order("joined_at", { ascending: true })
+            .limit(250);
+          if (error) throw error;
+          const rows = (data ?? []) as SpaceParticipantRow[];
+          const userIds = Array.from(
+            new Set(rows.map((r) => r.user_id).filter((v): v is string => !!v)),
+          );
+          let profiles = new Map<string, ProfileMiniRow>();
+          if (userIds.length > 0) {
+            const { data: profileRows, error: profileError } = await supabase
+              .from("profiles")
+              .select("id,user_id,username,display_name,avatar_color")
+              .or(`id.in.(${userIds.join(",")}),user_id.in.(${userIds.join(",")})`);
+            if (profileError) console.log("[social] space participant profiles failed", profileError.message);
+            profiles = buildProfileMap((profileRows ?? []) as ProfileMiniRow[]);
+          }
+          return rows.map((r): SpaceParticipant => {
+            const profile = r.user_id ? profiles.get(r.user_id) : undefined;
+            return {
+              id: r.id,
+              roomId: r.room_id,
+              userId: r.user_id,
+              identity: r.identity,
+              handle: handleFromProfile(profile),
+              name: nameFromProfile(profile, r.display_name ?? r.identity ?? "Listener"),
+              avatarColor: profile?.avatar_color ?? paletteFor(r.identity)[0],
+              role: participantRole(r.role),
+              muted: r.muted ?? true,
+              handRaised: r.hand_raised ?? false,
+              speaking: r.speaking ?? false,
+              joinedAt: r.joined_at ? new Date(r.joined_at).getTime() : Date.now(),
+            };
+          });
+        } catch (e) {
+          console.log("[social] space participants failed", e);
+          return [];
+        }
+      },
+      staleTime: 5_000,
+      refetchInterval: 10_000,
+    });
+
+  const useSpaceMessages = (id: string | undefined) =>
+    useQuery<SpaceMessage[]>({
+      queryKey: ["space", "messages", id ?? ""],
+      enabled: !!id,
+      queryFn: async () => {
+        if (!id) return [];
+        try {
+          const { data, error } = await supabase
+            .from("space_messages")
+            .select("id,room_id,user_id,body,message_type,created_at")
+            .eq("room_id", id)
+            .order("created_at", { ascending: true })
+            .limit(120);
+          if (error) throw error;
+          const rows = (data ?? []) as SpaceMessageRow[];
+          const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean)));
+          let profiles = new Map<string, ProfileMiniRow>();
+          if (userIds.length > 0) {
+            const { data: profileRows, error: profileError } = await supabase
+              .from("profiles")
+              .select("id,user_id,username,display_name,avatar_color")
+              .or(`id.in.(${userIds.join(",")}),user_id.in.(${userIds.join(",")})`);
+            if (profileError) console.log("[social] space message profiles failed", profileError.message);
+            profiles = buildProfileMap((profileRows ?? []) as ProfileMiniRow[]);
+          }
+          return rows.map((r): SpaceMessage => {
+            const profile = profiles.get(r.user_id);
+            return {
+              id: r.id,
+              roomId: r.room_id,
+              userId: r.user_id,
+              authorHandle: handleFromProfile(profile),
+              authorName: nameFromProfile(profile, "Trader"),
+              authorColor: profile?.avatar_color ?? paletteFor(r.user_id)[0],
+              body: r.body ?? "",
+              type: messageType(r.message_type),
+              createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+            };
+          });
+        } catch (e) {
+          console.log("[social] space messages failed", e);
+          return [];
+        }
+      },
+      staleTime: 5_000,
+      refetchInterval: 8_000,
+    });
 
   const getCommunity = useCallback(
     (id: string) => communities.find((c) => c.id === id || c.handle === id),
@@ -1643,6 +2017,17 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       isFollowingSpace: isFollowing,
       toggleFollowSpace,
       getSpace,
+      createSpace,
+      startSpace,
+      joinSpace,
+      leaveSpace,
+      setSpaceMute,
+      setSpaceHand,
+      sendSpaceMessage,
+      addSpaceReaction,
+      endSpace,
+      useSpaceParticipants,
+      useSpaceMessages,
       isLoading: communitiesQ.isLoading || spacesQ.isLoading,
     }),
     [
@@ -1672,6 +2057,17 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       isFollowing,
       toggleFollowSpace,
       getSpace,
+      createSpace,
+      startSpace,
+      joinSpace,
+      leaveSpace,
+      setSpaceMute,
+      setSpaceHand,
+      sendSpaceMessage,
+      addSpaceReaction,
+      endSpace,
+      useSpaceParticipants,
+      useSpaceMessages,
       communitiesQ.isLoading,
       spacesQ.isLoading,
     ],

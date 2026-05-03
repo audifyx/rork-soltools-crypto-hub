@@ -26,7 +26,7 @@ export default function VoiceRoomsRail() {
           <View style={styles.iconBox}>
             <Headphones color={Colors.goldBright} size={14} strokeWidth={2.6} />
           </View>
-          <Text style={styles.title}>Voice rooms</Text>
+          <Text style={styles.title}>Spaces</Text>
           {liveSpaces.length > 0 ? (
             <View style={styles.live}>
               <View style={styles.liveDot} />
@@ -101,7 +101,7 @@ export default function VoiceRoomsRail() {
                 </View>
                 <View style={[styles.joinBtn, { backgroundColor: r.accent[0] }]}>
                   <Volume2 color={Colors.ink} size={10} strokeWidth={3} />
-                  <Text style={styles.joinText}>JOIN</Text>
+                  <Text style={styles.joinText}>{r.isLive ? "JOIN" : "VIEW"}</Text>
                 </View>
               </View>
             </LinearGradient>

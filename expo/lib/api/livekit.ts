@@ -129,7 +129,7 @@ export async function getLiveKitToken(params: {
   }
 
   const normalizedParams = { ...params, room: safeRoom, identity: safeIdentity };
-  const endpoints: LiveKitEndpoint[] = ["voice-token", "livekit-token"];
+  const endpoints: LiveKitEndpoint[] = ["livekit-token", "voice-token"];
   const errors: string[] = [];
 
   for (const endpoint of endpoints) {
