@@ -27,7 +27,7 @@ export default function TokenAvatar({
 }: Props) {
   const [errored, setErrored] = useState<boolean>(false);
   const r = radius ?? Math.round(size * 0.28);
-  const colors = gradient ?? ([Colors.mint, Colors.cyan] as [string, string]);
+  const colors = gradient ?? ([Colors.goldBright, Colors.silver] as [string, string]);
   const hasUri = !!uri && uri.trim().length > 0;
   const seed = (ticker ?? "").replace("$", "");
   const resolvedUri = hasUri
@@ -72,7 +72,7 @@ export default function TokenAvatar({
 }
 
 const styles = StyleSheet.create({
-  wrap: { backgroundColor: Colors.card },
+  wrap: { backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(216,183,90,0.20)" },
   fallback: { alignItems: "center", justifyContent: "center" },
   text: { color: Colors.ink, fontWeight: "900", letterSpacing: 0.4 },
 });

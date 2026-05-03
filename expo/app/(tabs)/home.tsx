@@ -387,7 +387,7 @@ export default function HomeFeedScreen() {
           </Pressable>
           <View style={styles.brandPill}>
             <LinearGradient
-              colors={[Colors.mint, Colors.cyan]}
+              colors={[Colors.goldBright, Colors.silver]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.brandDot}
@@ -584,7 +584,7 @@ function HomeCommandHero() {
   return (
     <View style={styles.commandHero} testID="home-command-hero">
       <LinearGradient
-        colors={["rgba(255,255,255,0.16)", "rgba(255,255,255,0.055)", "rgba(0,0,0,0.2)"]}
+        colors={["rgba(244,198,91,0.20)", "rgba(221,227,236,0.075)", "rgba(0,0,0,0.24)"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -592,7 +592,7 @@ function HomeCommandHero() {
       <View style={styles.commandGrid} pointerEvents="none" />
       <View style={styles.commandTopRow}>
         <View style={styles.commandBadge}>
-          <Sparkles color={Colors.text} size={12} strokeWidth={3} />
+          <Sparkles color={Colors.goldBright} size={12} strokeWidth={3} />
           <Text style={styles.commandBadgeText}>SOLTOOLS COMMAND</Text>
         </View>
         <View style={styles.commandLivePill}>
@@ -632,7 +632,7 @@ function HomeCommandHero() {
           style={({ pressed }) => [styles.commandSecondary, pressed && styles.pressed]}
           testID="hero-open-tools"
         >
-          <Zap color={Colors.text} size={15} strokeWidth={2.8} />
+          <Zap color={Colors.goldBright} size={15} strokeWidth={2.8} />
           <Text style={styles.commandSecondaryText}>Tools</Text>
         </Pressable>
         <Pressable
@@ -640,7 +640,7 @@ function HomeCommandHero() {
           style={({ pressed }) => [styles.commandSecondary, pressed && styles.pressed]}
           testID="hero-open-launches"
         >
-          <Rocket color={Colors.text} size={15} strokeWidth={2.8} />
+          <Rocket color={Colors.silver} size={15} strokeWidth={2.8} />
           <Text style={styles.commandSecondaryText}>Launches</Text>
         </Pressable>
       </View>
@@ -704,7 +704,7 @@ function MarketStrip() {
   return (
     <View style={styles.marketCard}>
       <LinearGradient
-        colors={["rgba(255,255,255,0.14)", "rgba(229,231,235,0.04)"]}
+        colors={["rgba(244,198,91,0.16)", "rgba(221,227,236,0.055)"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.marketGradient}
@@ -1708,7 +1708,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(216,183,90,0.18)",
     backgroundColor: "rgba(5,5,6,0.82)",
   },
   avatarBtn: {
@@ -1719,7 +1719,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(216,183,90,0.18)",
   },
   avatarBtnText: {
     color: Colors.ink,
@@ -1740,9 +1740,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(216,183,90,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(221,227,236,0.10)",
   },
   reactionCount: {
     color: Colors.muted,
@@ -1756,9 +1756,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 8,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(221,227,236,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
+    borderColor: "rgba(244,198,91,0.24)",
   },
   brandDot: { width: 12, height: 12, borderRadius: 4 },
   brandText: {
@@ -1772,9 +1772,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 13,
-    backgroundColor: "rgba(255,255,255,0.055)",
+    backgroundColor: "rgba(216,183,90,0.11)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(216,183,90,0.20)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1810,7 +1810,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(216,183,90,0.12)",
     backgroundColor: "rgba(0,0,0,0.46)",
     overflow: "hidden",
   },
@@ -1825,9 +1825,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.035)",
+    backgroundColor: "rgba(216,183,90,0.055)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.055)",
+    borderColor: "rgba(216,183,90,0.11)",
   },
   filterText: {
     color: Colors.muted,
@@ -1860,10 +1860,10 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 28,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    backgroundColor: "rgba(7,7,8,0.88)",
+    borderColor: "rgba(244,198,91,0.24)",
+    backgroundColor: "rgba(8,7,3,0.90)",
     overflow: "hidden",
-    shadowColor: "#FFFFFF",
+    shadowColor: "#F4C65B",
     shadowOpacity: 0.12,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
@@ -1883,9 +1883,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(244,198,91,0.14)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+    borderColor: "rgba(244,198,91,0.30)",
   },
   commandBadgeText: { color: Colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
   commandLivePill: {
@@ -1895,9 +1895,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(221,227,236,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(216,183,90,0.18)",
   },
   commandLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.text },
   commandLiveText: { color: Colors.text, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
@@ -1924,7 +1924,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "rgba(0,0,0,0.32)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(244,198,91,0.14)",
   },
   commandStatValue: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2 },
   commandStatLabel: { color: Colors.muted, fontSize: 9, fontWeight: "800", marginTop: 3, textTransform: "uppercase" },
@@ -1948,9 +1948,9 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 13,
     borderRadius: 15,
-    backgroundColor: "rgba(255,255,255,0.07)",
+    backgroundColor: "rgba(221,227,236,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.13)",
+    borderColor: "rgba(221,227,236,0.18)",
   },
   commandSecondaryText: { color: Colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 0.2 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
@@ -1960,8 +1960,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(8,12,16,0.65)",
+    borderColor: "rgba(216,183,90,0.12)",
+    backgroundColor: "rgba(8,7,3,0.70)",
   },
 
   composer: {
@@ -1971,9 +1971,9 @@ const styles = StyleSheet.create({
     marginTop: 18,
     padding: 15,
     borderRadius: 22,
-    backgroundColor: "rgba(8,8,9,0.88)",
+    backgroundColor: "rgba(10,8,4,0.88)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.13)",
+    borderColor: "rgba(221,227,236,0.18)",
   },
   composerAvatar: {
     width: 40,
@@ -2005,9 +2005,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(216,183,90,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(221,227,236,0.10)",
   },
   composerActionText: {
     color: Colors.text,
@@ -2021,8 +2021,8 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(7,7,8,0.78)",
+    borderColor: "rgba(216,183,90,0.20)",
+    backgroundColor: "rgba(8,7,3,0.80)",
   },
   marketGradient: {
     paddingVertical: 15,
@@ -2040,7 +2040,7 @@ const styles = StyleSheet.create({
   marketDivider: {
     width: 1,
     height: 32,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(216,183,90,0.12)",
   },
   marketLabel: {
     color: Colors.muted,
@@ -2097,7 +2097,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(221,227,236,0.10)",
     backgroundColor: Colors.card,
   },
   railEmptyTitle: {
@@ -2132,7 +2132,7 @@ const styles = StyleSheet.create({
   pairInner: {
     padding: 14,
     borderRadius: 24,
-    backgroundColor: "rgba(8, 14, 18, 0.86)",
+    backgroundColor: "rgba(10, 8, 4, 0.88)",
     overflow: "hidden",
   },
   pairGlowBlob: {
@@ -2170,7 +2170,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(221,227,236,0.10)",
   },
   ageText: {
     color: Colors.muted,
@@ -2265,7 +2265,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(221,227,236,0.10)",
     backgroundColor: "rgba(255,255,255,0.02)",
   },
   timeframeChipActive: {
@@ -2287,8 +2287,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: "rgba(216,183,90,0.12)",
+    backgroundColor: "rgba(216,183,90,0.045)",
   },
   tickerTabActive: {
     borderColor: `${Colors.mint}88`,
@@ -2312,7 +2312,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(216,183,90,0.085)",
   },
   sectionLabel: {
     color: Colors.muted,
@@ -2378,9 +2378,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(216,183,90,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(221,227,236,0.10)",
   },
   tagText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
   tagCount: { color: Colors.muted, fontSize: 10, fontWeight: "800" },
@@ -2440,9 +2440,9 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(216,183,90,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+    borderColor: "rgba(244,198,91,0.30)",
     marginBottom: 14,
   },
   feedEmptyTitle: {
@@ -2484,9 +2484,9 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
     borderRadius: 22,
-    backgroundColor: "rgba(8,8,9,0.80)",
+    backgroundColor: "rgba(10,8,4,0.82)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.09)",
+    borderColor: "rgba(216,183,90,0.14)",
   },
   postAvatar: {
     width: 42,
@@ -2545,7 +2545,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(221,227,236,0.10)",
   },
   imgGridRow: {
     marginTop: 12,
@@ -2632,9 +2632,9 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     padding: 14,
     borderRadius: 20,
-    backgroundColor: "rgba(8,8,9,0.78)",
+    backgroundColor: "rgba(10,8,4,0.82)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.09)",
+    borderColor: "rgba(216,183,90,0.14)",
   },
   tokenMid: { flex: 1 },
   tokenTopRow: { flexDirection: "row", alignItems: "center", gap: 6 },

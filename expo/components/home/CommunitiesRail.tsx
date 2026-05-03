@@ -61,7 +61,7 @@ export default function CommunitiesRail() {
           testID="discover-communities"
         >
           <LinearGradient
-            colors={["rgba(255,255,255,0.12)", "rgba(229,231,235,0.05)"]}
+            colors={["rgba(244,198,91,0.16)", "rgba(221,227,236,0.06)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.discoverInner}
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(244,198,91,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -191,9 +191,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(216,183,90,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.20)",
+    borderColor: "rgba(216,183,90,0.28)",
   },
   joinedPillText: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
   see: { color: Colors.mint, fontSize: 12, fontWeight: "800" },
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
+    borderColor: "rgba(216,183,90,0.24)",
     backgroundColor: Colors.card,
   },
   discoverInner: { padding: 14, minHeight: 168, justifyContent: "space-between" },
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(244,198,91,0.14)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -235,14 +235,14 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 5,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(8,12,16,0.85)",
+    borderColor: "rgba(216,183,90,0.18)",
+    backgroundColor: "rgba(10,8,4,0.86)",
   },
   cardInner: { padding: 14, minHeight: 168 },
   bannerImage: { ...StyleSheet.absoluteFillObject, opacity: 0.78 },
   bannerShade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(3,7,8,0.42)",
+    backgroundColor: "rgba(4,3,1,0.48)",
   },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   avatar: {
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "rgba(201,206,216,0.14)",
+    backgroundColor: "rgba(244,198,91,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.48)",
   },
   statText: { color: Colors.text, fontSize: 10, fontWeight: "800" },
   onlineDot: { width: 6, height: 6, borderRadius: 4, backgroundColor: Colors.mint },
@@ -296,9 +296,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   joinBtnOn: {
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(221,227,236,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: "rgba(221,227,236,0.18)",
   },
   joinText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
 });

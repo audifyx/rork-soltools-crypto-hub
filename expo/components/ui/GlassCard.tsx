@@ -28,7 +28,7 @@ export default function GlassCard({
   style,
   intensity = 28,
   tint = "dark",
-  borderColor = "rgba(255,255,255,0.10)",
+  borderColor = "rgba(216,183,90,0.18)",
   glowColor,
   radius = 22,
   padding = 16,
@@ -37,8 +37,8 @@ export default function GlassCard({
 }: GlassCardProps) {
   const blurAvailable = Platform.OS !== "web";
   const grad: [string, string] = gradient ?? [
-    "rgba(255,255,255,0.08)",
-    "rgba(255,255,255,0.02)",
+    "rgba(244,198,91,0.11)",
+    "rgba(221,227,236,0.035)",
   ];
 
   return (
@@ -67,7 +67,7 @@ export default function GlassCard({
         <View
           style={[
             StyleSheet.absoluteFill,
-            { backgroundColor: tint === "dark" ? "rgba(8,12,16,0.62)" : "rgba(255,255,255,0.55)" },
+            { backgroundColor: tint === "dark" ? "rgba(12,10,5,0.70)" : "rgba(247,242,231,0.62)" },
           ]}
         />
         <LinearGradient

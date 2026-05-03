@@ -24,7 +24,7 @@ export default function VoiceRoomsRail() {
       <View style={styles.header}>
         <View style={styles.headLeft}>
           <View style={styles.iconBox}>
-            <Headphones color={Colors.violet} size={14} strokeWidth={2.6} />
+            <Headphones color={Colors.goldBright} size={14} strokeWidth={2.6} />
           </View>
           <Text style={styles.title}>Voice rooms</Text>
           {liveSpaces.length > 0 ? (
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 9,
-    backgroundColor: "rgba(184,190,200,0.12)",
+    backgroundColor: "rgba(244,198,91,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -143,13 +143,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(244,244,245,0.10)",
+    backgroundColor: "rgba(244,198,91,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(244,244,245,0.24)",
+    borderColor: "rgba(244,198,91,0.24)",
   },
-  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.rose },
-  liveText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
-  see: { color: Colors.violet, fontSize: 12, fontWeight: "800" },
+  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.goldBright },
+  liveText: { color: Colors.goldBright, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
+  see: { color: Colors.goldBright, fontSize: 12, fontWeight: "800" },
   row: { paddingHorizontal: 14, gap: 12 },
   card: {
     width: 230,
@@ -160,8 +160,8 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 6,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(8,12,16,0.85)",
+    borderColor: "rgba(216,183,90,0.18)",
+    backgroundColor: "rgba(10,8,4,0.86)",
   },
   cardInner: { padding: 14, minHeight: 132, justifyContent: "space-between" },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
@@ -174,9 +174,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(244,244,245,0.12)",
+    backgroundColor: "rgba(244,198,91,0.12)",
   },
-  livePulseText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
+  livePulseText: { color: Colors.goldBright, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
   cardTitle: {
     color: Colors.text,
     fontSize: 15,
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(216,183,90,0.075)",
   },
   statText: { color: Colors.text, fontSize: 11, fontWeight: "800" },
   joinBtn: {

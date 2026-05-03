@@ -11,15 +11,15 @@ interface AppBackgroundProps {
 }
 
 const variantAccents: Record<BackgroundVariant, [string, string, string]> = {
-  feed: ["#FFFFFF", "#9CA3AF", "#3F3F46"],
-  market: ["#F8FAFC", "#A1A1AA", "#52525B"],
-  social: ["#FFFFFF", "#D4D4D8", "#3F3F46"],
-  wallet: ["#FFFFFF", "#A7A7AE", "#27272A"],
-  tool: ["#FFFFFF", "#C7CBD1", "#3A3A42"],
-  neutral: ["#FFFFFF", "#A1A1AA", "#27272A"],
+  feed: [Colors.goldBright, Colors.silver, Colors.bronze],
+  market: [Colors.gold, Colors.platinum, Colors.silver],
+  social: [Colors.platinum, Colors.gold, Colors.silver],
+  wallet: [Colors.goldBright, Colors.goldSoft, Colors.silver],
+  tool: [Colors.gold, Colors.silver, Colors.bronze],
+  neutral: [Colors.gold, Colors.silver, Colors.goldSoft],
 };
 
-/** Atmospheric app-wide background: black/white SolTools slab gradient. */
+/** Atmospheric app-wide background: black, gold, silver SolTools luxury gradient. */
 export default function AppBackground({ variant = "neutral" }: AppBackgroundProps) {
   const accents = variantAccents[variant];
   const gridLines = useMemo<number[]>(() => Array.from({ length: 10 }, (_, i) => i), []);
@@ -27,7 +27,7 @@ export default function AppBackground({ variant = "neutral" }: AppBackgroundProp
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <LinearGradient
-        colors={["#000000", "#030304", "#111113", "#050506", "#000000"]}
+        colors={["#000000", "#060502", "#14110A", "#080807", "#000000"]}
         locations={[0, 0.22, 0.46, 0.72, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -36,12 +36,12 @@ export default function AppBackground({ variant = "neutral" }: AppBackgroundProp
       <View style={styles.carbonPanel} />
       <View style={styles.diagonalPanel} />
       <Text style={styles.watermark}>SOLTOOLS</Text>
-      <Text style={styles.watermarkSmall}>SCAN · SOCIAL · ALPHA</Text>
+      <Text style={styles.watermarkSmall}>GOLD DESK · SOCIAL · ALPHA</Text>
       <View style={[styles.orb, styles.orbTop, { backgroundColor: `${accents[0]}18` }]} />
       <View style={[styles.orb, styles.orbMid, { backgroundColor: `${accents[1]}12` }]} />
       <View style={[styles.orb, styles.orbLow, { backgroundColor: `${accents[2]}1A` }]} />
       <LinearGradient
-        colors={["rgba(255,255,255,0.18)", "rgba(255,255,255,0.035)", "rgba(255,255,255,0.00)"]}
+        colors={["rgba(244,198,91,0.22)", "rgba(221,227,236,0.055)", "rgba(255,255,255,0.00)"]}
         locations={[0, 0.36, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -74,8 +74,8 @@ const styles = StyleSheet.create({
     height: 180,
     borderRadius: 34,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.055)",
-    backgroundColor: "rgba(255,255,255,0.018)",
+    borderColor: "rgba(216,183,90,0.12)",
+    backgroundColor: "rgba(216,183,90,0.035)",
     transform: [{ rotate: "-4deg" }],
   },
   diagonalPanel: {
@@ -86,15 +86,15 @@ const styles = StyleSheet.create({
     height: 520,
     borderRadius: 40,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
-    backgroundColor: "rgba(255,255,255,0.014)",
+    borderColor: "rgba(221,227,236,0.10)",
+    backgroundColor: "rgba(221,227,236,0.022)",
     transform: [{ rotate: "22deg" }],
   },
   watermark: {
     position: "absolute",
     top: 112,
     left: -26,
-    color: "rgba(255,255,255,0.046)",
+    color: "rgba(216,183,90,0.080)",
     fontSize: 58,
     fontWeight: "900",
     letterSpacing: 9,
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 184,
     left: 28,
-    color: "rgba(255,255,255,0.055)",
+    color: "rgba(221,227,236,0.080)",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 3,
@@ -144,21 +144,21 @@ const styles = StyleSheet.create({
   },
   grid: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.13,
+    opacity: 0.18,
   },
   gridLineV: {
     position: "absolute",
     top: 0,
     bottom: 0,
     width: 1,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(216,183,90,0.16)",
   },
   gridLineH: {
     position: "absolute",
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(221,227,236,0.10)",
   },
   bottomFade: {
     position: "absolute",

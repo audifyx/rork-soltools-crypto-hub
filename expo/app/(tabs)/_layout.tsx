@@ -12,7 +12,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.text,
+        tabBarActiveTintColor: Colors.goldBright,
         tabBarInactiveTintColor: Colors.muted,
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.label,
@@ -28,7 +28,7 @@ export default function TabsLayout() {
             ) : null}
             <View style={styles.barBg} />
             <LinearGradient
-              colors={["rgba(255,255,255,0.22)", "rgba(255,255,255,0.08)", "rgba(0,0,0,0.04)"]}
+              colors={["rgba(244,198,91,0.24)", "rgba(221,227,236,0.10)", "rgba(0,0,0,0.04)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     bottom: Platform.OS === "ios" ? 22 : 14,
     borderTopWidth: 0,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.18)",
+    borderColor: "rgba(216,183,90,0.34)",
     backgroundColor: "transparent",
     elevation: 0,
     height: 74,
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius: 24,
     overflow: "hidden",
-    shadowColor: "#FFFFFF",
+    shadowColor: Colors.goldBright,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.18,
     shadowRadius: 20,
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
   },
   barBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.82)",
+    backgroundColor: "rgba(4,3,1,0.88)",
   },
   activePlate: {
     position: "absolute",
@@ -137,13 +137,13 @@ const styles = StyleSheet.create({
     right: 8,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(244,198,91,0.16)",
   },
   barInnerBorder: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(221,227,236,0.14)",
   },
   label: {
     fontSize: 8.5,

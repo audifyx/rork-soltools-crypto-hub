@@ -78,7 +78,7 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
       <View style={styles.card}>
         {/* deep space base */}
         <LinearGradient
-          colors={["#000000", "#09090A", "#000000"]}
+          colors={["#000000", "#120F06", "#020202"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -88,7 +88,7 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
         <View
           style={[
             styles.nebula,
-            { backgroundColor: positive ? "rgba(255,255,255,0.14)" : "rgba(180,180,188,0.14)" },
+            { backgroundColor: positive ? "rgba(244,198,91,0.18)" : "rgba(221,227,236,0.16)" },
           ]}
           pointerEvents="none"
         />
@@ -161,7 +161,7 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
           {token.hot ? (
             <View style={styles.hotPillWrap}>
               <LinearGradient
-                colors={[Colors.mint, Colors.orange, Colors.neon, Colors.cyan]}
+                colors={[Colors.gold, Colors.goldBright, Colors.platinum, Colors.silver]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -206,7 +206,7 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
           testID={`chart-${token.id}`}
         >
           <LinearGradient
-            colors={[Colors.graphite, Colors.neon, Colors.cardSoft]}
+            colors={[Colors.graphite, Colors.goldBright, Colors.cardSoft]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.chartBtn}
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 26,
     minWidth: 0,
-    shadowColor: Colors.neon,
+    shadowColor: Colors.goldBright,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.5,
     shadowRadius: 22,
@@ -258,10 +258,10 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     paddingHorizontal: 14,
     paddingVertical: 16,
-    backgroundColor: "#02040A",
+    backgroundColor: "#050402",
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(216,183,90,0.18)",
   },
   nebula: {
     position: "absolute",
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     bottom: -60,
     left: -70,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(221,227,236,0.10)",
     opacity: 0.7,
   },
   star: {
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#08080F",
+    backgroundColor: "#090704",
   },
   hotText: {
     color: Colors.orange,
@@ -420,9 +420,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(216,183,90,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
+    borderColor: "rgba(244,198,91,0.32)",
     shadowColor: Colors.mint,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
@@ -458,8 +458,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(216,183,90,0.14)",
+    backgroundColor: "rgba(216,183,90,0.055)",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.45,
     shadowRadius: 10,
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
     minWidth: "70%",
     borderRadius: 999,
     overflow: "hidden",
-    shadowColor: Colors.neon,
+    shadowColor: Colors.goldBright,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.95,
     shadowRadius: 16,
