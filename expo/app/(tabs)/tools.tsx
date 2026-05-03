@@ -67,6 +67,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
+import {
+  SOLTOOLS_MODULE_COUNT,
+  SOLTOOLS_TRADING_DISABLED_MESSAGE,
+  getSolToolsModulesByStatus,
+} from "@/lib/soltools-platform";
 
 type LucideIcon = React.ComponentType<{
   color?: string;
@@ -88,7 +93,7 @@ type Tool = {
   glow: string;
   gradient: [string, string];
   tags: string[];
-  status: "LIVE" | "BETA" | "NEW";
+  status: "LIVE" | "BETA" | "NEW" | "GATED";
   category: ToolCategory;
 };
 
@@ -136,15 +141,14 @@ const TOOLS: Tool[] = [
     id: "trade-vault",
     route: "/wallet",
     name: "Trade Vault",
-    tagline: "Create, import, connect Phantom, and swap",
-    description:
-      "Secure Solana trading wallet with local encrypted keys, Phantom deeplinks, Jupiter routes, exports, and trade history.",
+    tagline: "Wallets + swaps gated until App Store launch",
+    description: SOLTOOLS_TRADING_DISABLED_MESSAGE,
     Icon: Wallet,
     accent: Colors.mint,
     glow: "rgba(255,255,255,0.16)",
     gradient: [Colors.mint, Colors.orange],
     tags: ["Wallet", "Jupiter", "Phantom"],
-    status: "LIVE",
+    status: "GATED",
     category: "trading",
   },
   {
@@ -631,6 +635,8 @@ export default function ToolsScreen() {
   }, [recent]);
 
   const featured = TOOLS[0];
+  const liveModuleCount = getSolToolsModulesByStatus("live").length;
+  const betaModuleCount = getSolToolsModulesByStatus("beta").length;
 
   const handleScanSubmit = useCallback(() => {
     const v = scan.trim();
@@ -808,20 +814,20 @@ export default function ToolsScreen() {
 
           <View style={styles.statsRow}>
             <StatTile
-              label="TOOLS"
-              value={TOOLS.length.toString()}
+              label="MODULES"
+              value={SOLTOOLS_MODULE_COUNT.toString()}
               accent={Colors.mint}
               Icon={Wrench}
             />
             <StatTile
               label="LIVE"
-              value={TOOLS.filter((t) => t.status === "LIVE").length.toString()}
+              value={liveModuleCount.toString()}
               accent={Colors.cyan}
               Icon={Activity}
             />
             <StatTile
-              label="NEW"
-              value={TOOLS.filter((t) => t.status === "NEW").length.toString()}
+              label="BETA"
+              value={betaModuleCount.toString()}
               accent={Colors.rose}
               Icon={Sparkles}
             />
@@ -831,6 +837,16 @@ export default function ToolsScreen() {
               accent={Colors.violet}
               Icon={Clock}
             />
+          </View>
+
+          <View style={styles.platformNotice}>
+            <View style={styles.platformNoticeIcon}>
+              <Lock color={Colors.goldBright} size={15} strokeWidth={2.8} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.platformNoticeTitle}>App Store safety mode</Text>
+              <Text style={styles.platformNoticeBody}>{SOLTOOLS_TRADING_DISABLED_MESSAGE}</Text>
+            </View>
           </View>
 
           {recentTools.length > 0 ? (
@@ -958,7 +974,7 @@ export default function ToolsScreen() {
           <View style={styles.footerNote}>
             <Zap color={Colors.mint} size={14} strokeWidth={2.6} />
             <Text style={styles.footerText}>
-              More tools shipping soon · Powered by Helius + RPC
+              Full SOL Tools platform map · Powered by Helius + DexScreener + Supabase
             </Text>
           </View>
         </ScrollView>
@@ -1024,8 +1040,9 @@ function ToolRow({ tool, onPress }: { tool: Tool; onPress: () => void }) {
           {(() => {
             const isLive = tool.status === "LIVE";
             const isNew = tool.status === "NEW";
-            const color = isLive ? Colors.mint : isNew ? Colors.rose : Colors.orange;
-            const PillIcon = isLive ? Activity : Sparkles;
+            const isGated = tool.status === "GATED";
+            const color = isLive ? Colors.mint : isNew ? Colors.rose : isGated ? Colors.goldBright : Colors.orange;
+            const PillIcon = isLive ? Activity : isGated ? Lock : Sparkles;
             return (
               <View
                 style={[
@@ -1062,7 +1079,7 @@ function ToolRow({ tool, onPress }: { tool: Tool; onPress: () => void }) {
         </View>
 
         <View style={styles.openRow}>
-          <Text style={[styles.openText, { color: tool.accent }]}>Open tool</Text>
+          <Text style={[styles.openText, { color: tool.accent }]}>{tool.status === "GATED" ? "View launch gate" : "Open tool"}</Text>
           <ArrowRight color={tool.accent} size={14} strokeWidth={3} />
         </View>
       </View>
@@ -1274,6 +1291,29 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginTop: 2,
   },
+
+  platformNotice: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(244,198,91,0.24)",
+    backgroundColor: "rgba(216,183,90,0.075)",
+    flexDirection: "row",
+    gap: 12,
+  },
+  platformNoticeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(244,198,91,0.34)",
+    backgroundColor: "rgba(244,198,91,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  platformNoticeTitle: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.2 },
+  platformNoticeBody: { color: Colors.muted, fontSize: 11, fontWeight: "700", lineHeight: 16, marginTop: 3 },
 
   section: { marginTop: 22 },
   sectionHead: {

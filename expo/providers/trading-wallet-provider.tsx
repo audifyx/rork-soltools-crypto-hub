@@ -25,6 +25,7 @@ import {
   savePhantomConnection,
   signAndSendLocalSwap,
 } from "@/lib/solana-wallet";
+import { SOLTOOLS_TRADING_DISABLED_MESSAGE, isSolToolsTradingEnabled } from "@/lib/soltools-platform";
 import { useAuth } from "@/providers/auth-provider";
 
 export type TradingWalletType = "local" | "phantom";
@@ -134,6 +135,12 @@ function safeRouteSummary(quote: JupiterQuote): unknown[] {
   return Array.isArray(quote.routePlan) ? quote.routePlan.slice(0, 8) : [];
 }
 
+function assertTradingEnabled(): void {
+  if (!isSolToolsTradingEnabled()) {
+    throw new Error(SOLTOOLS_TRADING_DISABLED_MESSAGE);
+  }
+}
+
 export const [TradingWalletProvider, useTradingWallets] = createContextHook(() => {
   const qc = useQueryClient();
   const { userId, isAuthenticated } = useAuth();
@@ -206,6 +213,7 @@ export const [TradingWalletProvider, useTradingWallets] = createContextHook(() =
 
   const createWallet = useMutation({
     mutationFn: async (label?: string) => {
+      assertTradingEnabled();
       if (!userId) throw new Error("Sign in before creating a trading wallet.");
       const walletId = Crypto.randomUUID();
       const secret = createFreshSolanaWallet();
@@ -241,6 +249,7 @@ export const [TradingWalletProvider, useTradingWallets] = createContextHook(() =
 
   const importWallet = useMutation({
     mutationFn: async (input: { secret: string; label?: string }) => {
+      assertTradingEnabled();
       if (!userId) throw new Error("Sign in before importing a trading wallet.");
       const walletId = Crypto.randomUUID();
       const secret = importSolanaWalletSecret(input.secret);
@@ -276,6 +285,7 @@ export const [TradingWalletProvider, useTradingWallets] = createContextHook(() =
 
   const exportWallet = useCallback(
     async (walletId: string): Promise<WalletExportPayload> => {
+      assertTradingEnabled();
       if (!userId) throw new Error("Sign in to export this wallet.");
       const wallet = wallets.find((w) => w.id === walletId);
       if (!wallet || wallet.type !== "local") throw new Error("Only locally created/imported wallets can be exported here.");
@@ -312,6 +322,7 @@ export const [TradingWalletProvider, useTradingWallets] = createContextHook(() =
   );
 
   const connectPhantom = useCallback(async () => {
+    assertTradingEnabled();
     if (!userId) throw new Error("Sign in before connecting Phantom.");
     const pair = createPhantomDappKeypair();
     pendingPhantomSecretRef.current = pair.secretKeyBase58;
@@ -403,6 +414,7 @@ export const [TradingWalletProvider, useTradingWallets] = createContextHook(() =
 
   const phantomSignAndSend = useCallback(
     async (transactionBytes: Uint8Array): Promise<string> => {
+      assertTradingEnabled();
       if (!userId) throw new Error("Sign in before trading with Phantom.");
       const connection = await readPhantomConnection(userId);
       if (!connection) throw new Error("Connect Phantom first.");
@@ -420,6 +432,7 @@ export const [TradingWalletProvider, useTradingWallets] = createContextHook(() =
   );
 
   const previewQuote = useCallback(async (input: SwapRequest): Promise<JupiterQuote> => {
+    assertTradingEnabled();
     const amountRaw = amountToRaw(input.amountUi, input.inputToken.decimals);
     if (amountRaw === "0") throw new Error("Enter an amount greater than 0.");
     return getQuote({
@@ -432,6 +445,7 @@ export const [TradingWalletProvider, useTradingWallets] = createContextHook(() =
 
   const executeSwap = useMutation({
     mutationFn: async (input: SwapRequest) => {
+      assertTradingEnabled();
       if (!userId) throw new Error("Sign in before trading.");
       const wallet = wallets.find((w) => w.id === input.walletId);
       if (!wallet) throw new Error("Select a trading wallet.");

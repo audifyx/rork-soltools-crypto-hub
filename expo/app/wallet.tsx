@@ -23,9 +23,9 @@ import React, { useCallback } from "react";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
+import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
 
-const COMING_SOON_MESSAGE =
-  "Wallet connection, wallet creation/import/export, Phantom, and Jupiter trading are paused until the App Store launch. For now SolTools is social + crypto discovery only.";
+const COMING_SOON_MESSAGE = SOLTOOLS_TRADING_DISABLED_MESSAGE;
 
 export default function WalletScreen() {
   const router = useRouter();
@@ -56,7 +56,7 @@ export default function WalletScreen() {
           </View>
 
           <LinearGradient
-            colors={["rgba(85,245,178,0.24)", "rgba(56,215,255,0.11)", "rgba(3,7,8,0)"]}
+            colors={["rgba(244,198,91,0.24)", "rgba(221,227,236,0.11)", "rgba(3,7,8,0)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.hero}
@@ -144,19 +144,19 @@ const styles = StyleSheet.create({
   headerMid: { flex: 1 },
   eyebrow: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
   title: { color: Colors.text, fontSize: 29, fontWeight: "900", letterSpacing: -1, marginTop: 2 },
-  hero: { marginTop: 16, padding: 18, borderRadius: 26, borderWidth: 1, borderColor: "rgba(85,245,178,0.24)", overflow: "hidden" },
-  heroIcon: { width: 56, height: 56, borderRadius: 20, backgroundColor: "rgba(85,245,178,0.12)", alignItems: "center", justifyContent: "center" },
+  hero: { marginTop: 16, padding: 18, borderRadius: 26, borderWidth: 1, borderColor: "rgba(244,198,91,0.26)", overflow: "hidden" },
+  heroIcon: { width: 56, height: 56, borderRadius: 20, backgroundColor: "rgba(244,198,91,0.12)", alignItems: "center", justifyContent: "center" },
   heroTitle: { color: Colors.text, fontSize: 25, fontWeight: "900", marginTop: 15, letterSpacing: -0.5 },
   heroText: { color: Colors.muted, fontSize: 13, lineHeight: 20, fontWeight: "700", marginTop: 8 },
   statusPill: { marginTop: 16, alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: Colors.mint, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   statusText: { color: Colors.ink, fontSize: 11, fontWeight: "900", letterSpacing: 0.2 },
   grid: { gap: 10, marginTop: 14 },
-  gateCard: { padding: 15, borderRadius: 22, backgroundColor: "rgba(16,19,29,0.80)", borderWidth: 1, borderColor: "rgba(255,255,255,0.11)" },
+  gateCard: { padding: 15, borderRadius: 22, backgroundColor: "rgba(16,16,14,0.84)", borderWidth: 1, borderColor: "rgba(216,183,90,0.16)" },
   gateIcon: { width: 40, height: 40, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   gateTitle: { color: Colors.text, fontSize: 15, fontWeight: "900", marginTop: 12 },
   gateBody: { color: Colors.muted, fontSize: 12, lineHeight: 18, fontWeight: "700", marginTop: 5 },
   gateStatus: { fontSize: 10, fontWeight: "900", letterSpacing: 1.2, marginTop: 12 },
-  card: { marginTop: 14, padding: 16, borderRadius: 22, backgroundColor: "rgba(16,19,29,0.82)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  card: { marginTop: 14, padding: 16, borderRadius: 22, backgroundColor: "rgba(16,16,14,0.84)", borderWidth: 1, borderColor: "rgba(216,183,90,0.16)" },
   sectionTitle: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.2 },
   bodyText: { color: Colors.muted, fontSize: 13, lineHeight: 20, fontWeight: "700", marginTop: 8 },
   primaryBtn: { marginTop: 14, minHeight: 46, borderRadius: 14, backgroundColor: Colors.mint, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 14 },

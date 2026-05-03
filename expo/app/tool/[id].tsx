@@ -87,6 +87,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import { getTokenOverview, getTokenSecurity, type TokenOverview } from "@/lib/api/birdeye";
 import { getLiveKitToken } from "@/lib/api/livekit";
@@ -100,6 +101,7 @@ import {
 } from "@/lib/api/wallet";
 import { AlertItem, useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
+import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
@@ -112,6 +114,8 @@ interface ToolMeta {
   accent: string;
   description: string;
 }
+
+const TRADING_GATED_TOOLS = new Set<string>(["copy-trade"]);
 
 const META: Record<string, ToolMeta> = {
   "wallet-tracker": {
@@ -191,10 +195,10 @@ const META: Record<string, ToolMeta> = {
   "copy-trade": {
     id: "copy-trade",
     name: "Copy Trade",
-    tagline: "Mirror top wallets",
+    tagline: "Gated until App Store launch",
     Icon: Users,
     accent: Colors.orange,
-    description: "Pick a top performing wallet, set risk, and mirror every trade automatically.",
+    description: SOLTOOLS_TRADING_DISABLED_MESSAGE,
   },
   honeypot: {
     id: "honeypot",
@@ -333,6 +337,7 @@ export default function ToolDetailScreen() {
 
   return (
     <View style={styles.root} testID={`tool-screen-${meta.id}`}>
+      <AppBackground variant="tool" />
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -372,7 +377,7 @@ function ToolHeader({ meta, onBack }: { meta: ToolMeta; onBack: () => void }) {
           <Text style={styles.heroDesc}>{meta.description}</Text>
           <View style={styles.heroLive}>
             <View style={[styles.heroLiveDot, { backgroundColor: meta.accent }]} />
-            <Text style={[styles.heroLiveText, { color: meta.accent }]}>LIVE</Text>
+            <Text style={[styles.heroLiveText, { color: meta.accent }]}>{TRADING_GATED_TOOLS.has(meta.id) ? "GATED" : "LIVE"}</Text>
           </View>
         </LinearGradient>
       </View>
@@ -401,7 +406,7 @@ function ToolBody({ meta }: { meta: ToolMeta }) {
     case "trending":
       return <TokenStreamTool accent={meta.accent} kind={meta.id} />;
     case "copy-trade":
-      return <CopyTradeTool accent={meta.accent} />;
+      return <TradingGatedTool accent={meta.accent} />;
     case "alpha-bot":
       return <AlphaBotTool accent={meta.accent} />;
     case "candle-scanner":
@@ -1926,6 +1931,17 @@ interface CopyConfig {
   address: string;
   riskPct: number;
   enabled: boolean;
+}
+
+function TradingGatedTool({ accent }: { accent: string }) {
+  return (
+    <EmptyState
+      accent={accent}
+      Icon={Lock}
+      title="Trading opens after App Store launch"
+      body={SOLTOOLS_TRADING_DISABLED_MESSAGE}
+    />
+  );
 }
 
 function CopyTradeTool({ accent }: { accent: string }) {
