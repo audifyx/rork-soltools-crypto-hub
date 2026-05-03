@@ -8,6 +8,13 @@ import { compareOgMemeTokens, isOgMemeToken } from "@/lib/alpha-runners";
 import { fetchLivePairs } from "@/lib/api/pairs";
 import { isSafeToken } from "@/lib/safety";
 import { supabase } from "@/lib/supabase";
+import {
+  extractSolanaAddress,
+  fetchLaunchTokenForSearchQuery,
+  getTokenSearchRank,
+  mergeTokenSearchResult,
+  tokenMatchesSearch,
+} from "@/lib/token-search";
 import { useAuth } from "@/providers/auth-provider";
 import {
   LaunchSort,
@@ -158,6 +165,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   const [sort, setSort] = useState<LaunchSort>("newest");
   const [venue, setVenue] = useState<LaunchVenueFilter>("all");
   const [search, setSearch] = useState<string>("");
+  const [searchResolvedToken, setSearchResolvedToken] = useState<LaunchToken | null>(null);
   const [upvoted, setUpvoted] = useState<Record<string, true>>({});
 
   const listingsQuery = useQuery<LaunchToken[]>({
@@ -373,6 +381,29 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   const rawListings = listingsQuery.data ?? [];
 
   useEffect(() => {
+    let alive = true;
+    const q = search.trim();
+    if (q.length === 0 || !extractSolanaAddress(q)) {
+      setSearchResolvedToken(null);
+      return () => {
+        alive = false;
+      };
+    }
+    void (async () => {
+      try {
+        const token = await fetchLaunchTokenForSearchQuery(q);
+        if (alive) setSearchResolvedToken(token);
+      } catch (e) {
+        console.log("[launchpad] contract search fetch failed", e instanceof Error ? e.message : e);
+        if (alive) setSearchResolvedToken(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [search]);
+
+  useEffect(() => {
     if (!isAuthenticated || !userId) return;
     const submissionIds = rawListings.map((t) => t.id).filter(isUuid);
     if (submissionIds.length === 0) return;
@@ -411,27 +442,32 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   const { data: dexMap } = useDexTokens(visibleAddresses);
 
   const listings = useMemo<LaunchToken[]>(() => {
-    if (!dexMap) return rawListings;
-    return rawListings.map((t) => {
-      const live = t.contract ? dexMap[t.contract] : undefined;
-      if (!live) return t;
-      return {
-        ...t,
-        price: live.priceUsd ?? t.price ?? null,
-        change24hPct: live.priceChange24hPct ?? t.change24hPct ?? null,
-        liquidityUsd: live.liquidityUsd ?? t.liquidityUsd ?? null,
-        marketCapUsd: live.marketCapUsd ?? t.marketCapUsd ?? null,
-        volume24hUsd: live.volume24hUsd ?? t.volume24hUsd ?? null,
-        logoUrl: t.logoUrl ?? live.imageUrl ?? null,
-        bannerUrl: t.bannerUrl ?? live.bannerUrl ?? null,
-      };
-    });
-  }, [rawListings, dexMap]);
+    const marketListings = !dexMap
+      ? rawListings
+      : rawListings.map((t) => {
+          const live = t.contract ? dexMap[t.contract] : undefined;
+          if (!live) return t;
+          return {
+            ...t,
+            price: live.priceUsd ?? t.price ?? null,
+            change24hPct: live.priceChange24hPct ?? t.change24hPct ?? null,
+            liquidityUsd: live.liquidityUsd ?? t.liquidityUsd ?? null,
+            marketCapUsd: live.marketCapUsd ?? t.marketCapUsd ?? null,
+            volume24hUsd: live.volume24hUsd ?? t.volume24hUsd ?? null,
+            logoUrl: t.logoUrl ?? live.imageUrl ?? null,
+            bannerUrl: t.bannerUrl ?? live.bannerUrl ?? null,
+          };
+        });
+    return mergeTokenSearchResult(marketListings, searchResolvedToken);
+  }, [rawListings, dexMap, searchResolvedToken]);
 
   const filtered = useMemo<LaunchToken[]>(() => {
+    const pastedAddress = extractSolanaAddress(search);
     let items = listings.slice().filter((t) =>
-      // User-submitted listings always pass; market data is rug-screened.
+      // User-submitted listings always pass; market data is rug-screened unless
+      // the user pasted an exact CA, where showing the requested token is critical.
       t.submittedBy === "user" ||
+        (!!pastedAddress && tokenMatchesSearch(t, search)) ||
         isSafeToken({
           marketCapUsd: t.marketCapUsd,
           liquidityUsd: t.liquidityUsd,
@@ -440,6 +476,12 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
           tags: t.tags,
         }),
     );
+    const q = search.trim();
+    if (pastedAddress) {
+      return items
+        .filter((t) => tokenMatchesSearch(t, q))
+        .sort((a, b) => getTokenSearchRank(a, q) - getTokenSearchRank(b, q) || b.createdAt - a.createdAt);
+    }
     if (tab === "featured") items = items.filter((t) => t.featured);
     if (tab === "mine")
       items = items.filter(
@@ -453,16 +495,14 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
     if (sort === "liquidity") items = items.filter((t) => hasRealMarket(t) && (t.liquidityUsd ?? 0) > 0);
     if (sort === "marketcap") items = items.filter((t) => hasRealMarket(t) && (t.marketCapUsd ?? 0) > 0);
     if (sort === "og") items = items.filter(isOgMemeToken);
-    const q = search.trim().toLowerCase();
     if (q.length > 0) {
-      items = items.filter(
-        (t) =>
-          t.name.toLowerCase().includes(q) ||
-          t.ticker.toLowerCase().includes(q) ||
-          t.contract.toLowerCase().includes(q),
-      );
+      items = items.filter((t) => tokenMatchesSearch(t, q));
     }
     items.sort((a, b) => {
+      if (q.length > 0) {
+        const rankDelta = getTokenSearchRank(a, q) - getTokenSearchRank(b, q);
+        if (rankDelta !== 0) return rankDelta;
+      }
       switch (sort) {
         case "trending":
           return getMarketHeatScore(b) - getMarketHeatScore(a);

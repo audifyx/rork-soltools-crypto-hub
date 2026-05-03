@@ -132,15 +132,25 @@ async function directSwapOrder(params: {
   return JSON.parse(text) as { swapTransaction: string; lastValidBlockHeight?: number };
 }
 
+function cleanTokenQuery(value: string): string {
+  const stripped = value
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/^(ca|contract|mint|address)\s*[:#-]\s*/i, "")
+    .trim();
+  const match = stripped.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
+  return match?.[0] ?? stripped;
+}
+
 function looksLikeSolanaAddress(value: string): boolean {
-  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value.trim());
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(cleanTokenQuery(value));
 }
 
 async function pumpFunTokenSearch(query: string): Promise<JupiterToken[]> {
-  if (!looksLikeSolanaAddress(query)) return [];
-  const token = await fetchPumpFunToken(query);
+  const mint = cleanTokenQuery(query);
+  if (!looksLikeSolanaAddress(mint)) return [];
+  const token = await fetchPumpFunToken(mint);
   if (!token) return [];
-  const address = token.id ?? token.mint ?? query;
+  const address = token.id ?? token.mint ?? mint;
   return [{
     address,
     decimals: Number(token.decimals ?? 0),
@@ -152,8 +162,9 @@ async function pumpFunTokenSearch(query: string): Promise<JupiterToken[]> {
 }
 
 async function dexTokenSearch(query: string): Promise<JupiterToken[]> {
-  if (!looksLikeSolanaAddress(query)) return [];
-  const snap = await fetchDexToken(query);
+  const mint = cleanTokenQuery(query);
+  if (!looksLikeSolanaAddress(mint)) return [];
+  const snap = await fetchDexToken(mint);
   const pair = snap.pair;
   if (!pair?.baseToken?.address) return [];
   return [{
@@ -167,7 +178,7 @@ async function dexTokenSearch(query: string): Promise<JupiterToken[]> {
 }
 
 async function directTokens(query?: string): Promise<JupiterToken[]> {
-  const q = (query ?? "").trim() || "SOL,JUP,USDC,BONK";
+  const q = cleanTokenQuery(query ?? "") || "SOL,JUP,USDC,BONK";
   const res = await fetch(`${JUPITER_TOKENS_DIRECT}?query=${encodeURIComponent(q)}`);
   const text = await res.text();
   if (!res.ok) throw new Error(`Jupiter tokens ${res.status}: ${text}`);
@@ -233,7 +244,7 @@ export async function buildSwapOrder(params: {
 }
 
 export async function getTokens(query?: string): Promise<JupiterToken[]> {
-  const q = (query ?? "").trim();
+  const q = cleanTokenQuery(query ?? "");
   try {
     const edgeRows = await callEdge<JupiterToken[]>(TOKENS_FN, { query: q });
     if (Array.isArray(edgeRows) && edgeRows.length > 0) return edgeRows;

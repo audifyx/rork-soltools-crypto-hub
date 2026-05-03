@@ -33,7 +33,7 @@ import {
   X,
   Zap,
 } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   ListRenderItem,
@@ -66,6 +66,13 @@ import {
 import { fmtUsd } from "@/utils/format";
 import { useApp } from "@/providers/app-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
+import {
+  extractSolanaAddress,
+  fetchLaunchTokenForSearchQuery,
+  getTokenSearchRank,
+  mergeTokenSearchResult,
+  tokenMatchesSearch,
+} from "@/lib/token-search";
 import { LaunchToken } from "@/types/launchpad";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number; fill?: string }>;
@@ -176,9 +183,45 @@ export default function DiscoverScreen() {
   const [query, setQuery] = useState<string>("");
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [searchResolvedToken, setSearchResolvedToken] = useState<LaunchToken | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const q = query.trim();
+    if (q.length === 0 || !extractSolanaAddress(q)) {
+      setSearchResolvedToken(null);
+      return () => {
+        alive = false;
+      };
+    }
+    void (async () => {
+      try {
+        const token = await fetchLaunchTokenForSearchQuery(q);
+        if (alive) setSearchResolvedToken(token);
+      } catch (e) {
+        console.log("[discover] contract search fetch failed", e instanceof Error ? e.message : e);
+        if (alive) setSearchResolvedToken(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [query]);
+
+  const searchableListings = useMemo<LaunchToken[]>(
+    () => mergeTokenSearchResult(listings, searchResolvedToken),
+    [listings, searchResolvedToken],
+  );
 
   const filtered = useMemo<LaunchToken[]>(() => {
-    let items = listings.slice();
+    const q = query.trim();
+    const pastedAddress = extractSolanaAddress(q);
+    let items = searchableListings.slice();
+    if (pastedAddress) {
+      return items
+        .filter((t) => tokenMatchesSearch(t, q))
+        .sort((a, b) => getTokenSearchRank(a, q) - getTokenSearchRank(b, q) || b.createdAt - a.createdAt);
+    }
     if (section === "hot")
       items = items
         .filter((t) => hasRealMarket(t) && heatScore(t) > 0)
@@ -209,17 +252,13 @@ export default function DiscoverScreen() {
         if (cat.id === "og-tokens") items = items.sort(compareOgMemeTokens);
       }
     }
-    const q = query.trim().toLowerCase();
     if (q.length > 0) {
-      items = items.filter(
-        (t) =>
-          t.name.toLowerCase().includes(q) ||
-          t.ticker.toLowerCase().includes(q) ||
-          t.contract.toLowerCase().includes(q),
-      );
+      items = items
+        .filter((t) => tokenMatchesSearch(t, q))
+        .sort((a, b) => getTokenSearchRank(a, q) - getTokenSearchRank(b, q));
     }
     return items;
-  }, [listings, section, query, activeCat]);
+  }, [searchableListings, section, query, activeCat]);
 
   const onOpen = useCallback(
     (id: string) => {
