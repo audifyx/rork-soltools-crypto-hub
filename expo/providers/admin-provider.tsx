@@ -8,46 +8,28 @@ import { useAuth } from "@/providers/auth-provider";
 
 export type AdminRole = "owner" | "superadmin" | "admin" | "moderator" | "support" | "user";
 
-interface AdminRoleRow {
-  user_id: string;
-  role: AdminRole;
-}
-
 export const [AdminProvider, useAdmin] = createContextHook(() => {
   const { userId, email, isAuthenticated } = useAuth();
+  const normalizedEmail = email?.trim().toLowerCase() ?? "";
+  const isOwnerEmail = normalizedEmail === SOLTOOLS_ADMIN_EMAIL;
 
   const roleQuery = useQuery<AdminRole | null>({
-    queryKey: ["admin", "self-role", userId ?? "guest", email ?? ""],
-    enabled: isAuthenticated && !!userId,
+    queryKey: ["admin", "self-role", userId ?? "guest", normalizedEmail],
+    enabled: isAuthenticated && !!userId && isOwnerEmail,
     staleTime: 60_000,
     queryFn: async () => {
-      if (!userId) return null;
-      if (email?.toLowerCase() === SOLTOOLS_ADMIN_EMAIL) {
-        const { error: ownerError } = await supabase.rpc("ensure_owner_role", {
-          check_user_id: userId,
-          check_email: email,
-        });
-        if (ownerError) console.log("[admin] owner role ensure skipped", ownerError.message);
-        return "owner" as const;
-      }
-      const { data, error } = await supabase
-        .from("admin_roles")
-        .select("user_id,role")
-        .eq("user_id", userId)
-        .in("role", ["owner", "superadmin"])
-        .limit(1)
-        .maybeSingle();
-      if (error) {
-        console.log("[admin] self-role error", error.message);
-        return null;
-      }
-      const row = data as AdminRoleRow | null;
-      return row?.role ?? null;
+      if (!userId || !isOwnerEmail) return null;
+      const { error: ownerError } = await supabase.rpc("ensure_owner_role", {
+        check_user_id: userId,
+        check_email: normalizedEmail,
+      });
+      if (ownerError) console.log("[admin] owner role ensure skipped", ownerError.message);
+      return "owner" as const;
     },
   });
 
-  const role = roleQuery.data ?? null;
-  const isOwner = role === "owner" || role === "superadmin";
+  const role = isOwnerEmail ? roleQuery.data ?? "owner" : null;
+  const isOwner = role === "owner" && isOwnerEmail;
   const isAdmin = isOwner;
   const isSuperadmin = isOwner;
 
@@ -57,8 +39,8 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       isAdmin,
       isOwner,
       isSuperadmin,
-      isLoading: roleQuery.isLoading,
+      isLoading: isOwnerEmail && roleQuery.isLoading,
     }),
-    [role, isAdmin, isOwner, isSuperadmin, roleQuery.isLoading],
+    [role, isAdmin, isOwner, isSuperadmin, isOwnerEmail, roleQuery.isLoading],
   );
 });

@@ -19,6 +19,7 @@ export interface CustomBadge {
 
 export interface PublicProfile {
   id: string;
+  user_id: string;
   username: string | null;
   display_name: string | null;
   bio: string | null;
@@ -227,8 +228,10 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
  * Hook for loading another user's profile by handle (X-style).
  */
 function publicProfileFromRow(row: Record<string, unknown>): PublicProfile {
+  const userId = String(row.user_id ?? row.id);
   return {
-    id: String(row.id ?? row.user_id),
+    id: userId,
+    user_id: userId,
     username: (row.username as string | null) ?? null,
     display_name: (row.display_name as string | null) ?? null,
     bio: (row.bio as string | null) ?? null,

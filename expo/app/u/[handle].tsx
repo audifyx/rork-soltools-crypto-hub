@@ -9,6 +9,7 @@ import {
   Copy,
   Globe,
   MapPin,
+  MessageCircle,
   ShieldCheck,
   Sparkles,
   Star,
@@ -37,7 +38,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
 import { useAuth } from "@/providers/auth-provider";
+import { useMessages } from "@/providers/messages-provider";
 import {
   useProfileProvider,
   usePublicProfile,
@@ -49,6 +52,7 @@ export default function PublicProfileScreen() {
   const params = useLocalSearchParams<{ handle: string }>();
   const handle = (params.handle ?? "").toString();
   const { userId, isAuthenticated } = useAuth();
+  const { ensureConversationWith } = useMessages();
   const { toggleFollow, isToggling } = useProfileProvider();
 
   const profileQ = usePublicProfile(handle);
@@ -68,6 +72,32 @@ export default function PublicProfileScreen() {
       Alert.alert("Couldn't update", e instanceof Error ? e.message : "Try again");
     }
   }, [isAuthenticated, profile, isSelf, toggleFollow]);
+
+  const onMessageUser = useCallback(async () => {
+    if (!isAuthenticated) {
+      Alert.alert("Sign in", "Sign in to message traders.");
+      return;
+    }
+    if (!profile || isSelf) return;
+    try {
+      const conversationId = await ensureConversationWith({
+        userId: profile.user_id,
+        handle: `@${profile.username ?? profile.user_id.slice(0, 8)}`,
+        name: profile.display_name ?? profile.username ?? "Trader",
+        color: profile.avatar_color ?? Colors.mint,
+        verified: profile.verified,
+        bio: profile.bio ?? undefined,
+        avatarUrl: profile.avatar_url,
+      });
+      router.push({ pathname: "/dm/[id]", params: { id: conversationId } });
+    } catch (e) {
+      Alert.alert("Message failed", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [ensureConversationWith, isAuthenticated, isSelf, profile, router]);
+
+  const onComingSoonWallet = useCallback(() => {
+    Alert.alert("Coming soon", SOLTOOLS_TRADING_DISABLED_MESSAGE);
+  }, []);
 
   const onOpenLink = useCallback((url: string) => {
     if (!url) return;
@@ -143,13 +173,26 @@ export default function PublicProfileScreen() {
 
             {!isSelf ? (
               <View style={styles.actionStack}>
+                <Pressable
+                  onPress={() => {
+                    if (Platform.OS !== "web") {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    }
+                    onMessageUser();
+                  }}
+                  style={styles.messageBtn}
+                  testID="message-user"
+                >
+                  <MessageCircle color={Colors.ink} size={13} strokeWidth={2.8} />
+                  <Text style={styles.messageBtnText}>Message</Text>
+                </Pressable>
                 {profile.wallet_address ? (
                   <Pressable
                     onPress={() => {
                       if (Platform.OS !== "web") {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                       }
-                      setTipOpen(true);
+                      onComingSoonWallet();
                     }}
                     style={styles.tipBtn}
                     testID="open-tip"
@@ -424,7 +467,7 @@ function TipModal({
             </LinearGradient>
           </Pressable>
           <Text style={tipStyles.foot}>
-            Opens Phantom (or your default wallet) to confirm. SolTools never holds funds.
+            Wallet transfers are coming soon. SolTools never holds funds.
           </Text>
         </Pressable>
       </Pressable>
@@ -495,6 +538,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 10,
+  },
+  messageBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 999,
+    backgroundColor: Colors.mint,
+  },
+  messageBtnText: {
+    color: Colors.ink,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.4,
   },
   tipBtn: {
     flexDirection: "row",

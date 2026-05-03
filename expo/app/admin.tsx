@@ -23,7 +23,6 @@ import {
   ShieldOff,
   Star,
   Trash2,
-  UserPlus,
   Users,
   Volume2,
   Wallet,
@@ -305,7 +304,7 @@ export default function AdminDashboard() {
 
         <View style={styles.content}>
           {section === "overview" && <OverviewSection onJump={setSection} />}
-          {section === "users" && <UsersSection isOwner={isOwner} />}
+          {section === "users" && <UsersSection />}
           {section === "submissions" && <SubmissionsSection />}
           {section === "lobbies" && <LobbiesSection />}
           {section === "credits" && <CreditsSection />}
@@ -413,7 +412,7 @@ function OverviewSection({ onJump }: { onJump: (s: Section) => void }) {
 
 /* --------------------------------- USERS --------------------------------- */
 
-function UsersSection({ isOwner }: { isOwner: boolean }) {
+function UsersSection() {
   const qc = useQueryClient();
   const logAction = useAuditLogger();
   const [query, setQuery] = useState<string>("");
@@ -439,20 +438,6 @@ function UsersSection({ isOwner }: { isOwner: boolean }) {
       return haystack.includes(q);
     });
   }, [query, usersQuery.data]);
-
-  const promoteMutation = useMutation({
-    mutationFn: async (row: ProfileRow) => {
-      const uid = profileUserId(row);
-      const { error } = await supabase.from("admin_roles").upsert(
-        { user_id: uid, email: "", role: "admin", permissions: { dashboard: true } },
-        { onConflict: "user_id" },
-      );
-      if (error) throw error;
-      await logAction("promote_admin", "user", uid, null, { role: "admin" });
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
-    onError: (e: Error) => Alert.alert("Promote failed", e.message),
-  });
 
   const banMutation = useMutation({
     mutationFn: async (row: ProfileRow) => {
@@ -507,7 +492,6 @@ function UsersSection({ isOwner }: { isOwner: boolean }) {
               <ActionButton label="View" Icon={Wallet} onPress={() => Alert.alert("User activity", `PnL: ${Number(item.pnl_pct ?? 0).toFixed(1)}%\nTrades: ${item.trades_count ?? 0}\nWin rate: ${Number(item.win_rate ?? 0).toFixed(0)}%`)} />
               <ActionButton label={item.is_banned ? "Unban" : "Ban"} Icon={Ban} danger onPress={() => banMutation.mutate(item)} />
               <ActionButton label="Reset credits" Icon={Coins} onPress={() => resetCreditsMutation.mutate(item)} />
-              {isOwner ? <ActionButton label="Promote" Icon={UserPlus} onPress={() => promoteMutation.mutate(item)} /> : null}
             </View>
           </View>
         )}
@@ -911,7 +895,7 @@ function SecuritySection({ isOwner }: { isOwner: boolean }) {
     <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
       <View style={styles.noticeCard}>
         <ShieldAlert color={Colors.goldBright} size={18} strokeWidth={2.6} />
-        <Text style={styles.noticeText}>Last login and force-logout require a service-role edge function. Role revocation is enforced by RLS and fully audited.</Text>
+        <Text style={styles.noticeText}>Admin access is owner-only. Any legacy admin/superadmin rows are ignored by the app and should be revoked here after applying the owner-lock SQL.</Text>
       </View>
       {(adminsQuery.data ?? []).map((row) => (
         <View key={`${row.user_id}-${row.role}`} style={styles.card}>

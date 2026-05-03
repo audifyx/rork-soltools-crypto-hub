@@ -17,6 +17,7 @@ import {
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
+  Alert,
   Animated,
   Easing,
   FlatList,
@@ -83,10 +84,14 @@ export default function MessagesScreen() {
 
   const onStartWith = async (user: DMUser) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const id = await ensureConversationWith(user);
-    setComposeOpen(false);
-    setQuery("");
-    router.push({ pathname: "/dm/[id]", params: { id } });
+    try {
+      const id = await ensureConversationWith(user);
+      setComposeOpen(false);
+      setQuery("");
+      router.push({ pathname: "/dm/[id]", params: { id } });
+    } catch (e) {
+      Alert.alert("Message failed", e instanceof Error ? e.message : "Try again.");
+    }
   };
 
   const renderItem: ListRenderItem<Conversation> = ({ item }) => (

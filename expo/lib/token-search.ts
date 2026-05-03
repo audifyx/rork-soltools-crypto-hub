@@ -1,9 +1,13 @@
 import { getTokens, type JupiterToken } from "@/lib/api/jupiter";
 import { scanCommunityToken, type CommunityTokenCard } from "@/lib/community-token";
+import { supabase, SUPABASE_READY } from "@/lib/supabase";
 import type { LaunchToken, LaunchVenue } from "@/types/launchpad";
 
 const SOLANA_ADDRESS_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 const DEFAULT_SEARCH_BANNER = "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/o23za4or0jutesw13rqqp.jpg";
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
+const TOKEN_SEARCH_EDGE = `${SUPABASE_URL}/functions/v1/solana-token-search`;
 
 function normalizeText(input: string): string {
   return input
@@ -12,20 +16,34 @@ function normalizeText(input: string): string {
     .toLowerCase();
 }
 
-/** Removes paste noise around token searches while preserving Solana base58 casing. */
-export function cleanTokenSearchQuery(input: string): string {
-  return input
+function safeDecode(input: string): string {
+  try {
+    return decodeURIComponent(input);
+  } catch {
+    return input;
+  }
+}
+
+function searchFriendlyText(input: string): string {
+  return safeDecode(input)
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .replace(/^(ca|contract|mint|address)\s*[:#-]\s*/i, "")
-    .replace(/^https?:\/\//i, "")
-    .replace(/[?&#].*$/g, "")
+    .replace(/\b(ca|contract|mint|address)\b\s*[:=#-]?\s*/gi, " ")
+    .replace(/[/?&#=,;()\[\]{}"'<>]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
-/** Extracts a Solana mint from pasted text, URLs, or CA-prefixed clipboard contents. */
+/** Removes paste noise around token searches while preserving Solana base58 casing. */
+export function cleanTokenSearchQuery(input: string): string {
+  const address = extractSolanaAddress(input);
+  if (address) return address;
+  return searchFriendlyText(input).replace(/^https?:\s*/i, "").trim();
+}
+
+/** Extracts a Solana mint from pasted text, URLs, query params, or CA-prefixed clipboard contents. */
 export function extractSolanaAddress(input: string): string | null {
-  const cleaned = cleanTokenSearchQuery(input);
-  const matches = cleaned.match(SOLANA_ADDRESS_RE) ?? [];
+  const friendly = searchFriendlyText(input);
+  const matches = friendly.match(SOLANA_ADDRESS_RE) ?? [];
   return matches.find((candidate) => candidate.length >= 32 && candidate.length <= 44) ?? null;
 }
 
@@ -146,10 +164,38 @@ export function mergeTokenSearchResult(tokens: LaunchToken[], result: LaunchToke
   return exists ? tokens : [result, ...tokens];
 }
 
+type TokenSearchEdgeRow = CommunityTokenCard & { scannedAt?: number };
+
+async function fetchTokenSearchEdge(address: string): Promise<LaunchToken | null> {
+  if (!SUPABASE_READY || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token ?? SUPABASE_ANON_KEY;
+    const res = await fetch(TOKEN_SEARCH_EDGE, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ query: address }),
+    });
+    if (!res.ok) throw new Error(`edge ${res.status}`);
+    const row = (await res.json()) as TokenSearchEdgeRow | null;
+    if (!row?.address) return null;
+    return communityTokenToLaunchToken({ ...row, chain: "solana", scannedAt: row.scannedAt ?? Date.now() });
+  } catch (e) {
+    console.log("[token-search] edge fallback", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
 /** Resolves a pasted CA into a displayable token even when it is not in cached feeds yet. */
 export async function fetchLaunchTokenForSearchQuery(query: string): Promise<LaunchToken | null> {
   const address = extractSolanaAddress(query);
   if (!address) return null;
+  const edgeToken = await fetchTokenSearchEdge(address);
+  if (edgeToken) return edgeToken;
   try {
     const scanned = await scanCommunityToken(address, { persist: false });
     return communityTokenToLaunchToken(scanned);
