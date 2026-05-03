@@ -1067,9 +1067,12 @@ function tokenOverviewToPair(t: {
   name?: string;
   logoURI?: string;
   price?: number;
+  priceChange1h?: number;
   priceChange24h?: number;
+  priceChange7d?: number;
   liquidity?: number;
   marketCap?: number;
+  volume24hUSD?: number;
 }, idx: number): LaunchToken {
   const symbol = (t.symbol ?? "").toUpperCase();
   return {
@@ -1092,11 +1095,49 @@ function tokenOverviewToPair(t: {
     change24hPct: t.priceChange24h ?? null,
     liquidityUsd: t.liquidity ?? null,
     marketCapUsd: t.marketCap ?? null,
-    volume24hUsd: t.liquidity ?? null,
+    volume24hUsd: t.volume24hUSD ?? null,
     holders: null,
     upvotes: 0,
     watchers: 0,
   };
+}
+
+function getTickerCategoryItems(tokens: LaunchToken[], tab: TickerTab): LaunchToken[] {
+  const withRealMetrics = tokens.filter((token) => {
+    const hasMarket = (token.marketCapUsd ?? 0) > 0 && (token.liquidityUsd ?? 0) > 0;
+    if (!hasMarket) return false;
+    if (tab === "gainers") return typeof token.change24hPct === "number" && token.change24hPct > 0;
+    if (tab === "losers") return typeof token.change24hPct === "number" && token.change24hPct < 0;
+    if (tab === "volume") return (token.volume24hUsd ?? 0) > 0;
+    return (token.volume24hUsd ?? 0) > 0 || typeof token.change24hPct === "number";
+  });
+
+  const ranked = withRealMetrics.slice();
+  switch (tab) {
+    case "gainers":
+      ranked.sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0));
+      break;
+    case "losers":
+      ranked.sort((a, b) => (a.change24hPct ?? 0) - (b.change24hPct ?? 0));
+      break;
+    case "volume":
+      ranked.sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0));
+      break;
+    case "trending":
+    default:
+      ranked.sort((a, b) => {
+        const score = (token: LaunchToken): number =>
+          (token.hot ? 1_000_000 : 0) +
+          (token.verified ? 250_000 : 0) +
+          (token.volume24hUsd ?? 0) * 0.7 +
+          (token.liquidityUsd ?? 0) * 0.2 +
+          Math.max(0, token.change24hPct ?? 0) * 15_000 +
+          token.upvotes * 2_500;
+        return score(b) - score(a);
+      });
+      break;
+  }
+  return uniqueLaunchTokens(ranked).slice(0, 12);
 }
 
 function TrendingTickersRail() {
@@ -1146,41 +1187,20 @@ function TrendingTickersRail() {
 
   const pairs = useMemo<LaunchToken[]>(() => {
     const fromTrending = (trending ?? [])
-      .filter((t) => !!t.symbol)
+      .filter((t) => !!t.symbol && !!t.address)
       .map((t, i) => {
         const pair = tokenOverviewToPair(t, i);
-        const change = pickChange(t);
         return {
           ...pair,
-          change24hPct: change,
+          change24hPct: pickChange(t),
           volume24hUsd: t.volume24hUSD ?? pair.volume24hUsd,
         };
       })
       .filter((token) => !hasExcludedTokenKey(token, excludedNewPairKeys));
     const fallbackListings = listings.filter((token) => !hasExcludedTokenKey(token, excludedNewPairKeys));
-    const base: LaunchToken[] = fromTrending.length > 0 ? fromTrending : fallbackListings;
-    const arr = base.slice();
-    if (fromTrending.length === 0) {
-      switch (tab) {
-        case "gainers":
-          arr.sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0));
-          break;
-        case "losers":
-          arr.sort((a, b) => (a.change24hPct ?? 0) - (b.change24hPct ?? 0));
-          break;
-        case "volume":
-          arr.sort(
-            (a, b) =>
-              (b.volume24hUsd ?? b.liquidityUsd ?? 0) - (a.volume24hUsd ?? a.liquidityUsd ?? 0)
-          );
-          break;
-        case "trending":
-        default:
-          arr.sort((a, b) => Math.abs(b.change24hPct ?? 0) - Math.abs(a.change24hPct ?? 0));
-          break;
-      }
-    }
-    return uniqueLaunchTokens(arr).slice(0, 12);
+    const primary = getTickerCategoryItems(fromTrending, tab);
+    if (primary.length > 0) return primary;
+    return getTickerCategoryItems(fallbackListings, tab);
   }, [trending, listings, tab, pickChange, excludedNewPairKeys]);
 
   const onOpen = useCallback(
@@ -1193,7 +1213,7 @@ function TrendingTickersRail() {
       <View style={styles.railHeader}>
         <View style={styles.railTitleRow}>
           <TrendingUp color={Colors.mint} size={16} strokeWidth={2.6} />
-          <Text style={styles.railTitle}>Trending tickers</Text>
+          <Text style={styles.railTitle}>{TICKER_TABS.find((t) => t.key === tab)?.label ?? "Trending"} tickers</Text>
         </View>
         <Pressable
           hitSlop={8}
@@ -1269,7 +1289,7 @@ function TrendingTickersRail() {
         <View style={styles.railEmpty} testID="tickers-empty">
           <Text style={styles.railEmptyTitle}>No trending tickers</Text>
           <Text style={styles.railEmptyBody}>
-            Trending tickers will appear here as soon as live market data loads.
+            {TICKER_TABS.find((t) => t.key === tab)?.label ?? "Trending"} tickers will appear here as soon as live market data loads.
           </Text>
         </View>
       )}

@@ -92,9 +92,37 @@ function pairToOverview(pair: DexPair, fallbackAddress: string, rank?: number): 
     liquidity: pair.liquidity?.usd,
     marketCap: pair.marketCap ?? pair.fdv,
     volume24hUSD: pair.volume?.h24,
+    holder: undefined,
     logoURI: pair.info?.imageUrl,
     rank,
   };
+}
+
+function sortOverviewByMetric(items: TokenOverview[], opts: TrendingOpts): TokenOverview[] {
+  const sortBy = opts.sort_by ?? "rank";
+  const sortType = opts.sort_type ?? "desc";
+  const dir = sortType === "asc" ? 1 : -1;
+  const valueFor = (token: TokenOverview): number => {
+    switch (sortBy) {
+      case "volume24hUSD":
+        return token.volume24hUSD ?? 0;
+      case "liquidity":
+        return token.liquidity ?? 0;
+      case "priceChangePercent":
+        return token.priceChange24h ?? token.priceChange1h ?? token.priceChange7d ?? 0;
+      case "rank":
+      default:
+        // Lower rank is better when the upstream provides it. Fallback pairs do
+        // not have a real rank, so use a volume/liquidity momentum score.
+        if (typeof token.rank === "number") return -token.rank;
+        return (token.volume24hUSD ?? 0) * 0.65 + (token.liquidity ?? 0) * 0.25 + Math.abs(token.priceChange24h ?? 0) * 10_000;
+    }
+  };
+  return items.slice().sort((a, b) => {
+    const delta = valueFor(a) - valueFor(b);
+    if (delta !== 0) return delta * dir;
+    return (b.volume24hUSD ?? 0) - (a.volume24hUSD ?? 0);
+  });
 }
 
 async function fallbackTokenOverview(address: string): Promise<TokenOverview> {
@@ -149,8 +177,9 @@ export async function getTrending(
     return res.data ?? [];
   } catch (e) {
     console.log("[birdeye] trending fallback", e instanceof Error ? e.message : e);
-    const pairs = await getNewSolanaPairs(body.limit);
-    return pairs.map((pair, index) => pairToOverview(pair, pair.baseToken?.address ?? "", index + 1));
+    const pairs = await getNewSolanaPairs(Math.max(body.limit, 60));
+    const overviews = pairs.map((pair, index) => pairToOverview(pair, pair.baseToken?.address ?? "", index + 1));
+    return sortOverviewByMetric(overviews, body).slice(0, body.limit);
   }
 }
 

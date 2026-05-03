@@ -52,6 +52,8 @@ const TABS: { key: LaunchTab; label: string; Icon: typeof Rocket }[] = [
 const SORTS: { key: LaunchSort; label: string }[] = [
   { key: "newest", label: "Newest" },
   { key: "trending", label: "Trending" },
+  { key: "gainers", label: "Gainers" },
+  { key: "losers", label: "Losers" },
   { key: "liquidity", label: "Liquidity" },
   { key: "marketcap", label: "Market Cap" },
   { key: "volume", label: "Volume" },

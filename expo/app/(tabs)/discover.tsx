@@ -67,7 +67,7 @@ import { LaunchToken } from "@/types/launchpad";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number; fill?: string }>;
 
-type Section = "all" | "hot" | "new" | "gainers" | "losers" | "whales" | "ai";
+type Section = "all" | "hot" | "new" | "gainers" | "losers" | "volume" | "whales" | "ai";
 
 const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "all", label: "All", Icon: Sparkles },
@@ -75,6 +75,7 @@ const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "new", label: "New", Icon: Zap },
   { id: "gainers", label: "Gainers", Icon: TrendingUp },
   { id: "losers", label: "Losers", Icon: TrendingDown },
+  { id: "volume", label: "Volume", Icon: BarChart3 },
   { id: "whales", label: "Whales", Icon: Waves },
   { id: "ai", label: "Daily Runners", Icon: Bot },
 ];
@@ -91,6 +92,22 @@ function tokenHaystack(t: LaunchToken): string {
   return [t.name, t.ticker, t.description ?? "", ...(t.tags ?? [])]
     .join(" ")
     .toLowerCase();
+}
+
+function hasRealMarket(token: LaunchToken): boolean {
+  return (token.marketCapUsd ?? 0) > 0 && (token.liquidityUsd ?? 0) > 0;
+}
+
+function heatScore(token: LaunchToken): number {
+  return (
+    (token.hot ? 1_000_000 : 0) +
+    (token.verified ? 250_000 : 0) +
+    (token.volume24hUsd ?? 0) * 0.72 +
+    (token.liquidityUsd ?? 0) * 0.22 +
+    Math.max(0, token.change24hPct ?? 0) * 15_000 +
+    token.upvotes * 2_500 +
+    token.watchers * 1_000
+  );
 }
 
 const CATEGORIES: Category[] = [
@@ -151,18 +168,27 @@ export default function DiscoverScreen() {
 
   const filtered = useMemo<LaunchToken[]>(() => {
     let items = listings.slice();
-    if (section === "hot") items = items.filter((t) => t.hot);
+    if (section === "hot")
+      items = items
+        .filter((t) => hasRealMarket(t) && heatScore(t) > 0)
+        .sort((a, b) => heatScore(b) - heatScore(a));
     if (section === "new") items = items.sort((a, b) => b.createdAt - a.createdAt).slice(0, 30);
     if (section === "gainers")
       items = items
-        .filter((t) => (t.change24hPct ?? 0) > 0)
+        .filter((t) => hasRealMarket(t) && (t.change24hPct ?? 0) > 0)
         .sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0));
     if (section === "losers")
       items = items
-        .filter((t) => (t.change24hPct ?? 0) < 0)
+        .filter((t) => hasRealMarket(t) && (t.change24hPct ?? 0) < 0)
         .sort((a, b) => (a.change24hPct ?? 0) - (b.change24hPct ?? 0));
+    if (section === "volume")
+      items = items
+        .filter((t) => hasRealMarket(t) && (t.volume24hUsd ?? 0) > 0)
+        .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0));
     if (section === "whales")
-      items = items.filter((t) => (t.holders ?? 0) > 100 || (t.volume24hUsd ?? 0) > 50_000);
+      items = items
+        .filter((t) => (t.holders ?? 0) > 100 || (t.volume24hUsd ?? 0) > 50_000)
+        .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0));
     if (section === "ai") items = getDailyAlphaRunners(items, 50);
     if (activeCat) {
       const cat = CATEGORIES.find((c) => c.id === activeCat);
@@ -219,14 +245,18 @@ export default function DiscoverScreen() {
   }, [listings, watchlist]);
 
   const featuredSpotlight = useMemo(
-    () => listings.filter((t) => t.featured || t.hot).slice(0, 6),
+    () =>
+      listings
+        .filter((t) => t.featured || (hasRealMarket(t) && heatScore(t) > 0))
+        .sort((a, b) => Number(b.featured) - Number(a.featured) || heatScore(b) - heatScore(a))
+        .slice(0, 6),
     [listings],
   );
 
   const topGainers = useMemo(
     () =>
       listings
-        .filter((t) => (t.change24hPct ?? 0) > 0)
+        .filter((t) => hasRealMarket(t) && (t.change24hPct ?? 0) > 0)
         .sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0))
         .slice(0, 5),
     [listings],
@@ -235,7 +265,7 @@ export default function DiscoverScreen() {
   const topLosers = useMemo(
     () =>
       listings
-        .filter((t) => (t.change24hPct ?? 0) < 0)
+        .filter((t) => hasRealMarket(t) && (t.change24hPct ?? 0) < 0)
         .sort((a, b) => (a.change24hPct ?? 0) - (b.change24hPct ?? 0))
         .slice(0, 5),
     [listings],

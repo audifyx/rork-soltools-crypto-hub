@@ -89,6 +89,23 @@ function isUuid(input: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input);
 }
 
+function hasRealMarket(token: LaunchToken): boolean {
+  return (token.marketCapUsd ?? 0) > 0 && (token.liquidityUsd ?? 0) > 0;
+}
+
+function getMarketHeatScore(token: LaunchToken): number {
+  return (
+    (token.hot ? 1_000_000 : 0) +
+    (token.verified ? 250_000 : 0) +
+    (token.featured ? 150_000 : 0) +
+    (token.volume24hUsd ?? 0) * 0.72 +
+    (token.liquidityUsd ?? 0) * 0.22 +
+    Math.max(0, token.change24hPct ?? 0) * 15_000 +
+    token.upvotes * 2_500 +
+    token.watchers * 1_000
+  );
+}
+
 function rowToToken(row: Record<string, unknown>, _currentUserId: string | null): LaunchToken {
   const venueRaw = String(row.status ?? "other").toLowerCase();
   const venue: LaunchVenue = (VALID_VENUES.includes(venueRaw as LaunchVenue)
@@ -428,6 +445,12 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
         (t) => !!userId && t.ownerId === userId,
       );
     if (venue !== "all") items = items.filter((t) => t.venue === venue);
+    if (sort === "trending") items = items.filter((t) => hasRealMarket(t) && getMarketHeatScore(t) > 0);
+    if (sort === "gainers") items = items.filter((t) => hasRealMarket(t) && (t.change24hPct ?? 0) > 0);
+    if (sort === "losers") items = items.filter((t) => hasRealMarket(t) && (t.change24hPct ?? 0) < 0);
+    if (sort === "volume") items = items.filter((t) => hasRealMarket(t) && (t.volume24hUsd ?? 0) > 0);
+    if (sort === "liquidity") items = items.filter((t) => hasRealMarket(t) && (t.liquidityUsd ?? 0) > 0);
+    if (sort === "marketcap") items = items.filter((t) => hasRealMarket(t) && (t.marketCapUsd ?? 0) > 0);
     const q = search.trim().toLowerCase();
     if (q.length > 0) {
       items = items.filter(
@@ -440,7 +463,11 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
     items.sort((a, b) => {
       switch (sort) {
         case "trending":
-          return b.upvotes - a.upvotes;
+          return getMarketHeatScore(b) - getMarketHeatScore(a);
+        case "gainers":
+          return (b.change24hPct ?? Number.NEGATIVE_INFINITY) - (a.change24hPct ?? Number.NEGATIVE_INFINITY);
+        case "losers":
+          return (a.change24hPct ?? Number.POSITIVE_INFINITY) - (b.change24hPct ?? Number.POSITIVE_INFINITY);
         case "liquidity":
           return (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0);
         case "marketcap":
@@ -467,7 +494,12 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
 
   const featured = useMemo(() => listings.filter((t) => t.featured), [listings]);
   const trending = useMemo(
-    () => listings.slice().sort((a, b) => b.upvotes - a.upvotes).slice(0, 12),
+    () =>
+      listings
+        .slice()
+        .filter((t) => hasRealMarket(t) && ((t.volume24hUsd ?? 0) > 0 || typeof t.change24hPct === "number"))
+        .sort((a, b) => getMarketHeatScore(b) - getMarketHeatScore(a))
+        .slice(0, 12),
     [listings],
   );
 

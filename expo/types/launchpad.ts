@@ -42,5 +42,5 @@ export interface LaunchpadStats {
 }
 
 export type LaunchTab = "all" | "featured" | "mine";
-export type LaunchSort = "newest" | "trending" | "liquidity" | "marketcap" | "volume";
+export type LaunchSort = "newest" | "trending" | "gainers" | "losers" | "liquidity" | "marketcap" | "volume";
 export type LaunchVenueFilter = LaunchVenue | "all";
