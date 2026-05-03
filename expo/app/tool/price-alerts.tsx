@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -15,7 +14,7 @@ import {
   TrendingUp,
   X,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -29,24 +28,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useTrendingTokens } from "@/lib/api/market";
+import { useApp } from "@/providers/app-provider";
 
-interface Alert {
-  id: string;
-  symbol: string;
-  mint: string;
-  condition: "above" | "below";
-  target: number;
-  discord: boolean;
-  ts: number;
-}
-
-const KEY = "price-alerts.list.v1";
 const ACCENT = Colors.mint;
 
 export default function PriceAlertsScreen() {
   const router = useRouter();
   const trending = useTrendingTokens(20);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const { alerts, addAlert, removeAlert } = useApp();
   const [pickedSymbol, setPickedSymbol] = useState<string>("");
   const [pickedMint, setPickedMint] = useState<string>("");
   const [customMint, setCustomMint] = useState<string>("");
@@ -54,23 +43,6 @@ export default function PriceAlertsScreen() {
   const [target, setTarget] = useState<string>("0.00001");
   const [discord, setDiscord] = useState<boolean>(false);
 
-  useEffect(() => {
-    AsyncStorage.getItem(KEY)
-      .then((raw) => {
-        if (!raw) return;
-        try {
-          const p = JSON.parse(raw) as Alert[];
-          if (Array.isArray(p)) setAlerts(p);
-        } catch (e) {
-          console.log("[price-alerts] parse", e);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  const persist = useCallback((next: Alert[]) => {
-    AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => {});
-  }, []);
 
   const tokens = useMemo(() => {
     const list = (trending.data ?? []).slice(0, 12);
@@ -92,37 +64,29 @@ export default function PriceAlertsScreen() {
     }
   }, []);
 
-  const onCreate = useCallback(() => {
+  const onCreate = useCallback(async () => {
     const mint = pickedMint || customMint.trim();
     if (!mint) return;
     const num = parseFloat(target);
     if (!Number.isFinite(num) || num <= 0) return;
-    const a: Alert = {
-      id: `${Date.now()}`,
-      symbol: pickedSymbol || "TOKEN",
-      mint,
-      condition,
-      target: num,
-      discord,
-      ts: Date.now(),
-    };
-    const next = [a, ...alerts];
-    setAlerts(next);
-    persist(next);
+    await addAlert({
+      ticker: (pickedSymbol || "TOKEN").replace("$", "").toUpperCase(),
+      contract: mint,
+      type: condition === "above" ? "price-above" : "price-below",
+      value: num,
+    });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     setPickedSymbol("");
     setPickedMint("");
     setCustomMint("");
     setTarget("0.00001");
-  }, [pickedMint, customMint, target, pickedSymbol, condition, discord, alerts, persist]);
+  }, [pickedMint, customMint, target, pickedSymbol, condition, addAlert]);
 
   const remove = useCallback(
-    (id: string) => {
-      const next = alerts.filter((a) => a.id !== id);
-      setAlerts(next);
-      persist(next);
+    async (id: string) => {
+      await removeAlert(id);
     },
-    [alerts, persist],
+    [removeAlert],
   );
 
   return (
@@ -288,8 +252,9 @@ export default function PriceAlertsScreen() {
               </View>
             ) : (
               alerts.map((a) => {
-                const Icon = a.condition === "above" ? TrendingUp : TrendingDown;
-                const c = a.condition === "above" ? Colors.mint : Colors.rose;
+                const isAbove = a.type === "price-above" || a.type === "volume-spike" || a.type === "whale-buy";
+                const Icon = isAbove ? TrendingUp : TrendingDown;
+                const c = isAbove ? Colors.mint : Colors.rose;
                 return (
                   <View key={a.id} style={s.alertRow}>
                     <View style={[s.evIcon, { backgroundColor: `${c}1A`, borderColor: `${c}55` }]}>
@@ -297,10 +262,10 @@ export default function PriceAlertsScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={s.alertTitle}>
-                        ${a.symbol} {a.condition} ${a.target}
+                        ${a.ticker} {isAbove ? "above" : "below"} ${a.value}
                       </Text>
                       <Text style={s.alertSub}>
-                        {a.mint.slice(0, 4)}…{a.mint.slice(-4)} · {a.discord ? "Discord on" : "Push only"}
+                        {(a.contract ?? a.ticker).slice(0, 4)}…{(a.contract ?? a.ticker).slice(-4)} · {a.enabled ? "Active" : "Paused"}
                       </Text>
                     </View>
                     <Pressable onPress={() => remove(a.id)} hitSlop={6}>

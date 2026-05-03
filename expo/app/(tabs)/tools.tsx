@@ -69,8 +69,12 @@ import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import {
   SOLTOOLS_MODULE_COUNT,
+  SOLTOOLS_PLATFORM_MODULES,
   SOLTOOLS_TRADING_DISABLED_MESSAGE,
   getSolToolsModulesByStatus,
+  type SolToolsModuleCategory,
+  type SolToolsModuleSpec,
+  type SolToolsModuleStatus,
 } from "@/lib/soltools-platform";
 
 type LucideIcon = React.ComponentType<{
@@ -80,7 +84,7 @@ type LucideIcon = React.ComponentType<{
   fill?: string;
 }>;
 
-type ToolCategory = "trading" | "analysis" | "defi" | "risk" | "wallet";
+type ToolCategory = "trading" | "analysis" | "defi" | "risk" | "wallet" | "social" | "platform";
 
 type Tool = {
   id: string;
@@ -103,6 +107,8 @@ const CATEGORIES: { key: ToolCategory; label: string; Icon: LucideIcon; accent: 
   { key: "defi", label: "DeFi & Yield", Icon: Coins, accent: Colors.violet },
   { key: "risk", label: "Risk", Icon: ShieldAlert, accent: Colors.rose },
   { key: "wallet", label: "Wallet Intel", Icon: Wallet, accent: Colors.orange },
+  { key: "social", label: "Social + Voice", Icon: Users, accent: Colors.silver },
+  { key: "platform", label: "Platform", Icon: Wrench, accent: Colors.goldBright },
 ];
 
 const TOOLS: Tool[] = [
@@ -541,6 +547,69 @@ const TOOLS: Tool[] = [
   },
 ];
 
+function moduleStatusToToolStatus(status: SolToolsModuleStatus): Tool["status"] {
+  if (status === "live") return "LIVE";
+  if (status === "gated") return "GATED";
+  if (status === "planned") return "NEW";
+  return "BETA";
+}
+
+function moduleCategoryToToolCategory(category: SolToolsModuleCategory): ToolCategory {
+  if (category === "wallet" || category === "premium" || category === "credits") return "wallet";
+  if (category === "token" || category === "ai" || category === "basic") return "analysis";
+  if (category === "advanced") return "risk";
+  if (category === "social" || category === "voice" || category === "notifications") return "social";
+  if (category === "launchpad") return "trading";
+  return "platform";
+}
+
+function moduleIconForCategory(category: SolToolsModuleCategory): LucideIcon {
+  if (category === "wallet" || category === "premium" || category === "credits") return Wallet;
+  if (category === "token" || category === "basic") return ScanLine;
+  if (category === "ai") return Brain;
+  if (category === "advanced") return ShieldAlert;
+  if (category === "social") return Users;
+  if (category === "voice") return Mic;
+  if (category === "notifications") return BellRing;
+  if (category === "launchpad") return Zap;
+  return Wrench;
+}
+
+function moduleAccentForCategory(category: ToolCategory): string {
+  if (category === "trading") return Colors.mint;
+  if (category === "analysis") return Colors.cyan;
+  if (category === "defi") return Colors.violet;
+  if (category === "risk") return Colors.rose;
+  if (category === "wallet") return Colors.orange;
+  if (category === "social") return Colors.silver;
+  return Colors.goldBright;
+}
+
+function moduleToTool(module: SolToolsModuleSpec): Tool {
+  const category = moduleCategoryToToolCategory(module.category);
+  const accent = moduleAccentForCategory(category);
+  const creditTag = module.creditCost != null ? `${module.creditCost} credits` : module.status;
+  return {
+    id: module.id,
+    route: module.route ?? "/(tabs)/tools",
+    name: module.name,
+    tagline: module.status === "gated" ? "Paused until App Store launch" : `${module.surface} · ${module.status.toUpperCase()}`,
+    description: module.gatedReason ?? `${module.name} is wired into ${module.surface} using the existing SolTools data layer and routes.`,
+    Icon: moduleIconForCategory(module.category),
+    accent,
+    glow: `${accent}18`,
+    gradient: [accent, Colors.silver],
+    tags: [module.category, module.surface.split(" ")[0] ?? "SolTools", creditTag].slice(0, 3),
+    status: moduleStatusToToolStatus(module.status),
+    category,
+  };
+}
+
+const ALL_TOOLS: Tool[] = [
+  ...TOOLS,
+  ...SOLTOOLS_PLATFORM_MODULES.filter((module) => !TOOLS.some((tool) => tool.id === module.id)).map(moduleToTool),
+];
+
 const RECENT_KEY = "tools.recent.v1";
 const MAX_RECENT = 5;
 
@@ -619,8 +688,8 @@ export default function ToolsScreen() {
 
   const filtered = useMemo<Tool[]>(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return TOOLS;
-    return TOOLS.filter(
+    if (!q) return ALL_TOOLS;
+    return ALL_TOOLS.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
         t.tagline.toLowerCase().includes(q) ||
@@ -630,11 +699,11 @@ export default function ToolsScreen() {
 
   const recentTools = useMemo<Tool[]>(() => {
     return recent
-      .map((r) => TOOLS.find((t) => t.id === r.id))
+      .map((r) => ALL_TOOLS.find((t) => t.id === r.id))
       .filter((t): t is Tool => Boolean(t));
   }, [recent]);
 
-  const featured = TOOLS[0];
+  const featured = ALL_TOOLS[0];
   const liveModuleCount = getSolToolsModulesByStatus("live").length;
   const betaModuleCount = getSolToolsModulesByStatus("beta").length;
 
@@ -946,7 +1015,7 @@ export default function ToolsScreen() {
             ) : (
               <View style={{ marginTop: 6 }}>
                 {CATEGORIES.map((cat) => {
-                  const items = TOOLS.filter((t) => t.category === cat.key);
+                  const items = ALL_TOOLS.filter((t) => t.category === cat.key);
                   if (items.length === 0) return null;
                   return (
                     <View key={cat.key} style={styles.catBlock}>

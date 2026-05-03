@@ -75,8 +75,15 @@ function shortContract(contract: string): string {
 
 export default function TokenLookupScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ address?: string }>();
-  const initial = typeof params.address === "string" ? params.address : "";
+  const params = useLocalSearchParams<{ address?: string; ca?: string; mint?: string }>();
+  const initial =
+    typeof params.address === "string"
+      ? params.address
+      : typeof params.ca === "string"
+        ? params.ca
+        : typeof params.mint === "string"
+          ? params.mint
+          : "";
 
   const [input, setInput] = useState<string>(initial);
   const [contract, setContract] = useState<string>(initial);

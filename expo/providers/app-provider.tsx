@@ -37,6 +37,7 @@ export interface WatchItem {
 export interface AlertItem {
   id: string;
   ticker: string;
+  contract?: string;
   type: "price-above" | "price-below" | "volume-spike" | "whale-buy";
   value: number;
   enabled: boolean;
@@ -264,6 +265,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
           return (data ?? []).map((r): AlertItem => ({
             id: r.id as string,
             ticker: ((r.symbol as string) ?? "").toUpperCase(),
+            contract: (r.token_address as string) ?? undefined,
             type: condToAlertType[(r.condition as string) ?? "above"] ?? "price-above",
             value: Number(r.target_price ?? 0),
             enabled: !!r.is_active,
@@ -615,8 +617,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
   );
 
   const addAlert = useCallback(
-    async (input: { ticker: string; type: AlertItem["type"]; value: number }) => {
+    async (input: { ticker: string; type: AlertItem["type"]; value: number; contract?: string }) => {
       const ticker = input.ticker.toUpperCase();
+      const contract = input.contract?.trim() || ticker;
       if (isAuthenticated && userId) {
         try {
           const { data, error } = await supabase
@@ -624,7 +627,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
             .insert({
               user_id: userId,
               symbol: ticker,
-              token_address: ticker,
+              token_address: contract,
               target_price: input.value,
               condition: alertTypeToCond[input.type],
               is_active: true,
@@ -635,6 +638,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
           const item: AlertItem = {
             id: data.id as string,
             ticker,
+            contract,
             type: input.type,
             value: input.value,
             enabled: true,
@@ -650,6 +654,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       const item: AlertItem = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         ticker,
+        contract,
         type: input.type,
         value: input.value,
         enabled: true,

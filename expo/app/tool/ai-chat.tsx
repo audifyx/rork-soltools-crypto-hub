@@ -13,6 +13,7 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -25,6 +26,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { fetchWalletPortfolio } from "@/lib/api/wallet";
+import { isSolanaAddress, scanCommunityToken } from "@/lib/community-token";
+import { fmtNum, fmtPct, fmtUsd } from "@/utils/format";
 
 type Msg = {
   id: string;
@@ -50,28 +54,83 @@ export default function AIChatScreen() {
   const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>([STARTER_AI]);
   const [draft, setDraft] = useState<string>("");
+  const [thinking, setThinking] = useState<boolean>(false);
   const scrollRef = useRef<ScrollView | null>(null);
 
   const send = useCallback(
-    (text: string) => {
+    async (text: string) => {
       const trimmed = text.trim();
-      if (trimmed.length === 0) return;
+      if (trimmed.length === 0 || thinking) return;
       Haptics.selectionAsync().catch(() => {});
       const id = Date.now().toString();
       const userMsg: Msg = { id, role: "user", text: trimmed };
-      const aiMsg: Msg = {
+      const thinkingMsg: Msg = {
         id: `${id}-a`,
         role: "ai",
-        text:
-          "Pulling live on-chain context… I'll parse the address, fetch holders, flows, and history, then summarize key signals here.",
+        text: "Pulling live Solana context…",
       };
-      setMessages((prev) => [...prev, userMsg, aiMsg]);
+      const nextMessages = [...messages, userMsg];
+      setMessages([...nextMessages, thinkingMsg]);
       setDraft("");
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollToEnd({ animated: true });
-      });
+      setThinking(true);
+      requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+
+      try {
+        const address = trimmed.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/)?.[0] ?? null;
+        let liveContext = "No address detected in the prompt.";
+        if (address && isSolanaAddress(address)) {
+          const [tokenScan, wallet] = await Promise.all([
+            scanCommunityToken(address).catch((e) => {
+              console.log("[ai-chat] token context failed", e);
+              return null;
+            }),
+            fetchWalletPortfolio(address).catch((e) => {
+              console.log("[ai-chat] wallet context failed", e);
+              return null;
+            }),
+          ]);
+          const tokenLine = tokenScan
+            ? `Token: ${tokenScan.name} (${tokenScan.symbol}), MC ${fmtUsd(tokenScan.marketCapUsd)}, liquidity ${fmtUsd(tokenScan.liquidityUsd)}, volume ${fmtUsd(tokenScan.volume24hUsd)}, holders ${fmtNum(tokenScan.holderCount)}, 24h ${fmtPct(tokenScan.change24h)}.`
+            : "Token context unavailable.";
+          const walletLine = wallet
+            ? `Wallet: ${wallet.balance.sol.toFixed(4)} SOL, net ${fmtUsd(wallet.balance.usd)}, ${wallet.tokens.length} token holdings, ${wallet.stats.totalTxs} recent transactions, active ${wallet.stats.activeDays} days.`
+            : "Wallet context unavailable.";
+          liveContext = `${tokenLine}\n${walletLine}`;
+        }
+
+        const base = process.env.EXPO_PUBLIC_TOOLKIT_URL ?? "https://toolkit.rork.com";
+        const res = await fetch(`${base}/text/llm/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are SolTools AI, a concise Solana on-chain analyst. Use the provided live context when available. Trading execution is disabled until App Store launch, so do not tell users to buy/sell inside the app.",
+              },
+              { role: "system", content: `Live context:\n${liveContext}` },
+              ...nextMessages.slice(-10).map((m) => ({
+                role: m.role === "ai" ? "assistant" : "user",
+                content: m.text,
+              })),
+            ],
+          }),
+        });
+        if (!res.ok) throw new Error(`AI ${res.status}`);
+        const json = (await res.json()) as { completion?: string };
+        const reply = json.completion ?? "I could not generate a response from the live context.";
+        setMessages((prev) => prev.map((m) => (m.id === thinkingMsg.id ? { ...m, text: reply } : m)));
+      } catch (e) {
+        console.log("[ai-chat] send failed", e);
+        const reply = e instanceof Error ? `AI request failed: ${e.message}` : "AI request failed.";
+        setMessages((prev) => prev.map((m) => (m.id === thinkingMsg.id ? { ...m, text: reply } : m)));
+      } finally {
+        setThinking(false);
+        requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+      }
     },
-    []
+    [messages, thinking],
   );
 
   return (
@@ -130,7 +189,7 @@ export default function AIChatScreen() {
               {SUGGESTIONS.map((s) => (
                 <Pressable
                   key={s.label}
-                  onPress={() => send(s.prompt)}
+                  onPress={() => { void send(s.prompt); }}
                   style={styles.suggestChip}
                 >
                   <Zap color={Colors.orange} size={11} strokeWidth={3} />
@@ -154,18 +213,18 @@ export default function AIChatScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               multiline
-              onSubmitEditing={() => send(draft)}
+              onSubmitEditing={() => { void send(draft); }}
             />
             <Pressable
-              onPress={() => send(draft)}
-              disabled={draft.trim().length === 0}
+              onPress={() => { void send(draft); }}
+              disabled={draft.trim().length === 0 || thinking}
               style={[
                 styles.sendBtn,
-                draft.trim().length === 0 && { opacity: 0.4 },
+                (draft.trim().length === 0 || thinking) && { opacity: 0.4 },
               ]}
               testID="chat-send"
             >
-              <ArrowUp color={Colors.ink} size={18} strokeWidth={3} />
+              {thinking ? <ActivityIndicator color={Colors.ink} size="small" /> : <ArrowUp color={Colors.ink} size={18} strokeWidth={3} />}
             </Pressable>
           </View>
         </KeyboardAvoidingView>

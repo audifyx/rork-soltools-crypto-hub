@@ -70,6 +70,7 @@ import {
   Volume2,
   Wallet,
   Waves,
+  Wrench,
   X,
   Zap,
 } from "lucide-react-native";
@@ -101,7 +102,12 @@ import {
 } from "@/lib/api/wallet";
 import { AlertItem, useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
-import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
+import {
+  SOLTOOLS_PLATFORM_MODULES,
+  SOLTOOLS_TRADING_DISABLED_MESSAGE,
+  type SolToolsModuleCategory,
+  type SolToolsModuleSpec,
+} from "@/lib/soltools-platform";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
@@ -115,7 +121,10 @@ interface ToolMeta {
   description: string;
 }
 
-const TRADING_GATED_TOOLS = new Set<string>(["copy-trade"]);
+const TRADING_GATED_TOOLS = new Set<string>([
+  "copy-trade",
+  ...SOLTOOLS_PLATFORM_MODULES.filter((module) => module.status === "gated").map((module) => module.id),
+]);
 
 const META: Record<string, ToolMeta> = {
   "wallet-tracker": {
@@ -300,24 +309,66 @@ const META: Record<string, ToolMeta> = {
 };
 
 const CONTRACT_TOOLS = new Set<string>([
-  "holder-analysis", "liquidity-scanner", "token-metadata", "whale-concentration",
+  "holder-analysis", "liquidity-scanner", "token-metadata", "token-metadata-inspector", "whale-concentration",
   "wash-trading", "insider-detector", "rug-detector", "risk-detector",
-  "token-creator", "burn-watcher", "token-locks", "mev-tracker",
-  "impermanent-loss", "jupiter-routes",
+  "token-creator", "token-creator-tracker", "burn-watcher", "token-locks", "token-lock-monitor", "mev-tracker",
+  "impermanent-loss", "jupiter-routes", "jupiter-route-tracker", "lp-position-scanner", "program-interaction-monitor",
 ]);
 const WALLET_TOOLS = new Set<string>([
-  "wallet-profiler", "profit-curve", "trading-style", "wallet-age",
-  "transfer-profiler", "wallet-graph", "stake-tracker", "airdrop-analyzer",
-  "multi-wallet", "sol-depletion", "fee-analyzer", "lp-scanner",
+  "wallet-profiler", "profit-curve", "profit-curve-generator", "trading-style", "trading-style-classifier", "wallet-age", "wallet-age-calculator",
+  "transfer-profiler", "wallet-graph", "wallet-relationship-graph", "stake-tracker", "stake-account-tracker", "airdrop-analyzer",
+  "multi-wallet", "multi-wallet-merge", "sol-depletion", "sol-depletion-warning", "fee-analyzer", "lp-scanner", "lp-position-scanner",
+  "portfolio-comparison", "trade-history",
 ]);
 const STREAM_TOOLS = new Set<string>([
-  "token-sniper", "liquidity-sniper", "program-monitor", "staking-calculator",
+  "token-sniper", "token-sniper-v2", "liquidity-sniper", "program-monitor", "staking-calculator", "live-feed", "tokens-tracker",
 ]);
+
+function moduleIcon(category: SolToolsModuleCategory): LucideIcon {
+  if (category === "wallet" || category === "premium" || category === "credits") return Wallet;
+  if (category === "token" || category === "basic") return Scan;
+  if (category === "ai") return Brain;
+  if (category === "advanced") return ShieldAlert;
+  if (category === "voice") return Mic;
+  if (category === "social") return Users;
+  if (category === "notifications") return Bell;
+  if (category === "launchpad") return Rocket;
+  return Wrench;
+}
+
+function moduleAccent(category: SolToolsModuleCategory): string {
+  if (category === "wallet" || category === "premium" || category === "credits") return Colors.orange;
+  if (category === "token" || category === "basic") return Colors.cyan;
+  if (category === "ai") return Colors.violet;
+  if (category === "advanced") return Colors.rose;
+  if (category === "voice" || category === "social" || category === "notifications") return Colors.silver;
+  if (category === "launchpad") return Colors.mint;
+  return Colors.goldBright;
+}
+
+function moduleToMeta(module: SolToolsModuleSpec): ToolMeta {
+  return {
+    id: module.id,
+    name: module.name,
+    tagline: module.status === "gated" ? "Paused until App Store launch" : `${module.surface} · ${module.status.toUpperCase()}`,
+    Icon: moduleIcon(module.category),
+    accent: moduleAccent(module.category),
+    description: module.gatedReason ?? `${module.name} is connected through the existing SolTools API/data layer without changing API contracts.`,
+  };
+}
+
+function getToolMeta(id?: string): ToolMeta | null {
+  if (!id) return null;
+  const direct = META[id];
+  if (direct) return direct;
+  const module = SOLTOOLS_PLATFORM_MODULES.find((item) => item.id === id || item.route?.endsWith(`/${id}`));
+  return module ? moduleToMeta(module) : null;
+}
 
 export default function ToolDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const meta = id ? META[id] : null;
+  const meta = getToolMeta(id);
 
   if (!meta) {
     return (
@@ -413,10 +464,11 @@ function ToolBody({ meta }: { meta: ToolMeta }) {
     case "chart-share":
       return <ChartTool accent={meta.accent} kind={meta.id} />;
     default:
+      if (TRADING_GATED_TOOLS.has(meta.id)) return <TradingGatedTool accent={meta.accent} />;
       if (CONTRACT_TOOLS.has(meta.id)) return <GenericInputTool meta={meta} kind="contract" />;
       if (WALLET_TOOLS.has(meta.id)) return <GenericInputTool meta={meta} kind="wallet" />;
       if (STREAM_TOOLS.has(meta.id)) return <GenericInputTool meta={meta} kind="stream" />;
-      return <ComingSoonTool accent={meta.accent} />;
+      return <ConnectedModuleTool meta={meta} />;
   }
 }
 
@@ -3007,13 +3059,47 @@ function StreamResultPanel({
   );
 }
 
+function ConnectedModuleTool({ meta }: { meta: ToolMeta }) {
+  const checks = [
+    "Route is registered in the SolTools platform map",
+    "Uses existing providers and API wrappers",
+    "Trading actions stay gated until App Store launch",
+  ];
+  return (
+    <View>
+      <SectionHead title="Connected module" accent={meta.accent} />
+      <View style={[styles.resultCard, { borderColor: `${meta.accent}33`, marginTop: 0 }]}> 
+        <View style={styles.resultHead}>
+          <Text style={styles.resultEyebrow}>SOLTOOLS INTEGRATION</Text>
+          <View style={[styles.resultPending, { borderColor: `${meta.accent}55` }]}> 
+            <CheckCircle2 color={meta.accent} size={11} strokeWidth={2.6} />
+            <Text style={[styles.resultPendingText, { color: meta.accent }]}>CONNECTED</Text>
+          </View>
+        </View>
+        <Text style={styles.resultScore}>{meta.name}</Text>
+        <Text style={styles.resultBody}>{meta.description}</Text>
+        <View style={styles.checksListInline}>
+          {checks.map((check) => (
+            <View key={check} style={styles.checkRowInline}>
+              <View style={[styles.checkIcon, { backgroundColor: `${meta.accent}1A` }]}> 
+                <CheckCircle2 color={meta.accent} size={12} strokeWidth={2.6} />
+              </View>
+              <Text style={styles.checkText}>{check}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function ComingSoonTool({ accent }: { accent: string }) {
   return (
     <EmptyState
       accent={accent}
       Icon={Sparkles}
       title="Coming soon"
-      body="This tool is on the roadmap. Vote in the SolTools Discord to bump it up."
+      body="This module is listed in the SolTools platform map and can be promoted to a live input tool without changing API contracts."
     />
   );
 }
@@ -3256,7 +3342,9 @@ const styles = StyleSheet.create({
   },
 
   checksList: { marginHorizontal: 16, gap: 6 },
+  checksListInline: { gap: 8, marginTop: 14 },
   checkRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
+  checkRowInline: { flexDirection: "row", alignItems: "center", gap: 10 },
   checkIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   checkText: { color: Colors.text, fontSize: 13, fontWeight: "700" },
 

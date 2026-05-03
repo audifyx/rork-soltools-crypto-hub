@@ -1,3 +1,4 @@
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
@@ -18,8 +19,9 @@ import {
   Waves,
   Zap,
 } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,6 +32,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { getTokenSecurity } from "@/lib/api/birdeye";
+import { isSolanaAddress, scanCommunityToken, type CommunityTokenCard } from "@/lib/community-token";
+import { fmtNum, fmtPct, fmtUsd } from "@/utils/format";
 
 type LucideIcon = React.ComponentType<{
   color?: string;
@@ -41,11 +46,66 @@ export default function AIAnalysisScreen() {
   const router = useRouter();
   const [token, setToken] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [scan, setScan] = useState<CommunityTokenCard | null>(null);
+  const [security, setSecurity] = useState<{ riskScore: number; isHoneypot: boolean; buyTax?: number; sellTax?: number; lpLocked?: boolean; topHoldersPct?: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const onAnalyze = useCallback(() => {
+  const address = token.trim();
+  const validAddress = isSolanaAddress(address);
+
+  const onPaste = useCallback(async () => {
+    try {
+      const text = (await Clipboard.getStringAsync()).trim();
+      if (text) {
+        setToken(text);
+        Haptics.selectionAsync().catch(() => {});
+      }
+    } catch (e) {
+      console.log("[ai-analysis] paste failed", e);
+    }
+  }, []);
+
+  const onAnalyze = useCallback(async () => {
+    if (!validAddress) {
+      setError("Paste a full Solana mint address. Pump.fun mints ending in pump are supported.");
+      setAnalyzed(true);
+      return;
+    }
     Haptics.selectionAsync().catch(() => {});
-    if (token.trim().length > 0) setAnalyzed(true);
-  }, [token]);
+    setLoading(true);
+    setAnalyzed(true);
+    setError(null);
+    try {
+      const [tokenScan, tokenSecurity] = await Promise.all([
+        scanCommunityToken(address, { persist: true }),
+        getTokenSecurity(address).catch((e) => {
+          console.log("[ai-analysis] security fallback", e);
+          return null;
+        }),
+      ]);
+      setScan(tokenScan);
+      setSecurity(tokenSecurity);
+    } catch (e) {
+      console.log("[ai-analysis] scan failed", e);
+      setError(e instanceof Error ? e.message : "Token analysis failed.");
+      setScan(null);
+      setSecurity(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [address, validAddress]);
+
+  const riskScore = Math.round(security?.riskScore ?? (scan ? 35 : 0));
+  const safeScore = Math.max(0, 100 - riskScore);
+  const verdict = useMemo(() => {
+    if (error) return "Analysis unavailable.";
+    if (!scan) return "Ready for live token data.";
+    if (security?.isHoneypot) return "High-risk trading restrictions detected.";
+    if (riskScore >= 70) return "High risk — review before promoting.";
+    if (riskScore >= 40) return "Mixed signals — monitor liquidity and holders.";
+    return "Healthy signals from live token sources.";
+  }, [error, scan, security?.isHoneypot, riskScore]);
 
   return (
     <View style={styles.root}>
@@ -98,13 +158,15 @@ export default function AIAnalysisScreen() {
               autoCapitalize="none"
               autoCorrect={false}
             />
-            <ClipboardPaste color={Colors.cyan} size={18} strokeWidth={2.4} />
+            <Pressable onPress={onPaste} hitSlop={10}>
+              <ClipboardPaste color={Colors.cyan} size={18} strokeWidth={2.4} />
+            </Pressable>
           </View>
 
-          <Pressable onPress={onAnalyze} style={styles.analyzeBtn}>
-            <Zap color={Colors.ink} size={16} strokeWidth={3} />
+          <Pressable onPress={onAnalyze} style={[styles.analyzeBtn, loading && { opacity: 0.65 }]} disabled={loading}>
+            {loading ? <ActivityIndicator color={Colors.ink} /> : <Zap color={Colors.ink} size={16} strokeWidth={3} />}
             <Text style={styles.analyzeText}>
-              {analyzed ? "Re-run Analysis" : "Run AI Analysis"}
+              {loading ? "Analyzing…" : analyzed ? "Re-run Analysis" : "Run AI Analysis"}
             </Text>
           </Pressable>
 
@@ -113,16 +175,16 @@ export default function AIAnalysisScreen() {
               <View style={styles.scoreCard}>
                 <View style={styles.scoreLeft}>
                   <Text style={styles.scoreLabel}>RISK SCORE</Text>
-                  <Text style={styles.scoreValue}>74</Text>
+                  <Text style={styles.scoreValue}>{safeScore}</Text>
                   <Text style={styles.scoreOutOf}>/ 100</Text>
                 </View>
                 <View style={styles.scoreRight}>
                   <View style={styles.scoreBarTrack}>
-                    <View style={[styles.scoreBarFill, { width: "74%" }]} />
+                    <View style={[styles.scoreBarFill, { width: `${safeScore}%` }]} />
                   </View>
                   <View style={styles.scoreVerdict}>
                     <CheckCircle2 color={Colors.mint} size={14} strokeWidth={2.6} />
-                    <Text style={styles.scoreVerdictText}>Healthy signals</Text>
+                    <Text style={styles.scoreVerdictText}>{verdict}</Text>
                   </View>
                 </View>
               </View>
@@ -131,28 +193,28 @@ export default function AIAnalysisScreen() {
                 <Metric
                   Icon={Users}
                   label="Holders"
-                  value="12,481"
-                  delta="+421 / 24h"
+                  value={fmtNum(scan?.holderCount)}
+                  delta={fmtPct(scan?.change24h)}
                   tone="mint"
                 />
                 <Metric
                   Icon={Shield}
                   label="LP Locked"
-                  value="98.2%"
-                  delta="6 mo lock"
+                  value={security?.lpLocked == null ? "—" : security.lpLocked ? "Locked" : "Open"}
+                  delta={`Risk ${riskScore}/100`}
                   tone="cyan"
                 />
                 <Metric
                   Icon={Waves}
                   label="Smart Money"
-                  value="34 buys"
-                  delta="last 24h"
+                  value={fmtUsd(scan?.volume24hUsd)}
+                  delta="24h volume"
                   tone="orange"
                 />
                 <Metric
                   Icon={Gauge}
                   label="Tax"
-                  value="0% / 0%"
+                  value={`${security?.buyTax ?? 0}% / ${security?.sellTax ?? 0}%`}
                   delta="buy / sell"
                   tone="mint"
                 />
@@ -160,17 +222,15 @@ export default function AIAnalysisScreen() {
 
               <SectionHeader title="AI Verdict" />
               <View style={styles.verdictCard}>
-                <Text style={styles.verdictTitle}>Looks structurally healthy.</Text>
+                <Text style={styles.verdictTitle}>{scan ? `${scan.name} · ${scan.symbol}` : verdict}</Text>
                 <Text style={styles.verdictBody}>
-                  Holder distribution is wide, top 10 wallets control under 14% of
-                  supply, LP is locked for 6 months, and smart-money wallets have been
-                  net accumulators for 3 consecutive days. No honeypot or tax flags
-                  detected on simulated trades.
+                  {error ??
+                    `Live market snapshot: ${fmtUsd(scan?.marketCapUsd)} market cap, ${fmtUsd(scan?.liquidityUsd)} liquidity, ${fmtUsd(scan?.volume24hUsd)} 24h volume. ${verdict}`}
                 </Text>
                 <View style={styles.flagRow}>
-                  <Flag Icon={CheckCircle2} text="No mint authority" tone="mint" />
-                  <Flag Icon={CheckCircle2} text="No freeze authority" tone="mint" />
-                  <Flag Icon={ShieldAlert} text="Watch insider cluster" tone="orange" />
+                  <Flag Icon={CheckCircle2} text={security?.isHoneypot ? "Honeypot flag" : "No honeypot flag"} tone={security?.isHoneypot ? "orange" : "mint"} />
+                  <Flag Icon={CheckCircle2} text={security?.lpLocked ? "LP lock signal" : "LP needs review"} tone={security?.lpLocked ? "mint" : "orange"} />
+                  <Flag Icon={ShieldAlert} text={`Top holders ${security?.topHoldersPct != null ? `${security.topHoldersPct.toFixed(1)}%` : "pending"}`} tone="orange" />
                 </View>
               </View>
 
@@ -180,7 +240,7 @@ export default function AIAnalysisScreen() {
                   <ChartLine color={Colors.cyan} size={14} strokeWidth={2.6} />
                   <Text style={styles.chartTitle}>Net Flow • 24h</Text>
                   <View style={{ flex: 1 }} />
-                  <Text style={styles.chartDelta}>+$284K</Text>
+                  <Text style={styles.chartDelta}>{fmtPct(scan?.change24h)}</Text>
                 </View>
                 <View style={styles.chartBars}>
                   {[28, 42, 36, 58, 72, 64, 88, 76, 92, 84, 96, 100].map(
