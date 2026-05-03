@@ -138,6 +138,12 @@ function heatScore(token: LaunchToken): number {
   );
 }
 
+const SPOTLIGHT_DAILY_GAIN_MIN_PCT = 50;
+
+function isSpotlightDailyGainer(token: LaunchToken): boolean {
+  return hasRealMarket(token) && (token.change24hPct ?? Number.NEGATIVE_INFINITY) >= SPOTLIGHT_DAILY_GAIN_MIN_PCT;
+}
+
 const CATEGORIES: Category[] = [
   {
     id: "runners-2025",
@@ -339,9 +345,8 @@ export default function DiscoverScreen() {
   const featuredSpotlight = useMemo(
     () =>
       publicListings
-        .filter((t) => t.featured || (hasRealMarket(t) && heatScore(t) > 0))
-        .sort((a, b) => Number(b.featured) - Number(a.featured) || heatScore(b) - heatScore(a))
-        .slice(0, 6),
+        .filter(isSpotlightDailyGainer)
+        .sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0) || heatScore(b) - heatScore(a)),
     [publicListings],
   );
 
@@ -714,11 +719,11 @@ function DiscoverHeader({
           <View style={styles.sectionHead}>
             <View style={styles.sectionHeadLeft}>
               <Sparkles color={Colors.mint} size={15} strokeWidth={2.6} />
-              <Text style={styles.sectionTitle}>Spotlight</Text>
+              <Text style={styles.sectionTitle}>Spotlight +50% Today</Text>
             </View>
             <View style={styles.livePill}>
               <View style={styles.liveDot} />
-              <Text style={styles.liveText}>LIVE</Text>
+              <Text style={styles.liveText}>50%+</Text>
             </View>
           </View>
           <ScrollView
@@ -1031,17 +1036,8 @@ function SpotlightCard({
       >
         <View style={styles.spotlightHead}>
           <View style={styles.spotlightBadge}>
-            {token.featured ? (
-              <>
-                <Award color={Colors.mint} size={10} strokeWidth={3} />
-                <Text style={[styles.spotlightBadgeText, { color: Colors.mint }]}>FEATURED</Text>
-              </>
-            ) : (
-              <>
-                <Flame color={Colors.orange} size={10} strokeWidth={3} />
-                <Text style={[styles.spotlightBadgeText, { color: Colors.orange }]}>HOT</Text>
-              </>
-            )}
+            <Flame color={Colors.orange} size={10} strokeWidth={3} />
+            <Text style={[styles.spotlightBadgeText, { color: Colors.orange }]}>50%+ DAILY</Text>
           </View>
           <View style={styles.spotlightVenue}>
             <Text style={styles.spotlightVenueText}>{token.venue.toUpperCase()}</Text>
