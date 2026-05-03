@@ -19,8 +19,9 @@ export interface DMMessage {
   fromHandle: string;
   text: string;
   createdAt: number;
-  type: "text" | "ticker" | "tip" | "system";
+  type: "text" | "ticker" | "tip" | "system" | "image";
   ticker?: string;
+  imageUrl?: string;
   tipAmount?: number;
   tipToken?: string;
   read: boolean;
@@ -162,17 +163,18 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
   );
 
   const sendMessage = useCallback(
-    async (id: string, text: string, ticker?: string) => {
+    async (id: string, text: string, ticker?: string, imageUrl?: string) => {
       const trimmed = text.trim();
-      if (trimmed.length === 0) return;
+      if (trimmed.length === 0 && !imageUrl) return;
       const msg: DMMessage = {
         id: makeId(),
         conversationId: id,
         fromHandle: "@you",
-        text: trimmed,
+        text: trimmed || (imageUrl ? "Photo" : ""),
         createdAt: Date.now(),
-        type: ticker ? "ticker" : "text",
+        type: imageUrl ? "image" : ticker ? "ticker" : "text",
         ticker,
+        imageUrl,
         read: true,
       };
       const nextMsgs = [...messages, msg];

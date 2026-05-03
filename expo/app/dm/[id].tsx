@@ -1,4 +1,6 @@
 import * as Haptics from "expo-haptics";
+import { Image as ExpoImage } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -118,17 +120,46 @@ export default function DMThreadScreen() {
   }, [rows.length]);
 
   const onSend = useCallback(
-    async (override?: { text: string; ticker?: string }) => {
+    async (override?: { text: string; ticker?: string; imageUrl?: string }) => {
       if (!id || !conv) return;
       const t = override?.text ?? text;
-      if (!t.trim()) return;
+      if (!t.trim() && !override?.imageUrl) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      await sendMessage(id, t, override?.ticker);
+      await sendMessage(id, t, override?.ticker, override?.imageUrl);
       setText("");
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 30);
     },
     [id, conv, text, sendMessage],
   );
+
+  const onPickImage = useCallback(async () => {
+    if (!id || !conv) return;
+    Haptics.selectionAsync().catch(() => {});
+    try {
+      if (Platform.OS !== "web") {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert("Permission needed", "Allow photo access to attach images to DMs.");
+          return;
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: false,
+        quality: 0.85,
+      });
+      if (result.canceled || !result.assets[0]?.uri) return;
+      await onSend({ text: "Photo", imageUrl: result.assets[0].uri });
+    } catch (e) {
+      console.log("[dm] image pick failed", e);
+      Alert.alert("Image failed", "Could not attach that image. Try another one.");
+    }
+  }, [id, conv, onSend]);
+
+  const onStartCall = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    router.push("/spaces");
+  }, [router]);
 
   if (!conv) {
     return (
@@ -221,8 +252,9 @@ export default function DMThreadScreen() {
             </View>
           </Pressable>
           <Pressable
-            onPress={() => Haptics.selectionAsync().catch(() => {})}
+            onPress={onStartCall}
             style={styles.iconBtn}
+            testID="dm-start-space"
           >
             <Phone color={Colors.text} size={16} strokeWidth={2.4} />
           </Pressable>
@@ -314,7 +346,7 @@ export default function DMThreadScreen() {
             >
               <Hash color={picker ? Colors.cyan : Colors.muted} size={16} strokeWidth={2.6} />
             </Pressable>
-            <Pressable style={styles.composerBtn}>
+            <Pressable style={styles.composerBtn} onPress={onPickImage} testID="dm-image-attach">
               <ImageIcon color={Colors.muted} size={16} strokeWidth={2.4} />
             </Pressable>
             <View style={styles.inputWrap}>
@@ -455,6 +487,27 @@ function Bubble({
             <Text style={styles.tipNote}>{msg.text}</Text>
           </View>
         </LinearGradient>
+        <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
+      </View>
+    );
+  }
+
+  if (msg.type === "image" && msg.imageUrl) {
+    return (
+      <View style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}>
+        <View
+          style={[
+            styles.imageBubble,
+            mine ? { borderColor: Colors.cyan } : { borderColor: `${accent}55` },
+          ]}
+        >
+          <ExpoImage source={{ uri: msg.imageUrl }} style={styles.messageImage} contentFit="cover" />
+        </View>
+        {msg.text && msg.text !== "Photo" ? (
+          <View style={[styles.bubble, mine ? { backgroundColor: Colors.cyan } : { backgroundColor: Colors.card }]}>
+            <Text style={[styles.bubbleText, { color: mine ? Colors.ink : Colors.text }]}>{msg.text}</Text>
+          </View>
+        ) : null}
         <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
       </View>
     );
@@ -755,6 +808,17 @@ const styles = StyleSheet.create({
   tipLabel: { color: Colors.mint, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
   tipAmount: { color: Colors.text, fontSize: 18, fontWeight: "900", marginTop: 2 },
   tipNote: { color: Colors.text, fontSize: 11, fontWeight: "600", opacity: 0.8, marginTop: 2 },
+
+  imageBubble: {
+    width: 230,
+    height: 170,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1.5,
+    backgroundColor: Colors.card,
+    marginBottom: 4,
+  },
+  messageImage: { width: "100%", height: "100%" },
 
   tickerCard: {
     flexDirection: "row",

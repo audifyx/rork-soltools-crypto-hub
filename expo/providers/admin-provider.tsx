@@ -2,6 +2,7 @@ import createContextHook from "@nkzw/create-context-hook";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
+import { SOLTOOLS_ADMIN_EMAIL } from "@/lib/soltools-platform";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -21,7 +22,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     staleTime: 60_000,
     queryFn: async () => {
       if (!userId) return null;
-      if (email?.toLowerCase() === "audifyx@gmail.com") {
+      if (email?.toLowerCase() === SOLTOOLS_ADMIN_EMAIL) {
         const { error: ownerError } = await supabase.rpc("ensure_owner_role", {
           check_user_id: userId,
           check_email: email,
@@ -33,7 +34,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
         .from("admin_roles")
         .select("user_id,role")
         .eq("user_id", userId)
-        .in("role", ["owner", "superadmin", "admin", "moderator", "support"])
+        .in("role", ["owner", "superadmin"])
         .limit(1)
         .maybeSingle();
       if (error) {
@@ -47,7 +48,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
 
   const role = roleQuery.data ?? null;
   const isOwner = role === "owner" || role === "superadmin";
-  const isAdmin = role === "owner" || role === "superadmin" || role === "admin" || role === "moderator" || role === "support";
+  const isAdmin = isOwner;
   const isSuperadmin = isOwner;
 
   return useMemo(

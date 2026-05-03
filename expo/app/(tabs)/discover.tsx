@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   Activity,
@@ -75,6 +75,7 @@ import {
   extractSolanaAddress,
   fetchLaunchTokenForSearchQuery,
   getTokenSearchRank,
+  isSameTokenAddress,
   mergeTokenSearchResult,
   tokenMatchesSearch,
 } from "@/lib/token-search";
@@ -261,14 +262,20 @@ const CATEGORIES: Category[] = [
 
 export default function DiscoverScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ q?: string }>();
   const { listings, refresh, isRefreshing } = useLaunchpad();
   const { userId, isAuthenticated } = useAuth();
   const { watchlist, addWatch, removeWatch } = useApp();
+  const initialQuery = typeof params.q === "string" ? params.q : "";
   const [section, setSection] = useState<Section>("all");
-  const [query, setQuery] = useState<string>("");
+  const [query, setQuery] = useState<string>(initialQuery);
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [searchResolvedToken, setSearchResolvedToken] = useState<LaunchToken | null>(null);
+
+  useEffect(() => {
+    if (initialQuery.trim().length > 0) setQuery(initialQuery);
+  }, [initialQuery]);
 
   useEffect(() => {
     let alive = true;
@@ -312,12 +319,14 @@ export default function DiscoverScreen() {
     let items = searchableListings.slice();
     if (pastedAddress) {
       return items
-        .filter(
-          (t) =>
+        .filter((t) => {
+          const exactAddress = isSameTokenAddress(t.contract, pastedAddress);
+          return (
             tokenMatchesSearch(t, q) &&
             t.approvalStatus !== "rejected" &&
-            (isDiscoverSafeToken(t) || (!!userId && t.ownerId === userId)),
-        )
+            (exactAddress || isDiscoverSafeToken(t) || (!!userId && t.ownerId === userId))
+          );
+        })
         .sort((a, b) => getTokenSearchRank(a, q) - getTokenSearchRank(b, q) || b.createdAt - a.createdAt);
     }
     items = items.filter(

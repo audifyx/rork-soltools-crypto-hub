@@ -589,9 +589,12 @@ function moduleToTool(module: SolToolsModuleSpec): Tool {
   const category = moduleCategoryToToolCategory(module.category);
   const accent = moduleAccentForCategory(category);
   const creditTag = module.creditCost != null ? `${module.creditCost} credits` : module.status;
+  const route = module.category === "launchpad"
+    ? "/(tabs)/discover"
+    : module.route ?? `/tool/${module.id}`;
   return {
     id: module.id,
-    route: module.route ?? "/(tabs)/tools",
+    route,
     name: module.name,
     tagline: module.status === "gated" ? "Paused until App Store launch" : `${module.surface} · ${module.status.toUpperCase()}`,
     description: module.gatedReason ?? `${module.name} is wired into ${module.surface} using the existing SolTools data layer and routes.`,

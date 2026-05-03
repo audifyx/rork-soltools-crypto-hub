@@ -46,6 +46,7 @@ import DexChart from "@/components/DexChart";
 import AppBackground from "@/components/ui/AppBackground";
 import { getTokenOverview, type TokenOverview } from "@/lib/api/birdeye";
 import { isSolanaAddress, scanCommunityToken, type CommunityTokenCard } from "@/lib/community-token";
+import { cleanTokenSearchQuery, extractSolanaAddress } from "@/lib/token-search";
 import { fmtNum, fmtPct, fmtPrice, fmtUsd } from "@/utils/format";
 
 const INTERVALS: { key: string; label: string }[] = [
@@ -76,7 +77,7 @@ function shortContract(contract: string): string {
 export default function TokenLookupScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ address?: string; ca?: string; mint?: string }>();
-  const initial =
+  const rawInitial =
     typeof params.address === "string"
       ? params.address
       : typeof params.ca === "string"
@@ -84,6 +85,7 @@ export default function TokenLookupScreen() {
         : typeof params.mint === "string"
           ? params.mint
           : "";
+  const initial = extractSolanaAddress(rawInitial) ?? cleanTokenSearchQuery(rawInitial);
 
   const [input, setInput] = useState<string>(initial);
   const [contract, setContract] = useState<string>(initial);
@@ -147,7 +149,7 @@ export default function TokenLookupScreen() {
     try {
       const txt = await Clipboard.getStringAsync();
       if (txt) {
-        setInput(txt.trim());
+        setInput(extractSolanaAddress(txt) ?? cleanTokenSearchQuery(txt));
         Haptics.selectionAsync().catch(() => {});
       }
     } catch (e) {
@@ -156,11 +158,12 @@ export default function TokenLookupScreen() {
   }, []);
 
   const onLookup = useCallback(() => {
-    const c = input.trim();
+    const c = extractSolanaAddress(input) ?? cleanTokenSearchQuery(input);
     if (!isSolanaAddress(c)) {
       Alert.alert("Invalid address", "Paste a full Solana token contract address, including Pump.fun mints ending in pump.");
       return;
     }
+    setInput(c);
     setContract(c);
     Haptics.selectionAsync().catch(() => {});
   }, [input]);

@@ -22,11 +22,13 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  Alert,
   FlatList,
   ListRenderItem,
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -199,20 +201,30 @@ export default function PostsFeedScreen() {
 
   const onCompose = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    if (!isAuthenticated) {
+      router.push("/auth");
+      return;
+    }
     router.push("/compose");
-  }, [router]);
+  }, [isAuthenticated, router]);
 
   const onLike = useCallback(
     async (postId: string) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      qc.setQueryData<FeedPost[]>(["posts-feed", userId ?? "guest"], (prev) =>
+      if (!isAuthenticated || !userId) {
+        Alert.alert("Sign in", "Sign in to like posts and sync your activity.", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign in", onPress: () => router.push("/auth") },
+        ]);
+        return;
+      }
+      qc.setQueryData<FeedPost[]>(["posts-feed", userId], (prev) =>
         (prev ?? []).map((p) =>
           p.id === postId
             ? { ...p, liked: !p.liked, likes: Math.max(0, p.likes + (p.liked ? -1 : 1)) }
             : p,
         ),
       );
-      if (!isAuthenticated || !userId) return;
       try {
         const { data } = await supabase.rpc("toggle_post_like", { target_post_id: postId });
         const row = Array.isArray(data)
@@ -231,8 +243,19 @@ export default function PostsFeedScreen() {
         console.log("[posts] like sync failed", e);
       }
     },
-    [qc, userId, isAuthenticated],
+    [qc, userId, isAuthenticated, router],
   );
+
+  const onSharePost = useCallback(async (post: FeedPost) => {
+    Haptics.selectionAsync().catch(() => {});
+    const ticker = post.ticker ? `\n\n${post.ticker.replace("$", "")}` : "";
+    const author = post.authorHandle || post.authorName;
+    try {
+      await Share.share({ message: `${post.text || "SolTools post"}${ticker}\n\n— ${author}` });
+    } catch (e) {
+      console.log("[posts] share failed", e);
+    }
+  }, []);
 
   const renderItem: ListRenderItem<FeedPost> = useCallback(
     ({ item, index }) => (
@@ -252,14 +275,15 @@ export default function PostsFeedScreen() {
         onOpenTicker={() => {
           if (item.ticker) {
             router.push({
-              pathname: "/launch/[id]",
-              params: { id: item.ticker },
+              pathname: "/(tabs)/discover",
+              params: { q: item.ticker.replace("$", "") },
             });
           }
         }}
+        onShare={() => onSharePost(item)}
       />
     ),
-    [sort, onLike, router],
+    [sort, onLike, onSharePost, router],
   );
 
   return (
@@ -455,6 +479,7 @@ function PostRow({
   onLike,
   onOpenAuthor,
   onOpenTicker,
+  onShare,
 }: {
   post: FeedPost;
   rank: number;
@@ -462,6 +487,7 @@ function PostRow({
   onLike: () => void;
   onOpenAuthor: () => void;
   onOpenTicker: () => void;
+  onShare: () => void;
 }) {
   const time = useMemo(() => {
     const diff = Date.now() - post.createdAt;
@@ -601,10 +627,9 @@ function PostRow({
             icon={<Bookmark color={Colors.muted} size={14} strokeWidth={2.2} />}
             label=""
           />
-          <ActionItem
-            icon={<Share2 color={Colors.muted} size={14} strokeWidth={2.2} />}
-            label=""
-          />
+          <Pressable style={styles.action} onPress={onShare} hitSlop={6}>
+            <Share2 color={Colors.muted} size={14} strokeWidth={2.2} />
+          </Pressable>
         </View>
       </View>
     </View>

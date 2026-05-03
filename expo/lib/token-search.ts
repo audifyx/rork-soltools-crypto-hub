@@ -1,4 +1,5 @@
 import { getTokens, type JupiterToken } from "@/lib/api/jupiter";
+import { scanCommunityToken, type CommunityTokenCard } from "@/lib/community-token";
 import type { LaunchToken, LaunchVenue } from "@/types/launchpad";
 
 const SOLANA_ADDRESS_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
@@ -16,6 +17,8 @@ export function cleanTokenSearchQuery(input: string): string {
   return input
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .replace(/^(ca|contract|mint|address)\s*[:#-]\s*/i, "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/[?&#].*$/g, "")
     .trim();
 }
 
@@ -77,6 +80,36 @@ function venueFromTags(tags: string[] | undefined): LaunchVenue {
 }
 
 /** Converts a live token-search result into the app's launch token shape. */
+export function communityTokenToLaunchToken(token: CommunityTokenCard): LaunchToken {
+  const address = token.address;
+  const tags = ["search", "live", "solana"].filter(Boolean);
+  return {
+    id: address,
+    name: token.name || token.symbol || "Unknown token",
+    ticker: (token.symbol || "TOKEN").toUpperCase(),
+    description: "Live Solana token resolved from pasted contract address.",
+    logoUrl: token.logoUrl ?? null,
+    bannerUrl: DEFAULT_SEARCH_BANNER,
+    contract: address,
+    venue: "other",
+    status: "live",
+    tags,
+    featured: false,
+    hot: false,
+    verified: false,
+    createdAt: token.scannedAt,
+    submittedBy: "system",
+    price: token.priceUsd ?? null,
+    change24hPct: token.change24h ?? null,
+    liquidityUsd: token.liquidityUsd ?? null,
+    marketCapUsd: token.marketCapUsd ?? null,
+    volume24hUsd: token.volume24hUsd ?? null,
+    holders: token.holderCount ?? null,
+    upvotes: 0,
+    watchers: 0,
+  };
+}
+
 export function jupiterTokenToLaunchToken(token: JupiterToken): LaunchToken {
   const address = token.address;
   const tags = token.tags ?? ["search"];
@@ -117,6 +150,12 @@ export function mergeTokenSearchResult(tokens: LaunchToken[], result: LaunchToke
 export async function fetchLaunchTokenForSearchQuery(query: string): Promise<LaunchToken | null> {
   const address = extractSolanaAddress(query);
   if (!address) return null;
+  try {
+    const scanned = await scanCommunityToken(address, { persist: false });
+    return communityTokenToLaunchToken(scanned);
+  } catch (scanError) {
+    console.log("[token-search] community scan fallback", scanError instanceof Error ? scanError.message : scanError);
+  }
   const rows = await getTokens(address);
   const exact = rows.find((row) => isSameTokenAddress(row.address, address)) ?? rows[0];
   return exact ? jupiterTokenToLaunchToken(exact) : null;

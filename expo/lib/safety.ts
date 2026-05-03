@@ -112,7 +112,10 @@ export function isSafeToken(s: SafetySignals): boolean {
   if (!passesScaledLiquidity(s.marketCapUsd, liquidityUsd)) return false;
 
   const requiredHolders = getRequiredHolders(s.marketCapUsd);
-  if (requiredHolders != null && typeof s.holders === "number" && s.holders < requiredHolders) return false;
+  if (requiredHolders != null) {
+    if (typeof s.holders !== "number") return false;
+    if (s.holders < requiredHolders) return false;
+  }
 
   if (
     typeof s.priceUsd === "number" &&

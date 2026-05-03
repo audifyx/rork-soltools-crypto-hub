@@ -28,6 +28,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
 import { useApp } from "@/providers/app-provider";
+import { useAuth } from "@/providers/auth-provider";
 
 const MAX_CHARS = 280;
 const MAX_IMAGES = 4;
@@ -35,6 +36,7 @@ const MAX_IMAGES = 4;
 export default function ComposeScreen() {
   const router = useRouter();
   const { addPost, isPosting, profile } = useApp();
+  const { isAuthenticated } = useAuth();
   const [text, setText] = useState<string>("");
   const [ticker, setTicker] = useState<string>("");
   const [images, setImages] = useState<string[]>([]);
@@ -69,6 +71,13 @@ export default function ComposeScreen() {
 
   const onPost = useCallback(async () => {
     const t = text.trim();
+    if (!isAuthenticated) {
+      Alert.alert("Sign in", "Sign in to post and sync your profile activity.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign in", onPress: () => router.replace("/auth") },
+      ]);
+      return;
+    }
     if (!t && images.length === 0) return;
     try {
       await addPost({
@@ -88,7 +97,7 @@ export default function ComposeScreen() {
             : "Couldn't post right now.";
       Alert.alert("Failed to post", msg);
     }
-  }, [text, ticker, images, addPost, router]);
+  }, [text, ticker, images, addPost, router, isAuthenticated]);
 
   const remaining = MAX_CHARS - text.length;
   const canPost =
