@@ -9,9 +9,10 @@
  *   3. Mint + freeze authorities should be revoked when audit data exists.
  *   4. Dev/insider concentration must be under MAX_DEV_BALANCE_PCT.
  *   5. Tokens flagged as honeypot / scam / unsafe / rug are dropped.
- *   6. Pump.fun bonding-curve tokens that never migrated to Raydium /
- *      Pumpswap / Meteora are hidden — only graduated, surviving devs.
- *   7. Severe price collapse (-50% in 24h) is treated as a likely rug.
+ *   6. Severe price collapse (-50% in 24h) is treated as a likely rug.
+ *
+ * Pump.fun / PumpSwap bonding-curve mints are allowed through when they have
+ * real market data so users can scan every Solana token type by contract.
  *
  * The shape is intentionally permissive so any token-like object passes
  * through (Jupiter v2, DexScreener pair, internal LaunchToken, etc.).
@@ -59,23 +60,6 @@ export interface SafetySignals {
   bondingCurve?: boolean | null;
 }
 
-/**
- * True when the launchpad/venue indicates the token never migrated.
- * Pump.fun tokens that never graduate to Raydium/Pumpswap remain on the
- * bonding curve and are 99% rugs — we hide them.
- */
-function looksUnmigrated(s: SafetySignals): boolean {
-  if (s.bondingCurve === true) return true;
-  const lp = (s.launchpad ?? "").toLowerCase();
-  const venue = (s.venue ?? "").toLowerCase();
-  const status = (s.status ?? "").toLowerCase();
-  if (status.includes("bonding") || status.includes("curve")) return true;
-  // Pump.fun *itself* (not pumpswap) means it hasn't migrated yet.
-  if (lp === "pumpfun" || lp === "pump.fun") return true;
-  if (venue === "pumpfun") return true;
-  return false;
-}
-
 function hasScamTag(s: SafetySignals): boolean {
   const all = [...(s.tags ?? []), ...(s.labels ?? [])].map((t) =>
     String(t).toLowerCase(),
@@ -95,8 +79,6 @@ export function isSafeToken(s: SafetySignals): boolean {
   if (typeof s.marketCapUsd !== "number" || s.marketCapUsd < MIN_MARKET_CAP_USD)
     return false;
   if ((s.liquidityUsd ?? 0) < MIN_LIQUIDITY_USD) return false;
-
-  if (looksUnmigrated(s)) return false;
 
   // 24h drawdown screen — anything that has already collapsed is a rug.
   const ch = s.priceChange24hPct;

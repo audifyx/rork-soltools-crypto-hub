@@ -1,3 +1,4 @@
+import { fetchDexToken } from "@/lib/api/dexscreener";
 import { fetchPumpFunToken } from "@/lib/api/pumpfun";
 import { supabase } from "@/lib/supabase";
 
@@ -150,6 +151,21 @@ async function pumpFunTokenSearch(query: string): Promise<JupiterToken[]> {
   }];
 }
 
+async function dexTokenSearch(query: string): Promise<JupiterToken[]> {
+  if (!looksLikeSolanaAddress(query)) return [];
+  const snap = await fetchDexToken(query);
+  const pair = snap.pair;
+  if (!pair?.baseToken?.address) return [];
+  return [{
+    address: pair.baseToken.address,
+    decimals: 0,
+    name: pair.baseToken.name ?? pair.baseToken.symbol ?? "Unknown token",
+    symbol: pair.baseToken.symbol ?? "TOKEN",
+    logoURI: snap.imageUrl ?? undefined,
+    tags: [snap.dexId, ...(pair.labels ?? [])].filter((tag): tag is string => !!tag),
+  }];
+}
+
 async function directTokens(query?: string): Promise<JupiterToken[]> {
   const q = (query ?? "").trim() || "SOL,JUP,USDC,BONK";
   const res = await fetch(`${JUPITER_TOKENS_DIRECT}?query=${encodeURIComponent(q)}`);
@@ -232,7 +248,19 @@ export async function getTokens(query?: string): Promise<JupiterToken[]> {
     console.log("[jupiter] tokens pump.fun fallback", e instanceof Error ? e.message : e);
   }
 
-  return pumpFunTokenSearch(q);
+  try {
+    const pumpRows = await pumpFunTokenSearch(q);
+    if (pumpRows.length > 0) return pumpRows;
+  } catch (e) {
+    console.log("[jupiter] pump.fun token fallback failed", e instanceof Error ? e.message : e);
+  }
+
+  try {
+    return await dexTokenSearch(q);
+  } catch (e) {
+    console.log("[jupiter] dexscreener token fallback failed", e instanceof Error ? e.message : e);
+    return [];
+  }
 }
 
 export async function getPrice(ids: string[]): Promise<Record<string, JupiterPrice>> {

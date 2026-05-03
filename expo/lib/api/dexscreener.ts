@@ -13,8 +13,16 @@ import { useQuery } from "@tanstack/react-query";
 import { isSafeToken } from "@/lib/safety";
 
 const BASE = "https://api.dexscreener.com/latest/dex";
+const TOKEN_PAIRS_BASE = "https://api.dexscreener.com/token-pairs/v1";
+const TOKENS_V1_BASE = "https://api.dexscreener.com/tokens/v1";
 const PROFILES_URL = "https://api.dexscreener.com/token-profiles/latest/v1";
 const BOOSTS_URL = "https://api.dexscreener.com/token-boosts/latest/v1";
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`dexscreener ${res.status}`);
+  return (await res.json()) as T;
+}
 
 export interface DexPair {
   chainId: string;
@@ -114,14 +122,50 @@ function toSnapshot(address: string, pairs: DexPair[]): DexTokenSnapshot {
   };
 }
 
-export async function fetchDexToken(address: string): Promise<DexTokenSnapshot> {
-  const res = await fetch(`${BASE}/tokens/${address}`);
-  if (!res.ok) {
-    throw new Error(`dexscreener tokens ${res.status}`);
+async function fetchDexPairsForToken(address: string): Promise<DexPair[]> {
+  const mint = address.trim();
+  const attempts: Array<() => Promise<DexPair[]>> = [
+    async () => {
+      const json = await fetchJson<{ pairs?: DexPair[] | null }>(`${BASE}/tokens/${encodeURIComponent(mint)}`);
+      return Array.isArray(json.pairs) ? json.pairs : [];
+    },
+    async () => {
+      const json = await fetchJson<DexPair[]>(`${TOKEN_PAIRS_BASE}/solana/${encodeURIComponent(mint)}`);
+      return Array.isArray(json) ? json : [];
+    },
+    async () => {
+      const json = await fetchJson<DexPair[]>(`${TOKENS_V1_BASE}/solana/${encodeURIComponent(mint)}`);
+      return Array.isArray(json) ? json : [];
+    },
+    async () => {
+      const json = await fetchJson<{ pairs?: DexPair[] | null }>(`${BASE}/search?q=${encodeURIComponent(mint)}`);
+      const pairs = Array.isArray(json.pairs) ? json.pairs : [];
+      return pairs.filter(
+        (p) => p.chainId === "solana" &&
+          (p.baseToken?.address === mint || p.quoteToken?.address === mint || p.pairAddress === mint),
+      );
+    },
+  ];
+
+  const errors: unknown[] = [];
+  for (const attempt of attempts) {
+    try {
+      const pairs = await attempt();
+      if (pairs.length > 0) return pairs;
+    } catch (e) {
+      errors.push(e);
+    }
   }
-  const json = (await res.json()) as { pairs?: DexPair[] | null };
-  const pairs = Array.isArray(json.pairs) ? json.pairs : [];
-  return toSnapshot(address, pairs);
+  if (errors.length > 0) {
+    console.log("[dexscreener] token fallbacks exhausted", errors[0]);
+  }
+  return [];
+}
+
+export async function fetchDexToken(address: string): Promise<DexTokenSnapshot> {
+  const mint = address.trim();
+  const pairs = await fetchDexPairsForToken(mint);
+  return toSnapshot(mint, pairs);
 }
 
 export async function fetchDexTokenBatch(
@@ -135,17 +179,23 @@ export async function fetchDexTokenBatch(
   await Promise.all(
     chunks.map(async (chunk) => {
       try {
-        const res = await fetch(`${BASE}/tokens/${chunk.join(",")}`);
-        if (!res.ok) return;
-        const json = (await res.json()) as { pairs?: DexPair[] | null };
-        const pairs = Array.isArray(json.pairs) ? json.pairs : [];
+        const encoded = chunk.map((a) => encodeURIComponent(a)).join(",");
+        let pairs: DexPair[] = [];
+        try {
+          const json = await fetchJson<{ pairs?: DexPair[] | null }>(`${BASE}/tokens/${encoded}`);
+          pairs = Array.isArray(json.pairs) ? json.pairs : [];
+        } catch {
+          const json = await fetchJson<DexPair[]>(`${TOKENS_V1_BASE}/solana/${encoded}`);
+          pairs = Array.isArray(json) ? json : [];
+        }
         const grouped = new Map<string, DexPair[]>();
         chunk.forEach((a) => grouped.set(a, []));
         for (const p of pairs) {
-          const a = p.baseToken?.address;
-          if (!a) continue;
-          if (!grouped.has(a)) grouped.set(a, []);
-          grouped.get(a)!.push(p);
+          const candidates = [p.baseToken?.address, p.quoteToken?.address].filter((a): a is string => !!a);
+          for (const a of candidates) {
+            if (!grouped.has(a)) grouped.set(a, []);
+            grouped.get(a)!.push(p);
+          }
         }
         chunk.forEach((a) => {
           out[a] = toSnapshot(a, grouped.get(a) ?? []);

@@ -3,6 +3,7 @@ import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 import Colors from "@/constants/colors";
+import { useDexToken } from "@/lib/api/dexscreener";
 
 interface Props {
   contract: string;
@@ -16,7 +17,7 @@ interface Props {
 
 /**
  * Live DEXScreener chart embed. Works on iOS/Android (WebView) and web (iframe).
- * Falls back gracefully if the contract is invalid.
+ * Resolves Pump.fun mint CAs to the active Solana pair when needed.
  */
 export default function DexChart({
   contract,
@@ -26,8 +27,9 @@ export default function DexChart({
   theme = "dark",
 }: Props) {
   const [loading, setLoading] = useState<boolean>(true);
+  const { data: resolvedDex } = useDexToken(pairAddress ? null : contract);
 
-  const target = pairAddress ?? contract;
+  const target = pairAddress ?? resolvedDex?.pairAddress ?? contract;
   if (!target || target.length < 8) {
     return <View style={[styles.wrap, { height }]} />;
   }

@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useMemo } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import Colors from "@/constants/colors";
 
@@ -11,15 +11,15 @@ interface AppBackgroundProps {
 }
 
 const variantAccents: Record<BackgroundVariant, [string, string, string]> = {
-  feed: [Colors.mint, Colors.cyan, Colors.rose],
-  market: [Colors.cyan, Colors.mint, Colors.orange],
-  social: [Colors.rose, Colors.violet, Colors.cyan],
-  wallet: [Colors.violet, Colors.mint, Colors.orange],
-  tool: [Colors.mint, Colors.violet, Colors.cyan],
-  neutral: [Colors.cyan, Colors.violet, Colors.mint],
+  feed: [Colors.text, Colors.cyan, Colors.violet],
+  market: [Colors.text, Colors.cyan, Colors.orange],
+  social: [Colors.text, Colors.rose, Colors.violet],
+  wallet: [Colors.text, Colors.violet, Colors.cyan],
+  tool: [Colors.text, Colors.cyan, Colors.violet],
+  neutral: [Colors.text, Colors.cyan, Colors.violet],
 };
 
-/** Atmospheric app-wide background: dark social feed + DEX terminal + Phantom glow. */
+/** Atmospheric app-wide background: black/white SolTools terminal gradient. */
 export default function AppBackground({ variant = "neutral" }: AppBackgroundProps) {
   const accents = variantAccents[variant];
   const gridLines = useMemo<number[]>(() => Array.from({ length: 9 }, (_, i) => i), []);
@@ -27,17 +27,18 @@ export default function AppBackground({ variant = "neutral" }: AppBackgroundProp
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <LinearGradient
-        colors={["#05050A", "#081018", "#060811", "#05050A"]}
-        locations={[0, 0.35, 0.72, 1]}
+        colors={["#000000", "#101010", "#050505", "#1A1A1A", "#000000"]}
+        locations={[0, 0.24, 0.5, 0.76, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      <View style={[styles.orb, styles.orbTop, { backgroundColor: `${accents[0]}22` }]} />
-      <View style={[styles.orb, styles.orbMid, { backgroundColor: `${accents[1]}18` }]} />
-      <View style={[styles.orb, styles.orbLow, { backgroundColor: `${accents[2]}16` }]} />
+      <Text style={styles.watermark}>SOLTOOLS</Text>
+      <View style={[styles.orb, styles.orbTop, { backgroundColor: `${accents[0]}1F` }]} />
+      <View style={[styles.orb, styles.orbMid, { backgroundColor: `${accents[1]}14` }]} />
+      <View style={[styles.orb, styles.orbLow, { backgroundColor: `${accents[2]}10` }]} />
       <LinearGradient
-        colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0.00)"]}
+        colors={["rgba(255,255,255,0.16)", "rgba(255,255,255,0.00)"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.topSheen}
@@ -51,7 +52,7 @@ export default function AppBackground({ variant = "neutral" }: AppBackgroundProp
         ))}
       </View>
       <LinearGradient
-        colors={["rgba(5,5,10,0)", "rgba(5,5,10,0.82)"]}
+        colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.88)"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.bottomFade}
@@ -61,6 +62,16 @@ export default function AppBackground({ variant = "neutral" }: AppBackgroundProp
 }
 
 const styles = StyleSheet.create({
+  watermark: {
+    position: "absolute",
+    top: 116,
+    left: -20,
+    color: "rgba(255,255,255,0.035)",
+    fontSize: 56,
+    fontWeight: "900",
+    letterSpacing: 8,
+    transform: [{ rotate: "-9deg" }],
+  },
   orb: {
     position: "absolute",
     width: 320,
@@ -102,14 +113,14 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.10)",
   },
   gridLineH: {
     position: "absolute",
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.075)",
   },
   bottomFade: {
     position: "absolute",

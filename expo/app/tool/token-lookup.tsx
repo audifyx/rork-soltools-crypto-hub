@@ -45,6 +45,7 @@ import Colors from "@/constants/colors";
 import DexChart from "@/components/DexChart";
 import AppBackground from "@/components/ui/AppBackground";
 import { getTokenOverview, type TokenOverview } from "@/lib/api/birdeye";
+import { isSolanaAddress, scanCommunityToken, type CommunityTokenCard } from "@/lib/community-token";
 import { fmtNum, fmtPct, fmtPrice, fmtUsd } from "@/utils/format";
 
 const INTERVALS: { key: string; label: string }[] = [
@@ -90,14 +91,15 @@ export default function TokenLookupScreen() {
     setSeenData(false);
   }, [contract]);
 
-  const enabled = contract.trim().length >= 32;
+  const normalizedContract = contract.trim();
+  const enabled = isSolanaAddress(normalizedContract);
 
   const overviewQ = useQuery<TokenOverview | null>({
-    queryKey: ["tokenLookup", "overview", contract],
+    queryKey: ["tokenLookup", "overview", normalizedContract],
     enabled,
     queryFn: async () => {
       try {
-        const res = await getTokenOverview(contract.trim());
+        const res = await getTokenOverview(normalizedContract);
         if (res && res.address) return res;
         return null;
       } catch (e) {
@@ -112,9 +114,27 @@ export default function TokenLookupScreen() {
     placeholderData: (prev) => prev,
   });
 
+  const scanQ = useQuery<CommunityTokenCard | null>({
+    queryKey: ["tokenLookup", "community-scan", normalizedContract],
+    enabled,
+    queryFn: async () => {
+      try {
+        return await scanCommunityToken(normalizedContract);
+      } catch (e) {
+        console.log("[token-lookup] scan failed", e);
+        return null;
+      }
+    },
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    staleTime: 15_000,
+    retry: 1,
+    placeholderData: (prev) => prev,
+  });
+
   useEffect(() => {
-    if (overviewQ.data && overviewQ.data.address) setSeenData(true);
-  }, [overviewQ.data]);
+    if ((overviewQ.data && overviewQ.data.address) || (scanQ.data && scanQ.data.address)) setSeenData(true);
+  }, [overviewQ.data, scanQ.data]);
 
   const onPaste = useCallback(async () => {
     try {
@@ -130,8 +150,8 @@ export default function TokenLookupScreen() {
 
   const onLookup = useCallback(() => {
     const c = input.trim();
-    if (c.length < 32) {
-      Alert.alert("Invalid address", "Paste a full Solana token contract address.");
+    if (!isSolanaAddress(c)) {
+      Alert.alert("Invalid address", "Paste a full Solana token contract address, including Pump.fun mints ending in pump.");
       return;
     }
     setContract(c);
@@ -168,9 +188,29 @@ export default function TokenLookupScreen() {
     router.push({ pathname: "/launch/[id]", params: { id: contract } });
   }, [contract, router]);
 
-  const overview = overviewQ.data ?? null;
-  const loading = overviewQ.isFetching && !overview && !seenData;
-  const errored = !overview && !seenData && !overviewQ.isFetching && enabled && overviewQ.isFetched;
+  const scan = scanQ.data ?? null;
+  const overview = useMemo<TokenOverview | null>(() => {
+    const base = overviewQ.data ?? null;
+    if (!scan) return base;
+    return {
+      address: scan.address,
+      symbol: scan.symbol || base?.symbol || "TOKEN",
+      name: scan.name || base?.name || "Unknown Solana token",
+      decimals: scan.decimals ?? base?.decimals ?? 0,
+      price: scan.priceUsd ?? base?.price ?? 0,
+      priceChange1h: base?.priceChange1h,
+      priceChange24h: scan.change24h ?? base?.priceChange24h,
+      priceChange7d: base?.priceChange7d,
+      liquidity: scan.liquidityUsd ?? base?.liquidity,
+      marketCap: scan.marketCapUsd ?? base?.marketCap,
+      volume24hUSD: scan.volume24hUsd ?? base?.volume24hUSD,
+      holder: scan.holderCount ?? base?.holder,
+      rank: base?.rank,
+      logoURI: scan.logoUrl ?? base?.logoURI,
+    };
+  }, [overviewQ.data, scan]);
+  const loading = (overviewQ.isFetching || scanQ.isFetching) && !overview && !seenData;
+  const errored = !overview && !seenData && !overviewQ.isFetching && !scanQ.isFetching && enabled && overviewQ.isFetched && scanQ.isFetched;
   const change = overview?.priceChange24h;
   const isUp = (change ?? 0) >= 0;
   const accent = isUp ? Colors.mint : Colors.rose;
@@ -238,7 +278,7 @@ export default function TokenLookupScreen() {
 
           <View style={styles.heroCard}>
             <LinearGradient
-              colors={["rgba(56,215,255,0.24)", "rgba(217,70,255,0.14)", "rgba(3,7,8,0.12)"]}
+              colors={["rgba(255,255,255,0.20)", "rgba(160,160,160,0.10)", "rgba(0,0,0,0.12)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -340,7 +380,7 @@ export default function TokenLookupScreen() {
             <>
               <View style={[styles.tokenCard, { borderColor: `${accent}44` }]}> 
                 <LinearGradient
-                  colors={[`${accent}28`, "rgba(217,70,255,0.10)", "rgba(3,7,8,0)"]}
+                  colors={[`${accent}28`, "rgba(255,255,255,0.08)", "rgba(0,0,0,0)"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFill}
@@ -468,7 +508,7 @@ export default function TokenLookupScreen() {
                   end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFill}
                 />
-                <DexChart contract={contract} interval={interval} height={388} />
+                <DexChart contract={normalizedContract} pairAddress={scan?.pairAddress ?? undefined} interval={interval} height={388} />
               </View>
 
               <Pressable onPress={openDex} style={({ pressed }) => [styles.openExternal, pressed && styles.primaryPressed]} testID="open-dexscreener">
@@ -552,7 +592,7 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderRadius: 130,
-    backgroundColor: "rgba(56,215,255,0.16)",
+    backgroundColor: "rgba(255,255,255,0.11)",
   },
   bgOrbB: {
     position: "absolute",
@@ -561,7 +601,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: "rgba(217,70,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   bgGrid: {
     position: "absolute",
@@ -587,7 +627,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(11,24,26,0.72)",
+    backgroundColor: "rgba(10,10,10,0.82)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -599,8 +639,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.24)",
-    backgroundColor: "rgba(85,245,178,0.08)",
+    borderColor: "rgba(255,255,255,0.24)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -613,7 +653,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.28)",
+    borderColor: "rgba(255,255,255,0.22)",
     backgroundColor: Colors.card,
     padding: 18,
     minHeight: 226,
@@ -636,14 +676,14 @@ const styles = StyleSheet.create({
     height: 68,
     borderRadius: 34,
     borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.24)",
+    borderColor: "rgba(255,255,255,0.20)",
   },
   heroIcon: {
     width: 52,
     height: 52,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.44)",
+    borderColor: "rgba(255,255,255,0.38)",
     backgroundColor: "rgba(3,7,8,0.62)",
     alignItems: "center",
     justifyContent: "center",
@@ -656,8 +696,8 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,184,76,0.28)",
-    backgroundColor: "rgba(255,184,76,0.10)",
+    borderColor: "rgba(255,255,255,0.26)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   heroBadgeText: { color: Colors.orange, fontSize: 11, fontWeight: "900", letterSpacing: 0.3 },
   heroTitle: { color: Colors.text, fontSize: 30, fontWeight: "900", letterSpacing: -1.2, lineHeight: 34, marginTop: 16 },
@@ -679,8 +719,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.20)",
-    backgroundColor: "rgba(11,24,26,0.86)",
+    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(8,8,8,0.88)",
     padding: 14,
     gap: 9,
   },
@@ -705,8 +745,8 @@ const styles = StyleSheet.create({
     height: 45,
     borderRadius: 15,
     borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.20)",
-    backgroundColor: "rgba(56,215,255,0.09)",
+    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -730,7 +770,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "rgba(11,24,26,0.78)",
+    backgroundColor: "rgba(8,8,8,0.84)",
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -741,7 +781,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(56,215,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.10)",
   },
   placeholderTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2 },
   placeholderText: { color: Colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 17, marginTop: 2 },
@@ -750,7 +790,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
     borderRadius: 28,
     borderWidth: 1,
-    backgroundColor: "rgba(11,24,26,0.88)",
+    backgroundColor: "rgba(8,8,8,0.90)",
     padding: 16,
     overflow: "hidden",
   },
@@ -804,7 +844,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.07)",
-    backgroundColor: "rgba(3,7,8,0.34)",
+    backgroundColor: "rgba(0,0,0,0.42)",
   },
   scoreTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   scoreLabel: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.1 },
@@ -854,7 +894,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "rgba(11,24,26,0.80)",
+    backgroundColor: "rgba(8,8,8,0.84)",
     padding: 11,
     minHeight: 94,
   },
@@ -881,7 +921,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(11,24,26,0.72)",
+    backgroundColor: "rgba(10,10,10,0.82)",
     padding: 6,
   },
 
@@ -895,7 +935,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.07)",
-    backgroundColor: "rgba(11,24,26,0.80)",
+    backgroundColor: "rgba(8,8,8,0.84)",
   },
   openExternalText: { fontSize: 12, fontWeight: "900", letterSpacing: 0.4 },
   metaRowBottom: { marginTop: 10, flexDirection: "row", justifyContent: "center", gap: 8, flexWrap: "wrap" },
@@ -908,7 +948,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "rgba(11,24,26,0.72)",
+    backgroundColor: "rgba(10,10,10,0.82)",
   },
   metaText: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 0.6, textTransform: "uppercase" },
 });
