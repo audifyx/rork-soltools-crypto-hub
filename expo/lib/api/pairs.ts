@@ -1,5 +1,6 @@
 import { getTrending, type TokenOverview } from "@/lib/api/birdeye";
 import { getNewSolanaPairs, searchSolanaPairs, type DexPair } from "@/lib/api/dexscreener";
+import { OG_MEME_TOKEN_SEARCH_TERMS } from "@/lib/alpha-runners";
 import { isSafeToken } from "@/lib/safety";
 import { LaunchToken, LaunchVenue } from "@/types/launchpad";
 
@@ -271,7 +272,15 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
       }
     })(),
     (async () => {
-      const terms = ["utility", "depin", "rwa", "ai agent", "charity", "donation"];
+      const terms = [
+        "utility",
+        "depin",
+        "rwa",
+        "ai agent",
+        "charity",
+        "donation",
+        ...OG_MEME_TOKEN_SEARCH_TERMS,
+      ];
       const results = await Promise.all(
         terms.map(async (term) => {
           try {

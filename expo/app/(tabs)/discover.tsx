@@ -53,10 +53,13 @@ import AlphaInsightsCard from "@/components/discover/AlphaInsightsCard";
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import {
+  compareOgMemeTokens,
   getAlphaRunnerScore,
   getDailyAlphaRunners,
+  getOgMemeTokens,
   isDailyAlphaRunner,
   isNewCharityCoin,
+  isOgMemeToken,
   isRunnerFromYear,
   isUtilityRunner,
 } from "@/lib/alpha-runners";
@@ -67,7 +70,7 @@ import { LaunchToken } from "@/types/launchpad";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number; fill?: string }>;
 
-type Section = "all" | "hot" | "new" | "gainers" | "losers" | "volume" | "whales" | "ai";
+type Section = "all" | "hot" | "new" | "gainers" | "losers" | "volume" | "whales" | "og" | "ai";
 
 const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "all", label: "All", Icon: Sparkles },
@@ -77,6 +80,7 @@ const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "losers", label: "Losers", Icon: TrendingDown },
   { id: "volume", label: "Volume", Icon: BarChart3 },
   { id: "whales", label: "Whales", Icon: Waves },
+  { id: "og", label: "OG Tokens", Icon: Award },
   { id: "ai", label: "Daily Runners", Icon: Bot },
 ];
 
@@ -131,6 +135,13 @@ const CATEGORIES: Category[] = [
     Icon: Flame,
     tone: Colors.rose,
     match: (t) => isDailyAlphaRunner(t),
+  },
+  {
+    id: "og-tokens",
+    label: "OG Tokens",
+    Icon: Award,
+    tone: Colors.goldBright,
+    match: (t) => isOgMemeToken(t),
   },
   {
     id: "utility-runners",
@@ -189,10 +200,14 @@ export default function DiscoverScreen() {
       items = items
         .filter((t) => (t.holders ?? 0) > 100 || (t.volume24hUsd ?? 0) > 50_000)
         .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0));
+    if (section === "og") items = getOgMemeTokens(items, 80);
     if (section === "ai") items = getDailyAlphaRunners(items, 50);
     if (activeCat) {
       const cat = CATEGORIES.find((c) => c.id === activeCat);
-      if (cat) items = items.filter(cat.match);
+      if (cat) {
+        items = items.filter(cat.match);
+        if (cat.id === "og-tokens") items = items.sort(compareOgMemeTokens);
+      }
     }
     const q = query.trim().toLowerCase();
     if (q.length > 0) {

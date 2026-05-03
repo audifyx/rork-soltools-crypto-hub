@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useDexTokens } from "@/lib/api/dexscreener";
+import { compareOgMemeTokens, isOgMemeToken } from "@/lib/alpha-runners";
 import { fetchLivePairs } from "@/lib/api/pairs";
 import { isSafeToken } from "@/lib/safety";
 import { supabase } from "@/lib/supabase";
@@ -451,6 +452,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
     if (sort === "volume") items = items.filter((t) => hasRealMarket(t) && (t.volume24hUsd ?? 0) > 0);
     if (sort === "liquidity") items = items.filter((t) => hasRealMarket(t) && (t.liquidityUsd ?? 0) > 0);
     if (sort === "marketcap") items = items.filter((t) => hasRealMarket(t) && (t.marketCapUsd ?? 0) > 0);
+    if (sort === "og") items = items.filter(isOgMemeToken);
     const q = search.trim().toLowerCase();
     if (q.length > 0) {
       items = items.filter(
@@ -474,6 +476,8 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
           return (b.marketCapUsd ?? 0) - (a.marketCapUsd ?? 0);
         case "volume":
           return (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0);
+        case "og":
+          return compareOgMemeTokens(a, b);
         case "newest":
         default:
           return b.createdAt - a.createdAt;

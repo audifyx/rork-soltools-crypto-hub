@@ -22,6 +22,7 @@ import {
   Rocket,
   Search,
   Share2,
+  Award,
   Skull,
   Sparkles,
   TrendingDown,
@@ -59,6 +60,7 @@ import {
   useNewSolanaPairs,
 } from "@/lib/api/market";
 import { type DexPair, useDexTokens } from "@/lib/api/dexscreener";
+import { getOgMemeTokens } from "@/lib/alpha-runners";
 import { isSafeToken } from "@/lib/safety";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
@@ -67,7 +69,7 @@ import { LaunchToken } from "@/types/launchpad";
 import { UserPost, useApp } from "@/providers/app-provider";
 import { useMessages } from "@/providers/messages-provider";
 
-const FILTERS = ["For You", "Following", "Trending", "New Pairs", "Whales"] as const;
+const FILTERS = ["For You", "Following", "Trending", "New Pairs", "Whales", "OG Tokens"] as const;
 type Filter = (typeof FILTERS)[number];
 
 type WhaleFeedEvent = {
@@ -319,6 +321,9 @@ export default function HomeFeedScreen() {
         .slice(0, 30)
         .map((t): FeedItem => ({ kind: "token", data: t }));
     }
+    if (filter === "OG Tokens") {
+      return getOgMemeTokens(listings, 40).map((t): FeedItem => ({ kind: "token", data: t }));
+    }
     return userPosts.map((p): FeedItem => ({ kind: "user", data: p }));
   }, [filter, userPosts, followingPostsQ.data, listings, trendingTokens, newPairsData, whalesQ.data]);
 
@@ -568,7 +573,9 @@ function FeedHeader({
                 ? "New pairs"
                 : filter === "Whales"
                   ? "Whale activity"
-                  : "Live feed"}
+                  : filter === "OG Tokens"
+                    ? "OG tokens"
+                    : "Live feed"}
         </Text>
         <View style={styles.livePill}>
           <View style={styles.liveDot} />
@@ -1486,6 +1493,7 @@ function FeedEmpty({ filter, onCompose }: { filter: Filter; onCompose: () => voi
     Trending: { title: "No trending tokens", body: "Trending tokens will appear once live market data loads.", Icon: Flame },
     "New Pairs": { title: "No new pairs", body: "Newly launched Solana pairs will surface here in real time.", Icon: Zap },
     Whales: { title: "No whale moves", body: "Large holder & high-volume tokens will appear here.", Icon: Waves },
+    "OG Tokens": { title: "No OG tokens yet", body: "BUTTCOIN, TROLL, WOJAK, USELESS, PENGU and other OG names will appear when live market data loads.", Icon: Award },
   };
   const c = titles[filter];
   return (

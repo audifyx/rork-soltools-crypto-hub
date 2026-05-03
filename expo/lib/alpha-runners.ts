@@ -4,6 +4,58 @@ export const ALPHA_MIN_24H_VOLUME_USD = 1_000_000;
 export const ALPHA_MAX_MARKET_CAP_USD = 50_000_000;
 export const NEW_CHARITY_WINDOW_MS = 1000 * 60 * 60 * 24 * 120;
 
+export const OG_MEME_TOKEN_SEARCH_TERMS = [
+  "buttcoin",
+  "troll",
+  "wojak",
+  "useless",
+  "pengu",
+  "pudgy penguins",
+  "popcat",
+  "dogwifhat",
+  "bonk",
+  "mew",
+  "ponke",
+  "fwog",
+  "michi",
+  "retardio",
+  "goatseus",
+  "fartcoin",
+] as const;
+
+const OG_MEME_TOKEN_TERMS = new Set([
+  "buttcoin",
+  "butt",
+  "troll",
+  "wojak",
+  "useless",
+  "pengu",
+  "pudgy",
+  "popcat",
+  "wif",
+  "dogwifhat",
+  "bonk",
+  "mew",
+  "ponke",
+  "fwog",
+  "michi",
+  "retardio",
+  "mother",
+  "boden",
+  "mumu",
+  "goat",
+  "goatseus",
+  "fartcoin",
+  "fart",
+]);
+
+const OG_MEME_TOKEN_PHRASES = [
+  "pudgy penguins",
+  "dog wif hat",
+  "dogwifhat",
+  "goatseus maximus",
+] as const;
+
 const BLOCKED_LARGE_CAP_TERMS = new Set([
   "fartcoin",
   "fart",
@@ -22,8 +74,12 @@ const BLOCKED_LARGE_CAP_TERMS = new Set([
   "orca",
 ]);
 
+function normalizeTokenTerm(input: string): string {
+  return input.replace(/^\$+/, "").trim().toLowerCase();
+}
+
 function normalizedTicker(token: LaunchToken): string {
-  return token.ticker.replace("$", "").trim().toLowerCase();
+  return normalizeTokenTerm(token.ticker);
 }
 
 function tokenHaystack(token: LaunchToken): string {
@@ -36,6 +92,41 @@ function looksBlockedLargeCap(token: LaunchToken): boolean {
   const ticker = normalizedTicker(token);
   const words = [ticker, ...token.name.toLowerCase().split(/[^a-z0-9]+/)].filter(Boolean);
   return words.some((word) => BLOCKED_LARGE_CAP_TERMS.has(word));
+}
+
+function hasLiveMarket(token: LaunchToken): boolean {
+  return (token.marketCapUsd ?? 0) > 0 || (token.liquidityUsd ?? 0) > 0 || (token.volume24hUsd ?? 0) > 0;
+}
+
+/** Returns true for established culture/meme coins from the OG Solana watch set. */
+export function isOgMemeToken(token: LaunchToken): boolean {
+  if (!hasLiveMarket(token)) return false;
+
+  const ticker = normalizedTicker(token);
+  const name = token.name.toLowerCase();
+  const words = [
+    ticker,
+    ...token.name.toLowerCase().split(/[^a-z0-9]+/),
+    ...(token.tags ?? []).map((tag) => normalizeTokenTerm(tag)),
+  ].filter(Boolean);
+
+  if (words.some((word) => OG_MEME_TOKEN_TERMS.has(word))) return true;
+  return OG_MEME_TOKEN_PHRASES.some((phrase) => name.includes(phrase));
+}
+
+export function compareOgMemeTokens(a: LaunchToken, b: LaunchToken): number {
+  const volumeDiff = (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0);
+  if (volumeDiff !== 0) return volumeDiff;
+
+  const marketCapDiff = (b.marketCapUsd ?? 0) - (a.marketCapUsd ?? 0);
+  if (marketCapDiff !== 0) return marketCapDiff;
+
+  return (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0);
+}
+
+/** Returns live OG meme/culture tokens ranked by real market activity. */
+export function getOgMemeTokens(tokens: LaunchToken[], limit: number): LaunchToken[] {
+  return tokens.filter(isOgMemeToken).sort(compareOgMemeTokens).slice(0, limit);
 }
 
 /**

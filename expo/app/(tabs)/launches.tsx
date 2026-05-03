@@ -57,6 +57,7 @@ const SORTS: { key: LaunchSort; label: string }[] = [
   { key: "liquidity", label: "Liquidity" },
   { key: "marketcap", label: "Market Cap" },
   { key: "volume", label: "Volume" },
+  { key: "og", label: "OG Tokens" },
 ];
 
 const VENUES: { key: LaunchVenueFilter; label: string }[] = [
