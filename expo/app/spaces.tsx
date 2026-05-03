@@ -6,7 +6,7 @@ import {
   ArrowLeft,
   Bell,
   Calendar,
-  ChevronRight,
+  CheckCircle2,
   Clock,
   Flame,
   Headphones,
@@ -14,10 +14,12 @@ import {
   Plus,
   Radio,
   Search,
+  ShieldCheck,
   Sparkles,
   Users as UsersIcon,
   Volume2,
   X,
+  Zap,
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
@@ -40,18 +42,26 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
-import { CreateSpaceInput, Space, useSocial } from "@/providers/social-provider";
 import { useAuth } from "@/providers/auth-provider";
+import { CreateSpaceInput, Space, useSocial } from "@/providers/social-provider";
 
-type Tab = "live" | "upcoming" | "following";
+type Tab = "onair" | "scheduled" | "following" | "all";
+type CategoryFilter = "all" | Space["category"];
 
-const SPACE_CATEGORIES: { key: Space["category"]; label: string }[] = [
-  { key: "alpha", label: "Alpha" },
-  { key: "whales", label: "Whales" },
-  { key: "ai", label: "AI" },
-  { key: "ta", label: "TA" },
-  { key: "memes", label: "Memes" },
-  { key: "launches", label: "Launches" },
+const SPACE_CATEGORIES: { key: Space["category"]; label: string; tone: string }[] = [
+  { key: "alpha", label: "Alpha", tone: Colors.goldBright },
+  { key: "whales", label: "Whales", tone: Colors.silver },
+  { key: "ai", label: "AI", tone: Colors.mint },
+  { key: "ta", label: "TA", tone: Colors.cyan },
+  { key: "memes", label: "Memes", tone: Colors.orange },
+  { key: "launches", label: "Launches", tone: Colors.platinum },
+];
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "onair", label: "On air" },
+  { key: "scheduled", label: "Soon" },
+  { key: "following", label: "Alerts" },
+  { key: "all", label: "All" },
 ];
 
 function fmtCount(n: number): string {
@@ -59,24 +69,24 @@ function fmtCount(n: number): string {
   return n.toString();
 }
 
-function formatScheduled(t?: number): string {
-  if (!t) return "Scheduled";
-  const diff = t - Date.now();
-  if (diff < 0) return "Now";
-  const m = Math.floor(diff / 60000);
-  if (m < 60) return `in ${Math.max(1, m)}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `in ${h}h`;
-  const d = Math.floor(h / 24);
-  return `in ${d}d`;
+function liveDuration(startedAt?: number): string {
+  if (!startedAt) return "LIVE";
+  const minutes = Math.max(0, Math.floor((Date.now() - startedAt) / 60000));
+  if (minutes < 60) return `${minutes}m live`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
-function formatLive(startedAt?: number): string {
-  if (!startedAt) return "LIVE";
-  const m = Math.max(0, Math.floor((Date.now() - startedAt) / 60000));
-  if (m < 60) return `${m}m live`;
-  const h = Math.floor(m / 60);
-  return `${h}h live`;
+function scheduleLabel(scheduledAt?: number): string {
+  if (!scheduledAt) return "Scheduled";
+  const minutes = Math.floor((scheduledAt - Date.now()) / 60000);
+  if (minutes <= 0) return "Ready";
+  if (minutes < 60) return `in ${minutes}m`;
+  if (minutes < 1440) return `in ${Math.floor(minutes / 60)}h`;
+  return `in ${Math.floor(minutes / 1440)}d`;
+}
+
+function categoryTone(category: Space["category"]): string {
+  return SPACE_CATEGORIES.find((c) => c.key === category)?.tone ?? Colors.goldBright;
 }
 
 export default function SpacesScreen() {
@@ -90,43 +100,66 @@ export default function SpacesScreen() {
     toggleFollowSpace,
     createSpace,
   } = useSocial();
-  const [tab, setTab] = useState<Tab>("live");
-  const [composerOpen, setComposerOpen] = useState<boolean>(false);
-  const [query, setQuery] = useState<string>("");
 
-  const followed = useMemo(
-    () => spaces.filter((s) => isFollowingSpace(s.id)),
-    [spaces, isFollowingSpace],
+  const [tab, setTab] = useState<Tab>("onair");
+  const [category, setCategory] = useState<CategoryFilter>("all");
+  const [query, setQuery] = useState<string>("");
+  const [composerOpen, setComposerOpen] = useState<boolean>(false);
+
+  const activeSpaces = useMemo(
+    () => spaces.filter((s) => s.status !== "ended" && s.status !== "cancelled"),
+    [spaces],
   );
 
-  const rawData = useMemo<Space[]>(() => {
-    if (tab === "live") return liveSpaces;
-    if (tab === "upcoming") return upcomingSpaces;
-    return followed;
-  }, [tab, liveSpaces, upcomingSpaces, followed]);
+  const followedSpaces = useMemo(
+    () => activeSpaces.filter((s) => isFollowingSpace(s.id)),
+    [activeSpaces, isFollowingSpace],
+  );
 
-  const data = useMemo<Space[]>(() => {
+  const heroSpace = useMemo<Space | undefined>(
+    () => liveSpaces[0] ?? upcomingSpaces[0] ?? activeSpaces[0],
+    [liveSpaces, upcomingSpaces, activeSpaces],
+  );
+
+  const tabSource = useMemo<Space[]>(() => {
+    if (tab === "onair") return liveSpaces;
+    if (tab === "scheduled") return upcomingSpaces;
+    if (tab === "following") return followedSpaces;
+    return activeSpaces;
+  }, [tab, liveSpaces, upcomingSpaces, followedSpaces, activeSpaces]);
+
+  const filtered = useMemo<Space[]>(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rawData;
-    return rawData.filter(
-      (s) =>
-        s.title.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q) ||
-        s.topic.toLowerCase().includes(q) ||
-        s.hostName.toLowerCase().includes(q),
-    );
-  }, [rawData, query]);
+    return tabSource
+      .filter((s) => category === "all" || s.category === category)
+      .filter((s) => {
+        if (!q) return true;
+        return [s.title, s.description, s.topic, s.hostName, s.hostHandle, s.category]
+          .join(" ")
+          .toLowerCase()
+          .includes(q);
+      })
+      .sort((a, b) => {
+        if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+        return (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt);
+      });
+  }, [tabSource, category, query]);
 
   const openCreate = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (!isAuthenticated) {
-      Alert.alert("Sign in required", "Create or join Spaces after signing in.", [
+      Alert.alert("Sign in required", "Create, join, and host Spaces after signing in.", [
         { text: "Cancel", style: "cancel" },
         { text: "Sign in", onPress: () => router.push("/auth") },
       ]);
       return;
     }
     setComposerOpen(true);
+  };
+
+  const openSpace = (space: Space) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    router.push({ pathname: "/space/[id]", params: { id: space.id } });
   };
 
   const onCreate = async (input: CreateSpaceInput) => {
@@ -141,13 +174,10 @@ export default function SpacesScreen() {
   };
 
   const renderItem: ListRenderItem<Space> = ({ item }) => (
-    <SpaceCard
+    <SpaceCapsule
       space={item}
       following={isFollowingSpace(item.id)}
-      onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-        router.push({ pathname: "/space/[id]", params: { id: item.id } });
-      }}
+      onPress={() => openSpace(item)}
       onFollow={() => {
         Haptics.selectionAsync().catch(() => {});
         toggleFollowSpace(item.id).catch(() => {});
@@ -165,185 +195,249 @@ export default function SpacesScreen() {
           <Pressable onPress={() => router.back()} style={styles.iconBtn} testID="spaces-back">
             <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
           </Pressable>
-          <View style={styles.headTitleWrap}>
-            <View style={styles.eyebrowRow}>
-              <Headphones color={Colors.goldBright} size={12} strokeWidth={2.8} />
-              <Text style={styles.eyebrow}>LIVEKIT AUDIO</Text>
+          <View style={styles.headerTitleWrap}>
+            <View style={styles.kickerRow}>
+              <Radio color={Colors.goldBright} size={12} strokeWidth={3} />
+              <Text style={styles.kicker}>LIVEKIT SPACES</Text>
             </View>
-            <Text style={styles.title}>Spaces</Text>
+            <Text style={styles.title}>Signal Rooms</Text>
           </View>
           <Pressable onPress={openCreate} style={styles.startBtn} testID="start-space">
-            <Plus color={Colors.ink} size={14} strokeWidth={3} />
-            <Text style={styles.startText}>START</Text>
+            <Plus color={Colors.ink} size={15} strokeWidth={3} />
+            <Text style={styles.startText}>HOST</Text>
           </Pressable>
         </View>
 
-        <View style={styles.heroWrap}>
-          <LinearGradient
-            colors={["rgba(244,198,91,0.28)", "rgba(221,227,236,0.10)", "rgba(0,0,0,0.04)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.hero}
-          >
-            <View style={styles.heroLeft}>
-              <View style={styles.heroPill}>
-                <View style={styles.pulseDot} />
-                <Text style={styles.heroPillText}>{liveSpaces.length} SPACES LIVE</Text>
-              </View>
-              <Text style={styles.heroTitle}>Real-time alpha rooms</Text>
-              <Text style={styles.heroSub}>
-                Host market calls, token launches, whale watch rooms, and AI alpha using LiveKit Spaces.
-              </Text>
-              <View style={styles.heroStatsRow}>
-                <MiniStat label="Live" value={liveSpaces.length.toString()} />
-                <MiniStat label="Scheduled" value={upcomingSpaces.length.toString()} />
-                <MiniStat label="Following" value={followed.length.toString()} />
-              </View>
-            </View>
-            <Pulser />
-          </LinearGradient>
-        </View>
-
-        <View style={styles.searchWrap}>
-          <Search color={Colors.muted} size={14} strokeWidth={2.6} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search Spaces, hosts, topics..."
-            placeholderTextColor={Colors.muted2}
-            style={styles.searchInput}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {query.length > 0 ? (
-            <Pressable onPress={() => setQuery("")} hitSlop={8}>
-              <X color={Colors.muted} size={14} strokeWidth={2.6} />
-            </Pressable>
-          ) : null}
-        </View>
-
-        <View style={styles.tabsWrap}>
-          {(["live", "upcoming", "following"] as Tab[]).map((t) => {
-            const active = tab === t;
-            const count = t === "live" ? liveSpaces.length : t === "upcoming" ? upcomingSpaces.length : followed.length;
-            return (
-              <Pressable
-                key={t}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setTab(t);
-                }}
-                style={[styles.tab, active && styles.tabActive]}
-                testID={`spaces-tab-${t}`}
-              >
-                {t === "live" && active ? <View style={styles.tabLiveDot} /> : null}
-                <Text style={[styles.tabText, active && { color: Colors.text }]}> 
-                  {t === "live" ? "Live" : t === "upcoming" ? "Scheduled" : "Following"}
-                </Text>
-                <View style={styles.tabCount}>
-                  <Text style={styles.tabCountText}>{count}</Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-
         <FlatList
-          data={data}
+          data={filtered}
           keyExtractor={(s) => s.id}
           renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={styles.gap} />}
+          ListHeaderComponent={
+            <View>
+              <HeroPanel
+                space={heroSpace}
+                liveCount={liveSpaces.length}
+                scheduledCount={upcomingSpaces.length}
+                alertCount={followedSpaces.length}
+                onPress={() => heroSpace && openSpace(heroSpace)}
+                onCreate={openCreate}
+              />
+
+              <View style={styles.searchShell}>
+                <Search color={Colors.muted} size={15} strokeWidth={2.7} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search hosts, topics, rooms..."
+                  placeholderTextColor={Colors.muted2}
+                  style={styles.searchInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {query.length > 0 ? (
+                  <Pressable onPress={() => setQuery("")} hitSlop={10}>
+                    <X color={Colors.muted} size={15} strokeWidth={2.7} />
+                  </Pressable>
+                ) : null}
+              </View>
+
+              <View style={styles.tabRail}>
+                {TABS.map((t) => {
+                  const active = tab === t.key;
+                  const count =
+                    t.key === "onair"
+                      ? liveSpaces.length
+                      : t.key === "scheduled"
+                        ? upcomingSpaces.length
+                        : t.key === "following"
+                          ? followedSpaces.length
+                          : activeSpaces.length;
+                  return (
+                    <Pressable
+                      key={t.key}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setTab(t.key);
+                      }}
+                      style={[styles.tabPill, active && styles.tabPillActive]}
+                      testID={`spaces-tab-${t.key}`}
+                    >
+                      {t.key === "onair" ? <View style={[styles.tabDot, active && styles.tabDotActive]} /> : null}
+                      <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
+                      <Text style={[styles.tabNumber, active && styles.tabNumberActive]}>{count}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRail}>
+                <CategoryChip
+                  label="All rooms"
+                  active={category === "all"}
+                  tone={Colors.goldBright}
+                  onPress={() => setCategory("all")}
+                />
+                {SPACE_CATEGORIES.map((c) => (
+                  <CategoryChip
+                    key={c.key}
+                    label={c.label}
+                    active={category === c.key}
+                    tone={c.tone}
+                    onPress={() => setCategory(c.key)}
+                  />
+                ))}
+              </ScrollView>
+
+              <View style={styles.sectionHead}>
+                <View>
+                  <Text style={styles.sectionEyebrow}>ROOM DIRECTORY</Text>
+                  <Text style={styles.sectionTitle}>{filtered.length} matching Spaces</Text>
+                </View>
+                <View style={styles.safeBadge}>
+                  <ShieldCheck color={Colors.goldBright} size={12} strokeWidth={2.8} />
+                  <Text style={styles.safeBadgeText}>Host controlled</Text>
+                </View>
+              </View>
+            </View>
+          }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <View style={styles.emptyIcon}>
-                {tab === "live" ? (
-                  <Radio color={Colors.goldBright} size={26} strokeWidth={2.4} />
-                ) : tab === "upcoming" ? (
-                  <Calendar color={Colors.silver} size={26} strokeWidth={2.4} />
-                ) : (
-                  <Bell color={Colors.goldBright} size={26} strokeWidth={2.4} />
-                )}
+              <View style={styles.emptyOrb}>
+                <Headphones color={Colors.goldBright} size={28} strokeWidth={2.6} />
               </View>
-              <Text style={styles.emptyTitle}>
-                {query.trim()
-                  ? "No Spaces matched"
-                  : tab === "live"
-                  ? "No one is on air yet"
-                  : tab === "upcoming"
-                  ? "Nothing scheduled"
-                  : "Follow rooms for reminders"}
-              </Text>
+              <Text style={styles.emptyTitle}>{query ? "No Space matched" : "No rooms in this lane"}</Text>
               <Text style={styles.emptyBody}>
-                {query.trim()
-                  ? "Try another host, topic, or room title."
-                  : "Start the first Space and pull traders into a live alpha room."}
+                {query ? "Try another ticker, host, or topic." : "Start the next alpha call and bring the room online."}
               </Text>
-              {!query.trim() ? (
-                <Pressable onPress={openCreate} style={styles.emptyCta}>
+              {!query ? (
+                <Pressable onPress={openCreate} style={styles.emptyBtn}>
                   <Plus color={Colors.ink} size={14} strokeWidth={3} />
-                  <Text style={styles.emptyCtaText}>Create Space</Text>
+                  <Text style={styles.emptyBtnText}>Create Space</Text>
                 </Pressable>
               ) : null}
             </View>
           }
-          ListFooterComponent={
-            <View style={styles.footerWrap}>
-              <Text style={styles.footerLabel}>ROOM TYPES</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagsRow}>
-                {SPACE_CATEGORIES.map((c) => (
-                  <View key={c.key} style={styles.fTag}>
-                    <Text style={styles.fTagText}>#{c.label.toLowerCase()}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          }
+          ListFooterComponent={<View style={styles.footerSpacer} />}
         />
       </SafeAreaView>
 
-      <CreateSpaceModal
-        visible={composerOpen}
-        onClose={() => setComposerOpen(false)}
-        onCreate={onCreate}
-      />
+      <CreateSpaceModal visible={composerOpen} onClose={() => setComposerOpen(false)} onCreate={onCreate} />
     </View>
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
+function HeroPanel({
+  space,
+  liveCount,
+  scheduledCount,
+  alertCount,
+  onPress,
+  onCreate,
+}: {
+  space?: Space;
+  liveCount: number;
+  scheduledCount: number;
+  alertCount: number;
+  onPress: () => void;
+  onCreate: () => void;
+}) {
   return (
-    <View style={styles.miniStat}>
-      <Text style={styles.miniValue}>{value}</Text>
-      <Text style={styles.miniLabel}>{label}</Text>
+    <LinearGradient
+      colors={["rgba(244,198,91,0.30)", "rgba(221,227,236,0.10)", "rgba(2,2,2,0.10)"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.hero}
+    >
+      <View style={styles.heroBgRing} />
+      <View style={styles.heroTop}>
+        <View style={styles.onAirPill}>
+          <View style={styles.livePulse} />
+          <Text style={styles.onAirText}>{liveCount} ON AIR NOW</Text>
+        </View>
+        <WaveOrb />
+      </View>
+      <Text style={styles.heroTitle}>Trade rooms that feel alive.</Text>
+      <Text style={styles.heroBody}>
+        LiveKit-powered audio Spaces for market calls, token launches, whale watch, AI alpha, and community calls.
+      </Text>
+      {space ? (
+        <Pressable onPress={onPress} style={styles.featuredRoom} testID="featured-space-room">
+          <View style={[styles.featuredStripe, { backgroundColor: categoryTone(space.category) }]} />
+          <View style={styles.featuredMid}>
+            <Text style={styles.featuredLabel}>{space.isLive ? liveDuration(space.startedAt) : scheduleLabel(space.scheduledAt)}</Text>
+            <Text style={styles.featuredTitle} numberOfLines={1}>{space.title}</Text>
+            <Text style={styles.featuredSub} numberOfLines={1}>{space.hostName} · {space.topic}</Text>
+          </View>
+          <View style={styles.featuredJoin}>
+            <Volume2 color={Colors.ink} size={14} strokeWidth={3} />
+          </View>
+        </Pressable>
+      ) : (
+        <Pressable onPress={onCreate} style={styles.featuredRoom}>
+          <View style={[styles.featuredStripe, { backgroundColor: Colors.goldBright }]} />
+          <View style={styles.featuredMid}>
+            <Text style={styles.featuredLabel}>READY</Text>
+            <Text style={styles.featuredTitle}>Create the first live room</Text>
+            <Text style={styles.featuredSub}>Host a market call in seconds</Text>
+          </View>
+          <View style={styles.featuredJoin}>
+            <Plus color={Colors.ink} size={14} strokeWidth={3} />
+          </View>
+        </Pressable>
+      )}
+      <View style={styles.heroStats}>
+        <HeroStat label="Live" value={liveCount.toString()} />
+        <HeroStat label="Scheduled" value={scheduledCount.toString()} />
+        <HeroStat label="Alerts" value={alertCount.toString()} />
+      </View>
+    </LinearGradient>
+  );
+}
+
+function HeroStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.heroStat}>
+      <Text style={styles.heroStatValue}>{value}</Text>
+      <Text style={styles.heroStatLabel}>{label}</Text>
     </View>
   );
 }
 
-function Pulser() {
-  const [scale] = useState(() => new Animated.Value(1));
+function WaveOrb() {
+  const scale = React.useRef(new Animated.Value(1)).current;
   React.useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(scale, { toValue: 1.18, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 1, duration: 900, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1.2, duration: 920, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 920, easing: Easing.in(Easing.quad), useNativeDriver: true }),
       ]),
     );
     loop.start();
     return () => loop.stop();
   }, [scale]);
   return (
-    <View style={styles.pulserWrap} pointerEvents="none">
-      <Animated.View style={[styles.pulserOuter, { transform: [{ scale }] }]} />
-      <View style={styles.pulserInner}>
-        <Volume2 color={Colors.ink} size={20} strokeWidth={2.8} />
+    <View style={styles.waveWrap} pointerEvents="none">
+      <Animated.View style={[styles.waveHalo, { transform: [{ scale }] }]} />
+      <View style={styles.waveCore}>
+        <Headphones color={Colors.ink} size={18} strokeWidth={3} />
       </View>
     </View>
   );
 }
 
-function SpaceCard({
+function CategoryChip({ label, active, tone, onPress }: { label: string; active: boolean; tone: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.categoryChip, active && { borderColor: tone, backgroundColor: `${tone}18` }]}>
+      {active ? <CheckCircle2 color={tone} size={12} strokeWidth={3} /> : null}
+      <Text style={[styles.categoryText, active && { color: tone }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function SpaceCapsule({
   space,
   following,
   onPress,
@@ -354,118 +448,93 @@ function SpaceCard({
   onPress: () => void;
   onFollow: () => void;
 }) {
+  const tone = categoryTone(space.category);
   return (
-    <Pressable onPress={onPress} style={styles.card} testID={`space-${space.id}`}>
-      <LinearGradient colors={[`${space.accent[0]}2E`, "rgba(255,255,255,0.035)"]} style={styles.cardInner}>
-        <View style={styles.cardTop}>
-          <View style={[styles.topicPill, { backgroundColor: `${space.accent[0]}22`, borderColor: `${space.accent[0]}55` }]}>
-            <Text style={[styles.topicText, { color: space.accent[0] }]}>{space.topic}</Text>
-          </View>
-          {space.isLive ? (
-            <View style={styles.liveBadge}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>{formatLive(space.startedAt)}</Text>
-            </View>
-          ) : (
-            <View style={styles.scheduledBadge}>
-              <Clock color={Colors.silver} size={10} strokeWidth={3} />
-              <Text style={styles.scheduledText}>{formatScheduled(space.scheduledAt)}</Text>
-            </View>
-          )}
+    <Pressable onPress={onPress} style={styles.capsule} testID={`space-${space.id}`}>
+      <LinearGradient colors={[`${tone}18`, "rgba(255,255,255,0.035)"]} style={styles.capsuleInner}>
+        <View style={[styles.signalAvatar, { backgroundColor: tone }]}>
+          {space.isLive ? <Radio color={Colors.ink} size={17} strokeWidth={3} /> : <Calendar color={Colors.ink} size={17} strokeWidth={3} />}
         </View>
-
-        <Text style={styles.cardTitle} numberOfLines={2}>{space.title}</Text>
-        {space.description ? <Text style={styles.cardDesc} numberOfLines={2}>{space.description}</Text> : null}
-
-        <View style={styles.hostRow}>
-          <View style={[styles.hostAvatar, { backgroundColor: space.accent[0] }]}>
-            <Text style={styles.hostInit}>{space.hostName.slice(0, 1).toUpperCase()}</Text>
+        <View style={styles.capsuleBody}>
+          <View style={styles.capsuleMetaRow}>
+            <Text style={[styles.capsuleTopic, { color: tone }]}>{space.topic}</Text>
+            <Text style={styles.capsuleDot}>·</Text>
+            <Text style={styles.capsuleTime}>{space.isLive ? liveDuration(space.startedAt) : scheduleLabel(space.scheduledAt)}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.hostName} numberOfLines={1}>{space.hostName} <Text style={styles.hostMeta}>· {space.hostHandle}</Text></Text>
-            <Text style={styles.hostCo} numberOfLines={1}>{space.category.toUpperCase()} room</Text>
-          </View>
-          {space.recording ? (
-            <View style={styles.recBadge}>
-              <View style={styles.recDot} />
-              <Text style={styles.recText}>REC</Text>
+          <Text style={styles.capsuleTitle} numberOfLines={1}>{space.title}</Text>
+          <View style={styles.capsuleSubRow}>
+            <Text style={styles.hostText} numberOfLines={1}>{space.hostName || "Host"}</Text>
+            <View style={styles.miniStatPill}>
+              <Mic color={tone} size={10} strokeWidth={3} />
+              <Text style={styles.miniStatText}>{space.speakers}</Text>
             </View>
-          ) : null}
+            <View style={styles.miniStatPill}>
+              <UsersIcon color={Colors.muted} size={10} strokeWidth={3} />
+              <Text style={styles.miniStatText}>{fmtCount(space.listeners)}</Text>
+            </View>
+            {space.raisedHands > 0 ? (
+              <View style={styles.miniStatPill}>
+                <Sparkles color={Colors.goldBright} size={10} strokeWidth={3} />
+                <Text style={styles.miniStatText}>{space.raisedHands}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
-
-        <View style={styles.cardFoot}>
-          <View style={styles.footStat}>
-            <Mic color={space.accent[0]} size={11} strokeWidth={3} />
-            <Text style={styles.footStatText}>{space.speakers}</Text>
+        {space.isLive ? (
+          <View style={[styles.joinPill, { backgroundColor: tone }]}>
+            <Text style={styles.joinText}>JOIN</Text>
           </View>
-          <View style={styles.footStat}>
-            <UsersIcon color={Colors.muted} size={11} strokeWidth={3} />
-            <Text style={styles.footStatText}>{fmtCount(space.listeners)}</Text>
-          </View>
-          {space.raisedHands > 0 ? (
-            <View style={styles.footStat}>
-              <Sparkles color={Colors.goldBright} size={11} strokeWidth={3} />
-              <Text style={styles.footStatText}>{space.raisedHands}</Text>
-            </View>
-          ) : null}
-          {space.isLive ? (
-            <View style={[styles.joinBtn, { backgroundColor: space.accent[0] }]}>
-              <Volume2 color={Colors.ink} size={11} strokeWidth={3} />
-              <Text style={styles.joinText}>JOIN</Text>
-              <ChevronRight color={Colors.ink} size={12} strokeWidth={3} />
-            </View>
-          ) : (
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                onFollow();
-              }}
-              style={[styles.followBtn, following && { backgroundColor: "rgba(244,198,91,0.16)", borderColor: Colors.goldBright }]}
-              hitSlop={6}
-              testID={`follow-${space.id}`}
-            >
-              <Bell color={following ? Colors.goldBright : Colors.text} size={11} strokeWidth={2.8} />
-              <Text style={[styles.followText, following && { color: Colors.goldBright }]}>{following ? "ALERTING" : "REMIND"}</Text>
-            </Pressable>
-          )}
-        </View>
+        ) : (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onFollow();
+            }}
+            style={[styles.remindPill, following && { borderColor: Colors.goldBright, backgroundColor: "rgba(244,198,91,0.14)" }]}
+            testID={`follow-${space.id}`}
+          >
+            <Bell color={following ? Colors.goldBright : Colors.text} size={12} strokeWidth={2.8} />
+          </Pressable>
+        )}
       </LinearGradient>
     </Pressable>
   );
 }
 
-function CreateSpaceModal({
-  visible,
-  onClose,
-  onCreate,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onCreate: (input: CreateSpaceInput) => Promise<void>;
-}) {
+function CreateSpaceModal({ visible, onClose, onCreate }: { visible: boolean; onClose: () => void; onCreate: (input: CreateSpaceInput) => Promise<void> }) {
   const [title, setTitle] = useState<string>("");
   const [topic, setTopic] = useState<string>("ALPHA");
   const [description, setDescription] = useState<string>("");
   const [category, setCategory] = useState<Space["category"]>("alpha");
   const [schedule, setSchedule] = useState<boolean>(false);
+  const [recording, setRecording] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
+
+  const reset = () => {
+    setTitle("");
+    setTopic("ALPHA");
+    setDescription("");
+    setCategory("alpha");
+    setSchedule(false);
+    setRecording(false);
+  };
 
   const submit = async () => {
     if (submitting) return;
     setSubmitting(true);
-    await onCreate({
-      title,
-      topic,
-      description,
-      category,
-      scheduledAt: schedule ? Date.now() + 30 * 60_000 : null,
-      recording: false,
-    }).finally(() => setSubmitting(false));
-    setTitle("");
-    setDescription("");
-    setTopic("ALPHA");
-    setCategory("alpha");
-    setSchedule(false);
+    try {
+      await onCreate({
+        title,
+        topic,
+        description,
+        category,
+        scheduledAt: schedule ? Date.now() + 30 * 60_000 : null,
+        recording,
+      });
+      reset();
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -474,74 +543,75 @@ function CreateSpaceModal({
         <Pressable style={styles.modalShade} onPress={onClose} />
         <View style={styles.sheet}>
           <View style={styles.sheetHandle} />
-          <View style={styles.sheetHead}>
+          <View style={styles.sheetHeader}>
             <View>
-              <Text style={styles.sheetEyebrow}>CREATE LIVEKIT SPACE</Text>
-              <Text style={styles.sheetTitle}>Start an audio room</Text>
+              <Text style={styles.sheetKicker}>NEW LIVEKIT SPACE</Text>
+              <Text style={styles.sheetTitle}>Build a room</Text>
             </View>
             <Pressable onPress={onClose} style={styles.sheetClose}>
-              <X color={Colors.text} size={18} strokeWidth={2.6} />
+              <X color={Colors.text} size={18} strokeWidth={2.8} />
             </Pressable>
           </View>
 
-          <Text style={styles.inputLabel}>Title</Text>
+          <Text style={styles.inputLabel}>Room title</Text>
           <TextInput
             value={title}
             onChangeText={setTitle}
-            placeholder="Market open alpha, AI runners, whale watch..."
+            placeholder="Fresh migrations, whale tape, AI runners..."
             placeholderTextColor={Colors.muted2}
-            style={styles.sheetInput}
+            style={styles.input}
             maxLength={120}
           />
 
-          <View style={styles.twoCol}>
+          <View style={styles.formRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.inputLabel}>Topic</Text>
+              <Text style={styles.inputLabel}>Topic tag</Text>
               <TextInput
                 value={topic}
                 onChangeText={(v) => setTopic(v.toUpperCase())}
                 placeholder="ALPHA"
                 placeholderTextColor={Colors.muted2}
-                style={styles.sheetInput}
+                style={styles.input}
                 maxLength={28}
                 autoCapitalize="characters"
               />
             </View>
-            <Pressable
-              onPress={() => setSchedule((v) => !v)}
-              style={[styles.scheduleToggle, schedule && styles.scheduleToggleActive]}
-            >
-              <Calendar color={schedule ? Colors.ink : Colors.text} size={15} strokeWidth={2.8} />
-              <Text style={[styles.scheduleText, schedule && { color: Colors.ink }]}>30m</Text>
+            <Pressable onPress={() => setSchedule((v) => !v)} style={[styles.optionTile, schedule && styles.optionTileActive]}>
+              <Clock color={schedule ? Colors.ink : Colors.text} size={16} strokeWidth={3} />
+              <Text style={[styles.optionText, schedule && styles.optionTextActive]}>30m</Text>
+            </Pressable>
+            <Pressable onPress={() => setRecording((v) => !v)} style={[styles.optionTile, recording && styles.optionTileActive]}>
+              <ShieldCheck color={recording ? Colors.ink : Colors.text} size={16} strokeWidth={3} />
+              <Text style={[styles.optionText, recording && styles.optionTextActive]}>REC</Text>
             </Pressable>
           </View>
 
           <Text style={styles.inputLabel}>Category</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sheetCategoryRail}>
             {SPACE_CATEGORIES.map((c) => {
               const active = category === c.key;
               return (
-                <Pressable key={c.key} onPress={() => setCategory(c.key)} style={[styles.categoryChip, active && styles.categoryChipActive]}>
-                  <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{c.label}</Text>
+                <Pressable key={c.key} onPress={() => setCategory(c.key)} style={[styles.sheetCat, active && { borderColor: c.tone, backgroundColor: `${c.tone}18` }]}>
+                  <Text style={[styles.sheetCatText, active && { color: c.tone }]}>{c.label}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
 
-          <Text style={styles.inputLabel}>Description</Text>
+          <Text style={styles.inputLabel}>Room brief</Text>
           <TextInput
             value={description}
             onChangeText={setDescription}
-            placeholder="Tell traders what the room is about."
+            placeholder="What should traders expect in this Space?"
             placeholderTextColor={Colors.muted2}
-            style={[styles.sheetInput, styles.sheetTextArea]}
+            style={[styles.input, styles.textArea]}
             multiline
             maxLength={500}
           />
 
           <Pressable onPress={submit} disabled={submitting} style={styles.createBtn} testID="create-space-submit">
-            <Flame color={Colors.ink} size={16} strokeWidth={3} />
-            <Text style={styles.createBtnText}>{submitting ? "CREATING..." : schedule ? "SCHEDULE SPACE" : "GO LIVE"}</Text>
+            <Zap color={Colors.ink} size={16} strokeWidth={3} />
+            <Text style={styles.createText}>{submitting ? "CREATING..." : schedule ? "SCHEDULE SPACE" : "GO LIVE"}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -552,99 +622,99 @@ function CreateSpaceModal({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
-  header: { paddingHorizontal: 18, paddingTop: 6, paddingBottom: 4, flexDirection: "row", alignItems: "center", gap: 12 },
-  iconBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", alignItems: "center", justifyContent: "center" },
-  headTitleWrap: { flex: 1 },
-  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  eyebrow: { color: Colors.goldBright, fontSize: 10, fontWeight: "900", letterSpacing: 1.6 },
-  title: { color: Colors.text, fontSize: 28, fontWeight: "900", letterSpacing: -0.9, marginTop: 2 },
-  startBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12, backgroundColor: Colors.goldBright },
+  header: { paddingHorizontal: 18, paddingTop: 6, paddingBottom: 8, flexDirection: "row", alignItems: "center", gap: 12 },
+  iconBtn: { width: 38, height: 38, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.055)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
+  headerTitleWrap: { flex: 1 },
+  kickerRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  kicker: { color: Colors.goldBright, fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  title: { color: Colors.text, fontSize: 28, fontWeight: "900", letterSpacing: -0.8, marginTop: 2 },
+  startBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 13, paddingVertical: 10, borderRadius: 15, backgroundColor: Colors.goldBright },
   startText: { color: Colors.ink, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
-  heroWrap: { paddingHorizontal: 18, marginTop: 14 },
-  hero: { flexDirection: "row", alignItems: "center", padding: 18, borderRadius: 24, borderWidth: 1, borderColor: "rgba(244,198,91,0.30)", overflow: "hidden" },
-  heroLeft: { flex: 1 },
-  heroPill: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.4)", borderWidth: 1, borderColor: "rgba(244,198,91,0.42)" },
-  pulseDot: { width: 6, height: 6, borderRadius: 4, backgroundColor: Colors.goldBright },
-  heroPillText: { color: Colors.goldBright, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  heroTitle: { color: Colors.text, fontSize: 21, fontWeight: "900", letterSpacing: -0.55, marginTop: 10 },
-  heroSub: { color: Colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 17, marginTop: 5 },
-  heroStatsRow: { flexDirection: "row", gap: 8, marginTop: 14 },
-  miniStat: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 13, backgroundColor: "rgba(0,0,0,0.28)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
-  miniValue: { color: Colors.text, fontSize: 13, fontWeight: "900" },
-  miniLabel: { color: Colors.muted, fontSize: 9, fontWeight: "800", marginTop: 1 },
-  pulserWrap: { width: 72, height: 72, alignItems: "center", justifyContent: "center" },
-  pulserOuter: { position: "absolute", width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(244,198,91,0.22)" },
-  pulserInner: { width: 50, height: 50, borderRadius: 25, backgroundColor: Colors.goldBright, alignItems: "center", justifyContent: "center" },
-  searchWrap: { marginHorizontal: 18, marginTop: 14, height: 42, borderRadius: 15, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
-  searchInput: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: "700", paddingVertical: 0 },
-  tabsWrap: { flexDirection: "row", gap: 6, marginTop: 12, marginHorizontal: 18, padding: 4, backgroundColor: Colors.card, borderRadius: 15, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
-  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 9, borderRadius: 11 },
-  tabActive: { backgroundColor: "rgba(255,255,255,0.07)" },
-  tabLiveDot: { width: 6, height: 6, borderRadius: 4, backgroundColor: Colors.goldBright },
-  tabText: { color: Colors.muted, fontSize: 12, fontWeight: "900", letterSpacing: 0.2 },
-  tabCount: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.06)", minWidth: 20, alignItems: "center" },
-  tabCountText: { color: Colors.text, fontSize: 9, fontWeight: "900" },
-  listContent: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 140 },
-  gap: { height: 12 },
-  card: { borderRadius: 24, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", backgroundColor: Colors.card },
-  cardInner: { padding: 16 },
-  cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  topicPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
-  topicText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  liveBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(244,198,91,0.14)", borderWidth: 1, borderColor: "rgba(244,198,91,0.38)" },
-  liveDot: { width: 6, height: 6, borderRadius: 4, backgroundColor: Colors.goldBright },
-  liveText: { color: Colors.goldBright, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
-  scheduledBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(221,227,236,0.12)", borderWidth: 1, borderColor: "rgba(221,227,236,0.25)" },
-  scheduledText: { color: Colors.silver, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
-  cardTitle: { color: Colors.text, fontSize: 18, fontWeight: "900", letterSpacing: -0.35, marginTop: 12 },
-  cardDesc: { color: Colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 17, marginTop: 4 },
-  hostRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.06)" },
-  hostAvatar: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  hostInit: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
-  hostName: { color: Colors.text, fontSize: 12, fontWeight: "900" },
-  hostMeta: { color: Colors.muted, fontWeight: "700" },
-  hostCo: { color: Colors.muted, fontSize: 10, fontWeight: "800", marginTop: 2 },
-  recBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, backgroundColor: "rgba(247,242,231,0.14)" },
-  recDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.rose },
-  recText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
-  cardFoot: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
-  footStat: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.05)" },
-  footStatText: { color: Colors.text, fontSize: 11, fontWeight: "800" },
-  joinBtn: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999 },
-  joinText: { color: Colors.ink, fontSize: 11, fontWeight: "900", letterSpacing: 0.6 },
-  followBtn: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" },
-  followText: { color: Colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
-  empty: { paddingHorizontal: 32, paddingVertical: 52, alignItems: "center" },
-  emptyIcon: { width: 60, height: 60, borderRadius: 18, backgroundColor: "rgba(244,198,91,0.14)", alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: "900" },
-  emptyBody: { color: Colors.muted, fontSize: 12, fontWeight: "600", textAlign: "center", marginTop: 6, lineHeight: 17 },
-  emptyCta: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 16, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, backgroundColor: Colors.goldBright },
-  emptyCtaText: { color: Colors.ink, fontSize: 12, fontWeight: "900" },
-  footerWrap: { marginTop: 22 },
-  footerLabel: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.4, marginBottom: 8 },
-  tagsRow: { gap: 6 },
-  fTag: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
-  fTagText: { color: Colors.text, fontSize: 11, fontWeight: "800" },
+  listContent: { paddingHorizontal: 18, paddingBottom: 138 },
+  gap: { height: 10 },
+  hero: { marginTop: 10, borderRadius: 30, padding: 18, overflow: "hidden", borderWidth: 1, borderColor: "rgba(244,198,91,0.30)" },
+  heroBgRing: { position: "absolute", right: -54, top: -42, width: 168, height: 168, borderRadius: 84, borderWidth: 1, borderColor: "rgba(244,198,91,0.20)" },
+  heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  onAirPill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.42)", borderWidth: 1, borderColor: "rgba(244,198,91,0.38)" },
+  livePulse: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.goldBright },
+  onAirText: { color: Colors.goldBright, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  waveWrap: { width: 58, height: 58, alignItems: "center", justifyContent: "center" },
+  waveHalo: { position: "absolute", width: 58, height: 58, borderRadius: 29, backgroundColor: "rgba(244,198,91,0.18)" },
+  waveCore: { width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.goldBright, alignItems: "center", justifyContent: "center" },
+  heroTitle: { color: Colors.text, fontSize: 27, fontWeight: "900", letterSpacing: -0.9, marginTop: 14, maxWidth: 260 },
+  heroBody: { color: Colors.muted, fontSize: 12.5, fontWeight: "650", lineHeight: 18, marginTop: 6, maxWidth: 310 },
+  featuredRoom: { marginTop: 15, minHeight: 68, borderRadius: 23, backgroundColor: "rgba(0,0,0,0.36)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", flexDirection: "row", alignItems: "center", overflow: "hidden" },
+  featuredStripe: { width: 5, alignSelf: "stretch" },
+  featuredMid: { flex: 1, paddingHorizontal: 12 },
+  featuredLabel: { color: Colors.goldBright, fontSize: 9, fontWeight: "900", letterSpacing: 1.1 },
+  featuredTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", marginTop: 3 },
+  featuredSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  featuredJoin: { width: 36, height: 36, borderRadius: 18, marginRight: 12, backgroundColor: Colors.goldBright, alignItems: "center", justifyContent: "center" },
+  heroStats: { flexDirection: "row", gap: 8, marginTop: 14 },
+  heroStat: { flex: 1, paddingVertical: 9, borderRadius: 17, backgroundColor: "rgba(0,0,0,0.28)", borderWidth: 1, borderColor: "rgba(255,255,255,0.07)", alignItems: "center" },
+  heroStatValue: { color: Colors.text, fontSize: 15, fontWeight: "900" },
+  heroStatLabel: { color: Colors.muted, fontSize: 9, fontWeight: "800", marginTop: 2 },
+  searchShell: { height: 45, borderRadius: 18, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 9, marginTop: 14, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.07)" },
+  searchInput: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: "800", paddingVertical: 0 },
+  tabRail: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 12 },
+  tabPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.07)" },
+  tabPillActive: { backgroundColor: "rgba(244,198,91,0.14)", borderColor: "rgba(244,198,91,0.40)" },
+  tabDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.muted2 },
+  tabDotActive: { backgroundColor: Colors.goldBright },
+  tabText: { color: Colors.muted, fontSize: 12, fontWeight: "900" },
+  tabTextActive: { color: Colors.text },
+  tabNumber: { color: Colors.muted2, fontSize: 10, fontWeight: "900" },
+  tabNumberActive: { color: Colors.goldBright },
+  categoryRail: { gap: 8, paddingVertical: 13 },
+  categoryChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.07)" },
+  categoryText: { color: Colors.muted, fontSize: 12, fontWeight: "900" },
+  sectionHead: { marginTop: 2, marginBottom: 12, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12 },
+  sectionEyebrow: { color: Colors.muted2, fontSize: 9, fontWeight: "900", letterSpacing: 1.3 },
+  sectionTitle: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.25, marginTop: 2 },
+  safeBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(244,198,91,0.10)", borderWidth: 1, borderColor: "rgba(244,198,91,0.22)" },
+  safeBadgeText: { color: Colors.goldBright, fontSize: 10, fontWeight: "900" },
+  capsule: { borderRadius: 28, overflow: "hidden", backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.075)" },
+  capsuleInner: { minHeight: 78, padding: 10, flexDirection: "row", alignItems: "center", gap: 11 },
+  signalAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  capsuleBody: { flex: 1, minWidth: 0 },
+  capsuleMetaRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  capsuleTopic: { fontSize: 9.5, fontWeight: "900", letterSpacing: 1.1 },
+  capsuleDot: { color: Colors.muted2, fontSize: 10, fontWeight: "900" },
+  capsuleTime: { color: Colors.muted, fontSize: 10, fontWeight: "850" },
+  capsuleTitle: { color: Colors.text, fontSize: 14.5, fontWeight: "900", letterSpacing: -0.2, marginTop: 4 },
+  capsuleSubRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 7 },
+  hostText: { color: Colors.muted, fontSize: 11, fontWeight: "800", maxWidth: 96 },
+  miniStatPill: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.055)" },
+  miniStatText: { color: Colors.text, fontSize: 10, fontWeight: "900" },
+  joinPill: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999 },
+  joinText: { color: Colors.ink, fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+  remindPill: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.055)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
+  empty: { paddingHorizontal: 32, paddingVertical: 46, alignItems: "center" },
+  emptyOrb: { width: 64, height: 64, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(244,198,91,0.13)", borderWidth: 1, borderColor: "rgba(244,198,91,0.22)", marginBottom: 14 },
+  emptyTitle: { color: Colors.text, fontSize: 17, fontWeight: "900" },
+  emptyBody: { color: Colors.muted, fontSize: 12, fontWeight: "700", textAlign: "center", lineHeight: 17, marginTop: 6 },
+  emptyBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 16, paddingHorizontal: 15, paddingVertical: 10, borderRadius: 15, backgroundColor: Colors.goldBright },
+  emptyBtnText: { color: Colors.ink, fontSize: 12, fontWeight: "900" },
+  footerSpacer: { height: 18 },
   modalRoot: { flex: 1, justifyContent: "flex-end" },
-  modalShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
-  sheet: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28, backgroundColor: "rgba(12,11,9,0.98)", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: "rgba(244,198,91,0.22)" },
+  modalShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.62)" },
+  sheet: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28, backgroundColor: "rgba(10,9,7,0.99)", borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, borderColor: "rgba(244,198,91,0.25)" },
   sheetHandle: { alignSelf: "center", width: 42, height: 4, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.18)", marginBottom: 14 },
-  sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
-  sheetEyebrow: { color: Colors.goldBright, fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
-  sheetTitle: { color: Colors.text, fontSize: 22, fontWeight: "900", letterSpacing: -0.5, marginTop: 3 },
-  sheetClose: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: Colors.card },
-  inputLabel: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.1, marginBottom: 7, marginTop: 10 },
-  sheetInput: { minHeight: 46, borderRadius: 15, paddingHorizontal: 12, color: Colors.text, fontSize: 13, fontWeight: "800", backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.07)" },
-  sheetTextArea: { minHeight: 82, paddingTop: 12, textAlignVertical: "top" },
-  twoCol: { flexDirection: "row", gap: 10, alignItems: "flex-end" },
-  scheduleToggle: { width: 78, height: 46, borderRadius: 15, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.07)" },
-  scheduleToggleActive: { backgroundColor: Colors.goldBright, borderColor: Colors.goldBright },
-  scheduleText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
-  categoryRow: { gap: 8, paddingRight: 16 },
-  categoryChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.07)" },
-  categoryChipActive: { backgroundColor: "rgba(244,198,91,0.16)", borderColor: Colors.goldBright },
-  categoryChipText: { color: Colors.muted, fontSize: 12, fontWeight: "900" },
-  categoryChipTextActive: { color: Colors.goldBright },
-  createBtn: { marginTop: 16, height: 50, borderRadius: 16, backgroundColor: Colors.goldBright, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  createBtnText: { color: Colors.ink, fontSize: 13, fontWeight: "900", letterSpacing: 0.8 },
+  sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  sheetKicker: { color: Colors.goldBright, fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  sheetTitle: { color: Colors.text, fontSize: 23, fontWeight: "900", letterSpacing: -0.55, marginTop: 2 },
+  sheetClose: { width: 38, height: 38, borderRadius: 14, backgroundColor: Colors.card, alignItems: "center", justifyContent: "center" },
+  inputLabel: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.15, marginBottom: 7, marginTop: 10 },
+  input: { minHeight: 46, borderRadius: 16, paddingHorizontal: 12, color: Colors.text, fontSize: 13, fontWeight: "800", backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  textArea: { minHeight: 84, paddingTop: 12, textAlignVertical: "top" },
+  formRow: { flexDirection: "row", gap: 9, alignItems: "flex-end" },
+  optionTile: { width: 58, height: 46, borderRadius: 16, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center", gap: 2 },
+  optionTileActive: { backgroundColor: Colors.goldBright, borderColor: Colors.goldBright },
+  optionText: { color: Colors.text, fontSize: 9, fontWeight: "900" },
+  optionTextActive: { color: Colors.ink },
+  sheetCategoryRail: { gap: 8, paddingRight: 16 },
+  sheetCat: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  sheetCatText: { color: Colors.muted, fontSize: 12, fontWeight: "900" },
+  createBtn: { marginTop: 16, height: 51, borderRadius: 18, backgroundColor: Colors.goldBright, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  createText: { color: Colors.ink, fontSize: 13, fontWeight: "900", letterSpacing: 0.8 },
 });

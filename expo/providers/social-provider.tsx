@@ -934,6 +934,48 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     [isAuthenticated, userId, qc],
   );
 
+  const setSpaceParticipantRole = useCallback(
+    async (id: string, participantId: string, role: SpaceParticipant["role"]): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Only hosts can manage the stage.");
+      const { error } = await supabase.rpc("set_space_participant_role", {
+        target_room_id: id,
+        target_participant_id: participantId,
+        p_role: role,
+      });
+      if (error) throw error;
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["social", "spaces"] }),
+        qc.invalidateQueries({ queryKey: ["space", "participants", id] }),
+      ]);
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const removeSpaceParticipant = useCallback(
+    async (id: string, participantId: string): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Only hosts can remove listeners.");
+      const { error } = await supabase.rpc("remove_space_participant", {
+        target_room_id: id,
+        target_participant_id: participantId,
+      });
+      if (error) throw error;
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["social", "spaces"] }),
+        qc.invalidateQueries({ queryKey: ["space", "participants", id] }),
+      ]);
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const heartbeatSpace = useCallback(
+    async (id: string): Promise<void> => {
+      if (!isAuthenticated || !userId) return;
+      const { error } = await supabase.rpc("heartbeat_space_participant", { target_room_id: id });
+      if (error) console.log("[social] space heartbeat failed", error.message);
+    },
+    [isAuthenticated, userId],
+  );
+
   const sendSpaceMessage = useCallback(
     async (id: string, body: string): Promise<void> => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to chat in Spaces.");
@@ -2023,6 +2065,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       leaveSpace,
       setSpaceMute,
       setSpaceHand,
+      setSpaceParticipantRole,
+      removeSpaceParticipant,
+      heartbeatSpace,
       sendSpaceMessage,
       addSpaceReaction,
       endSpace,
@@ -2063,6 +2108,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       leaveSpace,
       setSpaceMute,
       setSpaceHand,
+      setSpaceParticipantRole,
+      removeSpaceParticipant,
+      heartbeatSpace,
       sendSpaceMessage,
       addSpaceReaction,
       endSpace,
