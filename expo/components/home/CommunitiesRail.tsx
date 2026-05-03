@@ -61,7 +61,7 @@ export default function CommunitiesRail() {
           testID="discover-communities"
         >
           <LinearGradient
-            colors={["rgba(85,245,178,0.18)", "rgba(56,215,255,0.06)"]}
+            colors={["rgba(255,255,255,0.12)", "rgba(229,231,235,0.05)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.discoverInner}
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 9,
-    backgroundColor: "rgba(85,245,178,0.16)",
+    backgroundColor: "rgba(255,255,255,0.10)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -191,9 +191,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(85,245,178,0.14)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.32)",
+    borderColor: "rgba(255,255,255,0.20)",
   },
   joinedPillText: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
   see: { color: Colors.mint, fontSize: 12, fontWeight: "800" },
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.26)",
+    borderColor: "rgba(255,255,255,0.16)",
     backgroundColor: Colors.card,
   },
   discoverInner: { padding: 14, minHeight: 168, justifyContent: "space-between" },
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: "rgba(85,245,178,0.18)",
+    backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "rgba(255,184,76,0.18)",
+    backgroundColor: "rgba(201,206,216,0.14)",
     alignItems: "center",
     justifyContent: "center",
   },

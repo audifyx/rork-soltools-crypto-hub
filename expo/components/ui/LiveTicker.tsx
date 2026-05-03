@@ -108,7 +108,7 @@ export default function LiveTicker() {
       </View>
       <View style={styles.scrollWrap}>
         <LinearGradient
-          colors={["rgba(8,12,16,0.95)", "rgba(8,12,16,0)"]}
+          colors={["rgba(0,0,0,0.95)", "rgba(8,12,16,0)"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={[StyleSheet.absoluteFill, { zIndex: 2, width: 24 }]}
@@ -139,9 +139,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "rgba(255,184,76,0.12)",
+    backgroundColor: "rgba(255,255,255,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(255,184,76,0.4)",
+    borderColor: "rgba(255,255,255,0.20)",
   },
   badgeText: {
     color: Colors.orange,

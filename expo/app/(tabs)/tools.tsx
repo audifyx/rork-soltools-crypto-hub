@@ -111,8 +111,8 @@ const TOOLS: Tool[] = [
       "Drop any Solana contract to view a full token snapshot — price, market cap, liquidity, holders — and a live DEX chart.",
     Icon: ScanLine,
     accent: Colors.cyan,
-    glow: "rgba(56,215,255,0.22)",
-    gradient: [Colors.cyan, "#7B5BFF"],
+    glow: "rgba(229,231,235,0.14)",
+    gradient: [Colors.cyan, "#B8BEC8"],
     tags: ["Live", "Chart", "On-chain"],
     status: "LIVE",
     category: "analysis",
@@ -126,7 +126,7 @@ const TOOLS: Tool[] = [
       "Paste any wallet to see holdings, realized PnL, top trades, and live on-chain activity streamed via Helius RPC.",
     Icon: Wallet,
     accent: Colors.mint,
-    glow: "rgba(85,245,178,0.22)",
+    glow: "rgba(255,255,255,0.14)",
     gradient: [Colors.mint, Colors.cyan],
     tags: ["Helius", "PnL", "Live"],
     status: "LIVE",
@@ -141,7 +141,7 @@ const TOOLS: Tool[] = [
       "Secure Solana trading wallet with local encrypted keys, Phantom deeplinks, Jupiter routes, exports, and trade history.",
     Icon: Wallet,
     accent: Colors.mint,
-    glow: "rgba(85,245,178,0.26)",
+    glow: "rgba(255,255,255,0.16)",
     gradient: [Colors.mint, Colors.orange],
     tags: ["Wallet", "Jupiter", "Phantom"],
     status: "LIVE",
@@ -156,7 +156,7 @@ const TOOLS: Tool[] = [
       "Holder clusters, LP locks, tax behavior, smart-money flow and a risk score — generated on demand by our AI engine.",
     Icon: Brain,
     accent: Colors.violet,
-    glow: "rgba(184,140,255,0.22)",
+    glow: "rgba(184,190,200,0.14)",
     gradient: [Colors.violet, Colors.cyan],
     tags: ["AI", "Risk", "On-chain"],
     status: "LIVE",
@@ -171,7 +171,7 @@ const TOOLS: Tool[] = [
       "Conversational AI with live Helius + RPC blockchain context. Ask about flows, history, narratives, and risk in plain English.",
     Icon: MessageCircle,
     accent: Colors.orange,
-    glow: "rgba(255,184,76,0.22)",
+    glow: "rgba(201,206,216,0.14)",
     gradient: [Colors.orange, Colors.rose],
     tags: ["GPT", "RPC", "Context"],
     status: "BETA",
@@ -188,7 +188,7 @@ const TOOLS: Tool[] = [
       "Watch a curated list of whales, their entries, exits and fresh accumulations across Solana — live activity feed.",
     Icon: Waves,
     accent: Colors.cyan,
-    glow: "rgba(56,215,255,0.22)",
+    glow: "rgba(229,231,235,0.14)",
     gradient: [Colors.cyan, Colors.violet],
     tags: ["Whales", "Live", "Feed"],
     status: "NEW",
@@ -203,7 +203,7 @@ const TOOLS: Tool[] = [
       "Set price-cross conditions on any token, choose above/below targets and route notifications to push or Discord.",
     Icon: BellRing,
     accent: Colors.mint,
-    glow: "rgba(85,245,178,0.22)",
+    glow: "rgba(255,255,255,0.14)",
     gradient: [Colors.mint, Colors.cyan],
     tags: ["Alerts", "Discord", "Live"],
     status: "NEW",
@@ -218,7 +218,7 @@ const TOOLS: Tool[] = [
       "Realized + unrealized PnL, win rate, hold time, biggest wins, biggest losses — a complete trading scorecard.",
     Icon: TrendingUp,
     accent: Colors.violet,
-    glow: "rgba(184,140,255,0.22)",
+    glow: "rgba(184,190,200,0.14)",
     gradient: [Colors.violet, Colors.mint],
     tags: ["PnL", "Stats", "Win rate"],
     status: "NEW",
@@ -233,7 +233,7 @@ const TOOLS: Tool[] = [
       "Generate beautiful PnL and portfolio cards from any wallet — share to X, Telegram, or save to camera roll.",
     Icon: PieChart,
     accent: Colors.orange,
-    glow: "rgba(255,184,76,0.22)",
+    glow: "rgba(201,206,216,0.14)",
     gradient: [Colors.orange, Colors.rose],
     tags: ["Cards", "Share", "PnL"],
     status: "NEW",
@@ -248,7 +248,7 @@ const TOOLS: Tool[] = [
       "AI Trading Assistant with on-chain context — paste a wallet to get a behavior summary, risk traits and patterns.",
     Icon: Brain,
     accent: Colors.violet,
-    glow: "rgba(184,140,255,0.22)",
+    glow: "rgba(184,190,200,0.14)",
     gradient: [Colors.violet, Colors.cyan],
     tags: ["AI", "Wallet", "On-chain"],
     status: "NEW",
@@ -263,7 +263,7 @@ const TOOLS: Tool[] = [
     tagline: "Detect new token launches instantly",
     description:
       "Real-time stream of new mints across Pump.fun, Raydium, Meteora & Orca. Filter by liquidity, dev age, and instant-snipe.",
-    Icon: Crosshair, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    Icon: Crosshair, accent: Colors.mint, glow: "rgba(255,255,255,0.14)",
     gradient: [Colors.mint, Colors.cyan], tags: ["Live", "Mints", "Snipe"], status: "NEW", category: "trading",
   },
   {
@@ -272,7 +272,7 @@ const TOOLS: Tool[] = [
     name: "Liquidity Sniper",
     tagline: "Snipe new liquidity pools",
     description: "Watch new LP creations live. Filter by quote token, min liquidity and lock status — auto-alert on launch.",
-    Icon: Droplets, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    Icon: Droplets, accent: Colors.cyan, glow: "rgba(229,231,235,0.14)",
     gradient: [Colors.cyan, Colors.mint], tags: ["LP", "Snipe", "Live"], status: "NEW", category: "trading",
   },
   {
@@ -281,7 +281,7 @@ const TOOLS: Tool[] = [
     name: "Jupiter Routes",
     tagline: "Track swap routes and slippage",
     description: "Inspect Jupiter quote routes, hops, price impact and per-DEX split for any swap pair before you trade.",
-    Icon: Route, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    Icon: Route, accent: Colors.orange, glow: "rgba(201,206,216,0.14)",
     gradient: [Colors.orange, Colors.rose], tags: ["Jupiter", "Routes", "Slippage"], status: "LIVE", category: "trading",
   },
   {
@@ -290,7 +290,7 @@ const TOOLS: Tool[] = [
     name: "Profit Curve",
     tagline: "Generate PnL curves over time",
     description: "Plot any wallet's realized + unrealized PnL across days, weeks, months. Spot drawdowns and winning streaks.",
-    Icon: LineChart, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    Icon: LineChart, accent: Colors.violet, glow: "rgba(184,190,200,0.14)",
     gradient: [Colors.violet, Colors.cyan], tags: ["PnL", "Chart", "History"], status: "NEW", category: "trading",
   },
   {
@@ -299,7 +299,7 @@ const TOOLS: Tool[] = [
     name: "Trading Style",
     tagline: "Classify wallet trading patterns",
     description: "AI classifier labels wallets as scalper, sniper, swing, holder, farmer, or insider based on on-chain behavior.",
-    Icon: Fingerprint, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    Icon: Fingerprint, accent: Colors.mint, glow: "rgba(255,255,255,0.14)",
     gradient: [Colors.mint, Colors.violet], tags: ["AI", "Behavior", "Tag"], status: "NEW", category: "trading",
   },
   {
@@ -308,7 +308,7 @@ const TOOLS: Tool[] = [
     name: "Wallet Profiler",
     tagline: "Analyze any wallet's performance",
     description: "Win rate, avg hold time, ROI, biggest wins, biggest rugs — a complete profile of any address.",
-    Icon: Briefcase, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    Icon: Briefcase, accent: Colors.cyan, glow: "rgba(229,231,235,0.14)",
     gradient: [Colors.cyan, Colors.mint], tags: ["Stats", "PnL", "Profile"], status: "NEW", category: "trading",
   },
 
@@ -319,7 +319,7 @@ const TOOLS: Tool[] = [
     name: "Holder Analysis",
     tagline: "Deep dive into token holders",
     description: "Cluster holders by entry, dev wallet, sniper, fresh wallet. See who's distributing, who's accumulating.",
-    Icon: Users, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    Icon: Users, accent: Colors.cyan, glow: "rgba(229,231,235,0.14)",
     gradient: [Colors.cyan, Colors.violet], tags: ["Clusters", "Holders"], status: "NEW", category: "analysis",
   },
   {
@@ -328,7 +328,7 @@ const TOOLS: Tool[] = [
     name: "Liquidity Scanner",
     tagline: "Check pool liquidity depth",
     description: "See real liquidity across every pool, slippage curves at various sizes, and risk of low-depth pools.",
-    Icon: Waves, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    Icon: Waves, accent: Colors.mint, glow: "rgba(255,255,255,0.14)",
     gradient: [Colors.mint, Colors.cyan], tags: ["Liquidity", "Depth"], status: "NEW", category: "analysis",
   },
   {
@@ -337,7 +337,7 @@ const TOOLS: Tool[] = [
     name: "Token Metadata",
     tagline: "Inspect on-chain token data",
     description: "Mint authority, freeze authority, Metaplex metadata, decimals, supply, update authority — full transparency.",
-    Icon: Hash, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    Icon: Hash, accent: Colors.violet, glow: "rgba(184,190,200,0.14)",
     gradient: [Colors.violet, Colors.cyan], tags: ["Mint", "Metaplex"], status: "NEW", category: "analysis",
   },
   {
@@ -346,7 +346,7 @@ const TOOLS: Tool[] = [
     name: "Whale Concentration",
     tagline: "Analyze whale holdings",
     description: "Top 10/50/100 holder share, concentration index, whale rotation tracking, and distribution health score.",
-    Icon: PieChart, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    Icon: PieChart, accent: Colors.orange, glow: "rgba(201,206,216,0.14)",
     gradient: [Colors.orange, Colors.rose], tags: ["Whales", "Distribution"], status: "NEW", category: "analysis",
   },
   {
@@ -355,7 +355,7 @@ const TOOLS: Tool[] = [
     name: "Wash Trading",
     tagline: "Detect wash trading patterns",
     description: "Spot circular flows, repeat counterparties, and inflated volume. Identify fake liquidity and pump rings.",
-    Icon: Repeat, accent: Colors.rose, glow: "rgba(255,93,143,0.22)",
+    Icon: Repeat, accent: Colors.rose, glow: "rgba(244,244,245,0.12)",
     gradient: [Colors.rose, Colors.orange], tags: ["Detect", "Wash"], status: "NEW", category: "analysis",
   },
   {
@@ -364,7 +364,7 @@ const TOOLS: Tool[] = [
     name: "Insider Detector",
     tagline: "Find insider trading patterns",
     description: "Detect bundled buys, dev clusters, sniper bots, pre-launch funding paths and connected insider wallets.",
-    Icon: UserSearch, accent: Colors.rose, glow: "rgba(255,93,143,0.22)",
+    Icon: UserSearch, accent: Colors.rose, glow: "rgba(244,244,245,0.12)",
     gradient: [Colors.rose, Colors.violet], tags: ["Insiders", "Bundled"], status: "NEW", category: "analysis",
   },
 
@@ -375,7 +375,7 @@ const TOOLS: Tool[] = [
     name: "Staking Calculator",
     tagline: "Calculate staking rewards",
     description: "Project SOL & SPL staking rewards across validators with APY, commission, fees, and compounding.",
-    Icon: Scale, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    Icon: Scale, accent: Colors.mint, glow: "rgba(255,255,255,0.14)",
     gradient: [Colors.mint, Colors.cyan], tags: ["Stake", "APY"], status: "NEW", category: "defi",
   },
   {
@@ -384,7 +384,7 @@ const TOOLS: Tool[] = [
     name: "Impermanent Loss",
     tagline: "IL calculator for LP positions",
     description: "Model IL on any LP pair with custom price moves. Compare HODL vs LP vs concentrated liquidity.",
-    Icon: TrendingDown, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    Icon: TrendingDown, accent: Colors.cyan, glow: "rgba(229,231,235,0.14)",
     gradient: [Colors.cyan, Colors.violet], tags: ["IL", "LP", "Calc"], status: "NEW", category: "defi",
   },
   {
@@ -393,7 +393,7 @@ const TOOLS: Tool[] = [
     name: "LP Scanner",
     tagline: "Scan LP positions and yields",
     description: "Inspect any wallet's LP positions, current value, fees earned, and live APR across Raydium, Meteora, Orca.",
-    Icon: Layers, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    Icon: Layers, accent: Colors.violet, glow: "rgba(184,190,200,0.14)",
     gradient: [Colors.violet, Colors.mint], tags: ["LP", "Yield"], status: "NEW", category: "defi",
   },
   {
@@ -402,7 +402,7 @@ const TOOLS: Tool[] = [
     name: "Program Monitor",
     tagline: "Monitor DEX interactions",
     description: "Watch any Solana program ID — Raydium, Meteora, Pump, Jupiter — for instructions, calls, and unusual flow.",
-    Icon: Network, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    Icon: Network, accent: Colors.cyan, glow: "rgba(229,231,235,0.14)",
     gradient: [Colors.cyan, Colors.violet], tags: ["Programs", "DEX"], status: "NEW", category: "defi",
   },
   {
@@ -411,7 +411,7 @@ const TOOLS: Tool[] = [
     name: "Fee Analyzer",
     tagline: "Analyze transaction fees",
     description: "Break down priority fees, compute units, and total SOL spent on fees per wallet, per program, per day.",
-    Icon: Gauge, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    Icon: Gauge, accent: Colors.orange, glow: "rgba(201,206,216,0.14)",
     gradient: [Colors.orange, Colors.mint], tags: ["Fees", "Analytics"], status: "NEW", category: "defi",
   },
   {
@@ -420,7 +420,7 @@ const TOOLS: Tool[] = [
     name: "Token Locks",
     tagline: "Monitor token lock schedules",
     description: "Track team & LP unlocks across PinkLock, Streamflow, Bonfida — see what unlocks when, in real time.",
-    Icon: Lock, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    Icon: Lock, accent: Colors.violet, glow: "rgba(184,190,200,0.14)",
     gradient: [Colors.violet, Colors.cyan], tags: ["Locks", "Vesting"], status: "NEW", category: "defi",
   },
 
@@ -431,7 +431,7 @@ const TOOLS: Tool[] = [
     name: "Rug Detector",
     tagline: "Analyze rug pull risk",
     description: "AI rug score from mint authority, LP lock, dev wallets, holder clustering, and historical rug patterns.",
-    Icon: ShieldAlert, accent: Colors.rose, glow: "rgba(255,93,143,0.22)",
+    Icon: ShieldAlert, accent: Colors.rose, glow: "rgba(244,244,245,0.12)",
     gradient: [Colors.rose, Colors.orange], tags: ["Rug", "AI"], status: "LIVE", category: "risk",
   },
   {
@@ -440,7 +440,7 @@ const TOOLS: Tool[] = [
     name: "Risk Detector",
     tagline: "Comprehensive risk scoring",
     description: "Holistic risk dashboard: rug, honeypot, wash, insider, MEV, liquidity — one consolidated risk score.",
-    Icon: Shield, accent: Colors.rose, glow: "rgba(255,93,143,0.22)",
+    Icon: Shield, accent: Colors.rose, glow: "rgba(244,244,245,0.12)",
     gradient: [Colors.rose, Colors.violet], tags: ["Risk", "Score"], status: "NEW", category: "risk",
   },
   {
@@ -449,7 +449,7 @@ const TOOLS: Tool[] = [
     name: "Token Creator",
     tagline: "Track token creator history",
     description: "See every token a creator has launched, their average performance, rug rate, and active wallets.",
-    Icon: Target, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    Icon: Target, accent: Colors.orange, glow: "rgba(201,206,216,0.14)",
     gradient: [Colors.orange, Colors.rose], tags: ["Creator", "History"], status: "NEW", category: "risk",
   },
   {
@@ -458,7 +458,7 @@ const TOOLS: Tool[] = [
     name: "Burn Watcher",
     tagline: "Monitor token burns",
     description: "Track token burns, dev burns, LP burns and supply changes in real-time across Solana.",
-    Icon: Flame, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    Icon: Flame, accent: Colors.orange, glow: "rgba(201,206,216,0.14)",
     gradient: [Colors.orange, Colors.rose], tags: ["Burn", "Supply"], status: "NEW", category: "risk",
   },
   {
@@ -467,7 +467,7 @@ const TOOLS: Tool[] = [
     name: "MEV Tracker",
     tagline: "Detect MEV activity",
     description: "Spot sandwich attacks, JIT liquidity, frontrunning bots, and MEV losses across any token or wallet.",
-    Icon: Bug, accent: Colors.rose, glow: "rgba(255,93,143,0.22)",
+    Icon: Bug, accent: Colors.rose, glow: "rgba(244,244,245,0.12)",
     gradient: [Colors.rose, Colors.cyan], tags: ["MEV", "Sandwich"], status: "NEW", category: "risk",
   },
   {
@@ -476,7 +476,7 @@ const TOOLS: Tool[] = [
     name: "SOL Depletion",
     tagline: "Low balance warnings",
     description: "Get pinged before any tracked wallet runs out of SOL for fees. Auto-track burn rate per wallet.",
-    Icon: AlertTriangle, accent: Colors.orange, glow: "rgba(255,184,76,0.22)",
+    Icon: AlertTriangle, accent: Colors.orange, glow: "rgba(201,206,216,0.14)",
     gradient: [Colors.orange, Colors.rose], tags: ["Alert", "SOL"], status: "NEW", category: "risk",
   },
 
@@ -487,7 +487,7 @@ const TOOLS: Tool[] = [
     name: "Wallet Age",
     tagline: "Calculate wallet age & activity",
     description: "First-seen, last-seen, total active days, dormancy gaps and full lifetime activity timeline.",
-    Icon: Clock, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    Icon: Clock, accent: Colors.cyan, glow: "rgba(229,231,235,0.14)",
     gradient: [Colors.cyan, Colors.mint], tags: ["Age", "Lifetime"], status: "NEW", category: "wallet",
   },
   {
@@ -496,7 +496,7 @@ const TOOLS: Tool[] = [
     name: "Transfer Profiler",
     tagline: "Analyze transfer patterns",
     description: "Top counterparties, inflow/outflow heatmap, suspicious mixing, and stablecoin vs SPL flow analysis.",
-    Icon: BarChart3, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    Icon: BarChart3, accent: Colors.violet, glow: "rgba(184,190,200,0.14)",
     gradient: [Colors.violet, Colors.cyan], tags: ["Flow", "Profile"], status: "NEW", category: "wallet",
   },
   {
@@ -505,7 +505,7 @@ const TOOLS: Tool[] = [
     name: "Wallet Graph",
     tagline: "Visualize wallet relationships",
     description: "Interactive graph of connected wallets, common funders, and shared exchange deposit clusters.",
-    Icon: Network, accent: Colors.cyan, glow: "rgba(56,215,255,0.22)",
+    Icon: Network, accent: Colors.cyan, glow: "rgba(229,231,235,0.14)",
     gradient: [Colors.cyan, Colors.violet], tags: ["Graph", "Cluster"], status: "NEW", category: "wallet",
   },
   {
@@ -514,7 +514,7 @@ const TOOLS: Tool[] = [
     name: "Stake Tracker",
     tagline: "Track staking accounts",
     description: "All stake accounts, validators, rewards earned, and active/deactivating epochs for any wallet.",
-    Icon: Coins, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    Icon: Coins, accent: Colors.mint, glow: "rgba(255,255,255,0.14)",
     gradient: [Colors.mint, Colors.cyan], tags: ["Stake", "Validators"], status: "NEW", category: "wallet",
   },
   {
@@ -523,7 +523,7 @@ const TOOLS: Tool[] = [
     name: "Airdrop Analyzer",
     tagline: "Check airdrop eligibility",
     description: "Run any wallet against active and upcoming Solana airdrops to estimate allocation and farmability.",
-    Icon: Gift, accent: Colors.violet, glow: "rgba(184,140,255,0.22)",
+    Icon: Gift, accent: Colors.violet, glow: "rgba(184,190,200,0.14)",
     gradient: [Colors.violet, Colors.mint], tags: ["Airdrop", "Eligibility"], status: "NEW", category: "wallet",
   },
   {
@@ -532,7 +532,7 @@ const TOOLS: Tool[] = [
     name: "Multi-Wallet",
     tagline: "Merge multiple wallet views",
     description: "Combine multiple addresses into one consolidated portfolio — net worth, holdings, PnL, all merged.",
-    Icon: Eye, accent: Colors.mint, glow: "rgba(85,245,178,0.22)",
+    Icon: Eye, accent: Colors.mint, glow: "rgba(255,255,255,0.14)",
     gradient: [Colors.mint, Colors.cyan], tags: ["Portfolio", "Merge"], status: "NEW", category: "wallet",
   },
 ];
@@ -771,7 +771,7 @@ export default function ToolsScreen() {
             testID="tools-lobbies"
           >
             <LinearGradient
-              colors={["rgba(255,93,143,0.32)", "rgba(184,140,255,0.18)", "rgba(56,215,255,0.10)"]}
+              colors={["rgba(244,244,245,0.14)", "rgba(184,190,200,0.10)", "rgba(229,231,235,0.08)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -1093,8 +1093,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.25)",
-    backgroundColor: "rgba(85,245,178,0.08)",
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
   headerBadgeText: {
     color: Colors.mint,
@@ -1122,8 +1122,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.3)",
-    backgroundColor: "rgba(85,245,178,0.06)",
+    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.045)",
   },
   statusDotWrap: {
     width: 14,
@@ -1155,7 +1155,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.25)",
+    borderColor: "rgba(255,255,255,0.16)",
     backgroundColor: Colors.card,
     padding: 18,
     overflow: "hidden",
@@ -1172,9 +1172,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "rgba(85,245,178,0.14)",
+    backgroundColor: "rgba(255,255,255,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.4)",
+    borderColor: "rgba(255,255,255,0.22)",
   },
   heroBadgeText: { color: Colors.mint, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
   heroLive: {
@@ -1184,9 +1184,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "rgba(255,93,143,0.12)",
+    backgroundColor: "rgba(244,244,245,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,93,143,0.35)",
+    borderColor: "rgba(244,244,245,0.18)",
   },
   heroLiveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.rose },
   heroLiveText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
@@ -1446,7 +1446,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "rgba(255,93,143,0.4)",
+    borderColor: "rgba(244,244,245,0.20)",
     backgroundColor: Colors.card,
     padding: 16,
     overflow: "hidden",
@@ -1456,15 +1456,15 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999,
     backgroundColor: "rgba(3,7,8,0.5)",
-    borderWidth: 1, borderColor: "rgba(255,93,143,0.45)",
+    borderWidth: 1, borderColor: "rgba(244,244,245,0.22)",
   },
   lobbyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.rose },
   lobbyEyebrowText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 1.4 },
   lobbyCountChip: {
     flexDirection: "row", alignItems: "center", gap: 5,
     paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999,
-    backgroundColor: "rgba(255,93,143,0.16)",
-    borderWidth: 1, borderColor: "rgba(255,93,143,0.4)",
+    backgroundColor: "rgba(244,244,245,0.10)",
+    borderWidth: 1, borderColor: "rgba(244,244,245,0.20)",
   },
   lobbyCountText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
   lobbyBody: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 14 },

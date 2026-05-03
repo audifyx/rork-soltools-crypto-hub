@@ -28,11 +28,12 @@ export default function TabsLayout() {
             ) : null}
             <View style={styles.barBg} />
             <LinearGradient
-              colors={["rgba(0,255,163,0.22)", "rgba(124,92,255,0.18)", "rgba(34,211,255,0.14)"]}
+              colors={["rgba(255,255,255,0.22)", "rgba(255,255,255,0.08)", "rgba(0,0,0,0.04)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
+            <View style={styles.activePlate} />
             <View style={styles.barInnerBorder} />
           </View>
         ),
@@ -92,24 +93,24 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   bar: {
     position: "absolute",
-    left: 8,
-    right: 8,
+    left: 10,
+    right: 10,
     bottom: Platform.OS === "ios" ? 22 : 14,
     borderTopWidth: 0,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(255,255,255,0.18)",
     backgroundColor: "transparent",
     elevation: 0,
-    height: 72,
-    paddingTop: 6,
+    height: 74,
+    paddingTop: 7,
     paddingBottom: 10,
-    paddingHorizontal: 2,
-    borderRadius: 30,
+    paddingHorizontal: 4,
+    borderRadius: 24,
     overflow: "hidden",
-    shadowColor: Colors.violet,
+    shadowColor: "#FFFFFF",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 18,
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
   },
   item: {
     paddingTop: 2,
@@ -122,17 +123,27 @@ const styles = StyleSheet.create({
   barBgWrap: {
     flex: 1,
     overflow: "hidden",
-    borderRadius: 30,
+    borderRadius: 24,
   },
   barBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5, 5, 10, 0.72)",
+    backgroundColor: "rgba(0,0,0,0.82)",
+  },
+  activePlate: {
+    position: "absolute",
+    top: 8,
+    bottom: 8,
+    left: 8,
+    right: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
   barInnerBorder: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 30,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.10)",
   },
   label: {
     fontSize: 8.5,

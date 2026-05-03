@@ -263,7 +263,7 @@ function HeroCard({
   return (
     <View style={styles.heroWrap}>
       <LinearGradient
-        colors={["rgba(85,245,178,0.22)", "rgba(56,215,255,0.05)", "rgba(0,0,0,0)"]}
+        colors={["rgba(255,255,255,0.14)", "rgba(229,231,235,0.04)", "rgba(0,0,0,0)"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.heroGradient}
@@ -338,28 +338,28 @@ function StatsGrid({
         Icon={Rocket}
         label="Listed Tokens"
         value={listed.toString()}
-        tint="rgba(85,245,178,0.14)"
+        tint="rgba(255,255,255,0.10)"
         color={Colors.mint}
       />
       <StatCard
         Icon={DollarSign}
         label="24h Volume"
         value={formatCurrency(volume)}
-        tint="rgba(56,215,255,0.14)"
+        tint="rgba(229,231,235,0.10)"
         color={Colors.cyan}
       />
       <StatCard
         Icon={Droplets}
         label="Total Liquidity"
         value={formatCurrency(liquidity)}
-        tint="rgba(184,140,255,0.14)"
-        color="#B88CFF"
+        tint="rgba(184,190,200,0.10)"
+        color="#B8BEC8"
       />
       <StatCard
         Icon={Crown}
         label="Featured"
         value={featured.toString()}
-        tint="rgba(255,184,76,0.14)"
+        tint="rgba(201,206,216,0.10)"
         color={Colors.orange}
       />
     </View>
@@ -395,7 +395,7 @@ function TrendingRail({ tokens, onPress }: { tokens: LaunchToken[]; onPress: (id
     <View style={styles.sectionWrap}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionTitleRow}>
-          <View style={[styles.sectionIcon, { backgroundColor: "rgba(255,184,76,0.14)" }]}>
+          <View style={[styles.sectionIcon, { backgroundColor: "rgba(201,206,216,0.10)" }]}>
             <Flame color={Colors.orange} size={14} strokeWidth={2.6} />
           </View>
           <View>
@@ -473,7 +473,7 @@ function FeaturedSection({ tokens, onPress }: { tokens: LaunchToken[]; onPress: 
     <View style={styles.sectionWrap}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionTitleRow}>
-          <View style={[styles.sectionIcon, { backgroundColor: "rgba(255,184,76,0.14)" }]}>
+          <View style={[styles.sectionIcon, { backgroundColor: "rgba(201,206,216,0.10)" }]}>
             <Crown color={Colors.orange} size={14} strokeWidth={2.6} />
           </View>
           <View>
@@ -666,7 +666,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.22)",
+    borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: Colors.card,
   },
   heroGradient: { padding: 18, paddingVertical: 20 },
@@ -683,9 +683,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(85,245,178,0.14)",
+    backgroundColor: "rgba(255,255,255,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.4)",
+    borderColor: "rgba(255,255,255,0.22)",
   },
   livePillTopText: { color: Colors.mint, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   heroSub: { color: Colors.muted, fontSize: 13, fontWeight: "700", marginTop: 6, lineHeight: 18 },
@@ -826,8 +826,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: "rgba(255,184,76,0.25)",
-    backgroundColor: "rgba(255,184,76,0.04)",
+    borderColor: "rgba(201,206,216,0.16)",
+    backgroundColor: "rgba(201,206,216,0.035)",
   },
   featuredEmptyTitle: { color: Colors.text, fontSize: 13, fontWeight: "900" },
   featuredEmptyBody: { color: Colors.muted, fontSize: 12, fontWeight: "600", marginTop: 4, lineHeight: 17 },
@@ -837,7 +837,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: "rgba(255,184,76,0.28)",
+    borderColor: "rgba(201,206,216,0.18)",
   },
   featuredBanner: { height: 150, position: "relative", overflow: "hidden" },
   featuredBannerTop: {
@@ -868,7 +868,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(0,0,0,0.45)",
     borderWidth: 1,
-    borderColor: "rgba(255,184,76,0.45)",
+    borderColor: "rgba(201,206,216,0.24)",
   },
   featuredBadgeText: { color: Colors.orange, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
   featuredFoot: { padding: 14, flexDirection: "row", alignItems: "center", gap: 12, marginTop: -22 },
@@ -880,9 +880,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 999,
-    backgroundColor: "rgba(85,245,178,0.1)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.25)",
+    borderColor: "rgba(255,255,255,0.16)",
   },
   venueChipText: { color: Colors.mint, fontSize: 10, fontWeight: "800" },
 
@@ -904,8 +904,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
   },
   filterTabBtnActive: {
-    backgroundColor: "rgba(85,245,178,0.14)",
-    borderColor: "rgba(85,245,178,0.7)",
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.30)",
     shadowColor: Colors.mint,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.7,
@@ -924,10 +924,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === "ios" ? 14 : 11,
     borderRadius: 999,
-    backgroundColor: "rgba(184,140,255,0.10)",
+    backgroundColor: "rgba(184,190,200,0.08)",
     borderWidth: 1.5,
-    borderColor: "rgba(184,140,255,0.55)",
-    shadowColor: "#B88CFF",
+    borderColor: "rgba(184,190,200,0.24)",
+    shadowColor: "#B8BEC8",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.55,
     shadowRadius: 14,
@@ -950,9 +950,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 999,
-    backgroundColor: "rgba(85,245,178,0.10)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1.5,
-    borderColor: "rgba(85,245,178,0.55)",
+    borderColor: "rgba(255,255,255,0.22)",
     shadowColor: Colors.mint,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.55,
@@ -968,8 +968,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: "rgba(85,245,178,0.25)",
-    backgroundColor: "rgba(85,245,178,0.04)",
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(255,255,255,0.035)",
     alignItems: "center",
   },
   emptyIcon: {
@@ -978,9 +978,9 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(85,245,178,0.1)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.25)",
+    borderColor: "rgba(255,255,255,0.16)",
     marginBottom: 14,
   },
   emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: "900" },
@@ -1034,7 +1034,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  sheetRowActive: { backgroundColor: "rgba(85,245,178,0.1)" },
+  sheetRowActive: { backgroundColor: "rgba(255,255,255,0.08)" },
   sheetRowText: { color: Colors.muted, fontSize: 14, fontWeight: "700" },
   sheetRowTextActive: { color: Colors.mint, fontWeight: "900" },
   sheetActiveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.mint },

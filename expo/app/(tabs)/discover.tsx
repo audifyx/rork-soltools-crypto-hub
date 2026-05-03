@@ -837,10 +837,10 @@ function RunnerSourceStrip() {
 
 const SPOTLIGHT_GRADIENTS: [string, string][] = [
   [Colors.mint, Colors.cyan],
-  [Colors.cyan, "#7B5BFF"],
+  [Colors.cyan, "#B8BEC8"],
   [Colors.rose, Colors.orange],
-  ["#FFB84C", "#FF5D8F"],
-  ["#7B5BFF", Colors.mint],
+  ["#C9CED8", "#F4F4F5"],
+  ["#B8BEC8", Colors.mint],
   [Colors.cyan, Colors.mint],
 ];
 
@@ -918,11 +918,11 @@ function SpotlightCard({
                 styles.spotChange,
                 {
                   backgroundColor: positive
-                    ? "rgba(85,245,178,0.16)"
-                    : "rgba(255,93,143,0.16)",
+                    ? "rgba(255,255,255,0.12)"
+                    : "rgba(180,180,188,0.12)",
                   borderColor: positive
-                    ? "rgba(85,245,178,0.4)"
-                    : "rgba(255,93,143,0.4)",
+                    ? "rgba(255,255,255,0.22)"
+                    : "rgba(180,180,188,0.22)",
                 },
               ]}
             >
@@ -1034,7 +1034,7 @@ function AiPickRow({
         ticker={token.ticker}
         size={36}
         radius={12}
-        gradient={[Colors.cyan, "#7B5BFF"]}
+        gradient={[Colors.cyan, "#B8BEC8"]}
       />
       <View style={styles.aiMid}>
         <View style={styles.aiTopRow}>
@@ -1086,7 +1086,7 @@ function NewLaunchCard({
         <Pressable
           onPress={onWatch}
           hitSlop={6}
-          style={[styles.newWatch, watching && { backgroundColor: "rgba(85,245,178,0.14)" }]}
+          style={[styles.newWatch, watching && { backgroundColor: "rgba(255,255,255,0.10)" }]}
           testID={`new-watch-${token.id}`}
         >
           <Eye
@@ -1411,9 +1411,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(255,93,143,0.12)",
+    backgroundColor: "rgba(244,244,245,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(255,93,143,0.35)",
+    borderColor: "rgba(244,244,245,0.22)",
   },
   liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.rose },
   liveText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
@@ -1527,9 +1527,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: "rgba(56,215,255,0.14)",
+    backgroundColor: "rgba(229,231,235,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.4)",
+    borderColor: "rgba(229,231,235,0.22)",
   },
   aiBadgeText: { color: Colors.cyan, fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
   aiList: { marginHorizontal: 16, borderRadius: 16, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", overflow: "hidden" },
@@ -1538,7 +1538,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 7,
-    backgroundColor: "rgba(56,215,255,0.14)",
+    backgroundColor: "rgba(229,231,235,0.10)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1683,7 +1683,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  watchBtnOn: { backgroundColor: "rgba(85,245,178,0.12)", borderColor: "rgba(85,245,178,0.4)" },
+  watchBtnOn: { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.22)" },
   separator: { height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginHorizontal: 20 },
 
   empty: {
@@ -1696,9 +1696,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "rgba(56,215,255,0.1)",
+    backgroundColor: "rgba(229,231,235,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.3)",
+    borderColor: "rgba(229,231,235,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1777,9 +1777,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "rgba(255,93,143,0.1)",
+    backgroundColor: "rgba(244,244,245,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,93,143,0.3)",
+    borderColor: "rgba(244,244,245,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },

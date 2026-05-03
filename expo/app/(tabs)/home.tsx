@@ -540,6 +540,7 @@ function FeedHeader({
     <View style={styles.headerStack}>
       {filter === "For You" ? (
         <>
+          <HomeCommandHero />
           <View style={styles.tickerWrap}>
             <LiveTicker />
           </View>
@@ -573,6 +574,75 @@ function FeedHeader({
           <View style={styles.liveDot} />
           <Text style={styles.liveText}>LIVE</Text>
         </View>
+      </View>
+    </View>
+  );
+}
+
+function HomeCommandHero() {
+  const router = useRouter();
+  return (
+    <View style={styles.commandHero} testID="home-command-hero">
+      <LinearGradient
+        colors={["rgba(255,255,255,0.16)", "rgba(255,255,255,0.055)", "rgba(0,0,0,0.2)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.commandGrid} pointerEvents="none" />
+      <View style={styles.commandTopRow}>
+        <View style={styles.commandBadge}>
+          <Sparkles color={Colors.text} size={12} strokeWidth={3} />
+          <Text style={styles.commandBadgeText}>SOLTOOLS COMMAND</Text>
+        </View>
+        <View style={styles.commandLivePill}>
+          <View style={styles.commandLiveDot} />
+          <Text style={styles.commandLiveText}>LIVE DATA</Text>
+        </View>
+      </View>
+      <Text style={styles.commandTitle}>Track alpha. Scan contracts. Move with the feed.</Text>
+      <Text style={styles.commandSub}>
+        Social signal, pump.fun pairs, token lookup, and community rooms in one black-glass cockpit.
+      </Text>
+      <View style={styles.commandStatsRow}>
+        <View style={styles.commandStatBox}>
+          <Text style={styles.commandStatValue}>24/7</Text>
+          <Text style={styles.commandStatLabel}>market pulse</Text>
+        </View>
+        <View style={styles.commandStatBox}>
+          <Text style={styles.commandStatValue}>ALL</Text>
+          <Text style={styles.commandStatLabel}>Solana tokens</Text>
+        </View>
+        <View style={styles.commandStatBox}>
+          <Text style={styles.commandStatValue}>SOCIAL</Text>
+          <Text style={styles.commandStatLabel}>alpha feed</Text>
+        </View>
+      </View>
+      <View style={styles.commandActions}>
+        <Pressable
+          onPress={() => router.push("/(tabs)/discover")}
+          style={({ pressed }) => [styles.commandPrimary, pressed && styles.pressed]}
+          testID="hero-scan-alpha"
+        >
+          <Search color={Colors.ink} size={15} strokeWidth={3} />
+          <Text style={styles.commandPrimaryText}>Scan alpha</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push("/(tabs)/tools")}
+          style={({ pressed }) => [styles.commandSecondary, pressed && styles.pressed]}
+          testID="hero-open-tools"
+        >
+          <Zap color={Colors.text} size={15} strokeWidth={2.8} />
+          <Text style={styles.commandSecondaryText}>Tools</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push("/(tabs)/launches")}
+          style={({ pressed }) => [styles.commandSecondary, pressed && styles.pressed]}
+          testID="hero-open-launches"
+        >
+          <Rocket color={Colors.text} size={15} strokeWidth={2.8} />
+          <Text style={styles.commandSecondaryText}>Launches</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -634,7 +704,7 @@ function MarketStrip() {
   return (
     <View style={styles.marketCard}>
       <LinearGradient
-        colors={["rgba(85,245,178,0.18)", "rgba(56,215,255,0.04)"]}
+        colors={["rgba(255,255,255,0.14)", "rgba(229,231,235,0.04)"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.marketGradient}
@@ -882,7 +952,7 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
   const change = pair.change24hPct ?? 0;
   const positive = change >= 0;
   const accent = positive ? Colors.mint : Colors.rose;
-  const ringColor = pair.hot ? Colors.orange : positive ? Colors.mint : "#B88CFF";
+  const ringColor = pair.hot ? Colors.orange : positive ? Colors.mint : "#B8BEC8";
   const ageMs = Math.max(0, Date.now() - pair.createdAt);
   const ageLabel =
     ageMs < 60_000
@@ -1628,17 +1698,23 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
 
   topBar: {
-    paddingHorizontal: 14,
-    paddingTop: 4,
-    paddingBottom: 10,
+    marginHorizontal: 12,
+    marginTop: 4,
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(5,5,6,0.82)",
   },
   avatarBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 38,
+    height: 38,
+    borderRadius: 14,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
@@ -1677,14 +1753,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(85,245,178,0.08)",
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.2)",
+    borderColor: "rgba(255,255,255,0.16)",
   },
-  brandDot: { width: 12, height: 12, borderRadius: 6 },
+  brandDot: { width: 12, height: 12, borderRadius: 4 },
   brandText: {
     color: Colors.text,
     fontSize: 11,
@@ -1693,12 +1769,12 @@ const styles = StyleSheet.create({
   },
   topActions: { flexDirection: "row", gap: 8 },
   iconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.07)",
+    width: 36,
+    height: 36,
+    borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.055)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.13)",
+    borderColor: "rgba(255,255,255,0.14)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1730,18 +1806,28 @@ const styles = StyleSheet.create({
   inboxBadgeText: { color: Colors.ink, fontSize: 9, fontWeight: "900" },
 
   filterWrap: {
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.06)",
+    marginHorizontal: 12,
+    marginBottom: 4,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.46)",
+    overflow: "hidden",
   },
   filterRow: {
-    paddingHorizontal: 14,
-    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 6,
   },
   filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.055)",
   },
   filterText: {
     color: Colors.muted,
@@ -1753,11 +1839,11 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   filterUnderline: {
-    marginTop: 8,
+    marginTop: 7,
     height: 3,
     width: 24,
     borderRadius: 2,
-    backgroundColor: Colors.mint,
+    backgroundColor: Colors.text,
   },
 
   listContent: {
@@ -1766,8 +1852,108 @@ const styles = StyleSheet.create({
   },
 
   headerStack: {
-    paddingTop: 14,
+    paddingTop: 10,
   },
+  commandHero: {
+    marginHorizontal: 14,
+    marginBottom: 14,
+    padding: 18,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(7,7,8,0.88)",
+    overflow: "hidden",
+    shadowColor: "#FFFFFF",
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
+  },
+  commandGrid: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.045)",
+    transform: [{ rotate: "-6deg" }, { scale: 1.18 }],
+  },
+  commandTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  commandBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  commandBadgeText: { color: Colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  commandLivePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  commandLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.text },
+  commandLiveText: { color: Colors.text, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  commandTitle: {
+    color: Colors.text,
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: "900",
+    letterSpacing: -1.1,
+    marginTop: 18,
+    maxWidth: 330,
+  },
+  commandSub: {
+    color: Colors.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700",
+    marginTop: 9,
+  },
+  commandStatsRow: { flexDirection: "row", gap: 8, marginTop: 16 },
+  commandStatBox: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.32)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  commandStatValue: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2 },
+  commandStatLabel: { color: Colors.muted, fontSize: 9, fontWeight: "800", marginTop: 3, textTransform: "uppercase" },
+  commandActions: { flexDirection: "row", gap: 8, marginTop: 16 },
+  commandPrimary: {
+    flex: 1.2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingVertical: 13,
+    borderRadius: 15,
+    backgroundColor: Colors.text,
+  },
+  commandPrimaryText: { color: Colors.ink, fontSize: 13, fontWeight: "900", letterSpacing: 0.2 },
+  commandSecondary: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 13,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.13)",
+  },
+  commandSecondaryText: { color: Colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 0.2 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
   tickerWrap: {
     marginHorizontal: 14,
     marginBottom: 6,
@@ -1781,13 +1967,13 @@ const styles = StyleSheet.create({
   composer: {
     flexDirection: "row",
     gap: 12,
-    marginHorizontal: 16,
+    marginHorizontal: 14,
     marginTop: 18,
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: "rgba(16,19,29,0.78)",
+    padding: 15,
+    borderRadius: 22,
+    backgroundColor: "rgba(8,8,9,0.88)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.13)",
   },
   composerAvatar: {
     width: 40,
@@ -1831,14 +2017,15 @@ const styles = StyleSheet.create({
   },
 
   marketCard: {
-    marginHorizontal: 16,
-    borderRadius: 18,
+    marginHorizontal: 14,
+    borderRadius: 22,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.18)",
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(7,7,8,0.78)",
   },
   marketGradient: {
-    paddingVertical: 14,
+    paddingVertical: 15,
     paddingHorizontal: 8,
   },
   marketRow: {
@@ -1969,9 +2156,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "rgba(255,184,76,0.12)",
+    backgroundColor: "rgba(201,206,216,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(255,184,76,0.4)",
+    borderColor: "rgba(201,206,216,0.34)",
   },
   hotText: {
     color: Colors.orange,
@@ -2024,12 +2211,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   pairStatLiq: {
-    backgroundColor: "rgba(56,215,255,0.16)",
-    borderColor: "rgba(56,215,255,0.45)",
+    backgroundColor: "rgba(229,231,235,0.12)",
+    borderColor: "rgba(229,231,235,0.28)",
   },
   pairStatPrice: {
-    backgroundColor: "rgba(217,70,255,0.14)",
-    borderColor: "rgba(217,70,255,0.45)",
+    backgroundColor: "rgba(241,241,242,0.10)",
+    borderColor: "rgba(241,241,242,0.26)",
   },
   pairStatLabel: {
     color: Colors.muted,
@@ -2219,9 +2406,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(255,93,143,0.12)",
+    backgroundColor: "rgba(244,244,245,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(255,93,143,0.35)",
+    borderColor: "rgba(244,244,245,0.24)",
   },
   liveDot: {
     width: 6,
@@ -2237,8 +2424,7 @@ const styles = StyleSheet.create({
   },
 
   divider: {
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    height: 0,
     marginHorizontal: 18,
   },
 
@@ -2254,9 +2440,9 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(85,245,178,0.1)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.25)",
+    borderColor: "rgba(255,255,255,0.18)",
     marginBottom: 14,
   },
   feedEmptyTitle: {
@@ -2293,9 +2479,14 @@ const styles = StyleSheet.create({
 
   post: {
     flexDirection: "row",
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    marginHorizontal: 14,
+    marginVertical: 6,
+    padding: 14,
     gap: 12,
+    borderRadius: 22,
+    backgroundColor: "rgba(8,8,9,0.80)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.09)",
   },
   postAvatar: {
     width: 42,
@@ -2437,8 +2628,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    marginHorizontal: 14,
+    marginVertical: 6,
+    padding: 14,
+    borderRadius: 20,
+    backgroundColor: "rgba(8,8,9,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.09)",
   },
   tokenMid: { flex: 1 },
   tokenTopRow: { flexDirection: "row", alignItems: "center", gap: 6 },

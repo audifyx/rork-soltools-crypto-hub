@@ -88,7 +88,7 @@ export default function AlphaInsightsCard() {
   return (
     <View style={styles.wrap} testID="alpha-insights-card">
       <LinearGradient
-        colors={["rgba(56,215,255,0.18)", "rgba(184,140,255,0.10)", "rgba(56,215,255,0.04)"]}
+        colors={["rgba(255,255,255,0.12)", "rgba(184,190,200,0.08)", "rgba(229,231,235,0.04)"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFillObject}
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.28)",
+    borderColor: "rgba(255,255,255,0.16)",
     backgroundColor: "rgba(8,12,16,0.7)",
     shadowColor: Colors.cyan,
     shadowOpacity: 0.35,
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 11,
-    backgroundColor: "rgba(56,215,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -206,9 +206,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: "rgba(184,140,255,0.18)",
+    backgroundColor: "rgba(184,190,200,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(184,140,255,0.45)",
+    borderColor: "rgba(184,190,200,0.24)",
   },
   betaText: { color: Colors.violet, fontSize: 8, fontWeight: "900", letterSpacing: 0.6 },
   subRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
@@ -226,11 +226,11 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 11,
-    backgroundColor: "rgba(56,215,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.3)",
+    borderColor: "rgba(255,255,255,0.20)",
   },
   list: { gap: 8 },
   item: {

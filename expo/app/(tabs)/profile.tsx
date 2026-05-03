@@ -130,7 +130,7 @@ function computeRank(xp: number): RankInfo {
     { min: 300, name: "Trader", Icon: TrendingUp, color: Colors.mint },
     { min: 700, name: "Sniper", Icon: Target, color: Colors.orange },
     { min: 1500, name: "Whale", Icon: Gem, color: Colors.rose },
-    { min: 3000, name: "Legend", Icon: Crown, color: "#FFD56B" },
+    { min: 3000, name: "Legend", Icon: Crown, color: "#F4F4F5" },
   ];
   let idx = 0;
   for (let i = 0; i < tiers.length; i++) {
@@ -216,7 +216,7 @@ function buildAchievements(state: {
       title: "Launch Ready",
       desc: "List a token on Launch Pad",
       Icon: Rocket,
-      color: "#B88CFF",
+      color: "#B8BEC8",
       unlocked: state.listedCount >= 1,
       progress: Math.min(1, state.listedCount),
       goal: 1,
@@ -236,7 +236,7 @@ function buildAchievements(state: {
       title: "Whale Mode",
       desc: "Reach 1500 XP",
       Icon: Crown,
-      color: "#FFD56B",
+      color: "#F4F4F5",
       unlocked: state.xp >= 1500,
       progress: state.xp,
       goal: 1500,
@@ -462,7 +462,7 @@ export default function ProfileScreen() {
         title: `Listed $${l.ticker}`,
         sub: l.name,
         Icon: Rocket,
-        color: "#B88CFF",
+        color: "#B8BEC8",
       }),
     );
     return items.sort((a, b) => b.ts - a.ts).slice(0, 25);
@@ -780,7 +780,7 @@ export default function ProfileScreen() {
                 <View style={styles.xpTrack}>
                   <Animated.View style={[styles.xpFillWrap, { width: xpFillWidth }]}>
                     <LinearGradient
-                      colors={[Colors.mint, Colors.cyan, "#B88CFF"]}
+                      colors={[Colors.mint, Colors.cyan, "#B8BEC8"]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={StyleSheet.absoluteFillObject}
@@ -1005,7 +1005,7 @@ export default function ProfileScreen() {
               ) : (
                 wallets.map((w) => (
                   <View key={w.id} style={styles.listItem} testID={`wallet-${w.id}`}>
-                    <View style={[styles.listAvatar, { backgroundColor: "rgba(56,215,255,0.16)" }]}>
+                    <View style={[styles.listAvatar, { backgroundColor: "rgba(229,231,235,0.10)" }]}>
                       <Wallet color={Colors.cyan} size={15} strokeWidth={2.6} />
                     </View>
                     <View style={styles.listMid}>
@@ -1040,7 +1040,7 @@ export default function ProfileScreen() {
               ) : (
                 alerts.map((a) => (
                   <View key={a.id} style={styles.listItem} testID={`alert-${a.id}`}>
-                    <View style={[styles.listAvatar, { backgroundColor: "rgba(255,184,76,0.16)" }]}>
+                    <View style={[styles.listAvatar, { backgroundColor: "rgba(201,206,216,0.10)" }]}>
                       <Bell color={Colors.orange} size={15} strokeWidth={2.6} />
                     </View>
                     <View style={styles.listMid}>
@@ -1128,8 +1128,8 @@ export default function ProfileScreen() {
                     style={styles.listItem}
                     testID={`listing-${l.id}`}
                   >
-                    <View style={[styles.listAvatar, { backgroundColor: "rgba(184,140,255,0.16)" }]}>
-                      <Rocket color="#B88CFF" size={15} strokeWidth={2.6} />
+                    <View style={[styles.listAvatar, { backgroundColor: "rgba(184,190,200,0.10)" }]}>
+                      <Rocket color="#B8BEC8" size={15} strokeWidth={2.6} />
                     </View>
                     <View style={styles.listMid}>
                       <Text style={styles.listTitle}>${l.ticker}</Text>
@@ -1224,7 +1224,7 @@ export default function ProfileScreen() {
 }
 
 function BadgePill({ badge }: { badge: CustomBadge }) {
-  const color = badge.color ?? "#FFD56B";
+  const color = badge.color ?? "#F4F4F5";
   return (
     <View style={[styles.customBadge, { borderColor: `${color}55`, backgroundColor: `${color}1A` }]}>
       <Sparkles color={color} size={10} strokeWidth={3} />
@@ -1495,7 +1495,7 @@ function MenuRow({
 }) {
   return (
     <Pressable onPress={onPress} style={styles.menuRow}>
-      <View style={[styles.menuIcon, danger && { backgroundColor: "rgba(255,93,143,0.12)" }]}>
+      <View style={[styles.menuIcon, danger && { backgroundColor: "rgba(244,244,245,0.08)" }]}>
         <Icon color={danger ? Colors.rose : Colors.mint} size={15} strokeWidth={2.4} />
       </View>
       <View style={{ flex: 1 }}>
@@ -1593,13 +1593,13 @@ function EditProfileModal({
     initial.location,
   ]);
 
-  const COLORS = [Colors.mint, Colors.cyan, Colors.orange, Colors.rose, "#B88CFF", "#FFD56B", "#F4FFF9"];
+  const COLORS = [Colors.mint, Colors.cyan, Colors.orange, Colors.rose, "#B8BEC8", "#F4F4F5", "#FFFFFF"];
   const BANNERS: { from: string; to: string }[] = [
     { from: Colors.rose, to: Colors.cyan },
     { from: Colors.mint, to: Colors.cyan },
     { from: Colors.orange, to: Colors.rose },
-    { from: "#B88CFF", to: Colors.cyan },
-    { from: "#FFD56B", to: Colors.rose },
+    { from: "#B8BEC8", to: Colors.cyan },
+    { from: "#F4F4F5", to: Colors.rose },
     { from: Colors.ink, to: Colors.mint },
   ];
 
@@ -2456,7 +2456,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: "rgba(85,245,178,0.16)",
+    backgroundColor: "rgba(255,255,255,0.10)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -2509,9 +2509,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(56,215,255,0.12)",
+    backgroundColor: "rgba(229,231,235,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.4)",
+    borderColor: "rgba(229,231,235,0.20)",
   },
   verifiedPillText: { color: Colors.cyan, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   bio: { color: Colors.text, fontSize: 13, fontWeight: "600", lineHeight: 18, marginTop: 10 },
@@ -2604,9 +2604,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(255,184,76,0.12)",
+    backgroundColor: "rgba(201,206,216,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,184,76,0.4)",
+    borderColor: "rgba(201,206,216,0.20)",
   },
   perfBadgeText: { color: Colors.orange, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   perfGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
@@ -2668,7 +2668,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: "rgba(85,245,178,0.16)",
+    backgroundColor: "rgba(255,255,255,0.10)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2700,9 +2700,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "rgba(85,245,178,0.12)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.3)",
+    borderColor: "rgba(255,255,255,0.18)",
   },
   postPillText: { color: Colors.mint, fontSize: 11, fontWeight: "900" },
   postFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 },
@@ -2731,15 +2731,15 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: "rgba(85,245,178,0.25)",
-    backgroundColor: "rgba(85,245,178,0.04)",
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(255,255,255,0.035)",
     alignItems: "center",
   },
   emptyTabIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "rgba(85,245,178,0.12)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2777,7 +2777,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: "rgba(85,245,178,0.12)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2896,7 +2896,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
     marginBottom: 6,
   },
-  uploadBtnGhost: { backgroundColor: "transparent", borderColor: "rgba(255,93,143,0.25)" },
+  uploadBtnGhost: { backgroundColor: "transparent", borderColor: "rgba(244,244,245,0.16)" },
   uploadBtnText: { color: Colors.text, fontSize: 13, fontWeight: "800" },
   bannerPickerRow: { flexDirection: "row", gap: 10, marginTop: 8, flexWrap: "wrap" },
   bannerPick: {
@@ -2945,7 +2945,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: "rgba(85,245,178,0.12)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
   },

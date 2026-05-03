@@ -78,7 +78,7 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
       <View style={styles.card}>
         {/* deep space base */}
         <LinearGradient
-          colors={["#02050A", "#070016", "#000000"]}
+          colors={["#000000", "#09090A", "#000000"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -88,7 +88,7 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
         <View
           style={[
             styles.nebula,
-            { backgroundColor: positive ? "rgba(85,245,178,0.22)" : "rgba(255,93,143,0.22)" },
+            { backgroundColor: positive ? "rgba(255,255,255,0.14)" : "rgba(180,180,188,0.14)" },
           ]}
           pointerEvents="none"
         />
@@ -206,7 +206,7 @@ function TokenCardImpl({ token, onPress, onChart }: Props) {
           testID={`chart-${token.id}`}
         >
           <LinearGradient
-            colors={[Colors.violet, Colors.neon, "#7C3AED"]}
+            colors={[Colors.graphite, Colors.neon, Colors.cardSoft]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.chartBtn}
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     bottom: -60,
     left: -70,
-    backgroundColor: "rgba(217,70,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     opacity: 0.7,
   },
   star: {
@@ -420,9 +420,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(85,245,178,0.10)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.55)",
+    borderColor: "rgba(255,255,255,0.22)",
     shadowColor: Colors.mint,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
