@@ -66,8 +66,9 @@ import {
   isRunnerFromYear,
   isUtilityRunner,
 } from "@/lib/alpha-runners";
-import { fmtUsd } from "@/utils/format";
+import { fmtNum, fmtUsd } from "@/utils/format";
 import { useApp } from "@/providers/app-provider";
+import { isSafeToken } from "@/lib/safety";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import {
@@ -81,7 +82,7 @@ import { LaunchToken } from "@/types/launchpad";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number; fill?: string }>;
 
-type Section = "all" | "featured" | "tokens" | "mine" | "hot" | "new" | "gainers" | "losers" | "volume" | "whales" | "og" | "ai";
+type Section = "all" | "featured" | "tokens" | "mine" | "hot" | "new" | "migrated" | "gainers" | "losers" | "volume" | "whales" | "og" | "ai";
 
 const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "all", label: "All", Icon: Sparkles },
@@ -90,6 +91,7 @@ const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "mine", label: "Mine", Icon: UserCircle2 },
   { id: "hot", label: "Hot", Icon: Flame },
   { id: "new", label: "New", Icon: Zap },
+  { id: "migrated", label: "Migrated", Icon: Rocket },
   { id: "gainers", label: "Gainers", Icon: TrendingUp },
   { id: "losers", label: "Losers", Icon: TrendingDown },
   { id: "volume", label: "Volume", Icon: BarChart3 },
@@ -126,6 +128,19 @@ function hasRealMarket(token: LaunchToken): boolean {
   return (token.marketCapUsd ?? 0) > 0 && (token.liquidityUsd ?? 0) > 0;
 }
 
+function isDiscoverSafeToken(token: LaunchToken): boolean {
+  return isSafeToken({
+    marketCapUsd: token.marketCapUsd,
+    liquidityUsd: token.liquidityUsd,
+    volume24hUsd: token.volume24hUsd,
+    holders: token.holders,
+    priceUsd: token.price,
+    priceChange24hPct: token.change24hPct,
+    venue: token.venue,
+    tags: token.tags,
+  });
+}
+
 function heatScore(token: LaunchToken): number {
   return (
     (token.hot ? 1_000_000 : 0) +
@@ -139,9 +154,55 @@ function heatScore(token: LaunchToken): number {
 }
 
 const SPOTLIGHT_DAILY_GAIN_MIN_PCT = 50;
+const SPOTLIGHT_MAX_ANOMALY_PCT = 2_500;
+const MIGRATED_WINDOW_MS = 1000 * 60 * 60 * 72;
 
 function isSpotlightDailyGainer(token: LaunchToken): boolean {
-  return hasRealMarket(token) && (token.change24hPct ?? Number.NEGATIVE_INFINITY) >= SPOTLIGHT_DAILY_GAIN_MIN_PCT;
+  const change = token.change24hPct ?? Number.NEGATIVE_INFINITY;
+  return (
+    isDiscoverSafeToken(token) &&
+    change >= SPOTLIGHT_DAILY_GAIN_MIN_PCT &&
+    change <= SPOTLIGHT_MAX_ANOMALY_PCT &&
+    (token.volume24hUsd ?? 0) >= 50_000 &&
+    (token.liquidityUsd ?? 0) >= 25_000
+  );
+}
+
+function isFreshlyMigratedToken(token: LaunchToken): boolean {
+  const age = Date.now() - token.createdAt;
+  const text = tokenHaystack(token);
+  const looksGraduated =
+    token.venue === "pumpswap" ||
+    token.venue === "raydium" ||
+    token.venue === "meteora" ||
+    /pump|migrated|graduate|graduated|bonding/i.test(text);
+  return (
+    isDiscoverSafeToken(token) &&
+    looksGraduated &&
+    age >= 0 &&
+    age <= MIGRATED_WINDOW_MS &&
+    (token.liquidityUsd ?? 0) >= 20_000
+  );
+}
+
+function isCurrentDailyRunner(token: LaunchToken): boolean {
+  const change = token.change24hPct ?? Number.NEGATIVE_INFINITY;
+  return (
+    isDiscoverSafeToken(token) &&
+    change >= 25 &&
+    change <= SPOTLIGHT_MAX_ANOMALY_PCT &&
+    (token.volume24hUsd ?? 0) >= 100_000 &&
+    (token.liquidityUsd ?? 0) >= 25_000
+  );
+}
+
+function tokenAgeLabel(createdAt: number): string {
+  const ageMs = Math.max(0, Date.now() - createdAt);
+  const mins = Math.floor(ageMs / 60_000);
+  if (mins < 60) return `${Math.max(1, mins)}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
 }
 
 const CATEGORIES: Category[] = [
@@ -233,7 +294,10 @@ export default function DiscoverScreen() {
   }, [query]);
 
   const publicListings = useMemo<LaunchToken[]>(
-    () => listings.filter((t) => t.approvalStatus !== "pending" && t.approvalStatus !== "rejected"),
+    () =>
+      listings.filter(
+        (t) => t.approvalStatus !== "pending" && t.approvalStatus !== "rejected" && isDiscoverSafeToken(t),
+      ),
     [listings],
   );
 
@@ -248,15 +312,26 @@ export default function DiscoverScreen() {
     let items = searchableListings.slice();
     if (pastedAddress) {
       return items
-        .filter((t) => tokenMatchesSearch(t, q) && t.approvalStatus !== "rejected")
+        .filter(
+          (t) =>
+            tokenMatchesSearch(t, q) &&
+            t.approvalStatus !== "rejected" &&
+            (isDiscoverSafeToken(t) || (!!userId && t.ownerId === userId)),
+        )
         .sort((a, b) => getTokenSearchRank(a, q) - getTokenSearchRank(b, q) || b.createdAt - a.createdAt);
     }
-    items = items.filter((t) => t.approvalStatus !== "rejected" && (t.approvalStatus !== "pending" || section === "mine"));
+    items = items.filter(
+      (t) =>
+        t.approvalStatus !== "rejected" &&
+        (t.approvalStatus !== "pending" || section === "mine") &&
+        (section === "mine" ? !!userId && t.ownerId === userId : isDiscoverSafeToken(t)),
+    );
     if (section === "hot")
       items = items
         .filter((t) => hasRealMarket(t) && heatScore(t) > 0)
         .sort((a, b) => heatScore(b) - heatScore(a));
     if (section === "new") items = items.sort((a, b) => b.createdAt - a.createdAt).slice(0, 30);
+    if (section === "migrated") items = items.filter(isFreshlyMigratedToken).sort((a, b) => b.createdAt - a.createdAt);
     if (section === "gainers")
       items = items
         .filter((t) => hasRealMarket(t) && (t.change24hPct ?? 0) > 0)
@@ -370,6 +445,20 @@ export default function DiscoverScreen() {
 
   const newListings = useMemo(
     () => publicListings.slice().sort((a, b) => b.createdAt - a.createdAt).slice(0, 8),
+    [publicListings],
+  );
+
+  const migratedTokens = useMemo(
+    () => publicListings.filter(isFreshlyMigratedToken).sort((a, b) => b.createdAt - a.createdAt).slice(0, 8),
+    [publicListings],
+  );
+
+  const dailyRunners = useMemo(
+    () =>
+      publicListings
+        .filter(isCurrentDailyRunner)
+        .sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0) || (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0))
+        .slice(0, 8),
     [publicListings],
   );
 
@@ -509,6 +598,8 @@ export default function DiscoverScreen() {
               topGainers={topGainers}
               topLosers={topLosers}
               newListings={newListings}
+              migratedTokens={migratedTokens}
+              dailyRunners={dailyRunners}
               aiPicks={aiPicks}
               trendingTags={trendingTags}
               recentSearches={recentSearches}
@@ -556,6 +647,8 @@ function DiscoverHeader({
   topGainers,
   topLosers,
   newListings,
+  migratedTokens,
+  dailyRunners,
   aiPicks,
   trendingTags,
   recentSearches,
@@ -580,6 +673,8 @@ function DiscoverHeader({
   topGainers: LaunchToken[];
   topLosers: LaunchToken[];
   newListings: LaunchToken[];
+  migratedTokens: LaunchToken[];
+  dailyRunners: LaunchToken[];
   aiPicks: LaunchToken[];
   trendingTags: { tag: string; count: number }[];
   recentSearches: string[];
@@ -714,36 +809,38 @@ function DiscoverHeader({
       <AlphaInsightsCard />
       <RunnerSourceStrip />
 
-      {featuredSpotlight.length > 0 ? (
-        <View style={styles.spotlightWrap}>
-          <View style={styles.sectionHead}>
-            <View style={styles.sectionHeadLeft}>
-              <Sparkles color={Colors.mint} size={15} strokeWidth={2.6} />
-              <Text style={styles.sectionTitle}>Spotlight +50% Today</Text>
-            </View>
-            <View style={styles.livePill}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>50%+</Text>
-            </View>
-          </View>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.spotlightContent}
-            decelerationRate="fast"
-          >
-            {featuredSpotlight.map((t, idx) => (
-              <SpotlightCard
-                key={t.id}
-                token={t}
-                index={idx}
-                onPress={() => onOpen(t.id)}
-              />
-            ))}
-          </ScrollView>
-        </View>
-      ) : null}
+      <TokenOvalRail
+        title="Spotlight +50% Today"
+        subtitle="Safety gated: real liquidity, sane MC, holder checks"
+        Icon={Sparkles}
+        tone={Colors.mint}
+        badge="50%+"
+        tokens={featuredSpotlight.slice(0, 8)}
+        onOpen={onOpen}
+        onSeeAll={() => setSection("gainers")}
+      />
+
+      <TokenOvalRail
+        title="Freshly Migrated"
+        subtitle="New pump.fun graduates with live post-migration liquidity"
+        Icon={Rocket}
+        tone={Colors.orange}
+        badge="PUMP → DEX"
+        tokens={migratedTokens}
+        onOpen={onOpen}
+        onSeeAll={() => setSection("migrated")}
+      />
+
+      <TokenOvalRail
+        title="Current Daily Runners"
+        subtitle="Today’s active movers, filtered for scam/rug anomalies"
+        Icon={Flame}
+        tone={Colors.rose}
+        badge="LIVE"
+        tokens={dailyRunners}
+        onOpen={onOpen}
+        onSeeAll={() => setSection("gainers")}
+      />
 
       <View style={styles.categoriesWrap}>
         <Text style={styles.sectionLabel}>DISCOVER CATEGORIES</Text>
@@ -826,41 +923,18 @@ function DiscoverHeader({
         </View>
       ) : null}
 
-      {newListings.length > 0 ? (
-        <View style={styles.newWrap}>
-          <View style={styles.sectionHead}>
-            <View style={styles.sectionHeadLeft}>
-              <Zap color={Colors.orange} size={15} strokeWidth={2.6} />
-              <Text style={styles.sectionTitle}>New Tokens</Text>
-            </View>
-            <Pressable
-              onPress={() => {
-                Haptics.selectionAsync().catch(() => {});
-                setSection("new");
-              }}
-              hitSlop={8}
-              testID="see-all-new"
-            >
-              <Text style={styles.seeAll}>See all</Text>
-            </Pressable>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.newRow}
-          >
-            {newListings.map((t) => (
-              <NewLaunchCard
-                key={t.id}
-                token={t}
-                watching={isWatching(t.contract)}
-                onPress={() => onOpen(t.id)}
-                onWatch={() => onWatch(t)}
-              />
-            ))}
-          </ScrollView>
-        </View>
-      ) : null}
+      <TokenOvalRail
+        title="Newest Clean Pairs"
+        subtitle="Fresh tokens that passed the rug-screen before display"
+        Icon={Zap}
+        tone={Colors.orange}
+        badge="NEW"
+        tokens={newListings}
+        onOpen={onOpen}
+        onSeeAll={() => setSection("new")}
+        isWatching={isWatching}
+        onWatch={onWatch}
+      />
 
       {trendingTags.length > 0 ? (
         <View style={styles.tagsWrap}>
@@ -982,10 +1056,10 @@ function StatTile({
 
 function RunnerSourceStrip() {
   const sources = [
-    { label: "Pump.fun", sub: "new pairs", tone: Colors.orange },
-    { label: "Birdeye", sub: "24h volume", tone: Colors.cyan },
-    { label: "DexScreener", sub: "charts + boosts", tone: Colors.rose },
-    { label: "Jupiter", sub: "top traded", tone: Colors.mint },
+    { label: "Pump.fun", sub: "migration scan", tone: Colors.orange },
+    { label: "Birdeye", sub: "volume proof", tone: Colors.cyan },
+    { label: "DexScreener", sub: "liq + pair age", tone: Colors.rose },
+    { label: "Jupiter", sub: "holder checks", tone: Colors.mint },
   ];
   return (
     <ScrollView
@@ -1003,6 +1077,150 @@ function RunnerSourceStrip() {
         </View>
       ))}
     </ScrollView>
+  );
+}
+
+function TokenOvalRail({
+  title,
+  subtitle,
+  Icon,
+  tone,
+  badge,
+  tokens,
+  onOpen,
+  onSeeAll,
+  isWatching,
+  onWatch,
+}: {
+  title: string;
+  subtitle: string;
+  Icon: LucideIcon;
+  tone: string;
+  badge: string;
+  tokens: LaunchToken[];
+  onOpen: (id: string) => void;
+  onSeeAll: () => void;
+  isWatching?: (contract: string) => boolean;
+  onWatch?: (token: LaunchToken) => void;
+}) {
+  return (
+    <View style={styles.ovalRailWrap}>
+      <View style={styles.ovalRailHead}>
+        <View style={styles.ovalRailHeadLeft}>
+          <View style={[styles.ovalRailIcon, { backgroundColor: `${tone}18`, borderColor: `${tone}30` }]}> 
+            <Icon color={tone} size={14} strokeWidth={2.8} />
+          </View>
+          <View style={styles.ovalRailCopy}>
+            <View style={styles.ovalRailTitleRow}>
+              <Text style={styles.sectionTitle}>{title}</Text>
+              <View style={[styles.ovalRailBadge, { borderColor: `${tone}33`, backgroundColor: `${tone}12` }]}> 
+                <Text style={[styles.ovalRailBadgeText, { color: tone }]}>{badge}</Text>
+              </View>
+            </View>
+            <Text style={styles.ovalRailSub} numberOfLines={1}>{subtitle}</Text>
+          </View>
+        </View>
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => {});
+            onSeeAll();
+          }}
+          hitSlop={8}
+          testID={`see-all-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+        >
+          <Text style={styles.seeAll}>See all</Text>
+        </Pressable>
+      </View>
+      {tokens.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ovalRailRow}>
+          {tokens.map((token, index) => (
+            <TokenOvalPill
+              key={token.id}
+              token={token}
+              rank={index + 1}
+              tone={tone}
+              watching={isWatching?.(token.contract) ?? false}
+              onPress={() => onOpen(token.id)}
+              onWatch={onWatch ? () => onWatch(token) : undefined}
+            />
+          ))}
+        </ScrollView>
+      ) : (
+        <View style={styles.ovalRailEmpty}>
+          <Shield color={Colors.muted} size={13} strokeWidth={2.6} />
+          <Text style={styles.ovalRailEmptyText}>Nothing safe enough for this rail right now.</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function TokenOvalPill({
+  token,
+  rank,
+  tone,
+  watching,
+  onPress,
+  onWatch,
+}: {
+  token: LaunchToken;
+  rank: number;
+  tone: string;
+  watching: boolean;
+  onPress: () => void;
+  onWatch?: () => void;
+}) {
+  const positive = (token.change24hPct ?? 0) >= 0;
+  const accent = positive ? Colors.mint : Colors.rose;
+  return (
+    <Pressable onPress={onPress} style={styles.ovalPill} testID={`oval-token-${token.id}`}>
+      <LinearGradient
+        colors={[`${tone}18`, "rgba(255,255,255,0.035)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <View style={[styles.ovalRank, { borderColor: `${tone}33` }]}> 
+        <Text style={[styles.ovalRankText, { color: tone }]}>{rank}</Text>
+      </View>
+      <TokenAvatar
+        uri={token.logoUrl}
+        ticker={token.ticker}
+        size={34}
+        radius={17}
+        gradient={[tone, Colors.cardSoft]}
+      />
+      <View style={styles.ovalMid}>
+        <View style={styles.ovalTopLine}>
+          <Text style={styles.ovalTicker} numberOfLines={1}>${token.ticker.replace("$", "")}</Text>
+          {token.verified ? <Star color={Colors.cyan} size={9} fill={Colors.cyan} strokeWidth={2.4} /> : null}
+        </View>
+        <Text style={styles.ovalName} numberOfLines={1}>{token.name}</Text>
+        <Text style={styles.ovalMeta} numberOfLines={1}>
+          MC {formatUsd(token.marketCapUsd)} · LIQ {formatUsd(token.liquidityUsd)} · {fmtNum(token.holders)} holders
+        </Text>
+      </View>
+      <View style={styles.ovalRight}>
+        {token.change24hPct != null ? (
+          <View style={[styles.ovalChange, { backgroundColor: `${accent}16`, borderColor: `${accent}24` }]}> 
+            {positive ? <ArrowUpRight color={accent} size={10} strokeWidth={3} /> : <ArrowDownRight color={accent} size={10} strokeWidth={3} />}
+            <Text style={[styles.ovalChangeText, { color: accent }]}>{positive ? "+" : ""}{token.change24hPct.toFixed(1)}%</Text>
+          </View>
+        ) : (
+          <Text style={styles.ovalAge}>{tokenAgeLabel(token.createdAt)}</Text>
+        )}
+        {onWatch ? (
+          <Pressable
+            onPress={onWatch}
+            hitSlop={8}
+            style={[styles.ovalWatch, watching && styles.ovalWatchOn]}
+            testID={`oval-watch-${token.id}`}
+          >
+            <Eye color={watching ? Colors.mint : Colors.muted} size={12} strokeWidth={2.6} fill={watching ? Colors.mint : "transparent"} />
+          </Pressable>
+        ) : null}
+      </View>
+    </Pressable>
   );
 }
 
@@ -1635,6 +1853,96 @@ const styles = StyleSheet.create({
   },
   liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.rose },
   liveText: { color: Colors.rose, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+
+  ovalRailWrap: { marginTop: 24 },
+  ovalRailHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    marginBottom: 10,
+    gap: 12,
+  },
+  ovalRailHeadLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, minWidth: 0 },
+  ovalRailIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  ovalRailCopy: { flex: 1, minWidth: 0 },
+  ovalRailTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  ovalRailBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, borderWidth: 1 },
+  ovalRailBadgeText: { fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
+  ovalRailSub: { color: Colors.muted, fontSize: 10.5, fontWeight: "700", marginTop: 2 },
+  ovalRailRow: { paddingHorizontal: 16, gap: 10 },
+  ovalRailEmpty: {
+    marginHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  ovalRailEmptyText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
+  ovalPill: {
+    width: 310,
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "rgba(16,16,14,0.94)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.075)",
+  },
+  ovalRank: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.24)",
+    borderWidth: 1,
+  },
+  ovalRankText: { fontSize: 10, fontWeight: "900" },
+  ovalMid: { flex: 1, minWidth: 0 },
+  ovalTopLine: { flexDirection: "row", alignItems: "center", gap: 4 },
+  ovalTicker: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.2 },
+  ovalName: { color: Colors.muted, fontSize: 10.5, fontWeight: "700", marginTop: 1 },
+  ovalMeta: { color: Colors.muted2, fontSize: 9.5, fontWeight: "800", marginTop: 2 },
+  ovalRight: { alignItems: "flex-end", gap: 5 },
+  ovalChange: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  ovalChangeText: { fontSize: 10, fontWeight: "900" },
+  ovalAge: { color: Colors.muted, fontSize: 10, fontWeight: "900" },
+  ovalWatch: {
+    width: 25,
+    height: 25,
+    borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.045)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ovalWatchOn: { backgroundColor: "rgba(216,183,90,0.12)", borderColor: "rgba(216,183,90,0.28)" },
 
   spotlightWrap: { marginTop: 22 },
   spotlightContent: { paddingHorizontal: 16, gap: 12 },

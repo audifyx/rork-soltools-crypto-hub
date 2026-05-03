@@ -234,6 +234,8 @@ export async function searchSolanaPairs(query: string, limit: number = 20): Prom
       isSafeToken({
         marketCapUsd: p.marketCap ?? p.fdv ?? null,
         liquidityUsd: p.liquidity?.usd ?? null,
+        volume24hUsd: p.volume?.h24 ?? null,
+        priceUsd: p.priceUsd ? Number(p.priceUsd) : null,
         priceChange24hPct: p.priceChange?.h24 ?? null,
         labels: p.labels,
         launchpad: p.dexId,
@@ -270,6 +272,8 @@ export async function getNewSolanaPairs(limit: number = 20): Promise<DexPair[]> 
     const safe = isSafeToken({
       marketCapUsd: snap.marketCapUsd,
       liquidityUsd: snap.liquidityUsd,
+      volume24hUsd: snap.volume24hUsd,
+      priceUsd: snap.priceUsd,
       priceChange24hPct: snap.priceChange24hPct,
       labels: snap.pair.labels,
       launchpad: snap.dexId,

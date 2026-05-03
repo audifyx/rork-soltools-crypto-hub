@@ -1,3 +1,4 @@
+import { isSafeToken } from "@/lib/safety";
 import type { LaunchToken } from "@/types/launchpad";
 
 export const ALPHA_MIN_24H_VOLUME_USD = 1_000_000;
@@ -98,9 +99,22 @@ function hasLiveMarket(token: LaunchToken): boolean {
   return (token.marketCapUsd ?? 0) > 0 || (token.liquidityUsd ?? 0) > 0 || (token.volume24hUsd ?? 0) > 0;
 }
 
+function hasSafeLiveMarket(token: LaunchToken): boolean {
+  return isSafeToken({
+    marketCapUsd: token.marketCapUsd,
+    liquidityUsd: token.liquidityUsd,
+    volume24hUsd: token.volume24hUsd,
+    holders: token.holders,
+    priceUsd: token.price,
+    priceChange24hPct: token.change24hPct,
+    venue: token.venue,
+    tags: token.tags,
+  });
+}
+
 /** Returns true for established culture/meme coins from the OG Solana watch set. */
 export function isOgMemeToken(token: LaunchToken): boolean {
-  if (!hasLiveMarket(token)) return false;
+  if (!hasLiveMarket(token) || !hasSafeLiveMarket(token)) return false;
 
   const ticker = normalizedTicker(token);
   const name = token.name.toLowerCase();
@@ -138,6 +152,7 @@ export function isDailyAlphaRunner(token: LaunchToken): boolean {
   const marketCap = token.marketCapUsd ?? 0;
   const change = token.change24hPct;
 
+  if (!hasSafeLiveMarket(token)) return false;
   if (looksBlockedLargeCap(token)) return false;
   if (volume < ALPHA_MIN_24H_VOLUME_USD) return false;
   if (marketCap <= 0 || marketCap > ALPHA_MAX_MARKET_CAP_USD) return false;

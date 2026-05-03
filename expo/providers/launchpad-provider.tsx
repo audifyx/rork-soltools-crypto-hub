@@ -464,6 +464,9 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
         isSafeToken({
           marketCapUsd: t.marketCapUsd,
           liquidityUsd: t.liquidityUsd,
+          volume24hUsd: t.volume24hUsd,
+          holders: t.holders,
+          priceUsd: t.price,
           priceChange24hPct: t.change24hPct,
           venue: t.venue,
           tags: t.tags,

@@ -200,6 +200,9 @@ export default function HomeFeedScreen() {
             isSafeToken({
               marketCapUsd: t.marketCap ?? null,
               liquidityUsd: t.liquidity ?? null,
+              volume24hUsd: t.volume24hUSD ?? null,
+              holders: t.holder ?? null,
+              priceUsd: t.price ?? null,
               priceChange24hPct: t.priceChange24h ?? null,
             }),
           )
@@ -236,6 +239,9 @@ export default function HomeFeedScreen() {
           isSafeToken({
             marketCapUsd: t.marketCapUsd,
             liquidityUsd: t.liquidityUsd,
+            volume24hUsd: t.volume24hUsd,
+            holders: t.holders,
+            priceUsd: t.price,
             priceChange24hPct: t.change24hPct,
             venue: t.venue,
             tags: t.tags,
@@ -278,6 +284,9 @@ export default function HomeFeedScreen() {
         isSafeToken({
           marketCapUsd: t.marketCapUsd,
           liquidityUsd: t.liquidityUsd,
+          volume24hUsd: t.volume24hUsd,
+          holders: t.holders,
+          priceUsd: t.price,
           priceChange24hPct: t.change24hPct,
           venue: t.venue,
           tags: t.tags,
@@ -286,14 +295,16 @@ export default function HomeFeedScreen() {
       const localNew = listings
         .slice()
         .filter((t) =>
-          t.submittedBy === "user" ||
-            isSafeToken({
-              marketCapUsd: t.marketCapUsd,
-              liquidityUsd: t.liquidityUsd,
-              priceChange24hPct: t.change24hPct,
-              venue: t.venue,
-              tags: t.tags,
-            }),
+          isSafeToken({
+            marketCapUsd: t.marketCapUsd,
+            liquidityUsd: t.liquidityUsd,
+            volume24hUsd: t.volume24hUsd,
+            holders: t.holders,
+            priceUsd: t.price,
+            priceChange24hPct: t.change24hPct,
+            venue: t.venue,
+            tags: t.tags,
+          }),
         );
       // De-dup by contract/id, prefer dex (live) over local listing
       const seen = new Set<string>();
@@ -855,6 +866,9 @@ function getVisibleNewPairTokens(newPairs: DexPair[] | undefined, listings: Laun
     isSafeToken({
       marketCapUsd: t.marketCapUsd,
       liquidityUsd: t.liquidityUsd,
+      volume24hUsd: t.volume24hUsd,
+      holders: t.holders,
+      priceUsd: t.price,
       priceChange24hPct: t.change24hPct,
       venue: t.venue,
       tags: t.tags,
@@ -865,14 +879,16 @@ function getVisibleNewPairTokens(newPairs: DexPair[] | undefined, listings: Laun
     listings
       .slice()
       .filter((t) =>
-        t.submittedBy === "user" ||
-          isSafeToken({
-            marketCapUsd: t.marketCapUsd,
-            liquidityUsd: t.liquidityUsd,
-            priceChange24hPct: t.change24hPct,
-            venue: t.venue,
-            tags: t.tags,
-          }),
+        isSafeToken({
+          marketCapUsd: t.marketCapUsd,
+          liquidityUsd: t.liquidityUsd,
+          volume24hUsd: t.volume24hUsd,
+          holders: t.holders,
+          priceUsd: t.price,
+          priceChange24hPct: t.change24hPct,
+          venue: t.venue,
+          tags: t.tags,
+        }),
       )
       .sort((a, b) => b.createdAt - a.createdAt),
   ).slice(0, 12);

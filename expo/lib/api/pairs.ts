@@ -196,6 +196,9 @@ function safeFromJupiter(t: JupTokenV2, lt: LaunchToken): boolean {
   return isSafeToken({
     marketCapUsd: lt.marketCapUsd,
     liquidityUsd: lt.liquidityUsd,
+    volume24hUsd: lt.volume24hUsd,
+    holders: lt.holders,
+    priceUsd: lt.price,
     priceChange24hPct: lt.change24hPct,
     venue: lt.venue,
     launchpad: t.launchpad,
@@ -312,6 +315,9 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
     const safe = isSafeToken({
       marketCapUsd: t.marketCapUsd,
       liquidityUsd: t.liquidityUsd,
+      volume24hUsd: t.volume24hUsd,
+      holders: t.holders,
+      priceUsd: t.price,
       priceChange24hPct: t.change24hPct,
       venue: t.venue,
       tags: t.tags,
