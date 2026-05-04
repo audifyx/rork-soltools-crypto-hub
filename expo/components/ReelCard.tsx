@@ -21,13 +21,20 @@ interface ReelCardProps {
   onOpenToken: (reel: Reel) => void;
 }
 
-function escapeAttr(value: string | null | undefined): string {
-  if (typeof value !== "string") return "";
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+function escapeAttr(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const str = typeof value === "string" ? value : String(value);
+  if (!str || typeof str.replace !== "function") return "";
+  try {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  } catch (e) {
+    console.log("[reels] escapeAttr failed", e);
+    return "";
+  }
 }
 
 function formatCount(n: number): string {
@@ -48,6 +55,9 @@ function timeAgo(iso: string): string {
 
 function buildVideoHtml(url: string | null | undefined, active: boolean): string {
   const safeUrl = escapeAttr(url);
+  if (!safeUrl) {
+    return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>html,body{margin:0;width:100%;height:100%;background:#000}</style></head><body></body></html>`;
+  }
   const auto = active ? "autoplay" : "";
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}video{width:100%;height:100%;object-fit:cover;background:#000}</style></head><body><video ${auto} loop muted playsinline webkit-playsinline preload="metadata" src="${safeUrl}"></video><script>const v=document.querySelector('video');${active ? "v&&v.play().catch(()=>{});" : "v&&v.pause();"}</script></body></html>`;
 }
@@ -68,7 +78,7 @@ function ReelCardBase({
   const html = useMemo<string>(() => buildVideoHtml(mediaUrl, active), [active, mediaUrl]);
   const displayName: string = (reel.author?.displayName ?? "").trim();
   const initial = (displayName.slice(0, 1) || "S").toUpperCase();
-  const ticker = typeof reel.ticker === "string" && reel.ticker.length > 0 ? reel.ticker.replace("$", "").toUpperCase() : null;
+  const ticker = typeof reel.ticker === "string" && reel.ticker.length > 0 ? reel.ticker.replace(/\$/g, "").toUpperCase() : null;
 
   useEffect(() => {
     if (!reel.likedByViewer) return;
