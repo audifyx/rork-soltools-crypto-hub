@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Clock3, Compass, Flame, MessageCircle, Plus, RefreshCcw, Sparkles, X } from "lucide-react-native";
+import { Compass, Globe2, MessageCircle, Plus, RefreshCcw, Sparkles, UserCheck, Users, X } from "lucide-react-native";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -37,15 +37,16 @@ import {
   type ReelComment,
 } from "@/lib/api/reels";
 import { useAuth } from "@/providers/auth-provider";
+import { useFollowList } from "@/providers/profile-provider";
 
 const EMPTY_REELS: Reel[] = [];
 
-type ReelsTab = "foryou" | "trending" | "latest";
+type ReelsTab = "all" | "following" | "followers";
 
 const FEED_TABS: { key: ReelsTab; label: string; Icon: typeof Compass }[] = [
-  { key: "foryou", label: "For You", Icon: Sparkles },
-  { key: "trending", label: "Trending", Icon: Flame },
-  { key: "latest", label: "Latest", Icon: Clock3 },
+  { key: "all", label: "All", Icon: Globe2 },
+  { key: "following", label: "Following", Icon: UserCheck },
+  { key: "followers", label: "Followers", Icon: Users },
 ];
 
 export default function ReelsScreen() {
@@ -55,7 +56,18 @@ export default function ReelsScreen() {
   const { userId, isAuthenticated } = useAuth();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [commentReel, setCommentReel] = useState<Reel | null>(null);
-  const [feedTab, setFeedTab] = useState<ReelsTab>("foryou");
+  const [feedTab, setFeedTab] = useState<ReelsTab>("all");
+
+  const followingQuery = useFollowList(userId, "following");
+  const followersQuery = useFollowList(userId, "followers");
+  const followingIds = useMemo<Set<string>>(
+    () => new Set((followingQuery.data ?? []).map((p) => p.user_id)),
+    [followingQuery.data],
+  );
+  const followerIds = useMemo<Set<string>>(
+    () => new Set((followersQuery.data ?? []).map((p) => p.user_id)),
+    [followersQuery.data],
+  );
 
   const reelHeight = Math.max(620, height);
 
@@ -68,14 +80,16 @@ export default function ReelsScreen() {
 
   const allReels = feedQuery.data ?? EMPTY_REELS;
   const reels = useMemo<Reel[]>(() => {
-    if (feedTab === "trending") {
-      return [...allReels].sort((a, b) => (b.likesCount + b.viewsCount * 0.05) - (a.likesCount + a.viewsCount * 0.05));
+    if (feedTab === "following") {
+      if (!userId) return [];
+      return allReels.filter((r) => followingIds.has(r.userId));
     }
-    if (feedTab === "latest") {
-      return [...allReels].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (feedTab === "followers") {
+      if (!userId) return [];
+      return allReels.filter((r) => followerIds.has(r.userId));
     }
     return allReels;
-  }, [allReels, feedTab]);
+  }, [allReels, feedTab, followerIds, followingIds, userId]);
   const visibleId = activeId ?? reels[0]?.id ?? null;
   const activeIndex = useMemo<number>(() => {
     if (!visibleId) return 0;
