@@ -28,6 +28,7 @@ import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import {
   addReelComment,
+  deleteReel,
   fetchReelsFeed,
   getReelComments,
   likeReel,
@@ -172,6 +173,23 @@ export default function ReelsScreen() {
     router.push({ pathname: "/(tabs)/discover", params: { q: reel.ticker ?? "" } });
   }, [router]);
 
+  const onDelete = useCallback(async (reel: Reel) => {
+    if (!userId || reel.userId !== userId) return;
+    const previous = queryClient.getQueryData<Reel[]>(["reels", "feed", userId ?? "guest"]);
+    queryClient.setQueryData<Reel[]>(["reels", "feed", userId ?? "guest"], (prev) =>
+      (prev ?? []).filter((r) => r.id !== reel.id),
+    );
+    try {
+      await deleteReel(reel.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      await queryClient.invalidateQueries({ queryKey: ["reels", "user", reel.userId] });
+    } catch (e) {
+      console.log("[reels] delete failed", e);
+      if (previous) queryClient.setQueryData(["reels", "feed", userId ?? "guest"], previous);
+      Alert.alert("Delete failed", e instanceof Error ? e.message : "Could not delete this reel.");
+    }
+  }, [queryClient, userId]);
+
   const onRefresh = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
     feedQuery.refetch().catch(() => {});
@@ -182,13 +200,15 @@ export default function ReelsScreen() {
       reel={item}
       active={item.id === visibleId}
       height={reelHeight}
+      viewerUserId={userId}
       onLike={onLike}
       onComment={setCommentReel}
       onShare={onShare}
       onOpenAuthor={onOpenAuthor}
       onOpenToken={onOpenToken}
+      onDelete={onDelete}
     />
-  ), [onLike, onOpenAuthor, onOpenToken, onShare, reelHeight, visibleId]);
+  ), [onDelete, onLike, onOpenAuthor, onOpenToken, onShare, reelHeight, userId, visibleId]);
 
   return (
     <View style={styles.root} testID="reels-screen">

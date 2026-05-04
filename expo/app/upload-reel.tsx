@@ -3,6 +3,7 @@ import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CheckCircle2, Clapperboard, Hash, ImageIcon, Link2, Loader2, Play, Send, Sparkles, UploadCloud, Video as VideoIcon, X } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -51,6 +52,7 @@ function formatDuration(ms?: number | null): string {
 
 export default function UploadReelScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { userId, isAuthenticated } = useAuth();
   const [media, setMedia] = useState<PickedMedia | null>(null);
   const [caption, setCaption] = useState<string>("");
@@ -135,6 +137,8 @@ export default function UploadReelScreen() {
         durationMs: media.kind === "video" ? media.durationMs ?? null : null,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      await queryClient.invalidateQueries({ queryKey: ["reels", "feed"] });
+      await queryClient.invalidateQueries({ queryKey: ["reels", "user", userId] });
       router.replace("/(tabs)/reels");
     } catch (e) {
       console.log("[upload-reel] publish failed", e);
@@ -142,7 +146,7 @@ export default function UploadReelScreen() {
     } finally {
       setIsUploading(false);
     }
-  }, [caption, isAuthenticated, isUploading, media, normalizedTicker, router, tokenAddress, userId]);
+  }, [caption, isAuthenticated, isUploading, media, normalizedTicker, queryClient, router, tokenAddress, userId]);
 
   const meta = useMemo<string>(() => {
     if (!media) return "Photo or video — JPG, PNG, MP4, MOV up to 100MB.";

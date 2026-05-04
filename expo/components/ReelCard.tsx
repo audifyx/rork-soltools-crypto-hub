@@ -1,9 +1,9 @@
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { BadgeCheck, Eye, Heart, MessageCircle, Play, Send, Share2 } from "lucide-react-native";
+import { BadgeCheck, Eye, Heart, MessageCircle, MoreHorizontal, Play, Send, Share2, Trash2 } from "lucide-react-native";
 import React, { memo, useEffect, useMemo, useRef } from "react";
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActionSheetIOS, Alert, Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 import TokenAvatar from "@/components/TokenAvatar";
@@ -14,11 +14,13 @@ interface ReelCardProps {
   reel: Reel;
   active: boolean;
   height: number;
+  viewerUserId?: string | null;
   onLike: (reel: Reel) => void;
   onComment: (reel: Reel) => void;
   onShare: (reel: Reel) => void;
   onOpenAuthor: (reel: Reel) => void;
   onOpenToken: (reel: Reel) => void;
+  onDelete?: (reel: Reel) => void;
 }
 
 function escapeAttr(value: unknown): string {
@@ -66,12 +68,48 @@ function ReelCardBase({
   reel,
   active,
   height,
+  viewerUserId,
   onLike,
   onComment,
   onShare,
   onOpenAuthor,
   onOpenToken,
+  onDelete,
 }: ReelCardProps) {
+  const isOwner = !!viewerUserId && viewerUserId === reel.userId;
+
+  const confirmDelete = () => {
+    if (!onDelete) return;
+    Haptics.selectionAsync().catch(() => {});
+    Alert.alert(
+      "Delete reel?",
+      "This permanently removes the reel, its likes, and comments.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => onDelete(reel) },
+      ],
+    );
+  };
+
+  const openOwnerMenu = () => {
+    if (!onDelete) return;
+    Haptics.selectionAsync().catch(() => {});
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Delete reel"],
+          destructiveButtonIndex: 1,
+          cancelButtonIndex: 0,
+          userInterfaceStyle: "dark",
+        },
+        (idx) => {
+          if (idx === 1) confirmDelete();
+        },
+      );
+    } else {
+      confirmDelete();
+    }
+  };
   const heartScale = useRef<Animated.Value>(new Animated.Value(0)).current;
   const isImage = reel.mediaType === "image";
   const mediaUrl: string | null = typeof reel.videoUrl === "string" && reel.videoUrl.length > 0 ? reel.videoUrl : null;
@@ -143,14 +181,21 @@ function ReelCardBase({
         ) : null}
       </Pressable>
 
-      <View style={styles.topMeta} pointerEvents="none">
-        <View style={styles.livePill}>
+      <View style={styles.topMeta}>
+        <View style={styles.livePill} pointerEvents="none">
           <View style={styles.liveDot} />
           <Text style={styles.liveText}>{isImage ? "PHOTO" : "REELS"}</Text>
         </View>
-        <View style={styles.viewPill}>
-          <Eye color={Colors.text} size={12} strokeWidth={2.6} />
-          <Text style={styles.viewText}>{formatCount(reel.viewsCount)}</Text>
+        <View style={styles.topRight}>
+          <View style={styles.viewPill} pointerEvents="none">
+            <Eye color={Colors.text} size={12} strokeWidth={2.6} />
+            <Text style={styles.viewText}>{formatCount(reel.viewsCount)}</Text>
+          </View>
+          {isOwner && onDelete ? (
+            <Pressable onPress={openOwnerMenu} style={styles.moreBtn} testID="reel-owner-menu" hitSlop={10}>
+              <MoreHorizontal color={Colors.text} size={16} strokeWidth={2.6} />
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -183,6 +228,14 @@ function ReelCardBase({
           icon={<Share2 color={Colors.text} size={23} strokeWidth={2.5} />}
           testID="reel-share"
         />
+        {isOwner && onDelete ? (
+          <RailButton
+            label="Delete"
+            onPress={confirmDelete}
+            icon={<Trash2 color={Colors.rose} size={22} strokeWidth={2.5} />}
+            testID="reel-delete"
+          />
+        ) : null}
       </View>
 
       <View style={styles.captionWrap}>
@@ -292,6 +345,17 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.14)",
   },
   viewText: { color: Colors.text, fontSize: 10, fontWeight: "900" },
+  topRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  moreBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.46)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   sideRail: {
     position: "absolute",
     right: 12,
