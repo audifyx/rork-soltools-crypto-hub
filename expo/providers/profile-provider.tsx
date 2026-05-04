@@ -195,12 +195,17 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       const { data, error } = await supabase.rpc("toggle_follow", {
         target_user_id: target,
       });
-      if (error) throw error;
+      if (error) {
+        console.log("[profile] toggle_follow error", error.message);
+        throw error;
+      }
       return data as boolean;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["app", "profile"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["posts"] });
     },
   });
 
