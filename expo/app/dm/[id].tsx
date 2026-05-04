@@ -8,6 +8,8 @@ import {
   ArrowLeft,
   BadgeCheck,
   BellOff,
+  Check,
+  CheckCheck,
   ChevronRight,
   Coins,
   Hash,
@@ -596,7 +598,16 @@ function Bubble({
           {msg.text}
         </Text>
       </View>
-      <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
+      <View style={styles.bubbleMeta}>
+        <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
+        {mine ? (
+          msg.read ? (
+            <CheckCheck color={Colors.cyan} size={12} strokeWidth={2.6} />
+          ) : (
+            <Check color={Colors.muted} size={12} strokeWidth={2.6} />
+          )
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -811,7 +822,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   bubbleText: { fontSize: 14, lineHeight: 19, fontWeight: "500" },
-  bubbleTime: { color: Colors.muted, fontSize: 9, fontWeight: "800", marginTop: 3, marginHorizontal: 6 },
+  bubbleTime: { color: Colors.muted, fontSize: 9, fontWeight: "800", marginHorizontal: 6 },
+  bubbleMeta: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
 
   tipBubble: {
     flexDirection: "row",

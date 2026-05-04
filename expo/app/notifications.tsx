@@ -119,7 +119,7 @@ export default function NotificationsScreen() {
     queryKey: ["notifications", "followers", userId ?? "guest"],
     enabled: !!userId,
     queryFn: async () => {
-      if (!userId) return [];
+      if (!userId) return [] as { follower_id: string; created_at: string; username: string | null; display_name: string | null }[];
       try {
         const { data, error } = await supabase
           .from("followers")
@@ -128,7 +128,22 @@ export default function NotificationsScreen() {
           .order("created_at", { ascending: false })
           .limit(15);
         if (error) throw error;
-        return data ?? [];
+        const rows = (data ?? []) as { follower_id: string; created_at: string }[];
+        if (rows.length === 0) return [];
+        const ids = Array.from(new Set(rows.map((r) => r.follower_id)));
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id,username,display_name")
+          .in("user_id", ids);
+        const profileMap = new Map<string, { username: string | null; display_name: string | null }>();
+        ((profiles ?? []) as { user_id: string; username: string | null; display_name: string | null }[]).forEach((p) =>
+          profileMap.set(p.user_id, { username: p.username, display_name: p.display_name }),
+        );
+        return rows.map((r) => ({
+          ...r,
+          username: profileMap.get(r.follower_id)?.username ?? null,
+          display_name: profileMap.get(r.follower_id)?.display_name ?? null,
+        }));
       } catch {
         return [];
       }
@@ -140,13 +155,16 @@ export default function NotificationsScreen() {
     const list: Notif[] = [];
 
     (followersQ.data ?? []).forEach((f, i) => {
+      const display = f.display_name ?? f.username ?? `${f.follower_id.slice(0, 6)}…`;
+      const handle = f.username ? `@${f.username.replace(/^@/, "")}` : "";
       list.push({
         id: `follow-${f.follower_id}-${i}`,
         kind: "follow",
         title: "New follower",
-        body: `${(f.follower_id as string).slice(0, 6)}… started following you`,
+        body: `${display}${handle ? ` (${handle})` : ""} started following you`,
         ts: new Date(f.created_at as string).getTime(),
         unread: true,
+        actor: f.username ?? undefined,
       });
     });
 
@@ -251,8 +269,13 @@ export default function NotificationsScreen() {
         next.add(n.id);
         return next;
       });
-      if (n.kind === "follow") router.push("/(tabs)/users");
-      else if (n.kind === "whale" || n.kind === "trade" || n.kind === "alert")
+      if (n.kind === "follow") {
+        if (n.actor) {
+          router.push({ pathname: "/u/[handle]", params: { handle: n.actor.replace(/^@/, "") } });
+        } else {
+          router.push("/(tabs)/users");
+        }
+      } else if (n.kind === "whale" || n.kind === "trade" || n.kind === "alert")
         router.push("/(tabs)/discover");
     },
     [router],

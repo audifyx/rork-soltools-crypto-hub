@@ -2,25 +2,33 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  BadgeCheck,
   Check,
   Coins,
   Copy,
+  Film,
   Globe,
+  Heart,
   MapPin,
   MessageCircle,
+  MessageSquare,
+  Play,
+  Repeat2,
   ShieldCheck,
   Sparkles,
   Star,
   Twitter,
   UserPlus,
   UserCheck,
+  Users,
   Wallet,
   X,
   Zap,
 } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import {
@@ -43,10 +51,14 @@ import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
 import { useAuth } from "@/providers/auth-provider";
 import { useMessages } from "@/providers/messages-provider";
 import {
+  useFollowList,
   useProfileProvider,
   usePublicProfile,
   type CustomBadge,
+  type ProfileSummary,
 } from "@/providers/profile-provider";
+import { fetchUserPosts, type UserPostSummary } from "@/lib/api/posts";
+import { fetchUserReels, type Reel } from "@/lib/api/reels";
 
 export default function PublicProfileScreen() {
   const router = useRouter();
@@ -60,6 +72,24 @@ export default function PublicProfileScreen() {
   const profile = profileQ.data;
   const isSelf = !!profile && profile.id === userId;
   const [tipOpen, setTipOpen] = useState<boolean>(false);
+  const [feedTab, setFeedTab] = useState<"posts" | "reels">("posts");
+  const [followKind, setFollowKind] = useState<"followers" | "following" | null>(null);
+
+  const targetUserId = profile?.user_id ?? null;
+  const postsQ = useQuery<UserPostSummary[]>({
+    queryKey: ["profile", "posts", targetUserId ?? "none"],
+    enabled: !!targetUserId,
+    queryFn: () => (targetUserId ? fetchUserPosts(targetUserId) : Promise.resolve([])),
+    staleTime: 20_000,
+  });
+  const reelsQ = useQuery<Reel[]>({
+    queryKey: ["profile", "reels", targetUserId ?? "none"],
+    enabled: !!targetUserId,
+    queryFn: () => (targetUserId ? fetchUserReels(targetUserId, userId) : Promise.resolve([])),
+    staleTime: 20_000,
+  });
+  const userPosts = postsQ.data ?? [];
+  const userReels = reelsQ.data ?? [];
 
   const onToggleFollow = useCallback(async () => {
     if (!isAuthenticated) {
@@ -289,15 +319,29 @@ export default function PublicProfileScreen() {
           </View>
 
           <View style={styles.followStrip}>
-            <View style={styles.followCell}>
+            <Pressable
+              style={styles.followCell}
+              onPress={() => {
+                if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
+                setFollowKind("following");
+              }}
+              testID="open-following"
+            >
               <Text style={styles.followNum}>{profile.following_count}</Text>
               <Text style={styles.followKey}>Following</Text>
-            </View>
+            </Pressable>
             <View style={styles.followDivider} />
-            <View style={styles.followCell}>
+            <Pressable
+              style={styles.followCell}
+              onPress={() => {
+                if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
+                setFollowKind("followers");
+              }}
+              testID="open-followers"
+            >
               <Text style={styles.followNum}>{profile.followers_count}</Text>
               <Text style={styles.followKey}>Followers</Text>
-            </View>
+            </Pressable>
             <View style={styles.followDivider} />
             <View style={styles.followCell}>
               <Text style={[styles.followNum, { color: Colors.mint }]}>{profile.xp}</Text>
@@ -325,8 +369,62 @@ export default function PublicProfileScreen() {
               <Text style={styles.statKey}>PnL 30D</Text>
             </View>
           </View>
+
+          <View style={styles.feedTabsRow}>
+            <FeedTabButton
+              label={`Posts ${userPosts.length > 0 ? userPosts.length : ""}`.trim()}
+              Icon={MessageSquare}
+              active={feedTab === "posts"}
+              onPress={() => {
+                if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
+                setFeedTab("posts");
+              }}
+              testID="profile-feed-posts"
+            />
+            <FeedTabButton
+              label={`Reels ${userReels.length > 0 ? userReels.length : ""}`.trim()}
+              Icon={Film}
+              active={feedTab === "reels"}
+              onPress={() => {
+                if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
+                setFeedTab("reels");
+              }}
+              testID="profile-feed-reels"
+            />
+          </View>
+
+          {feedTab === "posts" ? (
+            <PostsList
+              posts={userPosts}
+              loading={postsQ.isLoading}
+              displayName={display}
+              avatarColor={profile.avatar_color ?? Colors.mint}
+              avatarUrl={profile.avatar_url}
+              handle={profile.username ?? "trader"}
+              verified={profile.verified}
+              onOpenToken={(addr, ticker) =>
+                router.push({ pathname: "/tool/token-lookup", params: { q: addr ?? ticker ?? "" } })
+              }
+            />
+          ) : (
+            <ReelsGrid
+              reels={userReels}
+              loading={reelsQ.isLoading}
+              onOpen={() => router.push("/(tabs)/reels")}
+            />
+          )}
         </View>
       </ScrollView>
+      <FollowListSheet
+        visible={followKind !== null}
+        kind={followKind ?? "followers"}
+        userId={targetUserId}
+        onClose={() => setFollowKind(null)}
+        onOpenUser={(username) => {
+          setFollowKind(null);
+          router.push({ pathname: "/u/[handle]", params: { handle: username } });
+        }}
+      />
       <TipModal
         visible={tipOpen}
         onClose={() => setTipOpen(false)}
@@ -474,6 +572,326 @@ function TipModal({
       </Pressable>
     </Modal>
   );
+}
+
+function FeedTabButton({
+  label,
+  Icon,
+  active,
+  onPress,
+  testID,
+}: {
+  label: string;
+  Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+  active: boolean;
+  onPress: () => void;
+  testID?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.feedTab, active && styles.feedTabActive]}
+      testID={testID}
+    >
+      <Icon color={active ? Colors.ink : Colors.text} size={13} strokeWidth={2.6} />
+      <Text style={[styles.feedTabText, active && styles.feedTabTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function PostsList({
+  posts,
+  loading,
+  displayName,
+  avatarColor,
+  avatarUrl,
+  handle,
+  verified,
+  onOpenToken,
+}: {
+  posts: UserPostSummary[];
+  loading: boolean;
+  displayName: string;
+  avatarColor: string;
+  avatarUrl: string | null;
+  handle: string;
+  verified: boolean;
+  onOpenToken: (address: string | null, ticker: string | null) => void;
+}) {
+  if (loading && posts.length === 0) {
+    return (
+      <View style={styles.feedEmpty}>
+        <ActivityIndicator color={Colors.mint} />
+      </View>
+    );
+  }
+  if (posts.length === 0) {
+    return (
+      <View style={styles.feedEmpty}>
+        <View style={styles.feedEmptyIcon}>
+          <MessageSquare color={Colors.muted} size={22} strokeWidth={2.4} />
+        </View>
+        <Text style={styles.feedEmptyTitle}>No posts yet</Text>
+        <Text style={styles.feedEmptyBody}>
+          When @{handle} posts a take, chart, or call, it shows up here.
+        </Text>
+      </View>
+    );
+  }
+  const initial = displayName.slice(0, 1).toUpperCase();
+  return (
+    <View style={styles.postsWrap}>
+      {posts.map((p) => (
+        <View key={p.id} style={styles.postCard}>
+          <View style={styles.postHead}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.postAvatar} contentFit="cover" />
+            ) : (
+              <View style={[styles.postAvatar, { backgroundColor: avatarColor, alignItems: "center", justifyContent: "center" }]}>
+                <Text style={styles.postAvatarInit}>{initial}</Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <View style={styles.postNameRow}>
+                <Text style={styles.postName} numberOfLines={1}>
+                  {displayName}
+                </Text>
+                {verified ? <BadgeCheck color={Colors.cyan} size={12} strokeWidth={2.8} /> : null}
+                <Text style={styles.postHandle} numberOfLines={1}>
+                  @{handle}
+                </Text>
+              </View>
+              <Text style={styles.postTime}>{relativeTime(p.createdAt)}</Text>
+            </View>
+          </View>
+          {p.text ? <Text style={styles.postBody}>{p.text}</Text> : null}
+          {p.imageUrl ? (
+            <Image source={{ uri: p.imageUrl }} style={styles.postImage} contentFit="cover" />
+          ) : null}
+          {p.ticker ? (
+            <Pressable
+              onPress={() => onOpenToken(p.tokenAddress, p.ticker)}
+              style={styles.postTokenPill}
+              testID={`post-token-${p.id}`}
+            >
+              <Coins color={Colors.cyan} size={11} strokeWidth={2.8} />
+              <Text style={styles.postTokenText}>${p.ticker}</Text>
+              {p.changePct != null ? (
+                <Text
+                  style={[
+                    styles.postChange,
+                    { color: p.changePct >= 0 ? Colors.mint : Colors.rose },
+                  ]}
+                >
+                  {p.changePct >= 0 ? "+" : ""}
+                  {p.changePct.toFixed(2)}%
+                </Text>
+              ) : null}
+            </Pressable>
+          ) : null}
+          <View style={styles.postStatsRow}>
+            <View style={styles.postStatItem}>
+              <Heart color={Colors.muted} size={12} strokeWidth={2.4} />
+              <Text style={styles.postStatText}>{p.likes}</Text>
+            </View>
+            <View style={styles.postStatItem}>
+              <Repeat2 color={Colors.muted} size={12} strokeWidth={2.4} />
+              <Text style={styles.postStatText}>{p.reposts}</Text>
+            </View>
+            <View style={styles.postStatItem}>
+              <MessageCircle color={Colors.muted} size={12} strokeWidth={2.4} />
+              <Text style={styles.postStatText}>{p.comments}</Text>
+            </View>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function ReelsGrid({
+  reels,
+  loading,
+  onOpen,
+}: {
+  reels: Reel[];
+  loading: boolean;
+  onOpen: () => void;
+}) {
+  if (loading && reels.length === 0) {
+    return (
+      <View style={styles.feedEmpty}>
+        <ActivityIndicator color={Colors.mint} />
+      </View>
+    );
+  }
+  if (reels.length === 0) {
+    return (
+      <View style={styles.feedEmpty}>
+        <View style={styles.feedEmptyIcon}>
+          <Film color={Colors.muted} size={22} strokeWidth={2.4} />
+        </View>
+        <Text style={styles.feedEmptyTitle}>No reels yet</Text>
+        <Text style={styles.feedEmptyBody}>Reels and photos this trader posts will live here.</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.reelsGrid}>
+      {reels.map((r) => {
+        const thumb = r.thumbnailUrl ?? (r.mediaType === "image" ? r.videoUrl : null);
+        return (
+          <Pressable
+            key={r.id}
+            onPress={onOpen}
+            style={styles.reelTile}
+            testID={`profile-reel-${r.id}`}
+          >
+            {thumb ? (
+              <Image source={{ uri: thumb }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+            ) : (
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: "#0a0f15" }]} />
+            )}
+            <LinearGradient
+              pointerEvents="none"
+              colors={["transparent", "rgba(0,0,0,0.7)"]}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <View style={styles.reelTileTop}>
+              {r.mediaType === "video" ? (
+                <View style={styles.reelPlayPill}>
+                  <Play color={Colors.ink} size={10} strokeWidth={3} fill={Colors.ink} />
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.reelTileBottom}>
+              <Heart color={Colors.text} size={11} strokeWidth={2.6} fill={Colors.text} />
+              <Text style={styles.reelTileStat}>{r.likesCount}</Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function FollowListSheet({
+  visible,
+  kind,
+  userId,
+  onClose,
+  onOpenUser,
+}: {
+  visible: boolean;
+  kind: "followers" | "following";
+  userId: string | null;
+  onClose: () => void;
+  onOpenUser: (username: string) => void;
+}) {
+  const list = useFollowList(visible ? userId : null, kind);
+  const data = list.data ?? [];
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={followStyles.backdrop} onPress={onClose}>
+        <Pressable style={followStyles.sheet} onPress={(e) => e.stopPropagation()}>
+          <View style={followStyles.handle} />
+          <View style={followStyles.head}>
+            <View style={followStyles.titleRow}>
+              <Users color={Colors.mint} size={16} strokeWidth={2.6} />
+              <Text style={followStyles.title}>
+                {kind === "followers" ? "Followers" : "Following"}
+              </Text>
+              <View style={followStyles.countPill}>
+                <Text style={followStyles.countText}>{data.length}</Text>
+              </View>
+            </View>
+            <Pressable onPress={onClose} hitSlop={8} style={followStyles.closeBtn}>
+              <X color={Colors.text} size={16} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+          {list.isLoading ? (
+            <View style={followStyles.loading}>
+              <ActivityIndicator color={Colors.mint} />
+            </View>
+          ) : data.length === 0 ? (
+            <View style={followStyles.empty}>
+              <Text style={followStyles.emptyTitle}>
+                {kind === "followers" ? "No followers yet" : "Not following anyone yet"}
+              </Text>
+              <Text style={followStyles.emptyBody}>
+                {kind === "followers"
+                  ? "Share alpha and great posts to grow a real audience."
+                  : "Discover traders to follow on the Users tab."}
+              </Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={followStyles.list}>
+              {data.map((u) => (
+                <FollowRow
+                  key={u.user_id}
+                  user={u}
+                  onPress={() => {
+                    const username = (u.username ?? "").replace(/^@/, "").trim();
+                    if (username) onOpenUser(username);
+                  }}
+                />
+              ))}
+            </ScrollView>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function FollowRow({ user, onPress }: { user: ProfileSummary; onPress: () => void }) {
+  const display = user.display_name ?? user.username ?? "Trader";
+  const initial = display.slice(0, 1).toUpperCase();
+  return (
+    <Pressable onPress={onPress} style={followStyles.row} testID={`follow-row-${user.user_id}`}>
+      {user.avatar_url ? (
+        <Image source={{ uri: user.avatar_url }} style={followStyles.avatar} contentFit="cover" />
+      ) : (
+        <View style={[followStyles.avatar, { backgroundColor: Colors.mint, alignItems: "center", justifyContent: "center" }]}>
+          <Text style={followStyles.avatarInit}>{initial}</Text>
+        </View>
+      )}
+      <View style={{ flex: 1 }}>
+        <View style={followStyles.nameRow}>
+          <Text style={followStyles.name} numberOfLines={1}>
+            {display}
+          </Text>
+          {user.verified ? <BadgeCheck color={Colors.cyan} size={12} strokeWidth={2.8} /> : null}
+        </View>
+        <Text style={followStyles.handle} numberOfLines={1}>
+          @{(user.username ?? "trader").replace(/^@/, "")}
+        </Text>
+      </View>
+      {typeof user.followers_count === "number" ? (
+        <Text style={followStyles.followers}>
+          {compactNumber(user.followers_count)} followers
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.max(0, Math.floor(diff / 60000));
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  return `${Math.floor(d / 7)}w`;
+}
+
+function compactNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return `${n}`;
 }
 
 function BadgePill({ badge }: { badge: CustomBadge }) {
@@ -631,6 +1049,180 @@ const styles = StyleSheet.create({
   },
   statNum: { color: Colors.text, fontSize: 18, fontWeight: "900" },
   statKey: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
+
+  feedTabsRow: { flexDirection: "row", gap: 8, marginTop: 22 },
+  feedTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  feedTabActive: { backgroundColor: Colors.mint, borderColor: Colors.mint },
+  feedTabText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
+  feedTabTextActive: { color: Colors.ink, fontWeight: "900" },
+
+  feedEmpty: { alignItems: "center", paddingVertical: 40, gap: 8 },
+  feedEmptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  feedEmptyTitle: { color: Colors.text, fontSize: 14, fontWeight: "900" },
+  feedEmptyBody: {
+    color: Colors.muted,
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    paddingHorizontal: 18,
+    lineHeight: 17,
+  },
+
+  postsWrap: { gap: 10, marginTop: 14 },
+  postCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    padding: 14,
+    gap: 10,
+  },
+  postHead: { flexDirection: "row", alignItems: "center", gap: 10 },
+  postAvatar: { width: 38, height: 38, borderRadius: 12 },
+  postAvatarInit: { color: Colors.ink, fontSize: 15, fontWeight: "900" },
+  postNameRow: { flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap" },
+  postName: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.2, maxWidth: 160 },
+  postHandle: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+  postTime: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 2 },
+  postBody: { color: Colors.text, fontSize: 14, lineHeight: 20, fontWeight: "500" },
+  postImage: { width: "100%", height: 220, borderRadius: 12, backgroundColor: "#0a0f15" },
+  postTokenPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(56,215,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(56,215,255,0.3)",
+  },
+  postTokenText: { color: Colors.cyan, fontSize: 11, fontWeight: "900" },
+  postChange: { fontSize: 11, fontWeight: "900" },
+  postStatsRow: { flexDirection: "row", gap: 18, marginTop: 4 },
+  postStatItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  postStatText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
+
+  reelsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 14 },
+  reelTile: {
+    width: "32.6%",
+    aspectRatio: 9 / 14,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#070c11",
+    position: "relative",
+  },
+  reelTileTop: { position: "absolute", top: 6, left: 6 },
+  reelPlayPill: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(244,198,91,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reelTileBottom: {
+    position: "absolute",
+    bottom: 6,
+    left: 6,
+    right: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  reelTileStat: { color: Colors.text, fontSize: 11, fontWeight: "900" },
+});
+
+const followStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "flex-end" },
+  sheet: {
+    height: "72%",
+    backgroundColor: Colors.panel,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  handle: {
+    alignSelf: "center",
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    marginBottom: 12,
+  },
+  head: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingBottom: 10,
+  },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  title: { color: Colors.text, fontSize: 18, fontWeight: "900", letterSpacing: -0.4 },
+  countPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "rgba(85,245,178,0.14)",
+  },
+  countText: { color: Colors.mint, fontSize: 10, fontWeight: "900" },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: Colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  list: { paddingHorizontal: 14, paddingBottom: 30 },
+  loading: { paddingVertical: 60, alignItems: "center" },
+  empty: { paddingHorizontal: 32, paddingVertical: 60, alignItems: "center" },
+  emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: "900" },
+  emptyBody: {
+    color: Colors.muted,
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 17,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 10,
+  },
+  avatar: { width: 42, height: 42, borderRadius: 13 },
+  avatarInit: { color: Colors.ink, fontSize: 16, fontWeight: "900" },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  name: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2, flexShrink: 1 },
+  handle: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  followers: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
 });
 
 const tipStyles = StyleSheet.create({

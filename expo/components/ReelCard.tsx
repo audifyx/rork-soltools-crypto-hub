@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { BadgeCheck, Eye, Heart, MessageCircle, MoreHorizontal, Play, Send, Share2, Trash2 } from "lucide-react-native";
+import { BadgeCheck, Eye, Heart, MessageCircle, MoreHorizontal, Play, Send, Share2, Trash2, Volume2, VolumeX } from "lucide-react-native";
 import React, { memo, useEffect, useMemo, useRef } from "react";
 import { ActionSheetIOS, Alert, Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
@@ -15,6 +15,8 @@ interface ReelCardProps {
   active: boolean;
   height: number;
   viewerUserId?: string | null;
+  muted: boolean;
+  onToggleMute: () => void;
   onLike: (reel: Reel) => void;
   onComment: (reel: Reel) => void;
   onShare: (reel: Reel) => void;
@@ -55,13 +57,14 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d`;
 }
 
-function buildVideoHtml(url: string | null | undefined, active: boolean): string {
+function buildVideoHtml(url: string | null | undefined, active: boolean, muted: boolean): string {
   const safeUrl = escapeAttr(url);
   if (!safeUrl) {
     return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>html,body{margin:0;width:100%;height:100%;background:#000}</style></head><body></body></html>`;
   }
   const auto = active ? "autoplay" : "";
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}video{width:100%;height:100%;object-fit:cover;background:#000}</style></head><body><video ${auto} loop muted playsinline webkit-playsinline preload="metadata" src="${safeUrl}"></video><script>const v=document.querySelector('video');${active ? "v&&v.play().catch(()=>{});" : "v&&v.pause();"}</script></body></html>`;
+  const mutedAttr = muted ? "muted" : "";
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}video{width:100%;height:100%;object-fit:cover;background:#000}</style></head><body><video ${auto} loop ${mutedAttr} playsinline webkit-playsinline preload="metadata" src="${safeUrl}"></video><script>const v=document.querySelector('video');if(v){v.muted=${muted ? "true" : "false"};${active ? "v.play().catch(()=>{});" : "v.pause();"}}</script></body></html>`;
 }
 
 function ReelCardBase({
@@ -69,6 +72,8 @@ function ReelCardBase({
   active,
   height,
   viewerUserId,
+  muted,
+  onToggleMute,
   onLike,
   onComment,
   onShare,
@@ -113,7 +118,7 @@ function ReelCardBase({
   const heartScale = useRef<Animated.Value>(new Animated.Value(0)).current;
   const isImage = reel.mediaType === "image";
   const mediaUrl: string | null = typeof reel.videoUrl === "string" && reel.videoUrl.length > 0 ? reel.videoUrl : null;
-  const html = useMemo<string>(() => buildVideoHtml(mediaUrl, active), [active, mediaUrl]);
+  const html = useMemo<string>(() => buildVideoHtml(mediaUrl, active, muted), [active, mediaUrl, muted]);
   const displayName: string = (reel.author?.displayName ?? "").trim();
   const initial = (displayName.slice(0, 1) || "S").toUpperCase();
   const ticker = typeof reel.ticker === "string" && reel.ticker.length > 0 ? reel.ticker.replace(/\$/g, "").toUpperCase() : null;
@@ -151,7 +156,7 @@ function ReelCardBase({
             <Image source={{ uri: reel.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={active ? 0 : 2} />
           ) : null}
           <WebView
-            key={`${reel.id}-${active ? "active" : "idle"}`}
+            key={`${reel.id}-${active ? "active" : "idle"}-${muted ? "m" : "u"}`}
             originWhitelist={["*"]}
             source={{ html, baseUrl: "https://soltools.app" }}
             style={StyleSheet.absoluteFill}
@@ -191,6 +196,24 @@ function ReelCardBase({
             <Eye color={Colors.text} size={12} strokeWidth={2.6} />
             <Text style={styles.viewText}>{formatCount(reel.viewsCount)}</Text>
           </View>
+          {!isImage ? (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                Haptics.selectionAsync().catch(() => {});
+                onToggleMute();
+              }}
+              style={styles.moreBtn}
+              testID="reel-mute-toggle"
+              hitSlop={10}
+            >
+              {muted ? (
+                <VolumeX color={Colors.text} size={16} strokeWidth={2.6} />
+              ) : (
+                <Volume2 color={Colors.goldBright} size={16} strokeWidth={2.6} />
+              )}
+            </Pressable>
+          ) : null}
           {isOwner && onDelete ? (
             <Pressable onPress={openOwnerMenu} style={styles.moreBtn} testID="reel-owner-menu" hitSlop={10}>
               <MoreHorizontal color={Colors.text} size={16} strokeWidth={2.6} />

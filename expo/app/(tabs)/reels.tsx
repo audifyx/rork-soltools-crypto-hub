@@ -58,6 +58,7 @@ export default function ReelsScreen() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [commentReel, setCommentReel] = useState<Reel | null>(null);
   const [feedTab, setFeedTab] = useState<ReelsTab>("all");
+  const [muted, setMuted] = useState<boolean>(true);
 
   const followingQuery = useFollowList(userId, "following");
   const followersQuery = useFollowList(userId, "followers");
@@ -195,12 +196,18 @@ export default function ReelsScreen() {
     feedQuery.refetch().catch(() => {});
   }, [feedQuery]);
 
+  const onToggleMute = useCallback(() => {
+    setMuted((prev) => !prev);
+  }, []);
+
   const renderItem: ListRenderItem<Reel> = useCallback(({ item }) => (
     <ReelCard
       reel={item}
       active={item.id === visibleId}
       height={reelHeight}
       viewerUserId={userId}
+      muted={muted}
+      onToggleMute={onToggleMute}
       onLike={onLike}
       onComment={setCommentReel}
       onShare={onShare}
@@ -208,7 +215,7 @@ export default function ReelsScreen() {
       onOpenToken={onOpenToken}
       onDelete={onDelete}
     />
-  ), [onDelete, onLike, onOpenAuthor, onOpenToken, onShare, reelHeight, userId, visibleId]);
+  ), [muted, onDelete, onLike, onOpenAuthor, onOpenToken, onShare, onToggleMute, reelHeight, userId, visibleId]);
 
   return (
     <View style={styles.root} testID="reels-screen">
