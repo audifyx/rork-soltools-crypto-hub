@@ -201,11 +201,46 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       }
       return data as boolean;
     },
+    onMutate: async (target: string) => {
+      // Optimistically flip is_following + counts so the UI updates instantly.
+      await qc.cancelQueries({ queryKey: ["profile"] });
+      await qc.cancelQueries({ queryKey: ["users"] });
+
+      // Public profile cache: ['profile', 'public', handle]
+      qc.setQueriesData<PublicProfile | null>({ queryKey: ["profile", "public"] }, (curr) => {
+        if (!curr || curr.user_id !== target) return curr;
+        const willFollow = !curr.is_following;
+        return {
+          ...curr,
+          is_following: willFollow,
+          followers_count: Math.max(0, curr.followers_count + (willFollow ? 1 : -1)),
+        };
+      });
+
+      // Users list cache: ['users', 'list', q, onlineOnly]
+      qc.setQueriesData<PlatformUser[] | undefined>({ queryKey: ["users", "list"] }, (curr) => {
+        if (!Array.isArray(curr)) return curr;
+        return curr.map((u) => {
+          if (u.user_id !== target) return u;
+          const willFollow = !u.is_following;
+          return {
+            ...u,
+            is_following: willFollow,
+            followers_count: Math.max(0, u.followers_count + (willFollow ? 1 : -1)),
+          };
+        });
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["app", "profile"] });
       qc.invalidateQueries({ queryKey: ["users"] });
       qc.invalidateQueries({ queryKey: ["posts"] });
+    },
+    onError: (err, target) => {
+      console.log("[profile] follow rollback", err instanceof Error ? err.message : err, target);
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
     },
   });
 
