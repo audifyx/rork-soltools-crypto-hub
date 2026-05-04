@@ -36,7 +36,7 @@ import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
 import { navigateBack } from "@/lib/navigation";
 import { extractSolanaAddress } from "@/lib/token-search";
-import { useTokenAutolink } from "@/lib/use-token-autolink";
+import { useTokenAutolink, type AutolinkResult } from "@/lib/use-token-autolink";
 import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -53,11 +53,13 @@ export default function ComposeScreen() {
   const [ticker, setTicker] = useState<string>("");
   const [contract, setContract] = useState<string>("");
   const [media, setMedia] = useState<PickedMedia[]>([]);
+  const [resolvedToken, setResolvedToken] = useState<AutolinkResult | null>(null);
 
   const autolink = useTokenAutolink({
     ticker,
     contract,
     onResolve: useCallback((data, via) => {
+      setResolvedToken(data);
       if (via === "ca") {
         if (!ticker.trim() && data.ticker) setTicker(data.ticker);
       } else if (via === "ticker") {
@@ -151,9 +153,22 @@ export default function ComposeScreen() {
     }
     if (!t && media.length === 0) return;
     try {
+      const ca = extractSolanaAddress(contract) ?? resolvedToken?.address ?? undefined;
+      const sym = ticker.trim() ? ticker.trim().replace("$", "").toUpperCase() : resolvedToken?.ticker;
       await addPost({
         text: t,
-        ticker: ticker.trim() ? ticker.trim().replace("$", "").toUpperCase() : undefined,
+        ticker: sym,
+        contract: ca,
+        token: resolvedToken && (resolvedToken.address === ca || !ca)
+          ? {
+              address: resolvedToken.address,
+              symbol: resolvedToken.ticker || sym || null,
+              name: resolvedToken.name || null,
+              logoUrl: resolvedToken.logoUrl,
+            }
+          : ca
+            ? { address: ca, symbol: sym ?? null }
+            : null,
         images: images.length ? images.map((m) => m.uri) : undefined,
         video: video ? { uri: video.uri, mimeType: video.mimeType ?? null, fileName: video.fileName ?? null } : undefined,
       });
@@ -169,7 +184,7 @@ export default function ComposeScreen() {
             : "Couldn't post right now.";
       Alert.alert("Failed to post", msg);
     }
-  }, [text, ticker, images, video, media.length, addPost, router, isAuthenticated]);
+  }, [text, ticker, contract, resolvedToken, images, video, media.length, addPost, router, isAuthenticated]);
 
   const remaining = MAX_CHARS - text.length;
   const canPost =

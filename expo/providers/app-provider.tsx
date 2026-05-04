@@ -18,6 +18,7 @@ export interface UserPost {
   id: string;
   text: string;
   ticker?: string;
+  contract?: string;
   changePct?: number;
   images?: string[];
   createdAt: number;
@@ -25,6 +26,22 @@ export interface UserPost {
   reposts: number;
   comments: number;
   liked: boolean;
+}
+
+export interface PostTokenInput {
+  address: string;
+  symbol?: string | null;
+  name?: string | null;
+  logoUrl?: string | null;
+  priceUsd?: number | null;
+  change24h?: number | null;
+  marketCapUsd?: number | null;
+  liquidityUsd?: number | null;
+  volume24hUsd?: number | null;
+  pairAddress?: string | null;
+  decimals?: number | null;
+  holderCount?: number | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface WatchItem {
@@ -197,7 +214,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         try {
           const { data, error } = await supabase
             .from("community_posts")
-            .select("id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
+            .select("id,user_id,content,image_url,ticker,change_pct,token_address,likes_count,reposts_count,comments_count,created_at")
             .eq("user_id", userId)
             .is("community_id", null)
             .is("parent_post_id", null)
@@ -208,6 +225,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
             id: row.id as string,
             text: (row.content as string) ?? "",
             ticker: (row.ticker as string) ?? undefined,
+            contract: (row.token_address as string | null) ?? undefined,
             changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
             images: row.image_url ? [row.image_url as string] : undefined,
             createdAt: new Date(row.created_at as string).getTime(),
@@ -437,7 +455,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const prefs = prefsQ.data ?? DEFAULT_PREFS;
 
   const addPost = useMutation({
-    mutationFn: async (input: { text: string; ticker?: string; changePct?: number; images?: string[]; video?: { uri: string; mimeType?: string | null; fileName?: string | null } }) => {
+    mutationFn: async (input: { text: string; ticker?: string; contract?: string; token?: PostTokenInput | null; changePct?: number; images?: string[]; video?: { uri: string; mimeType?: string | null; fileName?: string | null } }) => {
       if (isAuthenticated && userId) {
         let uploadedUrl: string | undefined;
         if (input.video?.uri) {
@@ -463,6 +481,25 @@ export const [AppProvider, useApp] = createContextHook(() => {
           : uploadedUrl
             ? ""
             : input.text;
+        const tokenAddress = input.token?.address ?? input.contract ?? null;
+        const tokenFields: Record<string, unknown> = tokenAddress
+          ? {
+              token_address: tokenAddress,
+              token_symbol: input.token?.symbol ?? input.ticker ?? null,
+              token_name: input.token?.name ?? null,
+              token_logo_url: input.token?.logoUrl ?? null,
+              token_price_usd: input.token?.priceUsd ?? null,
+              token_change_24h: input.token?.change24h ?? input.changePct ?? null,
+              token_market_cap_usd: input.token?.marketCapUsd ?? null,
+              token_liquidity_usd: input.token?.liquidityUsd ?? null,
+              token_volume_24h_usd: input.token?.volume24hUsd ?? null,
+              token_pair_address: input.token?.pairAddress ?? null,
+              token_decimals: input.token?.decimals ?? null,
+              token_holder_count: input.token?.holderCount ?? null,
+              token_metadata: input.token?.metadata ?? {},
+              token_scanned_at: new Date().toISOString(),
+            }
+          : {};
         const { data, error } = await supabase
           .from("community_posts")
           .insert({
@@ -470,10 +507,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
             community_id: null,
             content: safeContent ?? "",
             image_url: uploadedUrl ?? null,
-            ticker: input.ticker ?? null,
-            change_pct: input.changePct ?? null,
+            ticker: input.ticker ?? input.token?.symbol ?? null,
+            change_pct: input.changePct ?? input.token?.change24h ?? null,
+            ...tokenFields,
           })
-          .select("id,user_id,community_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
+          .select("id,user_id,community_id,content,image_url,ticker,change_pct,token_address,likes_count,reposts_count,comments_count,created_at")
           .single();
         if (error) {
           console.log("[app] community_posts insert error", {
@@ -488,6 +526,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
           id: data.id as string,
           text: (data.content as string) ?? input.text,
           ticker: (data.ticker as string) ?? input.ticker,
+          contract: (data.token_address as string | null) ?? tokenAddress ?? undefined,
           changePct: data.change_pct != null ? Number(data.change_pct) : input.changePct,
           images: data.image_url ? [data.image_url as string] : input.images,
           createdAt: new Date(data.created_at as string).getTime(),
@@ -502,6 +541,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         text: input.text,
         ticker: input.ticker,
+        contract: input.token?.address ?? input.contract,
         changePct: input.changePct,
         images: input.images,
         createdAt: Date.now(),
