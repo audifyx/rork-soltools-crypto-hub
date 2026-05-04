@@ -524,27 +524,55 @@ export const [LobbiesProvider, useLobbies] = createContextHook(() => {
     [SUPABASE_READY, isAuthenticated, handleSelf, updateLocalLobby, qc],
   );
 
+  const ensureMember = useCallback(
+    (lb: Lobby): Lobby => {
+      if (lb.members.some((m) => m.handle === handleSelf)) return lb;
+      return {
+        ...lb,
+        members: [
+          ...lb.members,
+          {
+            id: makeId(),
+            userId,
+            handle: handleSelf,
+            speaking: false,
+            muted: true,
+            isHost: false,
+            raisedHand: false,
+            role: "listener",
+            joinedAt: Date.now(),
+          },
+        ],
+      };
+    },
+    [handleSelf, userId],
+  );
+
   const toggleMute = useCallback(
     async (id: string): Promise<void> => {
       const lobby = lobbies.find((l) => l.id === id);
       const me = lobby?.members.find((m) => m.handle === handleSelf);
       const nextMuted = !(me?.muted ?? true);
+      updateLocalLobby(id, (lb) => {
+        const ensured = ensureMember(lb);
+        return {
+          ...ensured,
+          members: ensured.members.map((m) =>
+            m.handle === handleSelf ? { ...m, muted: nextMuted, speaking: !nextMuted } : m,
+          ),
+        };
+      });
       if (SUPABASE_READY && isAuthenticated) {
         try {
           const { error } = await supabase.rpc("set_voice_lobby_mute", { target_lobby_id: id, p_muted: nextMuted });
           if (error) throw error;
           await qc.invalidateQueries({ queryKey: QK });
-          return;
         } catch (e) {
           console.log("[lobbies] mute remote fallback", e instanceof Error ? e.message : e);
         }
       }
-      updateLocalLobby(id, (lb) => ({
-        ...lb,
-        members: lb.members.map((m) => (m.handle === handleSelf ? { ...m, muted: nextMuted, speaking: !nextMuted } : m)),
-      }));
     },
-    [SUPABASE_READY, isAuthenticated, lobbies, handleSelf, updateLocalLobby, qc],
+    [SUPABASE_READY, isAuthenticated, lobbies, handleSelf, updateLocalLobby, ensureMember, qc],
   );
 
   const toggleHand = useCallback(
@@ -552,38 +580,41 @@ export const [LobbiesProvider, useLobbies] = createContextHook(() => {
       const lobby = lobbies.find((l) => l.id === id);
       const me = lobby?.members.find((m) => m.handle === handleSelf);
       const nextRaised = !(me?.raisedHand ?? false);
+      updateLocalLobby(id, (lb) => {
+        const ensured = ensureMember(lb);
+        return {
+          ...ensured,
+          handCount: Math.max(0, ensured.handCount + (nextRaised ? 1 : -1)),
+          members: ensured.members.map((m) =>
+            m.handle === handleSelf ? { ...m, raisedHand: nextRaised } : m,
+          ),
+        };
+      });
       if (SUPABASE_READY && isAuthenticated) {
         try {
           const { error } = await supabase.rpc("set_voice_lobby_hand", { target_lobby_id: id, p_raised: nextRaised });
           if (error) throw error;
           await qc.invalidateQueries({ queryKey: QK });
-          return;
         } catch (e) {
           console.log("[lobbies] hand remote fallback", e instanceof Error ? e.message : e);
         }
       }
-      updateLocalLobby(id, (lb) => ({
-        ...lb,
-        handCount: Math.max(0, lb.handCount + (nextRaised ? 1 : -1)),
-        members: lb.members.map((m) => (m.handle === handleSelf ? { ...m, raisedHand: nextRaised } : m)),
-      }));
     },
-    [SUPABASE_READY, isAuthenticated, lobbies, handleSelf, updateLocalLobby, qc],
+    [SUPABASE_READY, isAuthenticated, lobbies, handleSelf, updateLocalLobby, ensureMember, qc],
   );
 
   const addReaction = useCallback(
     async (id: string, emoji = "🔥"): Promise<void> => {
+      updateLocalLobby(id, (lb) => ({ ...lb, reactionsCount: lb.reactionsCount + 1 }));
       if (SUPABASE_READY && isAuthenticated) {
         try {
           const { error } = await supabase.rpc("add_voice_lobby_reaction", { target_lobby_id: id, p_emoji: emoji });
           if (error) throw error;
           await qc.invalidateQueries({ queryKey: QK });
-          return;
         } catch (e) {
           console.log("[lobbies] reaction remote fallback", e instanceof Error ? e.message : e);
         }
       }
-      updateLocalLobby(id, (lb) => ({ ...lb, reactionsCount: lb.reactionsCount + 1 }));
     },
     [SUPABASE_READY, isAuthenticated, updateLocalLobby, qc],
   );

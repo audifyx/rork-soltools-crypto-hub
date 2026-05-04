@@ -65,6 +65,7 @@ export default function LobbyDetailScreen() {
   const {
     getLobby,
     handleSelf,
+    joinLobby,
     leaveLobby,
     sendMessage,
     toggleMute,
@@ -110,6 +111,11 @@ export default function LobbyDetailScreen() {
     loop.start();
     return () => loop.stop();
   }, [pulse]);
+
+  useEffect(() => {
+    if (!lobbyId) return;
+    joinLobby(lobbyId).catch((e) => console.log("[lobby] auto-join failed", e));
+  }, [lobbyId, joinLobby]);
 
   useEffect(() => {
     if (tab === "chat") {
