@@ -15,6 +15,7 @@ import {
   Heart,
   ImagePlus,
   Inbox,
+  Menu,
   MessageCircle,
   Plus,
   Repeat2,
@@ -43,6 +44,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
+import QuickAccessMenu from "@/components/QuickAccessMenu";
 import TokenAvatar from "@/components/TokenAvatar";
 import LiveTicker from "@/components/ui/LiveTicker";
 import CommunitiesRail from "@/components/home/CommunitiesRail";
@@ -95,6 +97,7 @@ export default function HomeFeedScreen() {
   const { data: newPairsData } = useNewSolanaPairs(40);
   const { userId, isAuthenticated } = useAuth();
   const [filter, setFilter] = useState<Filter>("For You");
+  const [menuOpen, setMenuOpen] = useState<boolean>(false);
 
   const onSelectFilter = useCallback((next: Filter) => {
     Haptics.selectionAsync().catch(() => {});
@@ -407,6 +410,16 @@ export default function HomeFeedScreen() {
               style={styles.iconBtn}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                setMenuOpen(true);
+              }}
+              testID="menu-btn"
+            >
+              <Menu color={Colors.text} size={18} strokeWidth={2.6} />
+            </Pressable>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                 router.push("/notifications");
               }}
               testID="bell-btn"
@@ -466,6 +479,8 @@ export default function HomeFeedScreen() {
           showsVerticalScrollIndicator={false}
           testID="home-feed"
         />
+
+        <QuickAccessMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
 
         <Pressable style={styles.fab} onPress={openCompose} testID="compose-fab">
           <LinearGradient
