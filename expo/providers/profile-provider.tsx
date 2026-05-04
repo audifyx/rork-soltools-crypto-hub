@@ -373,10 +373,12 @@ export function useFollowList(userId: string | null | undefined, kind: "follower
           avatar_url: normalizeMediaUrl(r.avatar_url),
           verified: !!r.verified,
           custom_badges: normalizeBadges(r.custom_badges),
+          followers_count: Number(r.followers_count ?? 0),
         }),
       );
     },
-    staleTime: 20_000,
+    staleTime: 5_000,
+    refetchOnMount: "always",
   });
 }
 

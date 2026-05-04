@@ -179,6 +179,27 @@ async function safeRpc<T>(name: string, params?: Record<string, unknown>): Promi
   return data as T;
 }
 
+export function useMessageableUsersSearch(query: string) {
+  const term = query.trim();
+  return useQuery<DMUser[]>({
+    queryKey: ["messages", "search-users", term],
+    staleTime: 10_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("list_messageable_users", {
+        q: term,
+        max_rows: 80,
+      });
+      if (error) {
+        console.log("[messages] search users failed", error.message);
+        return [];
+      }
+      return ((data ?? []) as ProfileSuggestionRow[])
+        .map(userFromProfileRow)
+        .filter((u): u is DMUser => !!u);
+    },
+  });
+}
+
 export const [MessagesProvider, useMessages] = createContextHook(() => {
   const queryClient = useQueryClient();
   const { userId, isAuthenticated } = useAuth();
@@ -222,19 +243,34 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
   const suggestedQuery = useQuery<DMUser[]>({
     queryKey: ["messages", "suggested-users", userId ?? "guest"],
     enabled: isAuthenticated && !!userId,
-    staleTime: 45_000,
+    staleTime: 20_000,
+    refetchOnMount: "always",
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id,user_id,username,display_name,avatar_url,avatar_color,verified,bio,is_online,followers_count")
-        .not("user_id", "eq", userId)
-        .order("followers_count", { ascending: false })
-        .limit(40);
+      const { data, error } = await supabase.rpc("list_messageable_users", {
+        q: "",
+        max_rows: 120,
+      });
       if (error) {
-        console.log("[messages] suggested users failed", error.message);
-        return [];
+        console.log("[messages] list_messageable_users failed", error.message);
+        // Fallback to direct profiles read so the picker still shows something
+        // when the RPC isn't deployed yet.
+        const fallback = await supabase
+          .from("profiles")
+          .select("id,user_id,username,display_name,avatar_url,avatar_color,verified,bio,is_online,followers_count")
+          .not("user_id", "eq", userId)
+          .order("followers_count", { ascending: false })
+          .limit(60);
+        if (fallback.error) {
+          console.log("[messages] fallback profiles failed", fallback.error.message);
+          return [];
+        }
+        return ((fallback.data ?? []) as ProfileSuggestionRow[])
+          .map(userFromProfileRow)
+          .filter((u): u is DMUser => !!u);
       }
-      return ((data ?? []) as ProfileSuggestionRow[]).map(userFromProfileRow).filter((u): u is DMUser => !!u);
+      return ((data ?? []) as ProfileSuggestionRow[])
+        .map(userFromProfileRow)
+        .filter((u): u is DMUser => !!u);
     },
   });
 

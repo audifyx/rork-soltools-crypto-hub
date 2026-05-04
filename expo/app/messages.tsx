@@ -36,7 +36,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
 import { navigateBack } from "@/lib/navigation";
-import { Conversation, DMUser, useMessages } from "@/providers/messages-provider";
+import { Conversation, DMUser, useMessageableUsersSearch, useMessages } from "@/providers/messages-provider";
 
 type Tab = "inbox" | "requests";
 
@@ -321,6 +321,7 @@ function ComposeModal({
   const { knownUsers, conversations } = useMessages();
   const [q, setQ] = useState<string>("");
   const slide = React.useRef(new Animated.Value(0)).current;
+  const search = useMessageableUsersSearch(q);
 
   React.useEffect(() => {
     Animated.timing(slide, {
@@ -333,13 +334,26 @@ function ComposeModal({
 
   const filtered = useMemo<DMUser[]>(() => {
     const term = q.trim().toLowerCase();
-    if (term.length === 0) return knownUsers;
-    return knownUsers.filter(
-      (u) =>
+    const remote = search.data ?? [];
+    // Merge remote + locally known users, dedup by userId/handle.
+    const merged: DMUser[] = [...remote, ...knownUsers];
+    const seen = new Set<string>();
+    const out: DMUser[] = [];
+    for (const u of merged) {
+      const key = u.userId ?? u.handle;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (term.length === 0) {
+        out.push(u);
+      } else if (
         u.handle.toLowerCase().includes(term) ||
-        u.name.toLowerCase().includes(term),
-    );
-  }, [q, knownUsers]);
+        u.name.toLowerCase().includes(term)
+      ) {
+        out.push(u);
+      }
+    }
+    return out;
+  }, [q, knownUsers, search.data]);
 
   return (
     <Modal visible={open} transparent animationType="none" onRequestClose={onClose}>
