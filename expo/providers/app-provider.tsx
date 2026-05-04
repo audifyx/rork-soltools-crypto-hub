@@ -6,7 +6,7 @@ import { useCallback, useMemo } from "react";
 import { normalizeMediaUrl } from "@/lib/media";
 import { fetchOwnProfileRow, saveOwnProfilePatch, type ProfilePatch } from "@/lib/profile-db";
 import { supabase } from "@/lib/supabase";
-import { uploadPostImage } from "@/lib/upload";
+import { uploadPostImage, uploadReelMedia } from "@/lib/upload";
 import type { CustomBadge } from "@/providers/profile-provider";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -437,15 +437,23 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const prefs = prefsQ.data ?? DEFAULT_PREFS;
 
   const addPost = useMutation({
-    mutationFn: async (input: { text: string; ticker?: string; changePct?: number; images?: string[] }) => {
+    mutationFn: async (input: { text: string; ticker?: string; changePct?: number; images?: string[]; video?: { uri: string; mimeType?: string | null; fileName?: string | null } }) => {
       if (isAuthenticated && userId) {
         let uploadedUrl: string | undefined;
-        const firstImage = input.images?.[0];
-        if (firstImage) {
+        if (input.video?.uri) {
           try {
-            uploadedUrl = await uploadPostImage(userId, firstImage);
+            uploadedUrl = await uploadReelMedia(userId, input.video.uri, input.video.fileName ?? null, input.video.mimeType ?? null);
           } catch (e) {
-            console.log("[app] post image upload failed", e);
+            console.log("[app] post video upload failed", e);
+          }
+        } else {
+          const firstImage = input.images?.[0];
+          if (firstImage) {
+            try {
+              uploadedUrl = await uploadPostImage(userId, firstImage);
+            } catch (e) {
+              console.log("[app] post image upload failed", e);
+            }
           }
         }
         // content is NOT NULL on community_posts; ensure a non-empty string

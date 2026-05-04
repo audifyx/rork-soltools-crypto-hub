@@ -7,11 +7,13 @@ import {
   Globe2,
   Hash,
   ImagePlus,
+  Play,
   Send,
   Sparkles,
+  Video as VideoIcon,
   X,
 } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -34,13 +36,18 @@ import { useAuth } from "@/providers/auth-provider";
 const MAX_CHARS = 280;
 const MAX_IMAGES = 4;
 
+type PickedMedia = { uri: string; kind: "image" | "video"; mimeType?: string | null; fileName?: string | null };
+
 export default function ComposeScreen() {
   const router = useRouter();
   const { addPost, isPosting, profile } = useApp();
   const { isAuthenticated } = useAuth();
   const [text, setText] = useState<string>("");
   const [ticker, setTicker] = useState<string>("");
-  const [images, setImages] = useState<string[]>([]);
+  const [media, setMedia] = useState<PickedMedia[]>([]);
+
+  const images = useMemo(() => media.filter((m) => m.kind === "image"), [media]);
+  const video = useMemo(() => media.find((m) => m.kind === "video") ?? null, [media]);
 
   const onPickImages = useCallback(async () => {
     Haptics.selectionAsync().catch(() => {});
@@ -52,22 +59,50 @@ export default function ComposeScreen() {
           return;
         }
       }
+      const remaining = MAX_IMAGES - images.length;
+      if (remaining <= 0) return;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsMultipleSelection: true,
-        selectionLimit: MAX_IMAGES - images.length,
+        selectionLimit: remaining,
         quality: 0.85,
       });
       if (result.canceled) return;
-      const uris = result.assets.map((a) => a.uri).slice(0, MAX_IMAGES - images.length);
-      setImages((prev) => [...prev, ...uris].slice(0, MAX_IMAGES));
+      const picked: PickedMedia[] = result.assets
+        .slice(0, remaining)
+        .map((a) => ({ uri: a.uri, kind: "image" as const, mimeType: a.mimeType ?? null, fileName: a.fileName ?? null }));
+      setMedia((prev) => [...prev.filter((m) => m.kind !== "video"), ...prev.filter((m) => m.kind === "image"), ...picked].slice(0, MAX_IMAGES));
     } catch (e) {
       console.log("[compose] image pick failed", e);
     }
   }, [images.length]);
 
-  const onRemoveImage = useCallback((uri: string) => {
-    setImages((prev) => prev.filter((u) => u !== uri));
+  const onPickVideo = useCallback(async () => {
+    Haptics.selectionAsync().catch(() => {});
+    try {
+      if (Platform.OS !== "web") {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert("Permission needed", "Allow photo library access to attach a video.");
+          return;
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        allowsMultipleSelection: false,
+        quality: 0.85,
+        videoMaxDuration: 180,
+      });
+      if (result.canceled || !result.assets[0]?.uri) return;
+      const a = result.assets[0];
+      setMedia([{ uri: a.uri, kind: "video", mimeType: a.mimeType ?? null, fileName: a.fileName ?? null }]);
+    } catch (e) {
+      console.log("[compose] video pick failed", e);
+    }
+  }, []);
+
+  const onRemoveMedia = useCallback((uri: string) => {
+    setMedia((prev) => prev.filter((m) => m.uri !== uri));
   }, []);
 
   const onPost = useCallback(async () => {
@@ -79,12 +114,13 @@ export default function ComposeScreen() {
       ]);
       return;
     }
-    if (!t && images.length === 0) return;
+    if (!t && media.length === 0) return;
     try {
       await addPost({
         text: t,
         ticker: ticker.trim() ? ticker.trim().replace("$", "").toUpperCase() : undefined,
-        images: images.length ? images : undefined,
+        images: images.length ? images.map((m) => m.uri) : undefined,
+        video: video ? { uri: video.uri, mimeType: video.mimeType ?? null, fileName: video.fileName ?? null } : undefined,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       navigateBack(router, "/(tabs)/home");
@@ -98,12 +134,13 @@ export default function ComposeScreen() {
             : "Couldn't post right now.";
       Alert.alert("Failed to post", msg);
     }
-  }, [text, ticker, images, addPost, router, isAuthenticated]);
+  }, [text, ticker, images, video, media.length, addPost, router, isAuthenticated]);
 
   const remaining = MAX_CHARS - text.length;
   const canPost =
-    (text.trim().length > 0 || images.length > 0) && remaining >= 0 && !isPosting;
-  const canPickMore = images.length < MAX_IMAGES;
+    (text.trim().length > 0 || media.length > 0) && remaining >= 0 && !isPosting;
+  const canPickMore = !video && images.length < MAX_IMAGES;
+  const canPickVideo = images.length === 0 && !video;
 
   return (
     <View style={styles.root}>
@@ -171,21 +208,40 @@ export default function ComposeScreen() {
               testID="compose-text"
             />
 
+            {video ? (
+              <View style={[styles.imageWrap, styles.imageWrapSolo, styles.videoWrap]} testID="compose-video">
+                <View style={styles.videoBadge}>
+                  <Play color={Colors.ink} size={22} strokeWidth={3} fill={Colors.ink} />
+                </View>
+                <Text style={styles.videoLabel} numberOfLines={1}>
+                  {video.fileName ?? "Video selected"}
+                </Text>
+                <Pressable
+                  onPress={() => onRemoveMedia(video.uri)}
+                  style={styles.imageRemove}
+                  hitSlop={8}
+                  testID="remove-video"
+                >
+                  <X color={Colors.text} size={14} strokeWidth={3} />
+                </Pressable>
+              </View>
+            ) : null}
+
             {images.length > 0 ? (
               <View style={styles.imageGrid} testID="compose-images">
-                {images.map((uri) => (
-                  <View key={uri} style={[styles.imageWrap, images.length === 1 && styles.imageWrapSolo]}>
+                {images.map((m) => (
+                  <View key={m.uri} style={[styles.imageWrap, images.length === 1 && styles.imageWrapSolo]}>
                     <ExpoImage
-                      source={{ uri }}
+                      source={{ uri: m.uri }}
                       style={styles.imageThumb}
                       contentFit="cover"
                       cachePolicy="memory"
                     />
                     <Pressable
-                      onPress={() => onRemoveImage(uri)}
+                      onPress={() => onRemoveMedia(m.uri)}
                       style={styles.imageRemove}
                       hitSlop={8}
-                      testID={`remove-image-${uri.slice(-6)}`}
+                      testID={`remove-image-${m.uri.slice(-6)}`}
                     >
                       <X color={Colors.text} size={14} strokeWidth={3} />
                     </Pressable>
@@ -225,8 +281,21 @@ export default function ComposeScreen() {
                   strokeWidth={2.4}
                 />
               </Pressable>
+              <Pressable
+                onPress={onPickVideo}
+                disabled={!canPickVideo}
+                style={[styles.toolBtn, !canPickVideo && styles.toolBtnDisabled]}
+                hitSlop={8}
+                testID="compose-video-btn"
+              >
+                <VideoIcon
+                  color={canPickVideo ? Colors.cyan : Colors.muted}
+                  size={20}
+                  strokeWidth={2.4}
+                />
+              </Pressable>
               <Text style={styles.toolHint}>
-                {images.length}/{MAX_IMAGES} photos
+                {video ? "1 video" : `${images.length}/${MAX_IMAGES} photos`}
               </Text>
             </View>
             <View style={styles.counterWrap}>
@@ -351,6 +420,29 @@ const styles = StyleSheet.create({
   imageThumb: {
     width: "100%",
     height: "100%",
+  },
+  videoWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(56,215,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(56,215,255,0.30)",
+    gap: 10,
+    padding: 14,
+  },
+  videoBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.cyan,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoLabel: {
+    color: Colors.text,
+    fontSize: 12,
+    fontWeight: "800",
+    maxWidth: "80%",
   },
   imageRemove: {
     position: "absolute",

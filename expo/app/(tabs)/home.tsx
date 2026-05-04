@@ -41,6 +41,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 
 import TokenAvatar from "@/components/TokenAvatar";
 import LiveTicker from "@/components/ui/LiveTicker";
@@ -1301,13 +1302,36 @@ function TrendingTagsCard() {
   );
 }
 
+function isVideoUri(uri: string): boolean {
+  return /\.(mp4|mov|m4v|webm|qt)(\?|$)/i.test(uri);
+}
+
+function PostMediaItem({ uri }: { uri: string }) {
+  if (isVideoUri(uri)) {
+    const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}video{width:100%;height:100%;object-fit:cover;background:#000}</style></head><body><video controls playsinline webkit-playsinline preload="metadata" src="${uri.replace(/"/g, "&quot;")}"></video></body></html>`;
+    return (
+      <WebView
+        originWhitelist={["*"]}
+        source={{ html, baseUrl: "https://soltools.app" }}
+        style={styles.imgFill}
+        scrollEnabled={false}
+        bounces={false}
+        allowsInlineMediaPlayback
+        mediaPlaybackRequiresUserAction={false}
+        javaScriptEnabled
+      />
+    );
+  }
+  return <ExpoImage source={{ uri }} style={styles.imgFill} contentFit="cover" />;
+}
+
 function PostImageGrid({ images }: { images: string[] }) {
   const count = Math.min(images.length, 4);
   if (count === 0) return null;
   if (count === 1) {
     return (
       <View style={styles.imgGridSolo} testID="post-images-1">
-        <ExpoImage source={{ uri: images[0] }} style={styles.imgFill} contentFit="cover" />
+        <PostMediaItem uri={images[0]} />
       </View>
     );
   }
@@ -1316,7 +1340,7 @@ function PostImageGrid({ images }: { images: string[] }) {
       <View style={styles.imgGridRow} testID="post-images-2">
         {images.slice(0, 2).map((u, i) => (
           <View key={`${u}-${i}`} style={styles.imgHalf}>
-            <ExpoImage source={{ uri: u }} style={styles.imgFill} contentFit="cover" />
+            <PostMediaItem uri={u} />
           </View>
         ))}
       </View>
@@ -1326,14 +1350,14 @@ function PostImageGrid({ images }: { images: string[] }) {
     return (
       <View style={styles.imgGridRow} testID="post-images-3">
         <View style={styles.imgHalf}>
-          <ExpoImage source={{ uri: images[0] }} style={styles.imgFill} contentFit="cover" />
+          <PostMediaItem uri={images[0]} />
         </View>
         <View style={styles.imgHalf}>
           <View style={styles.imgQuarter}>
-            <ExpoImage source={{ uri: images[1] }} style={styles.imgFill} contentFit="cover" />
+            <PostMediaItem uri={images[1]} />
           </View>
           <View style={[styles.imgQuarter, { marginTop: 4 }]}>
-            <ExpoImage source={{ uri: images[2] }} style={styles.imgFill} contentFit="cover" />
+            <PostMediaItem uri={images[2]} />
           </View>
         </View>
       </View>
@@ -1343,7 +1367,7 @@ function PostImageGrid({ images }: { images: string[] }) {
     <View style={styles.imgGrid4} testID="post-images-4">
       {images.slice(0, 4).map((u, i) => (
         <View key={`${u}-${i}`} style={styles.imgQuad}>
-          <ExpoImage source={{ uri: u }} style={styles.imgFill} contentFit="cover" />
+          <PostMediaItem uri={u} />
         </View>
       ))}
     </View>
