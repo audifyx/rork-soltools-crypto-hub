@@ -4,23 +4,7 @@ import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Haptics from "expo-haptics";
 import {
-  ArrowLeft,
-  ChevronRight,
-  Crown,
-  Flame,
-  Globe,
-  Heart,
-  Search,
-  ShieldCheck,
-  Sparkles,
-  Star,
-  TrendingUp,
-  UserPlus,
-  Users as UsersIcon,
-  Wifi,
-} from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
-import {
+  Alert,
   ActivityIndicator,
   Platform,
   Pressable,
@@ -31,6 +15,24 @@ import {
   TextInput,
   View,
 } from "react-native";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Crown,
+  Flame,
+  Globe,
+  Heart,
+  MessageCircle,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  TrendingUp,
+  UserPlus,
+  Users as UsersIcon,
+  Wifi,
+} from "lucide-react-native";
+import React, { useCallback, useMemo, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
@@ -38,6 +40,7 @@ import AppBackground from "@/components/ui/AppBackground";
 import { navigateBack } from "@/lib/navigation";
 import LeaderboardCard from "@/components/users/LeaderboardCard";
 import { useAuth } from "@/providers/auth-provider";
+import { useMessages } from "@/providers/messages-provider";
 import {
   useProfileProvider,
   usePlatformUsers,
@@ -67,8 +70,9 @@ function timeAgo(iso: string | null): string {
 
 export default function UsersScreen() {
   const router = useRouter();
-  const { userId } = useAuth();
+  const { userId, isAuthenticated } = useAuth();
   const { toggleFollow, isToggling } = useProfileProvider();
+  const { ensureConversationWith } = useMessages();
   const [mode, setMode] = useState<Mode>("all");
   const [filter, setFilter] = useState<Filter>("none");
   const [query, setQuery] = useState<string>("");
@@ -131,6 +135,32 @@ export default function UsersScreen() {
       }
     },
     [userId, toggleFollow, list],
+  );
+
+  const onMessage = useCallback(
+    async (u: PlatformUser) => {
+      if (!isAuthenticated) {
+        Alert.alert("Sign in", "Sign in to message traders.");
+        return;
+      }
+      if (u.user_id === userId) return;
+      tap();
+      try {
+        const conversationId = await ensureConversationWith({
+          userId: u.user_id,
+          handle: `@${u.username ?? u.user_id.slice(0, 8)}`,
+          name: u.display_name ?? u.username ?? "Trader",
+          color: Colors.mint,
+          verified: u.verified,
+          bio: u.bio ?? undefined,
+          avatarUrl: u.avatar_url,
+        });
+        router.push({ pathname: "/dm/[id]", params: { id: conversationId } });
+      } catch (e) {
+        Alert.alert("Message failed", e instanceof Error ? e.message : "Try again.");
+      }
+    },
+    [ensureConversationWith, isAuthenticated, router, userId],
   );
 
   return (
@@ -349,6 +379,7 @@ export default function UsersScreen() {
                 isMe={u.user_id === userId}
                 onOpen={() => onOpenUser(u)}
                 onFollow={() => onToggleFollow(u)}
+                onMessage={() => onMessage(u)}
                 disabled={isToggling}
               />
             ))
@@ -418,12 +449,14 @@ function UserRow({
   isMe,
   onOpen,
   onFollow,
+  onMessage,
   disabled,
 }: {
   user: PlatformUser;
   isMe: boolean;
   onOpen: () => void;
   onFollow: () => void;
+  onMessage: () => void;
   disabled: boolean;
 }) {
   return (
@@ -500,33 +533,46 @@ function UserRow({
           <Text style={styles.meChipText}>YOU</Text>
         </View>
       ) : (
-        <Pressable
-          onPress={(e) => {
-            e.stopPropagation();
-            onFollow();
-          }}
-          disabled={disabled}
-          style={[
-            styles.followBtn,
-            user.is_following && styles.followBtnActive,
-            disabled && { opacity: 0.6 },
-          ]}
-          testID={`follow-btn-${user.user_id}`}
-        >
-          <UserPlus
-            color={user.is_following ? Colors.mint : Colors.ink}
-            size={12}
-            strokeWidth={3}
-          />
-          <Text
-            style={[
-              styles.followBtnText,
-              user.is_following && { color: Colors.mint },
-            ]}
+        <View style={styles.actionCol}>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onMessage();
+            }}
+            style={styles.msgBtn}
+            testID={`message-btn-${user.user_id}`}
+            hitSlop={6}
           >
-            {user.is_following ? "Following" : "Follow"}
-          </Text>
-        </Pressable>
+            <MessageCircle color={Colors.cyan} size={14} strokeWidth={2.6} />
+          </Pressable>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onFollow();
+            }}
+            disabled={disabled}
+            style={[
+              styles.followBtn,
+              user.is_following && styles.followBtnActive,
+              disabled && { opacity: 0.6 },
+            ]}
+            testID={`follow-btn-${user.user_id}`}
+          >
+            <UserPlus
+              color={user.is_following ? Colors.mint : Colors.ink}
+              size={12}
+              strokeWidth={3}
+            />
+            <Text
+              style={[
+                styles.followBtnText,
+                user.is_following && { color: Colors.mint },
+              ]}
+            >
+              {user.is_following ? "Following" : "Follow"}
+            </Text>
+          </Pressable>
+        </View>
       )}
 
       <ChevronRight color={Colors.muted} size={14} strokeWidth={2.4} />
@@ -935,6 +981,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.6,
+  },
+  actionCol: { flexDirection: "row", alignItems: "center", gap: 6 },
+  msgBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(56,215,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(56,215,255,0.35)",
   },
   followBtn: {
     flexDirection: "row",

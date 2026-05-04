@@ -44,6 +44,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
+import { uploadDMImage } from "@/lib/upload";
+import { useAuth } from "@/providers/auth-provider";
 import { DMMessage, useMessages } from "@/providers/messages-provider";
 
 const QUICK_TICKERS = ["$SOL", "$BONK", "$WIF", "$JUP", "$AGNT", "$PYTH"];
@@ -77,6 +79,7 @@ interface ListRow {
 export default function DMThreadScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { userId } = useAuth();
   const {
     getConversation,
     getMessages,
@@ -86,6 +89,7 @@ export default function DMThreadScreen() {
     toggleMute,
     deleteConversation,
   } = useMessages();
+  const [uploading, setUploading] = useState<boolean>(false);
 
   const conv = id ? getConversation(id) : undefined;
   const messages = useMemo<DMMessage[]>(() => (id ? getMessages(id) : []), [id, getMessages]);
@@ -135,6 +139,10 @@ export default function DMThreadScreen() {
 
   const onPickImage = useCallback(async () => {
     if (!id || !conv) return;
+    if (!userId) {
+      Alert.alert("Sign in", "Sign in to send photos.");
+      return;
+    }
     Haptics.selectionAsync().catch(() => {});
     try {
       if (Platform.OS !== "web") {
@@ -148,14 +156,27 @@ export default function DMThreadScreen() {
         mediaTypes: ["images"],
         allowsMultipleSelection: false,
         quality: 0.85,
+        base64: Platform.OS !== "web",
       });
       if (result.canceled || !result.assets[0]?.uri) return;
-      await onSend({ text: "Photo", imageUrl: result.assets[0].uri });
+      const asset = result.assets[0];
+      setUploading(true);
+      const publicUrl = await uploadDMImage(
+        userId,
+        id,
+        asset.uri,
+        asset.base64 ?? null,
+        asset.fileName ?? null,
+        asset.mimeType ?? null,
+      );
+      await onSend({ text: "Photo", imageUrl: publicUrl });
     } catch (e) {
-      console.log("[dm] image pick failed", e);
-      Alert.alert("Image failed", "Could not attach that image. Try another one.");
+      console.log("[dm] image send failed", e);
+      Alert.alert("Image failed", e instanceof Error ? e.message : "Could not send that image. Try another one.");
+    } finally {
+      setUploading(false);
     }
-  }, [id, conv, onSend]);
+  }, [id, conv, onSend, userId]);
 
   const onStartCall = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -347,8 +368,13 @@ export default function DMThreadScreen() {
             >
               <Hash color={picker ? Colors.cyan : Colors.muted} size={16} strokeWidth={2.6} />
             </Pressable>
-            <Pressable style={styles.composerBtn} onPress={onPickImage} testID="dm-image-attach">
-              <ImageIcon color={Colors.muted} size={16} strokeWidth={2.4} />
+            <Pressable
+              style={[styles.composerBtn, uploading && { opacity: 0.55 }]}
+              onPress={onPickImage}
+              disabled={uploading}
+              testID="dm-image-attach"
+            >
+              <ImageIcon color={uploading ? Colors.cyan : Colors.muted} size={16} strokeWidth={2.4} />
             </Pressable>
             <View style={styles.inputWrap}>
               <TextInput

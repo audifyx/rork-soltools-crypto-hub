@@ -6,6 +6,7 @@ const BUCKET = "profile-media";
 const POSTS_BUCKET = "post-images";
 const COMMUNITY_BUCKET = "community-images";
 const REELS_BUCKET = "reel-media";
+const DM_BUCKET = "dm-media";
 
 export type ProfileMediaKind = "avatar" | "banner";
 export type CommunityMediaKind = "avatar" | "banner";
@@ -206,6 +207,41 @@ export async function uploadCommunityMedia(
   }
 
   const { data } = supabase.storage.from(COMMUNITY_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/** Uploads a DM image attachment to the public dm-media bucket. Returns a public URL. */
+export async function uploadDMImage(
+  userId: string,
+  conversationId: string,
+  uri: string,
+  base64?: string | null,
+  fileName?: string | null,
+  mimeType?: string | null,
+): Promise<string> {
+  const ext = extFromMime(mimeType, "jpg") ?? extFromUri(fileName ?? uri, "jpg");
+  const safeConvo = conversationId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const path = `${userId}/${safeConvo}/dm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  const ct = contentType(ext, mimeType);
+
+  let body: ArrayBuffer | Blob;
+  try {
+    body = await readBody(uri, base64);
+  } catch (e) {
+    console.log("[upload] dm read failed", e);
+    throw new Error(e instanceof Error ? e.message : "Could not read selected image");
+  }
+
+  const { error } = await supabase.storage
+    .from(DM_BUCKET)
+    .upload(path, body as ArrayBuffer, { contentType: ct, upsert: true });
+
+  if (error) {
+    console.log("[upload] dm storage error", error.message);
+    throw new Error(error.message);
+  }
+
+  const { data } = supabase.storage.from(DM_BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
 
