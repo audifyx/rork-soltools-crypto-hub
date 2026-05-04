@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { MessageCircle, Plus, RefreshCcw, Sparkles, X } from "lucide-react-native";
+import { Clock3, Compass, Flame, MessageCircle, Plus, RefreshCcw, Sparkles, X } from "lucide-react-native";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -40,6 +40,14 @@ import { useAuth } from "@/providers/auth-provider";
 
 const EMPTY_REELS: Reel[] = [];
 
+type ReelsTab = "foryou" | "trending" | "latest";
+
+const FEED_TABS: { key: ReelsTab; label: string; Icon: typeof Compass }[] = [
+  { key: "foryou", label: "For You", Icon: Sparkles },
+  { key: "trending", label: "Trending", Icon: Flame },
+  { key: "latest", label: "Latest", Icon: Clock3 },
+];
+
 export default function ReelsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -47,6 +55,7 @@ export default function ReelsScreen() {
   const { userId, isAuthenticated } = useAuth();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [commentReel, setCommentReel] = useState<Reel | null>(null);
+  const [feedTab, setFeedTab] = useState<ReelsTab>("foryou");
 
   const reelHeight = Math.max(620, height);
 
@@ -57,8 +66,22 @@ export default function ReelsScreen() {
     refetchInterval: 45_000,
   });
 
-  const reels = feedQuery.data ?? EMPTY_REELS;
+  const allReels = feedQuery.data ?? EMPTY_REELS;
+  const reels = useMemo<Reel[]>(() => {
+    if (feedTab === "trending") {
+      return [...allReels].sort((a, b) => (b.likesCount + b.viewsCount * 0.05) - (a.likesCount + a.viewsCount * 0.05));
+    }
+    if (feedTab === "latest") {
+      return [...allReels].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    return allReels;
+  }, [allReels, feedTab]);
   const visibleId = activeId ?? reels[0]?.id ?? null;
+  const activeIndex = useMemo<number>(() => {
+    if (!visibleId) return 0;
+    const idx = reels.findIndex((r) => r.id === visibleId);
+    return idx >= 0 ? idx : 0;
+  }, [reels, visibleId]);
 
   const viewabilityConfig = useMemo(() => ({ itemVisiblePercentThreshold: 72 }), []);
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<Reel>[] }) => {
@@ -195,16 +218,25 @@ export default function ReelsScreen() {
       />
 
       <SafeAreaView pointerEvents="box-none" edges={["top"]} style={styles.overlayTop}>
+        <LinearGradient
+          pointerEvents="none"
+          colors={["rgba(0,0,0,0.72)", "rgba(0,0,0,0.32)", "rgba(0,0,0,0)"]}
+          locations={[0, 0.55, 1]}
+          style={styles.topScrim}
+        />
         <View style={styles.header}>
-          <View>
-            <Text style={styles.eyebrow}>SOLTOOLS SHORTS</Text>
+          <View style={styles.headerLeft}>
+            <View style={styles.eyebrowRow}>
+              <View style={styles.liveDot} />
+              <Text style={styles.eyebrow}>SOLTOOLS SHORTS</Text>
+            </View>
             <Text style={styles.title}>Reels</Text>
           </View>
           <View style={styles.headerActions}>
-            <Pressable onPress={onRefresh} style={styles.iconBtn} testID="refresh-reels">
-              <RefreshCcw color={Colors.text} size={17} strokeWidth={2.5} />
+            <Pressable onPress={onRefresh} style={styles.iconBtn} testID="refresh-reels" hitSlop={8}>
+              <RefreshCcw color={Colors.text} size={16} strokeWidth={2.5} />
             </Pressable>
-            <Pressable onPress={() => router.push("/upload-reel")} style={styles.uploadBtn} testID="upload-reel-btn">
+            <Pressable onPress={() => router.push("/upload-reel")} style={styles.uploadBtn} testID="upload-reel-btn" hitSlop={8}>
               <LinearGradient
                 colors={[Colors.goldBright, Colors.silver]}
                 start={{ x: 0, y: 0 }}
@@ -216,6 +248,44 @@ export default function ReelsScreen() {
             </Pressable>
           </View>
         </View>
+        <View style={styles.tabsRow}>
+          {FEED_TABS.map(({ key, label, Icon }) => {
+            const active = feedTab === key;
+            return (
+              <Pressable
+                key={key}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setFeedTab(key);
+                }}
+                style={[styles.tabChip, active && styles.tabChipActive]}
+                testID={`reels-tab-${key}`}
+                hitSlop={6}
+              >
+                <Icon color={active ? Colors.ink : Colors.text} size={12} strokeWidth={2.7} />
+                <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {reels.length > 0 ? (
+          <View style={styles.progressTrack} pointerEvents="none">
+            {reels.slice(0, Math.min(reels.length, 12)).map((r, i) => {
+              const isActive = i === Math.min(activeIndex, 11);
+              const isPast = i < Math.min(activeIndex, 11);
+              return (
+                <View
+                  key={r.id}
+                  style={[
+                    styles.progressSeg,
+                    isPast && styles.progressSegPast,
+                    isActive && styles.progressSegActive,
+                  ]}
+                />
+              );
+            })}
+          </View>
+        ) : null}
       </SafeAreaView>
 
       <CommentsSheet
@@ -325,17 +395,58 @@ function CommentsSheet({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
   overlayTop: { position: "absolute", top: 0, left: 0, right: 0 },
+  topScrim: { position: "absolute", top: 0, left: 0, right: 0, height: 220 },
   header: {
     marginHorizontal: 14,
-    marginTop: 8,
+    marginTop: 6,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     pointerEvents: "box-none",
   },
+  headerLeft: { flex: 1 },
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.goldBright },
   eyebrow: { color: Colors.goldBright, fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
-  title: { color: Colors.text, fontSize: 30, fontWeight: "900", letterSpacing: -1.1, marginTop: 1 },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 9 },
+  title: { color: Colors.text, fontSize: 28, fontWeight: "900", letterSpacing: -1, marginTop: 2 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  tabsRow: {
+    flexDirection: "row",
+    gap: 7,
+    marginHorizontal: 14,
+    marginTop: 12,
+  },
+  tabChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.42)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.13)",
+  },
+  tabChipActive: {
+    backgroundColor: Colors.goldBright,
+    borderColor: "rgba(255,248,223,0.65)",
+  },
+  tabLabel: { color: Colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 0.3 },
+  tabLabelActive: { color: Colors.ink },
+  progressTrack: {
+    flexDirection: "row",
+    gap: 3,
+    marginHorizontal: 14,
+    marginTop: 10,
+    height: 2.5,
+  },
+  progressSeg: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderRadius: 2,
+  },
+  progressSegPast: { backgroundColor: "rgba(244,198,91,0.55)" },
+  progressSegActive: { backgroundColor: Colors.goldBright },
   iconBtn: {
     width: 40,
     height: 40,

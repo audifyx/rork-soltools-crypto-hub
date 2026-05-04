@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Globe2,
   ImagePlus,
+  Link2,
   Loader2,
   MessageCircle,
   Rocket,
@@ -34,6 +35,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
+import { useTokenAutolink } from "@/lib/use-token-autolink";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchVenue } from "@/types/launchpad";
 import { SOLTOOLS_DEFAULT_BANNER } from "@/utils/token-art";
@@ -177,6 +179,22 @@ export default function ListTokenScreen() {
 
   const venueLabel = useMemo(() => VENUES.find((v) => v.key === venue)?.label ?? "Select", [venue]);
 
+  const autolink = useTokenAutolink({
+    ticker,
+    contract,
+    onResolve: useCallback((data, via) => {
+      if (via === "ca") {
+        if (!ticker.trim() && data.ticker) setTicker(data.ticker);
+        if (!name.trim() && data.name) setName(data.name);
+        if (!logoUri && data.logoUrl) setLogoUri(data.logoUrl);
+      } else {
+        if (data.address && !contract.trim()) setContract(data.address);
+        if (!name.trim() && data.name) setName(data.name);
+        if (!logoUri && data.logoUrl) setLogoUri(data.logoUrl);
+      }
+    }, [ticker, name, logoUri, contract]),
+  });
+
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false, presentation: "modal" }} />
@@ -285,6 +303,7 @@ export default function ListTokenScreen() {
                   style={styles.input}
                   testID="input-contract"
                 />
+                <AutolinkStatus state={autolink} />
               </Field>
 
               <Field label="Venue">
@@ -476,6 +495,34 @@ export default function ListTokenScreen() {
           setVenueOpen(false);
         }}
       />
+    </View>
+  );
+}
+
+function AutolinkStatus({ state }: { state: ReturnType<typeof useTokenAutolink> }) {
+  if (state.status === "idle") return null;
+  if (state.status === "resolving") {
+    return (
+      <View style={styles.linkRow}>
+        <Loader2 color={Colors.cyan} size={11} strokeWidth={2.6} />
+        <Text style={styles.linkText}>{state.via === "ca" ? "Resolving ticker from chain\u2026" : "Searching CA on Solana\u2026"}</Text>
+      </View>
+    );
+  }
+  if (state.status === "missing") {
+    return (
+      <View style={styles.linkRow}>
+        <Link2 color={Colors.muted} size={11} strokeWidth={2.6} />
+        <Text style={[styles.linkText, { color: Colors.muted }]}>{state.via === "ca" ? "No metadata found for this CA yet" : "No live token matches that ticker"}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.linkRow, styles.linkRowOk]}>
+      <CheckCircle2 color={Colors.mint} size={11} strokeWidth={2.6} />
+      <Text style={[styles.linkText, { color: Colors.mint }]}>
+        {state.via === "ca" ? `Linked ${state.data.ticker} from chain` : `Linked CA \u2022 ${state.data.address.slice(0, 4)}\u2026${state.data.address.slice(-4)}`}
+      </Text>
     </View>
   );
 }
@@ -789,6 +836,24 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 14,
   },
+  linkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 9,
+    backgroundColor: "rgba(56,215,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(56,215,255,0.18)",
+    alignSelf: "flex-start",
+  },
+  linkRowOk: {
+    backgroundColor: "rgba(85,245,178,0.10)",
+    borderColor: "rgba(85,245,178,0.28)",
+  },
+  linkText: { color: Colors.cyan, fontSize: 10.5, fontWeight: "800" },
 
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   sheet: {

@@ -3,7 +3,7 @@ import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { ArrowLeft, Clapperboard, Hash, ImageIcon, Play, Send, Sparkles, UploadCloud, Video as VideoIcon, X } from "lucide-react-native";
+import { ArrowLeft, CheckCircle2, Clapperboard, Hash, ImageIcon, Link2, Loader2, Play, Send, Sparkles, UploadCloud, Video as VideoIcon, X } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -26,6 +26,7 @@ import Colors from "@/constants/colors";
 import { createReel, type ReelMediaType } from "@/lib/api/reels";
 import { navigateBack } from "@/lib/navigation";
 import { uploadReelMedia } from "@/lib/upload";
+import { useTokenAutolink } from "@/lib/use-token-autolink";
 import { useAuth } from "@/providers/auth-provider";
 
 type PickedMedia = {
@@ -60,6 +61,18 @@ export default function UploadReelScreen() {
   const remaining = MAX_CAPTION - caption.length;
   const normalizedTicker = ticker.trim().replace(/^\$/, "").toUpperCase();
   const canPublish = !!media && !isUploading && remaining >= 0;
+
+  const autolink = useTokenAutolink({
+    ticker,
+    contract: tokenAddress,
+    onResolve: useCallback((data, via) => {
+      if (via === "ca") {
+        if (!ticker.trim() && data.ticker) setTicker(data.ticker);
+      } else if (via === "ticker") {
+        if (!tokenAddress.trim() && data.address) setTokenAddress(data.address);
+      }
+    }, [ticker, tokenAddress]),
+  });
 
   const pickMedia = useCallback(async (kind: ReelMediaType) => {
     Haptics.selectionAsync().catch(() => {});
@@ -250,6 +263,30 @@ export default function UploadReelScreen() {
                 style={styles.addressInput}
                 testID="reel-token-address"
               />
+              {autolink.status !== "idle" ? (
+                <View style={[styles.linkPill, autolink.status === "resolved" && styles.linkPillOk]}>
+                  {autolink.status === "resolving" ? (
+                    <Loader2 color={Colors.cyan} size={11} strokeWidth={2.6} />
+                  ) : autolink.status === "resolved" ? (
+                    <CheckCircle2 color={Colors.mint} size={11} strokeWidth={2.6} />
+                  ) : (
+                    <Link2 color={Colors.muted} size={11} strokeWidth={2.6} />
+                  )}
+                  <Text style={[styles.linkPillText, autolink.status === "resolved" && { color: Colors.mint }, autolink.status === "missing" && { color: Colors.muted }]}>
+                    {autolink.status === "resolving"
+                      ? autolink.via === "ca"
+                        ? "Resolving ticker from Solana\u2026"
+                        : "Searching CA on Jupiter\u2026"
+                      : autolink.status === "resolved"
+                        ? autolink.via === "ca"
+                          ? `Linked ${autolink.data.ticker} from chain`
+                          : `Linked CA \u2022 ${autolink.data.address.slice(0, 4)}\u2026${autolink.data.address.slice(-4)}`
+                        : autolink.via === "ca"
+                          ? "No metadata for this CA yet"
+                          : "No live match for that ticker"}
+                  </Text>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.tipCard}>
@@ -405,4 +442,22 @@ const styles = StyleSheet.create({
     borderColor: "rgba(244,198,91,0.16)",
   },
   tipText: { flex: 1, color: Colors.muted, fontSize: 12, lineHeight: 18, fontWeight: "750" },
+  linkPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(56,215,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(56,215,255,0.22)",
+    alignSelf: "flex-start",
+  },
+  linkPillOk: {
+    backgroundColor: "rgba(85,245,178,0.12)",
+    borderColor: "rgba(85,245,178,0.30)",
+  },
+  linkPillText: { color: Colors.cyan, fontSize: 10.5, fontWeight: "900", letterSpacing: 0.2 },
 });
