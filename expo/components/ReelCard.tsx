@@ -21,7 +21,8 @@ interface ReelCardProps {
   onOpenToken: (reel: Reel) => void;
 }
 
-function escapeAttr(value: string): string {
+function escapeAttr(value: string | null | undefined): string {
+  if (typeof value !== "string") return "";
   return value
     .replace(/&/g, "&amp;")
     .replace(/"/g, "&quot;")
@@ -45,7 +46,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d`;
 }
 
-function buildVideoHtml(url: string, active: boolean): string {
+function buildVideoHtml(url: string | null | undefined, active: boolean): string {
   const safeUrl = escapeAttr(url);
   const auto = active ? "autoplay" : "";
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}video{width:100%;height:100%;object-fit:cover;background:#000}</style></head><body><video ${auto} loop muted playsinline webkit-playsinline preload="metadata" src="${safeUrl}"></video><script>const v=document.querySelector('video');${active ? "v&&v.play().catch(()=>{});" : "v&&v.pause();"}</script></body></html>`;
@@ -63,9 +64,11 @@ function ReelCardBase({
 }: ReelCardProps) {
   const heartScale = useRef<Animated.Value>(new Animated.Value(0)).current;
   const isImage = reel.mediaType === "image";
-  const html = useMemo<string>(() => buildVideoHtml(reel.videoUrl, active), [active, reel.videoUrl]);
-  const initial = reel.author.displayName.slice(0, 1).toUpperCase() || "S";
-  const ticker = reel.ticker ? reel.ticker.replace("$", "").toUpperCase() : null;
+  const mediaUrl: string | null = typeof reel.videoUrl === "string" && reel.videoUrl.length > 0 ? reel.videoUrl : null;
+  const html = useMemo<string>(() => buildVideoHtml(mediaUrl, active), [active, mediaUrl]);
+  const displayName: string = (reel.author?.displayName ?? "").trim();
+  const initial = (displayName.slice(0, 1) || "S").toUpperCase();
+  const ticker = typeof reel.ticker === "string" && reel.ticker.length > 0 ? reel.ticker.replace("$", "").toUpperCase() : null;
 
   useEffect(() => {
     if (!reel.likedByViewer) return;
@@ -86,12 +89,14 @@ function ReelCardBase({
   return (
     <View style={[styles.card, { height }]} testID={`reel-card-${reel.id}`}>
       {isImage ? (
-        <Image
-          source={{ uri: reel.videoUrl }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          testID="reel-image"
-        />
+        mediaUrl ? (
+          <Image
+            source={{ uri: mediaUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            testID="reel-image"
+          />
+        ) : null
       ) : (
         <>
           {reel.thumbnailUrl ? (

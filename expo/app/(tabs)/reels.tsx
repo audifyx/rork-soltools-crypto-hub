@@ -107,9 +107,10 @@ export default function ReelsScreen() {
   const onShare = useCallback(async (reel: Reel) => {
     Haptics.selectionAsync().catch(() => {});
     try {
+      const url = typeof reel.videoUrl === "string" ? reel.videoUrl : "";
       await Share.share({
-        message: `${reel.caption || "SolTools reel"}\n${reel.videoUrl}`,
-        url: reel.videoUrl,
+        message: `${reel.caption || "SolTools reel"}${url ? `\n${url}` : ""}`,
+        url,
         title: "SolTools Reel",
       });
       patchReel(reel.id, (current) => ({ ...current, sharesCount: current.sharesCount + 1 }));
@@ -120,7 +121,9 @@ export default function ReelsScreen() {
   }, [patchReel, userId]);
 
   const onOpenAuthor = useCallback((reel: Reel) => {
-    const handle = reel.author.handle.replace(/^@/, "");
+    const raw = typeof reel.author?.handle === "string" ? reel.author.handle : "";
+    const handle = raw.replace(/^@/, "");
+    if (!handle) return;
     router.push({ pathname: "/u/[handle]", params: { handle } });
   }, [router]);
 
