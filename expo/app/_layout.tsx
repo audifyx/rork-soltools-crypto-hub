@@ -51,6 +51,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="list-token" options={{ presentation: "modal" }} />
       <Stack.Screen name="compose" options={{ presentation: "modal" }} />
+      <Stack.Screen name="upload-reel" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="launch/[id]" />
       <Stack.Screen name="tool/[id]" />
       <Stack.Screen name="u/[handle]" />

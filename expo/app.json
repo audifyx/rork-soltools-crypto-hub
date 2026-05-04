@@ -49,7 +49,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow SolTools to access your photos so you can upload profile pictures and banners."
+          "photosPermission": "Allow SolTools to access your photos and videos so you can upload profile media, posts, and reels."
         }
       ],
       "expo-secure-store"

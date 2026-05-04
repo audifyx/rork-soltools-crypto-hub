@@ -14,10 +14,9 @@ import {
   Gem,
   Heart,
   ImagePlus,
-  Headphones,
   Inbox,
   MessageCircle,
-  MessageSquareText,
+  Plus,
   Repeat2,
   Rocket,
   Search,
@@ -26,7 +25,6 @@ import {
   Skull,
   Sparkles,
   TrendingDown,
-  Users as UsersIcon,
   TrendingUp,
   Waves,
   Zap,
@@ -67,7 +65,6 @@ import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchToken } from "@/types/launchpad";
 import { UserPost, useApp } from "@/providers/app-provider";
-import { useMessages } from "@/providers/messages-provider";
 
 const FILTERS = ["For You", "Following", "Trending", "New Pairs", "Whales", "OG Tokens"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -96,7 +93,6 @@ export default function HomeFeedScreen() {
   const { data: trendingTokens } = useTrendingTokens(40);
   const { data: newPairsData } = useNewSolanaPairs(40);
   const { userId, isAuthenticated } = useAuth();
-  const { totalUnread: dmUnread } = useMessages();
   const [filter, setFilter] = useState<Filter>("For You");
 
   const onSelectFilter = useCallback((next: Filter) => {
@@ -401,71 +397,11 @@ export default function HomeFeedScreen() {
               </Text>
             )}
           </Pressable>
-          <View style={styles.brandPill}>
-            <LinearGradient
-              colors={[Colors.goldBright, Colors.silver]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.brandDot}
-            />
-            <Text style={styles.brandText}>SOL TOOLS</Text>
+          <View style={styles.homeTitleWrap}>
+            <Text style={styles.homeTitle}>Home</Text>
+            <Text style={styles.homeSubtitle}>Live alpha feed</Text>
           </View>
           <View style={styles.topActions}>
-            <Pressable
-              style={styles.iconBtn}
-              onPress={() => router.push("/(tabs)/discover")}
-              testID="search-btn"
-            >
-              <Search color={Colors.text} size={18} strokeWidth={2.4} />
-            </Pressable>
-            <Pressable
-              style={styles.iconBtn}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                router.push("/posts");
-              }}
-              testID="posts-btn"
-            >
-              <MessageSquareText color={Colors.mint} size={18} strokeWidth={2.4} />
-            </Pressable>
-            <Pressable
-              style={styles.iconBtn}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                router.push("/(tabs)/users");
-              }}
-              testID="users-btn"
-            >
-              <UsersIcon color={Colors.text} size={18} strokeWidth={2.4} />
-            </Pressable>
-            <Pressable
-              style={styles.iconBtn}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                router.push("/spaces");
-              }}
-              testID="spaces-btn"
-            >
-              <Headphones color={Colors.text} size={18} strokeWidth={2.4} />
-              <View style={styles.bellDot} pointerEvents="none" />
-            </Pressable>
-            <Pressable
-              style={styles.iconBtn}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                router.push("/messages");
-              }}
-              testID="messages-btn"
-            >
-              <Inbox color={Colors.text} size={18} strokeWidth={2.4} />
-              {dmUnread > 0 ? (
-                <View style={styles.inboxBadge} pointerEvents="none">
-                  <Text style={styles.inboxBadgeText}>
-                    {dmUnread > 9 ? "9+" : dmUnread}
-                  </Text>
-                </View>
-              ) : null}
-            </Pressable>
             <Pressable
               style={styles.iconBtn}
               onPress={() => {
@@ -476,6 +412,13 @@ export default function HomeFeedScreen() {
             >
               <Bell color={Colors.text} size={18} strokeWidth={2.4} />
               <View style={styles.bellDot} pointerEvents="none" />
+            </Pressable>
+            <Pressable
+              style={[styles.iconBtn, styles.plusBtn]}
+              onPress={openCompose}
+              testID="header-compose-btn"
+            >
+              <Plus color={Colors.ink} size={19} strokeWidth={3} />
             </Pressable>
           </View>
         </View>
@@ -1793,34 +1736,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
-  brandPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: "rgba(221,227,236,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(244,198,91,0.24)",
+  homeTitleWrap: {
+    flex: 1,
+    paddingHorizontal: 12,
   },
-  brandDot: { width: 12, height: 12, borderRadius: 4 },
-  brandText: {
+  homeTitle: {
     color: Colors.text,
-    fontSize: 11,
+    fontSize: 24,
     fontWeight: "900",
-    letterSpacing: 1.6,
+    letterSpacing: -0.7,
   },
-  topActions: { flexDirection: "row", gap: 8 },
+  homeSubtitle: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    marginTop: 1,
+  },
+  topActions: { flexDirection: "row", gap: 9 },
   iconBtn: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 13,
     backgroundColor: "rgba(216,183,90,0.11)",
     borderWidth: 1,
     borderColor: "rgba(216,183,90,0.20)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  plusBtn: {
+    backgroundColor: Colors.goldBright,
+    borderColor: "rgba(255,248,223,0.55)",
   },
   bellDot: {
     position: "absolute",

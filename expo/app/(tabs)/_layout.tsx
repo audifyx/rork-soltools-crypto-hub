@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { Compass, Home, User, Wrench } from "lucide-react-native";
+import { Compass, Home, MessageCircle, Play, User, Wrench } from "lucide-react-native";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
@@ -49,8 +49,15 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="discover"
         options={{
-          title: "Discover",
+          title: "Explore",
           tabBarIcon: ({ color, size }) => <Compass color={color} size={size} strokeWidth={2.4} />,
+        }}
+      />
+      <Tabs.Screen
+        name="reels"
+        options={{
+          title: "Reels",
+          tabBarIcon: ({ color, size }) => <Play color={color} size={size} strokeWidth={2.6} fill="none" />,
         }}
       />
       <Tabs.Screen
@@ -79,6 +86,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="messages"
+        options={{
+          title: "Messages",
+          tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} strokeWidth={2.4} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
@@ -103,7 +117,7 @@ const styles = StyleSheet.create({
     height: 74,
     paddingTop: 7,
     paddingBottom: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
     borderRadius: 24,
     overflow: "hidden",
     shadowColor: Colors.goldBright,
@@ -145,7 +159,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(221,227,236,0.14)",
   },
   label: {
-    fontSize: 8.5,
+    fontSize: 7.8,
     fontWeight: "800",
     letterSpacing: 0.3,
     marginTop: 2,

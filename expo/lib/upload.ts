@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 const BUCKET = "profile-media";
 const POSTS_BUCKET = "post-images";
 const COMMUNITY_BUCKET = "community-images";
+const REELS_BUCKET = "reel-media";
 
 export type ProfileMediaKind = "avatar" | "banner";
 export type CommunityMediaKind = "avatar" | "banner";
@@ -20,23 +21,30 @@ function extFromUri(uri: string, fallback = "jpg"): string {
   return cleanExt(m?.[1], fallback);
 }
 
-function extFromMime(mimeType?: string | null): string | null {
+function extFromMime(mimeType?: string | null, fallback?: string): string | null {
   const clean = (mimeType ?? "").toLowerCase().trim();
-  if (!clean.startsWith("image/")) return null;
+  const kind = clean.split("/")[0];
+  if (kind !== "image" && kind !== "video") return null;
   const subtype = clean.split("/")[1]?.split(";")[0];
   if (!subtype) return null;
   if (subtype === "jpeg") return "jpg";
-  return cleanExt(subtype, "jpg");
+  if (subtype === "quicktime") return "mov";
+  if (subtype === "x-m4v") return "m4v";
+  return cleanExt(subtype, fallback ?? (kind === "video" ? "mp4" : "jpg"));
 }
 
 function contentType(ext: string, mimeType?: string | null): string {
   const clean = (mimeType ?? "").toLowerCase().trim();
-  if (clean.startsWith("image/")) return clean;
+  if (clean.startsWith("image/") || clean.startsWith("video/")) return clean;
   if (ext === "png") return "image/png";
   if (ext === "webp") return "image/webp";
   if (ext === "gif") return "image/gif";
   if (ext === "heic") return "image/heic";
   if (ext === "heif") return "image/heif";
+  if (ext === "mov") return "video/quicktime";
+  if (ext === "webm") return "video/webm";
+  if (ext === "m4v") return "video/x-m4v";
+  if (ext === "mp4") return "video/mp4";
   return "image/jpeg";
 }
 
@@ -175,7 +183,7 @@ export async function uploadCommunityMedia(
   fileName?: string | null,
   mimeType?: string | null,
 ): Promise<string> {
-  const ext = extFromMime(mimeType) ?? extFromUri(fileName ?? uri, "jpg");
+  const ext = extFromMime(mimeType, "jpg") ?? extFromUri(fileName ?? uri, "jpg");
   const safeScope = scope.replace(/[^a-zA-Z0-9_-]/g, "_");
   const path = `${safeScope}/${kind}-${Date.now()}.${ext}`;
   const ct = contentType(ext, mimeType);
@@ -198,5 +206,37 @@ export async function uploadCommunityMedia(
   }
 
   const { data } = supabase.storage.from(COMMUNITY_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/** Uploads a reel video to the public reel-media bucket. */
+export async function uploadReelMedia(
+  userId: string,
+  uri: string,
+  fileName?: string | null,
+  mimeType?: string | null,
+): Promise<string> {
+  const ext = extFromMime(mimeType, "mp4") ?? extFromUri(fileName ?? uri, "mp4");
+  const path = `${userId}/reel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  const ct = contentType(ext, mimeType);
+
+  let body: ArrayBuffer | Blob;
+  try {
+    body = await readBody(uri);
+  } catch (e) {
+    console.log("[upload] reel read failed", e);
+    throw new Error(e instanceof Error ? e.message : "Could not read selected video");
+  }
+
+  const { error } = await supabase.storage
+    .from(REELS_BUCKET)
+    .upload(path, body as ArrayBuffer, { contentType: ct, upsert: true });
+
+  if (error) {
+    console.log("[upload] reel storage error", error.message);
+    throw new Error(error.message);
+  }
+
+  const { data } = supabase.storage.from(REELS_BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
