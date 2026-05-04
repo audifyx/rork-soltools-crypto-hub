@@ -1,12 +1,17 @@
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import {
+  CheckCircle2,
+  ClipboardPaste,
   Globe2,
   Hash,
   ImagePlus,
+  Link2,
+  Loader2,
   Play,
   Send,
   Sparkles,
@@ -30,6 +35,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
 import { navigateBack } from "@/lib/navigation";
+import { extractSolanaAddress } from "@/lib/token-search";
+import { useTokenAutolink } from "@/lib/use-token-autolink";
 import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -44,7 +51,35 @@ export default function ComposeScreen() {
   const { isAuthenticated } = useAuth();
   const [text, setText] = useState<string>("");
   const [ticker, setTicker] = useState<string>("");
+  const [contract, setContract] = useState<string>("");
   const [media, setMedia] = useState<PickedMedia[]>([]);
+
+  const autolink = useTokenAutolink({
+    ticker,
+    contract,
+    onResolve: useCallback((data, via) => {
+      if (via === "ca") {
+        if (!ticker.trim() && data.ticker) setTicker(data.ticker);
+      } else if (via === "ticker") {
+        if (!contract.trim() && data.address) setContract(data.address);
+      }
+    }, [ticker, contract]),
+  });
+
+  const onPasteCA = useCallback(async () => {
+    Haptics.selectionAsync().catch(() => {});
+    try {
+      const txt = (await Clipboard.getStringAsync()).trim();
+      if (!txt) {
+        Alert.alert("Clipboard empty", "Copy a Solana CA first, then tap paste.");
+        return;
+      }
+      const addr = extractSolanaAddress(txt) ?? txt;
+      setContract(addr);
+    } catch (e) {
+      console.log("[compose] paste CA failed", e);
+    }
+  }, []);
 
   const images = useMemo(() => media.filter((m) => m.kind === "image"), [media]);
   const video = useMemo(() => media.find((m) => m.kind === "video") ?? null, [media]);
@@ -261,9 +296,53 @@ export default function ComposeScreen() {
                 autoCorrect={false}
                 style={styles.tickerInput}
                 maxLength={10}
+                testID="compose-ticker"
               />
               <Sparkles color={Colors.cyan} size={14} strokeWidth={2.6} />
             </View>
+
+            <View style={styles.caRow}>
+              <Link2 color={Colors.cyan} size={13} strokeWidth={2.6} />
+              <TextInput
+                value={contract}
+                onChangeText={setContract}
+                placeholder="Paste Solana CA / mint"
+                placeholderTextColor={Colors.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.caInput}
+                testID="compose-contract"
+              />
+              <Pressable onPress={onPasteCA} style={styles.pasteBtn} hitSlop={8} testID="compose-paste-ca">
+                <ClipboardPaste color={Colors.cyan} size={13} strokeWidth={2.6} />
+                <Text style={styles.pasteBtnText}>Paste</Text>
+              </Pressable>
+            </View>
+
+            {autolink.status !== "idle" ? (
+              <View style={[styles.linkPill, autolink.status === "resolved" && styles.linkPillOk]}>
+                {autolink.status === "resolving" ? (
+                  <Loader2 color={Colors.cyan} size={11} strokeWidth={2.6} />
+                ) : autolink.status === "resolved" ? (
+                  <CheckCircle2 color={Colors.mint} size={11} strokeWidth={2.6} />
+                ) : (
+                  <Link2 color={Colors.muted} size={11} strokeWidth={2.6} />
+                )}
+                <Text style={[styles.linkPillText, autolink.status === "resolved" && { color: Colors.mint }, autolink.status === "missing" && { color: Colors.muted }]}>
+                  {autolink.status === "resolving"
+                    ? autolink.via === "ca"
+                      ? "Resolving ticker from Solana\u2026"
+                      : "Searching CA on Jupiter\u2026"
+                    : autolink.status === "resolved"
+                      ? autolink.via === "ca"
+                        ? `Linked ${autolink.data.ticker} from chain`
+                        : `Linked CA \u2022 ${autolink.data.address.slice(0, 4)}\u2026${autolink.data.address.slice(-4)}`
+                      : autolink.via === "ca"
+                        ? "No metadata for this CA yet"
+                        : "No live match for that ticker"}
+                </Text>
+              </View>
+            ) : null}
           </ScrollView>
 
           <View style={styles.toolbar}>
@@ -476,6 +555,53 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     padding: 0,
   },
+  caRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(56,215,255,0.18)",
+  },
+  caInput: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 12,
+    fontWeight: "700",
+    padding: 0,
+  },
+  pasteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(56,215,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(56,215,255,0.3)",
+  },
+  pasteBtnText: { color: Colors.cyan, fontSize: 10.5, fontWeight: "900", letterSpacing: 0.4 },
+  linkPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(56,215,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(56,215,255,0.22)",
+    alignSelf: "flex-start",
+  },
+  linkPillOk: {
+    backgroundColor: "rgba(85,245,178,0.12)",
+    borderColor: "rgba(85,245,178,0.30)",
+  },
+  linkPillText: { color: Colors.cyan, fontSize: 10.5, fontWeight: "900", letterSpacing: 0.2 },
 
   toolbar: {
     flexDirection: "row",
