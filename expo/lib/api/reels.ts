@@ -10,9 +10,12 @@ export interface ReelAuthor {
   verified: boolean;
 }
 
+export type ReelMediaType = "video" | "image";
+
 export interface Reel {
   id: string;
   userId: string;
+  mediaType: ReelMediaType;
   videoUrl: string;
   thumbnailUrl: string | null;
   caption: string;
@@ -39,6 +42,7 @@ export interface ReelComment {
 
 export interface CreateReelInput {
   userId: string;
+  mediaType?: ReelMediaType;
   videoUrl: string;
   thumbnailUrl?: string | null;
   caption?: string;
@@ -50,6 +54,7 @@ export interface CreateReelInput {
 type ReelRow = {
   id: string;
   user_id: string;
+  media_type: string | null;
   video_url: string;
   thumbnail_url: string | null;
   caption: string | null;
@@ -146,6 +151,7 @@ async function mapReelRows(rows: ReelRow[], viewerId?: string | null): Promise<R
   return rows.map((row): Reel => ({
     id: row.id,
     userId: row.user_id,
+    mediaType: (row.media_type === "image" ? "image" : "video") as ReelMediaType,
     videoUrl: normalizeMediaUrl(row.video_url) ?? row.video_url,
     thumbnailUrl: normalizeMediaUrl(row.thumbnail_url),
     caption: row.caption ?? "",
@@ -165,7 +171,7 @@ async function mapReelRows(rows: ReelRow[], viewerId?: string | null): Promise<R
 export async function fetchReelsFeed(viewerId?: string | null, limit = 30): Promise<Reel[]> {
   const { data, error } = await supabase
     .from("reels")
-    .select("id,user_id,video_url,thumbnail_url,caption,ticker,token_address,duration_ms,likes_count,comments_count,shares_count,views_count,created_at")
+    .select("id,user_id,media_type,video_url,thumbnail_url,caption,ticker,token_address,duration_ms,likes_count,comments_count,shares_count,views_count,created_at")
     .eq("visibility", "public")
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -180,7 +186,7 @@ export async function fetchReelsFeed(viewerId?: string | null, limit = 30): Prom
 export async function fetchUserReels(targetUserId: string, viewerId?: string | null): Promise<Reel[]> {
   const { data, error } = await supabase
     .from("reels")
-    .select("id,user_id,video_url,thumbnail_url,caption,ticker,token_address,duration_ms,likes_count,comments_count,shares_count,views_count,created_at")
+    .select("id,user_id,media_type,video_url,thumbnail_url,caption,ticker,token_address,duration_ms,likes_count,comments_count,shares_count,views_count,created_at")
     .eq("user_id", targetUserId)
     .order("created_at", { ascending: false })
     .limit(80);
@@ -197,6 +203,7 @@ export async function createReel(input: CreateReelInput): Promise<Reel> {
     .from("reels")
     .insert({
       user_id: input.userId,
+      media_type: input.mediaType ?? "video",
       video_url: input.videoUrl.trim(),
       thumbnail_url: input.thumbnailUrl ?? null,
       caption: (input.caption ?? "").trim().slice(0, 2200),
@@ -205,7 +212,7 @@ export async function createReel(input: CreateReelInput): Promise<Reel> {
       duration_ms: input.durationMs ?? null,
       visibility: "public",
     })
-    .select("id,user_id,video_url,thumbnail_url,caption,ticker,token_address,duration_ms,likes_count,comments_count,shares_count,views_count,created_at")
+    .select("id,user_id,media_type,video_url,thumbnail_url,caption,ticker,token_address,duration_ms,likes_count,comments_count,shares_count,views_count,created_at")
     .single();
 
   if (error) throw new Error(error.message || "Could not publish reel");

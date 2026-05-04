@@ -62,6 +62,7 @@ function ReelCardBase({
   onOpenToken,
 }: ReelCardProps) {
   const heartScale = useRef<Animated.Value>(new Animated.Value(0)).current;
+  const isImage = reel.mediaType === "image";
   const html = useMemo<string>(() => buildVideoHtml(reel.videoUrl, active), [active, reel.videoUrl]);
   const initial = reel.author.displayName.slice(0, 1).toUpperCase() || "S";
   const ticker = reel.ticker ? reel.ticker.replace("$", "").toUpperCase() : null;
@@ -84,23 +85,34 @@ function ReelCardBase({
 
   return (
     <View style={[styles.card, { height }]} testID={`reel-card-${reel.id}`}>
-      {reel.thumbnailUrl ? (
-        <Image source={{ uri: reel.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={active ? 0 : 2} />
-      ) : null}
-      <WebView
-        key={`${reel.id}-${active ? "active" : "idle"}`}
-        originWhitelist={["*"]}
-        source={{ html, baseUrl: "https://soltools.app" }}
-        style={StyleSheet.absoluteFill}
-        containerStyle={StyleSheet.absoluteFill}
-        scrollEnabled={false}
-        bounces={false}
-        allowsInlineMediaPlayback
-        mediaPlaybackRequiresUserAction={false}
-        javaScriptEnabled
-        pointerEvents="none"
-        testID="reel-video"
-      />
+      {isImage ? (
+        <Image
+          source={{ uri: reel.videoUrl }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          testID="reel-image"
+        />
+      ) : (
+        <>
+          {reel.thumbnailUrl ? (
+            <Image source={{ uri: reel.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={active ? 0 : 2} />
+          ) : null}
+          <WebView
+            key={`${reel.id}-${active ? "active" : "idle"}`}
+            originWhitelist={["*"]}
+            source={{ html, baseUrl: "https://soltools.app" }}
+            style={StyleSheet.absoluteFill}
+            containerStyle={StyleSheet.absoluteFill}
+            scrollEnabled={false}
+            bounces={false}
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
+            javaScriptEnabled
+            pointerEvents="none"
+            testID="reel-video"
+          />
+        </>
+      )}
       <LinearGradient
         pointerEvents="none"
         colors={["rgba(0,0,0,0.58)", "rgba(0,0,0,0.08)", "rgba(0,0,0,0.84)"]}
@@ -109,7 +121,7 @@ function ReelCardBase({
       />
 
       <Pressable onPress={onDoubleTap} style={styles.tapLayer} testID="reel-like-surface">
-        {!active ? (
+        {!active && !isImage ? (
           <View style={styles.pausedBadge}>
             <Play color={Colors.ink} size={20} strokeWidth={3} fill={Colors.ink} />
           </View>
@@ -119,7 +131,7 @@ function ReelCardBase({
       <View style={styles.topMeta} pointerEvents="none">
         <View style={styles.livePill}>
           <View style={styles.liveDot} />
-          <Text style={styles.liveText}>REELS</Text>
+          <Text style={styles.liveText}>{isImage ? "PHOTO" : "REELS"}</Text>
         </View>
         <View style={styles.viewPill}>
           <Eye color={Colors.text} size={12} strokeWidth={2.6} />

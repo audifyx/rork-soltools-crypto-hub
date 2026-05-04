@@ -3,7 +3,7 @@ import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { ArrowLeft, Clapperboard, Hash, Play, Send, Sparkles, UploadCloud, X } from "lucide-react-native";
+import { ArrowLeft, Clapperboard, Hash, ImageIcon, Play, Send, Sparkles, UploadCloud, Video as VideoIcon, X } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -19,20 +19,23 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Image as ExpoImage } from "expo-image";
+
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
-import { createReel } from "@/lib/api/reels";
+import { createReel, type ReelMediaType } from "@/lib/api/reels";
 import { navigateBack } from "@/lib/navigation";
 import { uploadReelMedia } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
 
-type PickedVideo = {
+type PickedMedia = {
   uri: string;
   fileName?: string | null;
   mimeType?: string | null;
   durationMs?: number | null;
   width?: number | null;
   height?: number | null;
+  kind: ReelMediaType;
 };
 
 const MAX_CAPTION = 2200;
@@ -48,7 +51,7 @@ function formatDuration(ms?: number | null): string {
 export default function UploadReelScreen() {
   const router = useRouter();
   const { userId, isAuthenticated } = useAuth();
-  const [video, setVideo] = useState<PickedVideo | null>(null);
+  const [media, setMedia] = useState<PickedMedia | null>(null);
   const [caption, setCaption] = useState<string>("");
   const [ticker, setTicker] = useState<string>("");
   const [tokenAddress, setTokenAddress] = useState<string>("");
@@ -56,9 +59,9 @@ export default function UploadReelScreen() {
 
   const remaining = MAX_CAPTION - caption.length;
   const normalizedTicker = ticker.trim().replace(/^\$/, "").toUpperCase();
-  const canPublish = !!video && !isUploading && remaining >= 0;
+  const canPublish = !!media && !isUploading && remaining >= 0;
 
-  const pickVideo = useCallback(async () => {
+  const pickMedia = useCallback(async (kind: ReelMediaType) => {
     Haptics.selectionAsync().catch(() => {});
     try {
       if (Platform.OS !== "web") {
@@ -70,7 +73,7 @@ export default function UploadReelScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["videos"],
+        mediaTypes: kind === "image" ? ["images"] : ["videos"],
         allowsMultipleSelection: false,
         quality: 0.82,
         videoMaxDuration: 180,
@@ -78,17 +81,20 @@ export default function UploadReelScreen() {
 
       if (result.canceled || !result.assets[0]?.uri) return;
       const asset = result.assets[0];
-      setVideo({
+      const inferredKind: ReelMediaType =
+        asset.type === "video" || (asset.mimeType ?? "").startsWith("video/") ? "video" : "image";
+      setMedia({
         uri: asset.uri,
         fileName: asset.fileName,
         mimeType: asset.mimeType,
         durationMs: asset.duration ?? null,
         width: asset.width ?? null,
         height: asset.height ?? null,
+        kind: inferredKind,
       });
     } catch (e) {
       console.log("[upload-reel] pick failed", e);
-      Alert.alert("Video failed", "Could not open that video. Try another clip.");
+      Alert.alert("Media failed", "Could not open that file. Try another one.");
     }
   }, []);
 
@@ -100,18 +106,20 @@ export default function UploadReelScreen() {
       ]);
       return;
     }
-    if (!video || isUploading) return;
+    if (!media || isUploading) return;
 
     setIsUploading(true);
     try {
-      const videoUrl = await uploadReelMedia(userId, video.uri, video.fileName, video.mimeType);
+      const url = await uploadReelMedia(userId, media.uri, media.fileName, media.mimeType);
       await createReel({
         userId,
-        videoUrl,
+        mediaType: media.kind,
+        videoUrl: url,
+        thumbnailUrl: media.kind === "image" ? url : null,
         caption,
         ticker: normalizedTicker || null,
         tokenAddress: tokenAddress.trim() || null,
-        durationMs: video.durationMs ?? null,
+        durationMs: media.kind === "video" ? media.durationMs ?? null : null,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       router.replace("/(tabs)/reels");
@@ -121,13 +129,14 @@ export default function UploadReelScreen() {
     } finally {
       setIsUploading(false);
     }
-  }, [caption, isAuthenticated, isUploading, normalizedTicker, router, tokenAddress, userId, video]);
+  }, [caption, isAuthenticated, isUploading, media, normalizedTicker, router, tokenAddress, userId]);
 
   const meta = useMemo<string>(() => {
-    if (!video) return "MP4, MOV, or camera-roll video up to 3 minutes.";
-    const dims = video.width && video.height ? ` · ${video.width}×${video.height}` : "";
-    return `${formatDuration(video.durationMs)}${dims}`;
-  }, [video]);
+    if (!media) return "Photo or video — JPG, PNG, MP4, MOV up to 100MB.";
+    const dims = media.width && media.height ? ` · ${media.width}×${media.height}` : "";
+    if (media.kind === "image") return `Photo${dims}`;
+    return `${formatDuration(media.durationMs)}${dims}`;
+  }, [media]);
 
   return (
     <View style={styles.root} testID="upload-reel-screen">
@@ -151,26 +160,47 @@ export default function UploadReelScreen() {
 
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
           <ScrollView style={styles.flex} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <Pressable onPress={pickVideo} style={styles.videoDrop} testID="pick-reel-video">
+            <View style={styles.videoDrop} testID="reel-media-drop">
               <LinearGradient
-                colors={video ? ["rgba(244,198,91,0.22)", "rgba(221,227,236,0.10)"] : ["rgba(255,255,255,0.055)", "rgba(244,198,91,0.08)"]}
+                colors={media ? ["rgba(244,198,91,0.22)", "rgba(221,227,236,0.10)"] : ["rgba(255,255,255,0.055)", "rgba(244,198,91,0.08)"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.videoGrad}
               >
+                {media && media.kind === "image" ? (
+                  <ExpoImage source={{ uri: media.uri }} style={styles.preview} contentFit="cover" />
+                ) : null}
                 <View style={styles.videoIconWrap}>
-                  {video ? <Play color={Colors.ink} size={28} strokeWidth={3} fill={Colors.ink} /> : <UploadCloud color={Colors.ink} size={28} strokeWidth={2.8} />}
+                  {media ? (
+                    media.kind === "image" ? (
+                      <ImageIcon color={Colors.ink} size={28} strokeWidth={2.8} />
+                    ) : (
+                      <Play color={Colors.ink} size={28} strokeWidth={3} fill={Colors.ink} />
+                    )
+                  ) : (
+                    <UploadCloud color={Colors.ink} size={28} strokeWidth={2.8} />
+                  )}
                 </View>
-                <Text style={styles.videoTitle}>{video ? "Video selected" : "Choose a reel video"}</Text>
+                <Text style={styles.videoTitle}>{media ? (media.kind === "image" ? "Photo selected" : "Video selected") : "Choose photo or video"}</Text>
                 <Text style={styles.videoSub}>{meta}</Text>
-                {video ? (
-                  <Pressable onPress={() => setVideo(null)} style={styles.removeVideo} testID="remove-reel-video">
+                <View style={styles.pickRow}>
+                  <Pressable onPress={() => pickMedia("image")} style={[styles.pickBtn, media?.kind === "image" && styles.pickBtnActive]} testID="pick-reel-image">
+                    <ImageIcon color={media?.kind === "image" ? Colors.ink : Colors.text} size={14} strokeWidth={2.7} />
+                    <Text style={[styles.pickText, media?.kind === "image" && styles.pickTextActive]}>Photo</Text>
+                  </Pressable>
+                  <Pressable onPress={() => pickMedia("video")} style={[styles.pickBtn, media?.kind === "video" && styles.pickBtnActive]} testID="pick-reel-video">
+                    <VideoIcon color={media?.kind === "video" ? Colors.ink : Colors.text} size={14} strokeWidth={2.7} />
+                    <Text style={[styles.pickText, media?.kind === "video" && styles.pickTextActive]}>Video</Text>
+                  </Pressable>
+                </View>
+                {media ? (
+                  <Pressable onPress={() => setMedia(null)} style={styles.removeVideo} testID="remove-reel-media">
                     <X color={Colors.text} size={13} strokeWidth={2.7} />
                     <Text style={styles.removeText}>Remove</Text>
                   </Pressable>
                 ) : null}
               </LinearGradient>
-            </Pressable>
+            </View>
 
             <View style={styles.card}>
               <View style={styles.cardHead}>
@@ -271,6 +301,22 @@ const styles = StyleSheet.create({
   publishText: { color: Colors.ink, fontSize: 12, fontWeight: "900" },
   content: { padding: 16, paddingBottom: 140, gap: 14 },
   videoDrop: { borderRadius: 30, overflow: "hidden" },
+  preview: { ...StyleSheet.absoluteFillObject, opacity: 0.45 },
+  pickRow: { flexDirection: "row", gap: 10, marginTop: 16 },
+  pickBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.42)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  pickBtnActive: { backgroundColor: Colors.goldBright, borderColor: "rgba(255,248,223,0.7)" },
+  pickText: { color: Colors.text, fontSize: 12, fontWeight: "900" },
+  pickTextActive: { color: Colors.ink },
   videoGrad: {
     minHeight: 310,
     borderRadius: 30,
