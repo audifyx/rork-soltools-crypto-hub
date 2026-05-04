@@ -1,3 +1,4 @@
+import { getCanonicalBridgedMarketCap } from "@/lib/api/bridged-marketcap";
 import { fetchDexToken, getNewSolanaPairs, type DexPair } from "@/lib/api/dexscreener";
 import { fetchPumpFunToken, pumpFunVolume24h } from "@/lib/api/pumpfun";
 import { supabase } from "@/lib/supabase";
@@ -153,12 +154,24 @@ async function fallbackTokenOverview(address: string): Promise<TokenOverview> {
 }
 
 export async function getTokenOverview(address: string): Promise<TokenOverview> {
+  let overview: TokenOverview;
   try {
-    return await call<TokenOverview>("birdeye-token", { address });
+    overview = await call<TokenOverview>("birdeye-token", { address });
   } catch (e) {
     console.log("[birdeye] token fallback", e instanceof Error ? e.message : e);
-    return fallbackTokenOverview(address);
+    overview = await fallbackTokenOverview(address);
   }
+  try {
+    const canonical = await getCanonicalBridgedMarketCap({
+      address: overview.address ?? address,
+      symbol: overview.symbol,
+      name: overview.name,
+    });
+    if (canonical && canonical > 0) overview.marketCap = canonical;
+  } catch (e) {
+    console.log("[birdeye] bridged mc override failed", e instanceof Error ? e.message : e);
+  }
+  return overview;
 }
 
 export async function getTrending(

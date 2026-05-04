@@ -10,6 +10,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
+import { getCanonicalBridgedMarketCap } from "@/lib/api/bridged-marketcap";
 import { isSafeToken } from "@/lib/safety";
 
 const BASE = "https://api.dexscreener.com/latest/dex";
@@ -167,7 +168,26 @@ async function fetchDexPairsForToken(address: string): Promise<DexPair[]> {
 export async function fetchDexToken(address: string): Promise<DexTokenSnapshot> {
   const mint = address.trim();
   const pairs = await fetchDexPairsForToken(mint);
-  return toSnapshot(mint, pairs);
+  const snap = toSnapshot(mint, pairs);
+  return applyBridgedMarketCapOverride(snap);
+}
+
+async function applyBridgedMarketCapOverride(snap: DexTokenSnapshot): Promise<DexTokenSnapshot> {
+  const base = snap.pair?.baseToken;
+  if (!base) return snap;
+  try {
+    const canonical = await getCanonicalBridgedMarketCap({
+      address: snap.address,
+      symbol: base.symbol,
+      name: base.name,
+    });
+    if (canonical && canonical > 0) {
+      return { ...snap, marketCapUsd: canonical };
+    }
+  } catch (e) {
+    console.log("[dexscreener] bridged mc override failed", e instanceof Error ? e.message : e);
+  }
+  return snap;
 }
 
 export async function fetchDexTokenBatch(
@@ -199,9 +219,11 @@ export async function fetchDexTokenBatch(
             grouped.get(a)!.push(p);
           }
         }
-        chunk.forEach((a) => {
-          out[a] = toSnapshot(a, grouped.get(a) ?? []);
-        });
+        await Promise.all(
+          chunk.map(async (a) => {
+            out[a] = await applyBridgedMarketCapOverride(toSnapshot(a, grouped.get(a) ?? []));
+          }),
+        );
       } catch (e) {
         console.log("[dexscreener] batch chunk failed", e);
       }

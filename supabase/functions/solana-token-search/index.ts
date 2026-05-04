@@ -34,6 +34,66 @@ const CORS = {
 
 const ADDRESS_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/;
 
+type BridgedEntry = { symbol: string; coingeckoId: string; nameContains: string[] };
+const BRIDGED_REGISTRY: BridgedEntry[] = [
+  { symbol: "ZEC", coingeckoId: "zcash", nameContains: ["zcash"] },
+  { symbol: "BTC", coingeckoId: "bitcoin", nameContains: ["bitcoin"] },
+  { symbol: "WBTC", coingeckoId: "wrapped-bitcoin", nameContains: ["bitcoin"] },
+  { symbol: "ETH", coingeckoId: "ethereum", nameContains: ["ethereum", "ether"] },
+  { symbol: "WETH", coingeckoId: "weth", nameContains: ["ethereum", "ether"] },
+  { symbol: "LTC", coingeckoId: "litecoin", nameContains: ["litecoin"] },
+  { symbol: "BCH", coingeckoId: "bitcoin-cash", nameContains: ["bitcoin cash"] },
+  { symbol: "DOGE", coingeckoId: "dogecoin", nameContains: ["dogecoin"] },
+  { symbol: "ADA", coingeckoId: "cardano", nameContains: ["cardano"] },
+  { symbol: "DOT", coingeckoId: "polkadot", nameContains: ["polkadot"] },
+  { symbol: "AVAX", coingeckoId: "avalanche-2", nameContains: ["avalanche"] },
+  { symbol: "MATIC", coingeckoId: "matic-network", nameContains: ["matic", "polygon"] },
+  { symbol: "POL", coingeckoId: "matic-network", nameContains: ["polygon"] },
+  { symbol: "SUI", coingeckoId: "sui", nameContains: ["sui"] },
+  { symbol: "APT", coingeckoId: "aptos", nameContains: ["aptos"] },
+  { symbol: "XRP", coingeckoId: "ripple", nameContains: ["xrp", "ripple"] },
+  { symbol: "TRX", coingeckoId: "tron", nameContains: ["tron"] },
+  { symbol: "ATOM", coingeckoId: "cosmos", nameContains: ["cosmos"] },
+  { symbol: "LINK", coingeckoId: "chainlink", nameContains: ["chainlink"] },
+  { symbol: "UNI", coingeckoId: "uniswap", nameContains: ["uniswap"] },
+  { symbol: "AAVE", coingeckoId: "aave", nameContains: ["aave"] },
+  { symbol: "BNB", coingeckoId: "binancecoin", nameContains: ["bnb", "binance"] },
+  { symbol: "TON", coingeckoId: "the-open-network", nameContains: ["toncoin", "ton"] },
+  { symbol: "XMR", coingeckoId: "monero", nameContains: ["monero"] },
+  { symbol: "FIL", coingeckoId: "filecoin", nameContains: ["filecoin"] },
+  { symbol: "NEAR", coingeckoId: "near", nameContains: ["near"] },
+  { symbol: "ARB", coingeckoId: "arbitrum", nameContains: ["arbitrum"] },
+  { symbol: "OP", coingeckoId: "optimism", nameContains: ["optimism"] },
+  { symbol: "INJ", coingeckoId: "injective-protocol", nameContains: ["injective"] },
+  { symbol: "SEI", coingeckoId: "sei-network", nameContains: ["sei"] },
+  { symbol: "TIA", coingeckoId: "celestia", nameContains: ["celestia"] },
+  { symbol: "RNDR", coingeckoId: "render-token", nameContains: ["render"] },
+  { symbol: "RENDER", coingeckoId: "render-token", nameContains: ["render"] },
+];
+
+async function fetchCanonicalBridgedMarketCap(symbol: string | null, name: string | null): Promise<number | null> {
+  const sym = (symbol ?? "").trim().toUpperCase();
+  const lname = (name ?? "").trim().toLowerCase();
+  if (!sym) return null;
+  const entry = BRIDGED_REGISTRY.find(
+    (e) => e.symbol === sym && e.nameContains.some((n) => lname.includes(n)),
+  );
+  if (!entry) return null;
+  try {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(entry.coingeckoId)}&precision=0`,
+      { headers: { accept: "application/json" } },
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ id?: string; market_cap?: number }>;
+    const row = Array.isArray(rows) ? rows.find((r) => r.id === entry.coingeckoId) ?? rows[0] ?? null : null;
+    return typeof row?.market_cap === "number" && Number.isFinite(row.market_cap) ? row.market_cap : null;
+  } catch (e) {
+    console.log("[solana-token-search] bridged mc fetch failed", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -89,6 +149,9 @@ Deno.serve(async (req) => {
         .gte("scanned_at", new Date(Date.now() - 2 * 60 * 1000).toISOString())
         .maybeSingle();
       if (cached) {
+        const cachedSymbol = cached.symbol ?? "TOKEN";
+        const cachedName = cached.name ?? cached.symbol ?? "Unknown token";
+        const cachedCanonical = await fetchCanonicalBridgedMarketCap(cachedSymbol, cachedName);
         return json({
           address: cached.token_address,
           chain: "solana",
@@ -97,7 +160,7 @@ Deno.serve(async (req) => {
           logoUrl: cached.logo_url,
           priceUsd: num(cached.price_usd),
           change24h: num(cached.change_24h),
-          marketCapUsd: num(cached.market_cap_usd),
+          marketCapUsd: cachedCanonical ?? num(cached.market_cap_usd),
           liquidityUsd: num(cached.liquidity_usd),
           volume24hUsd: num(cached.volume_24h_usd),
           pairAddress: cached.pair_address,
@@ -118,21 +181,25 @@ Deno.serve(async (req) => {
       (dex?.pairs ?? []).find((p) => p.chainId === "solana") ?? null;
     const jup = Array.isArray(jupRows) ? (jupRows.find((r) => (r.address ?? r.id) === address) ?? jupRows[0] ?? null) : null;
     const now = Date.now();
+    const dexMarketCap = num(pair?.marketCap ?? pair?.fdv);
+    const symbol = pair?.baseToken?.symbol ?? jup?.symbol ?? "TOKEN";
+    const name = pair?.baseToken?.name ?? jup?.name ?? jup?.symbol ?? "Unknown Solana token";
+    const canonicalMarketCap = await fetchCanonicalBridgedMarketCap(symbol, name);
     const result = {
       address,
       chain: "solana" as const,
-      symbol: pair?.baseToken?.symbol ?? jup?.symbol ?? "TOKEN",
-      name: pair?.baseToken?.name ?? jup?.name ?? jup?.symbol ?? "Unknown Solana token",
+      symbol,
+      name,
       logoUrl: pair?.info?.imageUrl ?? jup?.logoURI ?? jup?.icon ?? null,
       priceUsd: num(pair?.priceUsd),
       change24h: num(pair?.priceChange?.h24),
-      marketCapUsd: num(pair?.marketCap ?? pair?.fdv),
+      marketCapUsd: canonicalMarketCap ?? dexMarketCap,
       liquidityUsd: num(pair?.liquidity?.usd),
       volume24hUsd: num(pair?.volume?.h24),
       pairAddress: pair?.pairAddress ?? null,
       decimals: typeof jup?.decimals === "number" ? jup.decimals : null,
       holderCount: null,
-      metadata: { source: "edge", dexId: pair?.dexId ?? null },
+      metadata: { source: "edge", dexId: pair?.dexId ?? null, bridgedMarketCap: canonicalMarketCap != null },
       scannedAt: now,
     };
 

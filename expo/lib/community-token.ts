@@ -1,4 +1,5 @@
 import { getTokenOverview } from "@/lib/api/birdeye";
+import { getCanonicalBridgedMarketCap } from "@/lib/api/bridged-marketcap";
 import { fetchDexToken } from "@/lib/api/dexscreener";
 import { getTokens, rpcCall } from "@/lib/api/jupiter";
 import { fetchPumpFunToken, pumpFunVolume24h } from "@/lib/api/pumpfun";
@@ -259,6 +260,20 @@ export async function scanCommunityToken(
     },
     scannedAt: Date.now(),
   };
+
+  try {
+    const canonical = await getCanonicalBridgedMarketCap({
+      address: token.address,
+      symbol: token.symbol,
+      name: token.name,
+    });
+    if (canonical && canonical > 0) {
+      token.marketCapUsd = canonical;
+      token.metadata = { ...(token.metadata ?? {}), bridgedMarketCap: true };
+    }
+  } catch (e) {
+    console.log("[community-token] bridged mc override failed", e instanceof Error ? e.message : e);
+  }
 
   if (opts.persist) await persistTokenScan(token);
   return token;
