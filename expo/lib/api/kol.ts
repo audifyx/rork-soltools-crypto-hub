@@ -253,3 +253,139 @@ export function truncateAddress(addr: string, head: number = 4, tail: number = 4
   if (addr.length <= head + tail + 1) return addr;
   return `${addr.slice(0, head)}…${addr.slice(-tail)}`;
 }
+
+export interface KOLHolding {
+  id: string;
+  kol_id: string;
+  token_address: string;
+  symbol: string;
+  name: string | null;
+  logo_url: string | null;
+  balance: number;
+  avg_buy_price: number | null;
+  current_price: number | null;
+  value_usd: number;
+  pnl_usd: number;
+  pnl_pct: number;
+  updated_at: string;
+}
+
+export interface KOLPortfolio {
+  kol_id: string;
+  name: string;
+  x_handle: string | null;
+  wallet_address: string;
+  blockchain: KOLBlockchain;
+  avatar_url: string | null;
+  bio: string | null;
+  follower_count: number;
+  verified: boolean;
+  is_followed: boolean;
+  total_value_usd: number;
+  total_pnl_usd: number;
+  total_pnl_pct: number;
+  win_rate: number;
+  token_count: number;
+  tx_count: number;
+  top_holding_symbol: string | null;
+  top_holding_value_usd: number | null;
+}
+
+interface RawHolding {
+  id: string;
+  kol_id: string;
+  token_address: string;
+  symbol: string;
+  name: string | null;
+  logo_url: string | null;
+  balance: number | string | null;
+  avg_buy_price: number | string | null;
+  current_price: number | string | null;
+  value_usd: number | string | null;
+  pnl_usd: number | string | null;
+  pnl_pct: number | string | null;
+  updated_at: string;
+}
+
+interface RawPortfolio {
+  kol_id: string;
+  name: string;
+  x_handle: string | null;
+  wallet_address: string;
+  blockchain: string;
+  avatar_url: string | null;
+  bio: string | null;
+  follower_count: number | string | null;
+  verified: boolean | null;
+  is_followed: boolean | null;
+  total_value_usd: number | string | null;
+  total_pnl_usd: number | string | null;
+  total_pnl_pct: number | string | null;
+  win_rate: number | string | null;
+  token_count: number | string | null;
+  tx_count: number | string | null;
+  top_holding_symbol: string | null;
+  top_holding_value_usd: number | string | null;
+}
+
+function mapHolding(r: RawHolding): KOLHolding {
+  return {
+    id: r.id,
+    kol_id: r.kol_id,
+    token_address: r.token_address,
+    symbol: r.symbol,
+    name: r.name ?? null,
+    logo_url: r.logo_url ?? null,
+    balance: toNum(r.balance),
+    avg_buy_price: r.avg_buy_price == null ? null : toNum(r.avg_buy_price),
+    current_price: r.current_price == null ? null : toNum(r.current_price),
+    value_usd: toNum(r.value_usd),
+    pnl_usd: toNum(r.pnl_usd),
+    pnl_pct: toNum(r.pnl_pct),
+    updated_at: r.updated_at,
+  };
+}
+
+export async function getKOLHoldings(kolId: string): Promise<KOLHolding[]> {
+  try {
+    const { data, error } = await supabase.rpc("get_kol_holdings", { p_kol_id: kolId });
+    if (error) throw error;
+    return (data ?? []).map((r: RawHolding) => mapHolding(r));
+  } catch (e) {
+    console.log("[kol] getKOLHoldings failed", e);
+    return [];
+  }
+}
+
+export async function getKOLPortfolio(kolId: string): Promise<KOLPortfolio | null> {
+  try {
+    const { data, error } = await supabase.rpc("get_kol_portfolio", { p_kol_id: kolId });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return null;
+    const r = row as RawPortfolio;
+    return {
+      kol_id: r.kol_id,
+      name: r.name,
+      x_handle: r.x_handle ?? null,
+      wallet_address: r.wallet_address,
+      blockchain: (r.blockchain as KOLBlockchain) ?? "solana",
+      avatar_url: r.avatar_url ?? null,
+      bio: r.bio ?? null,
+      follower_count: toNum(r.follower_count),
+      verified: Boolean(r.verified),
+      is_followed: Boolean(r.is_followed),
+      total_value_usd: toNum(r.total_value_usd),
+      total_pnl_usd: toNum(r.total_pnl_usd),
+      total_pnl_pct: toNum(r.total_pnl_pct),
+      win_rate: toNum(r.win_rate),
+      token_count: toNum(r.token_count),
+      tx_count: toNum(r.tx_count),
+      top_holding_symbol: r.top_holding_symbol ?? null,
+      top_holding_value_usd: r.top_holding_value_usd == null ? null : toNum(r.top_holding_value_usd),
+    };
+  } catch (e) {
+    console.log("[kol] getKOLPortfolio failed", e);
+    return null;
+  }
+}

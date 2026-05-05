@@ -177,9 +177,8 @@ export default function KOLScanScreen() {
 
   const onPressKOL = useCallback((kol: KOLProfile) => {
     Haptics.selectionAsync().catch(() => {});
-    setActiveKolId((prev) => (prev === kol.id ? null : kol.id));
-    setTab("feed");
-  }, []);
+    router.push({ pathname: "/kol/[id]", params: { id: kol.id } });
+  }, [router]);
 
   const onRefresh = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -299,10 +298,7 @@ export default function KOLScanScreen() {
             renderItem={({ item }) => (
               <KOLTransactionCard
                 tx={item}
-                onPressKOL={(id) => {
-                  setActiveKolId(id);
-                  setTab("feed");
-                }}
+                onPressKOL={(id) => router.push({ pathname: "/kol/[id]", params: { id } })}
               />
             )}
             ItemSeparatorComponent={() => <View style={{ height: 10 }} />}

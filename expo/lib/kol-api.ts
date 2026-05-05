@@ -7,6 +7,8 @@
  */
 import {
   explorerUrlForTx,
+  getKOLHoldings,
+  getKOLPortfolio,
   getKOLProfiles,
   getKOLRecentTransactions,
   getUserFollowedKOLs,
@@ -15,6 +17,8 @@ import {
   toggleFollowKOL,
   truncateAddress,
   type KOLBlockchain,
+  type KOLHolding,
+  type KOLPortfolio,
   type KOLProfile,
   type KOLTransaction,
   type KOLTxType,
@@ -22,6 +26,8 @@ import {
 
 export {
   explorerUrlForTx,
+  getKOLHoldings,
+  getKOLPortfolio,
   getKOLProfiles,
   getKOLRecentTransactions,
   getUserFollowedKOLs,
@@ -29,7 +35,7 @@ export {
   toggleFollowKOL,
   truncateAddress,
 };
-export type { KOLBlockchain, KOLProfile, KOLTransaction, KOLTxType };
+export type { KOLBlockchain, KOLHolding, KOLPortfolio, KOLProfile, KOLTransaction, KOLTxType };
 
 /**
  * Subscribe to realtime inserts for all KOL transactions across every tracked
