@@ -6,6 +6,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import Colors from "@/constants/colors";
+import { registerKOLSync } from "@/lib/kol-background";
 import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
 import { AuthProvider } from "@/providers/auth-provider";
@@ -79,6 +80,9 @@ export default function RootLayout() {
   useEffect(() => {
     SplashScreen.hideAsync().catch((error: unknown) => {
       console.log("SolTools splash hide skipped", error);
+    });
+    registerKOLSync().catch((error: unknown) => {
+      console.log("SolTools kol bg sync skipped", error);
     });
   }, []);
 
