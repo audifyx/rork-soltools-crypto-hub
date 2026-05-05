@@ -1,19 +1,20 @@
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import {
+  BadgeCheck,
   Bookmark,
   Flame,
   Heart,
   MessageCircle,
+  MoreHorizontal,
   Repeat2,
-  Share2,
+  Share,
   Sparkles,
   TrendingDown,
   TrendingUp,
   Users,
 } from "lucide-react-native";
-import React, { memo, useCallback } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Colors from "@/constants/colors";
@@ -28,12 +29,27 @@ interface CryptoNewsCardProps {
   onPress?: (item: CryptoNewsItem) => void;
 }
 
-const CATEGORY_META: Record<Exclude<NewsCategory, "all">, { label: string; color: string; Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }> }> = {
-  trending: { label: "TRENDING", color: Colors.mint, Icon: Flame },
-  meme: { label: "MEME", color: Colors.orange, Icon: Sparkles },
-  viral: { label: "VIRAL", color: Colors.cyan, Icon: TrendingUp },
+const CATEGORY_META: Record<
+  Exclude<NewsCategory, "all">,
+  {
+    label: string;
+    color: string;
+    Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+  }
+> = {
+  trending: { label: "Trending", color: Colors.mint, Icon: Flame },
+  meme: { label: "Meme", color: Colors.orange, Icon: Sparkles },
+  viral: { label: "Viral", color: Colors.cyan, Icon: TrendingUp },
   kol: { label: "KOL", color: Colors.violet, Icon: Users },
 };
+
+const AVATAR_PALETTE = [
+  ["#D8B75A", "#8C6F2F"],
+  ["#F4C65B", "#A77A37"],
+  ["#DDE3EC", "#6E7686"],
+  ["#AEB6C3", "#4C5360"],
+  ["#E2C98B", "#8C6F2F"],
+];
 
 function relTime(iso: string): string {
   const t = new Date(iso).getTime();
@@ -42,7 +58,21 @@ function relTime(iso: string): string {
   if (diff < 60_000) return "now";
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
-  return `${Math.floor(diff / 86_400_000)}d`;
+  if (diff < 86_400_000 * 7) return `${Math.floor(diff / 86_400_000)}d`;
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function handleFromSource(source: string): string {
+  return `@${source.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 18) || "wire"}`;
+}
+
+function avatarFor(source: string): { initial: string; colors: [string, string] } {
+  const initial = (source?.[0] ?? "C").toUpperCase();
+  let h = 0;
+  for (let i = 0; i < source.length; i += 1) h = (h * 31 + source.charCodeAt(i)) >>> 0;
+  const palette = AVATAR_PALETTE[h % AVATAR_PALETTE.length] as [string, string];
+  return { initial, colors: palette };
 }
 
 function CryptoNewsCardImpl({ item, saved, onToggleSave, onShare, onPress }: CryptoNewsCardProps) {
@@ -50,6 +80,17 @@ function CryptoNewsCardImpl({ item, saved, onToggleSave, onShare, onPress }: Cry
   const sentiment: NewsSentiment | null = item.sentiment ?? null;
   const sentimentColor =
     sentiment === "bullish" ? Colors.mint : sentiment === "bearish" ? Colors.rose : Colors.muted;
+
+  const avatar = useMemo(() => avatarFor(item.source ?? "Wire"), [item.source]);
+  const handle = useMemo(() => handleFromSource(item.source ?? "wire"), [item.source]);
+
+  const tweetText = useMemo(() => {
+    const title = item.title?.trim() ?? "";
+    const desc = item.description?.trim();
+    if (!desc) return title;
+    if (title.length > 140) return title;
+    return `${title}\n\n${desc}`;
+  }, [item.title, item.description]);
 
   const handleSave = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
@@ -67,108 +108,133 @@ function CryptoNewsCardImpl({ item, saved, onToggleSave, onShare, onPress }: Cry
   }, [onPress, item]);
 
   return (
-    <Pressable onPress={handlePress} style={({ pressed }) => [styles.card, pressed && styles.pressed]} testID={`news-${item.id}`}>
-      <LinearGradient
-        colors={["rgba(244,198,91,0.10)", "rgba(0,0,0,0)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      {item.image_url ? (
-        <View style={styles.imageWrap}>
-          <ExpoImage source={{ uri: item.image_url }} style={styles.image} contentFit="cover" transition={180} />
-          <LinearGradient
-            colors={["rgba(2,2,2,0)", "rgba(2,2,2,0.8)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.imageBadgeRow}>
-            <View style={[styles.catBadge, { borderColor: `${meta.color}66`, backgroundColor: `${meta.color}1F` }]}>
-              <meta.Icon color={meta.color} size={11} strokeWidth={3} />
-              <Text style={[styles.catBadgeText, { color: meta.color }]}>{meta.label}</Text>
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      testID={`news-${item.id}`}
+    >
+      <View style={styles.headerRow}>
+        <View style={[styles.avatar, { backgroundColor: avatar.colors[0] }]}>
+          <View style={[styles.avatarRing, { borderColor: avatar.colors[1] }]} />
+          <Text style={styles.avatarInitial}>{avatar.initial}</Text>
+        </View>
+
+        <View style={styles.identity}>
+          <View style={styles.nameRow}>
+            <Text style={styles.displayName} numberOfLines={1}>
+              {item.source}
+            </Text>
+            <BadgeCheck color={Colors.mint} size={14} strokeWidth={2.6} fill="rgba(216,183,90,0.18)" />
+            <Text style={styles.dot}>·</Text>
+            <Text style={styles.time}>{relTime(item.published_at)}</Text>
+          </View>
+          <View style={styles.handleRow}>
+            <Text style={styles.handle} numberOfLines={1}>
+              {handle}
+            </Text>
+            <View style={[styles.catChip, { borderColor: `${meta.color}55`, backgroundColor: `${meta.color}1A` }]}>
+              <meta.Icon color={meta.color} size={10} strokeWidth={3} />
+              <Text style={[styles.catChipText, { color: meta.color }]}>{meta.label}</Text>
             </View>
             {sentiment ? (
-              <View style={[styles.sentimentPill, { borderColor: `${sentimentColor}66`, backgroundColor: `${sentimentColor}1F` }]}>
+              <View style={[styles.sentChip, { borderColor: `${sentimentColor}55`, backgroundColor: `${sentimentColor}1A` }]}>
                 {sentiment === "bullish" ? (
-                  <TrendingUp color={sentimentColor} size={11} strokeWidth={3} />
+                  <TrendingUp color={sentimentColor} size={10} strokeWidth={3} />
                 ) : sentiment === "bearish" ? (
-                  <TrendingDown color={sentimentColor} size={11} strokeWidth={3} />
+                  <TrendingDown color={sentimentColor} size={10} strokeWidth={3} />
                 ) : null}
-                <Text style={[styles.sentimentText, { color: sentimentColor }]}>
-                  {sentiment.toUpperCase()}
+                <Text style={[styles.sentChipText, { color: sentimentColor }]}>
+                  {sentiment === "bullish" ? "Bull" : sentiment === "bearish" ? "Bear" : "Mixed"}
                 </Text>
               </View>
             ) : null}
           </View>
         </View>
-      ) : (
-        <View style={styles.imageBadgeRowFlat}>
-          <View style={[styles.catBadge, { borderColor: `${meta.color}66`, backgroundColor: `${meta.color}1F` }]}>
-            <meta.Icon color={meta.color} size={11} strokeWidth={3} />
-            <Text style={[styles.catBadgeText, { color: meta.color }]}>{meta.label}</Text>
-          </View>
-          {sentiment ? (
-            <View style={[styles.sentimentPill, { borderColor: `${sentimentColor}66`, backgroundColor: `${sentimentColor}1F` }]}>
-              <Text style={[styles.sentimentText, { color: sentimentColor }]}>{sentiment.toUpperCase()}</Text>
-            </View>
-          ) : null}
-        </View>
-      )}
 
-      <View style={styles.body}>
-        <View style={styles.sourceRow}>
-          <Text style={styles.source} numberOfLines={1}>{item.source}</Text>
-          <Text style={styles.dot}>·</Text>
-          <Text style={styles.time}>{relTime(item.published_at)}</Text>
-        </View>
-
-        <Text style={styles.title} numberOfLines={3}>{item.title}</Text>
-        {item.description ? (
-          <Text style={styles.desc} numberOfLines={3}>{item.description}</Text>
-        ) : null}
-
-        {item.coin_mentions.length > 0 ? (
-          <View style={styles.mentionsRow}>
-            {item.coin_mentions.slice(0, 5).map((m) => (
-              <View key={m} style={styles.mention}>
-                <Text style={styles.mentionText}>${m.replace("$", "").toUpperCase()}</Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-
-        <View style={styles.footerRow}>
-          <View style={styles.metricsRow}>
-            <View style={styles.metric}>
-              <Heart color={Colors.muted} size={13} strokeWidth={2.4} />
-              <Text style={styles.metricText}>{fmtNum(item.engagement.likes)}</Text>
-            </View>
-            <View style={styles.metric}>
-              <MessageCircle color={Colors.muted} size={13} strokeWidth={2.4} />
-              <Text style={styles.metricText}>{fmtNum(item.engagement.comments)}</Text>
-            </View>
-            <View style={styles.metric}>
-              <Repeat2 color={Colors.muted} size={13} strokeWidth={2.4} />
-              <Text style={styles.metricText}>{fmtNum(item.engagement.shares)}</Text>
-            </View>
-          </View>
-
-          <View style={styles.actionRow}>
-            <Pressable onPress={handleShare} hitSlop={10} style={styles.iconBtn} testID={`news-share-${item.id}`}>
-              <Share2 color={Colors.muted} size={15} strokeWidth={2.4} />
-            </Pressable>
-            <Pressable onPress={handleSave} hitSlop={10} style={styles.iconBtn} testID={`news-save-${item.id}`}>
-              <Bookmark
-                color={saved ? Colors.mint : Colors.muted}
-                fill={saved ? Colors.mint : "transparent"}
-                size={15}
-                strokeWidth={2.4}
-              />
-            </Pressable>
-          </View>
-        </View>
+        <Pressable hitSlop={10} style={styles.moreBtn} testID={`news-more-${item.id}`}>
+          <MoreHorizontal color={Colors.muted2} size={16} strokeWidth={2.4} />
+        </Pressable>
       </View>
+
+      <Text style={styles.tweetBody}>{tweetText}</Text>
+
+      {item.coin_mentions.length > 0 ? (
+        <View style={styles.cashRow}>
+          {item.coin_mentions.slice(0, 6).map((m) => (
+            <Text key={m} style={styles.cashTag}>
+              ${m.replace("$", "").toUpperCase()}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
+      {item.image_url ? (
+        <View style={styles.imageWrap}>
+          <ExpoImage
+            source={{ uri: item.image_url }}
+            style={styles.image}
+            contentFit="cover"
+            transition={200}
+          />
+        </View>
+      ) : null}
+
+      <View style={styles.actions}>
+        <ActionButton
+          Icon={MessageCircle}
+          label={fmtNum(item.engagement.comments)}
+          color={Colors.muted}
+          testID={`news-reply-${item.id}`}
+        />
+        <ActionButton
+          Icon={Repeat2}
+          label={fmtNum(item.engagement.shares)}
+          color={Colors.muted}
+          testID={`news-repost-${item.id}`}
+        />
+        <ActionButton
+          Icon={Heart}
+          label={fmtNum(item.engagement.likes)}
+          color={Colors.muted}
+          testID={`news-like-${item.id}`}
+        />
+        <ActionButton
+          Icon={Bookmark}
+          color={saved ? Colors.mint : Colors.muted}
+          filled={saved}
+          onPress={handleSave}
+          testID={`news-save-${item.id}`}
+        />
+        <ActionButton
+          Icon={Share}
+          color={Colors.muted}
+          onPress={handleShare}
+          testID={`news-share-${item.id}`}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+interface ActionButtonProps {
+  Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number; fill?: string }>;
+  label?: string;
+  color: string;
+  filled?: boolean;
+  onPress?: () => void;
+  testID?: string;
+}
+
+function ActionButton({ Icon, label, color, filled, onPress, testID }: ActionButtonProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.65 }]}
+      testID={testID}
+    >
+      <Icon color={color} size={15} strokeWidth={2.2} fill={filled ? color : "transparent"} />
+      {label ? <Text style={[styles.actionLabel, { color }]}>{label}</Text> : null}
     </Pressable>
   );
 }
@@ -178,83 +244,93 @@ export default CryptoNewsCard;
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 22,
-    backgroundColor: "rgba(16,16,14,0.84)",
+    borderRadius: 20,
+    backgroundColor: "rgba(12,12,10,0.92)",
     borderWidth: 1,
-    borderColor: "rgba(216,183,90,0.18)",
+    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 6,
+    gap: 10,
+  },
+  pressed: { opacity: 0.94 },
+  headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
     overflow: "hidden",
   },
-  pressed: { opacity: 0.92 },
-  imageWrap: { width: "100%", height: 180, backgroundColor: Colors.cardSoft },
+  avatarRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    opacity: 0.5,
+  },
+  avatarInitial: { color: "#0B0B08", fontSize: 16, fontWeight: "900" },
+  identity: { flex: 1, gap: 2 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  displayName: { color: Colors.text, fontSize: 14.5, fontWeight: "900", letterSpacing: -0.2, maxWidth: 180 },
+  dot: { color: Colors.muted2, fontSize: 12, fontWeight: "900", marginHorizontal: 1 },
+  time: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  handleRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  handle: { color: Colors.muted2, fontSize: 12, fontWeight: "700" },
+  catChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  catChipText: { fontSize: 9.5, fontWeight: "900", letterSpacing: 0.5 },
+  sentChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  sentChipText: { fontSize: 9.5, fontWeight: "900", letterSpacing: 0.5 },
+  moreBtn: { padding: 4 },
+  tweetBody: {
+    color: Colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "600",
+    letterSpacing: -0.1,
+    paddingHorizontal: 2,
+  },
+  cashRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 2 },
+  cashTag: { color: Colors.mint, fontSize: 13, fontWeight: "800" },
+  imageWrap: {
+    width: "100%",
+    height: 200,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: Colors.cardSoft,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
   image: { width: "100%", height: "100%" },
-  imageBadgeRow: {
-    position: "absolute",
-    left: 12,
-    bottom: 12,
-    flexDirection: "row",
-    gap: 8,
-  },
-  imageBadgeRowFlat: {
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-  },
-  catBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  catBadgeText: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
-  sentimentPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  sentimentText: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
-  body: { padding: 14, gap: 8 },
-  sourceRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  source: { color: Colors.mint, fontSize: 11, fontWeight: "900", letterSpacing: 0.5, maxWidth: 180 },
-  dot: { color: Colors.muted2, fontSize: 11, fontWeight: "900" },
-  time: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
-  title: { color: Colors.text, fontSize: 17, lineHeight: 22, fontWeight: "900", letterSpacing: -0.3 },
-  desc: { color: Colors.muted, fontSize: 13, lineHeight: 19, fontWeight: "600" },
-  mentionsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 2 },
-  mention: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: "rgba(216,183,90,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(216,183,90,0.28)",
-  },
-  mentionText: { color: Colors.mint, fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
-  footerRow: {
+  actions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 6,
+    paddingTop: 4,
+    paddingHorizontal: 4,
   },
-  metricsRow: { flexDirection: "row", gap: 14 },
-  metric: { flexDirection: "row", alignItems: "center", gap: 5 },
-  metricText: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
-  actionRow: { flexDirection: "row", gap: 6 },
-  iconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+  actionBtn: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 6,
+    paddingRight: 6,
   },
+  actionLabel: { fontSize: 12, fontWeight: "700" },
 });

@@ -32,7 +32,6 @@ import {
   subscribeToNews,
   toggleSaveNews,
 } from "@/lib/api/crypto-news";
-import { useAuth } from "@/providers/auth-provider";
 
 const FILTERS: { key: NewsCategory | "saved"; label: string }[] = [
   { key: "all", label: "All" },
@@ -48,7 +47,6 @@ const PAGE_SIZE = 20;
 export default function CryptoNewsScreen() {
   const router = useRouter();
   const qc = useQueryClient();
-  const { isAuthenticated } = useAuth();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
   const [search, setSearch] = useState<string>("");
   const [debouncedSearch, setDebouncedSearch] = useState<string>("");
@@ -86,14 +84,13 @@ export default function CryptoNewsScreen() {
 
   const savedQuery = useQuery({
     queryKey: ["crypto-news", "saved"],
-    enabled: isSaved && isAuthenticated,
+    enabled: isSaved,
     queryFn: () => getSavedCryptoNews(80),
     staleTime: 30_000,
   });
 
   const savedIdsQuery = useQuery({
     queryKey: ["crypto-news", "saved-ids"],
-    enabled: isAuthenticated,
     queryFn: async () => new Set((await getSavedCryptoNews(200)).map((n) => n.id)),
     staleTime: 60_000,
   });
@@ -106,8 +103,9 @@ export default function CryptoNewsScreen() {
   const savedIds = savedIdsQuery.data ?? new Set<string>();
 
   const saveMutation = useMutation({
-    mutationFn: async (id: string) => toggleSaveNews(id),
-    onMutate: async (id: string) => {
+    mutationFn: async (payload: { id: string; item: CryptoNewsItem }) => toggleSaveNews(payload.id, payload.item),
+    onMutate: async (payload: { id: string; item: CryptoNewsItem }) => {
+      const id = payload.id;
       await qc.cancelQueries({ queryKey: ["crypto-news", "saved-ids"] });
       const prev = qc.getQueryData<Set<string>>(["crypto-news", "saved-ids"]);
       const next = new Set(prev ?? []);
@@ -254,11 +252,7 @@ export default function CryptoNewsScreen() {
               item={item}
               saved={savedIds.has(item.id)}
               onToggleSave={(n) => {
-                if (!isAuthenticated) {
-                  router.push("/auth?mode=signin");
-                  return;
-                }
-                saveMutation.mutate(n.id);
+                saveMutation.mutate({ id: n.id, item: n });
               }}
               onShare={onShare}
               onPress={onPressItem}

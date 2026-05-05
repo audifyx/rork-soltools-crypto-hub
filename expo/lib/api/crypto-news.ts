@@ -82,19 +82,126 @@ export interface NewsFeedParams {
   before?: string | null;
 }
 
+// ---------- LIVE NEWS (CryptoCompare public feed, no auth required) ----------
+
+interface CryptoCompareNewsRow {
+  id: string;
+  guid: string;
+  published_on: number;
+  imageurl: string;
+  title: string;
+  url: string;
+  source: string;
+  body: string;
+  tags: string;
+  categories: string;
+  upvotes: string;
+  downvotes: string;
+  lang: string;
+  source_info?: { name?: string; img?: string };
+}
+
+interface CryptoCompareNewsResponse {
+  Type: number;
+  Message?: string;
+  Data?: CryptoCompareNewsRow[];
+}
+
+const BULLISH_RE = /(surge|rally|soar|pump|breakout|all[- ]time high|ath|moon|bull|adopt|approve|inflow|gain|skyrocket|partnership)/i;
+const BEARISH_RE = /(crash|plunge|dump|drop|decline|sell[- ]off|hack|exploit|scam|rug|liquidat|bear|outflow|drain|warning|delist|ban|lawsuit|sec)/i;
+const MEME_RE = /(doge|shib|pepe|wif|bonk|floki|memecoin|meme coin|trump|brett|popcat)/i;
+const KOL_RE = /(elon|musk|saylor|cz|vitalik|trump|cathie|hayes|dragosch|kaiko|cobie|kol|influencer|whale)/i;
+
+function inferCategory(row: CryptoCompareNewsRow): NewsCategory {
+  const blob = `${row.title} ${row.tags} ${row.categories}`;
+  if (MEME_RE.test(blob)) return "meme";
+  if (KOL_RE.test(blob)) return "kol";
+  const up = Number(row.upvotes ?? 0);
+  if (up >= 5) return "viral";
+  return "trending";
+}
+
+function inferSentiment(row: CryptoCompareNewsRow): NewsSentiment | null {
+  const blob = `${row.title} ${row.body ?? ""}`;
+  const isBull = BULLISH_RE.test(blob);
+  const isBear = BEARISH_RE.test(blob);
+  if (isBull && !isBear) return "bullish";
+  if (isBear && !isBull) return "bearish";
+  if (isBull && isBear) return "neutral";
+  return null;
+}
+
+function extractMentions(row: CryptoCompareNewsRow): string[] {
+  const tagBag = `${row.tags ?? ""}|${row.categories ?? ""}`;
+  const tickers = new Set<string>();
+  tagBag
+    .split(/[|,\s]+/)
+    .map((t) => t.trim().toUpperCase())
+    .filter((t) => /^[A-Z0-9]{2,8}$/.test(t))
+    .filter((t) => !/^(NEWS|MARKET|TRADING|MINING|REGULATION|EXCHANGE|BLOCKCHAIN|TECHNOLOGY|BUSINESS|ICO|ALTCOIN|FIAT|GENERAL|SPONSORED|EN)$/.test(t))
+    .forEach((t) => tickers.add(t));
+  // Pull cashtags from title
+  const cashRe = /\$([A-Z]{2,8})\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = cashRe.exec(row.title)) !== null) tickers.add(m[1]);
+  return Array.from(tickers).slice(0, 6);
+}
+
+function mapLive(row: CryptoCompareNewsRow): CryptoNewsItem {
+  const upvotes = Number(row.upvotes ?? 0);
+  const downvotes = Number(row.downvotes ?? 0);
+  return {
+    id: `cc-${row.id}`,
+    source: row.source_info?.name ?? row.source ?? "Unknown",
+    source_url: row.url,
+    title: row.title,
+    description: row.body?.slice(0, 280) ?? null,
+    image_url: row.imageurl || null,
+    category: inferCategory(row),
+    sentiment: inferSentiment(row),
+    coin_mentions: extractMentions(row),
+    engagement: {
+      likes: upvotes,
+      shares: downvotes,
+      comments: 0,
+    },
+    published_at: new Date((row.published_on ?? 0) * 1000).toISOString(),
+  };
+}
+
+async function fetchLiveNews(params: { lToken?: number | null; categories?: string | null } = {}): Promise<CryptoNewsItem[]> {
+  const url = new URL("https://min-api.cryptocompare.com/data/v2/news/");
+  url.searchParams.set("lang", "EN");
+  if (params.lToken) url.searchParams.set("lTs", String(params.lToken));
+  if (params.categories) url.searchParams.set("categories", params.categories);
+  const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`news http ${res.status}`);
+  const json = (await res.json()) as CryptoCompareNewsResponse;
+  if (!json?.Data) return [];
+  return json.Data.map(mapLive);
+}
+
 export async function getCryptoNewsFeed(params: NewsFeedParams = {}): Promise<CryptoNewsItem[]> {
   const { category = "all", limit = 30, before = null } = params;
   try {
-    const { data, error } = await supabase.rpc("get_crypto_news_feed", {
-      p_category: category,
-      p_limit: limit,
-      p_before: before,
-    });
-    if (error) throw error;
-    return (data ?? []).map((row: RawNewsRow) => mapRow(row));
+    const beforeTs = before ? Math.floor(new Date(before).getTime() / 1000) : null;
+    const items = await fetchLiveNews({ lToken: beforeTs });
+    const filtered = category === "all" ? items : items.filter((i) => i.category === category);
+    return filtered.slice(0, limit);
   } catch (e) {
-    console.log("[crypto-news] getCryptoNewsFeed failed", e);
-    return [];
+    console.log("[crypto-news] live feed failed, falling back to supabase", e);
+    try {
+      const { data, error } = await supabase.rpc("get_crypto_news_feed", {
+        p_category: category,
+        p_limit: limit,
+        p_before: before,
+      });
+      if (error) throw error;
+      return (data ?? []).map((row: RawNewsRow) => mapRow(row));
+    } catch (err) {
+      console.log("[crypto-news] getCryptoNewsFeed fallback failed", err);
+      return [];
+    }
   }
 }
 
@@ -102,6 +209,14 @@ export async function searchCryptoNews(query: string, limit: number = 30): Promi
   const q = query.trim();
   if (!q) return [];
   try {
+    const items = await fetchLiveNews({});
+    const needle = q.toLowerCase();
+    const matches = items.filter((it) => {
+      const hay = `${it.title} ${it.description ?? ""} ${it.coin_mentions.join(" ")} ${it.source}`.toLowerCase();
+      return hay.includes(needle);
+    });
+    if (matches.length > 0) return matches.slice(0, limit);
+    // fallback to supabase search if live yields nothing
     const { data, error } = await supabase.rpc("search_crypto_news", {
       p_query: q,
       p_limit: limit,
@@ -114,26 +229,62 @@ export async function searchCryptoNews(query: string, limit: number = 30): Promi
   }
 }
 
-export async function toggleSaveNews(newsId: string): Promise<boolean> {
+// ---------- SAVED ARTICLES (local storage; live items aren't in DB) ----------
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const SAVED_KEY = "@crypto-news/saved/v1";
+
+async function readSavedMap(): Promise<Record<string, CryptoNewsItem>> {
   try {
-    const { data, error } = await supabase.rpc("toggle_save_news", { p_news_id: newsId });
-    if (error) throw error;
-    return Boolean(data);
+    const raw = await AsyncStorage.getItem(SAVED_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, CryptoNewsItem>;
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch (e) {
-    console.log("[crypto-news] toggleSaveNews failed", e);
-    throw e;
+    console.log("[crypto-news] readSavedMap failed", e);
+    return {};
   }
 }
 
-export async function getSavedCryptoNews(limit: number = 50): Promise<CryptoNewsItem[]> {
+async function writeSavedMap(map: Record<string, CryptoNewsItem>): Promise<void> {
   try {
-    const { data, error } = await supabase.rpc("get_saved_crypto_news", { p_limit: limit });
-    if (error) throw error;
-    return (data ?? []).map((row: RawNewsRow) => ({ ...mapRow(row), saved: true }));
+    await AsyncStorage.setItem(SAVED_KEY, JSON.stringify(map));
   } catch (e) {
-    console.log("[crypto-news] getSavedCryptoNews failed", e);
-    return [];
+    console.log("[crypto-news] writeSavedMap failed", e);
   }
+}
+
+export async function toggleSaveNews(newsId: string, item?: CryptoNewsItem): Promise<boolean> {
+  const map = await readSavedMap();
+  if (map[newsId]) {
+    delete map[newsId];
+    await writeSavedMap(map);
+    return false;
+  }
+  if (item) {
+    map[newsId] = { ...item, saved: true };
+  } else {
+    map[newsId] = {
+      id: newsId,
+      source: "Saved",
+      title: "Saved article",
+      coin_mentions: [],
+      category: "trending",
+      engagement: { likes: 0, shares: 0, comments: 0 },
+      published_at: new Date().toISOString(),
+    } as CryptoNewsItem;
+  }
+  await writeSavedMap(map);
+  return true;
+}
+
+export async function getSavedCryptoNews(limit: number = 50): Promise<CryptoNewsItem[]> {
+  const map = await readSavedMap();
+  return Object.values(map)
+    .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
+    .slice(0, limit)
+    .map((it) => ({ ...it, saved: true }));
 }
 
 /**
