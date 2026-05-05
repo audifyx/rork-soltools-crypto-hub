@@ -181,13 +181,41 @@ async function fetchLiveNews(params: { lToken?: number | null; categories?: stri
   return json.Data.map(mapLive);
 }
 
+/**
+ * Best-effort ingest of live items into Supabase so that engagement
+ * (likes/reposts/comments/saves) and realtime can persist across refreshes.
+ * Silent on failure (e.g. anonymous users / RLS).
+ */
+async function ingestLiveItems(items: CryptoNewsItem[]): Promise<void> {
+  if (!items.length) return;
+  try {
+    const payload = items.map((it) => ({
+      id: it.id,
+      source: it.source,
+      source_url: it.source_url ?? null,
+      title: it.title,
+      body: it.description ?? null,
+      image_url: it.image_url ?? null,
+      category: it.category,
+      sentiment: it.sentiment ?? null,
+      coin_mentions: it.coin_mentions ?? [],
+      published_at: it.published_at,
+    }));
+    await supabase.rpc("upsert_news_posts", { p_items: payload });
+  } catch (e) {
+    console.log("[crypto-news] ingestLiveItems failed", e);
+  }
+}
+
 export async function getCryptoNewsFeed(params: NewsFeedParams = {}): Promise<CryptoNewsItem[]> {
   const { category = "all", limit = 30, before = null } = params;
   try {
     const beforeTs = before ? Math.floor(new Date(before).getTime() / 1000) : null;
     const items = await fetchLiveNews({ lToken: beforeTs });
     const filtered = category === "all" ? items : items.filter((i) => i.category === category);
-    return filtered.slice(0, limit);
+    const sliced = filtered.slice(0, limit);
+    void ingestLiveItems(sliced);
+    return sliced;
   } catch (e) {
     console.log("[crypto-news] live feed failed, falling back to supabase", e);
     try {
@@ -440,6 +468,135 @@ export async function getPortfolioStats(): Promise<PortfolioStats> {
     topHolding,
     wallets: enriched,
   };
+}
+
+// ---------- LIVE ENGAGEMENT (likes / reposts / comments / save) ----------
+
+export interface NewsEngagement {
+  likeCount: number;
+  repostCount: number;
+  commentCount: number;
+  likedByMe: boolean;
+  repostedByMe: boolean;
+  savedByMe: boolean;
+}
+
+export interface NewsComment {
+  id: string;
+  user_id: string;
+  username: string;
+  avatar_url: string | null;
+  body: string;
+  created_at: string;
+}
+
+export async function getNewsFeedWithEngagement(
+  params: NewsFeedParams = {},
+): Promise<(CryptoNewsItem & { engagementExt: NewsEngagement })[]> {
+  const { category = "all", limit = 30, before = null } = params;
+  try {
+    const { data, error } = await supabase.rpc("get_news_feed_with_engagement", {
+      p_category: category,
+      p_limit: limit,
+      p_before: before,
+    });
+    if (error) throw error;
+    type Row = {
+      id: string;
+      source: string;
+      source_url: string | null;
+      title: string;
+      body: string | null;
+      image_url: string | null;
+      category: string;
+      sentiment: string | null;
+      coin_mentions: string[] | null;
+      published_at: string;
+      like_count: number;
+      repost_count: number;
+      comment_count: number;
+      liked_by_me: boolean;
+      reposted_by_me: boolean;
+      saved_by_me: boolean;
+    };
+    return (data ?? []).map((r: Row) => ({
+      id: r.id,
+      source: r.source,
+      source_url: r.source_url,
+      title: r.title,
+      description: r.body,
+      image_url: r.image_url,
+      category: (r.category ?? "trending") as NewsCategory,
+      sentiment: (r.sentiment ?? null) as NewsSentiment | null,
+      coin_mentions: r.coin_mentions ?? [],
+      engagement: { likes: r.like_count, shares: r.repost_count, comments: r.comment_count },
+      published_at: r.published_at,
+      saved: r.saved_by_me,
+      engagementExt: {
+        likeCount: r.like_count,
+        repostCount: r.repost_count,
+        commentCount: r.comment_count,
+        likedByMe: r.liked_by_me,
+        repostedByMe: r.reposted_by_me,
+        savedByMe: r.saved_by_me,
+      },
+    }));
+  } catch (e) {
+    console.log("[crypto-news] getNewsFeedWithEngagement failed", e);
+    return [];
+  }
+}
+
+export async function toggleLikeNewsPost(postId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("toggle_like_news_post", { p_post_id: postId });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+export async function toggleRepostNewsPost(postId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("toggle_repost_news_post", { p_post_id: postId });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+export async function toggleSaveNewsPost(postId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("toggle_save_news_post", { p_post_id: postId });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+export async function addNewsComment(postId: string, body: string): Promise<NewsComment | null> {
+  const trimmed = body.trim();
+  if (!trimmed) return null;
+  const { data, error } = await supabase.rpc("add_news_comment", {
+    p_post_id: postId,
+    p_body: trimmed,
+  });
+  if (error) throw error;
+  const row = (Array.isArray(data) ? data[0] : data) as { id: string; user_id: string; body: string; created_at: string } | null;
+  if (!row) return null;
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    username: "",
+    avatar_url: null,
+    body: row.body,
+    created_at: row.created_at,
+  };
+}
+
+export async function getNewsComments(postId: string, limit: number = 50): Promise<NewsComment[]> {
+  try {
+    const { data, error } = await supabase.rpc("get_news_comments", {
+      p_post_id: postId,
+      p_limit: limit,
+    });
+    if (error) throw error;
+    return (data ?? []) as NewsComment[];
+  } catch (e) {
+    console.log("[crypto-news] getNewsComments failed", e);
+    return [];
+  }
 }
 
 export async function createWalletAlert(input: {
