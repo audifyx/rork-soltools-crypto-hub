@@ -7,6 +7,7 @@ import {
   ChevronRight,
   LogOut,
   Newspaper,
+  Radio,
   TrendingUp,
   Wallet,
   X,
@@ -97,6 +98,14 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
       Icon: Wallet,
       color: Colors.cyan,
       onPress: () => navigate("/wallet"),
+    },
+    {
+      key: "kol",
+      label: "KOL Scan",
+      description: "Track smart money: live KOL buys, sells & swaps",
+      Icon: Radio,
+      color: Colors.magenta,
+      onPress: () => navigate("/kol-scan"),
     },
     {
       key: "alerts",
