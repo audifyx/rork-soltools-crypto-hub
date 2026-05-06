@@ -322,6 +322,19 @@ async function enrichHoldingsMeta(
   return [...enriched, ...rest];
 }
 
+/**
+ * Public helper: enrich an arbitrary list of holdings with Birdeye/Jupiter/
+ * Pump/Dex metadata and price. Used by the KOL portfolio path so every
+ * holding (including Token-2022 mints) ends up with symbol, name, logo, and
+ * a USD value.
+ */
+export async function enrichHoldings(
+  holdings: WalletTokenHolding[],
+  cap: number = 40,
+): Promise<WalletTokenHolding[]> {
+  return enrichHoldingsMeta(holdings, cap);
+}
+
 export async function fetchWalletPortfolio(
   address: string,
 ): Promise<WalletPortfolio> {
@@ -355,7 +368,7 @@ export async function fetchWalletPortfolio(
 
   const [enrichedTxs, enrichedTokens] = await Promise.all([
     enrichTransactions(baseTxs, 20),
-    enrichHoldingsMeta(balance.tokens ?? [], 12),
+    enrichHoldingsMeta(balance.tokens ?? [], 40),
   ]);
 
   // Recompute portfolio USD with enriched values.

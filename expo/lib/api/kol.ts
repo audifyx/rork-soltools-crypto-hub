@@ -14,7 +14,12 @@
  *   - toggle_follow_kol(p_kol_id)
  *   - get_user_followed_kols()
  */
-import { fetchWalletBalance, type WalletTokenHolding } from "@/lib/api/wallet";
+import {
+  enrichHoldings,
+  fetchWalletBalance,
+  type WalletTokenHolding,
+} from "@/lib/api/wallet";
+import { getPrice } from "@/lib/api/jupiter";
 import {
   fetchOnchainSwaps,
   shortMint,
@@ -385,35 +390,51 @@ function holdingFromToken(kol: KOLProfile, t: WalletTokenHolding): KOLHolding {
   };
 }
 
+async function solUsdPrice(): Promise<number> {
+  try {
+    const map = await getPrice([SOL_MINT_ADDRESS]);
+    const row = map[SOL_MINT_ADDRESS] as { price?: number } | undefined;
+    return Number(row?.price ?? 0) || 0;
+  } catch (e) {
+    console.log("[kol] solUsdPrice failed", e);
+    return 0;
+  }
+}
+
 export async function getKOLHoldings(kolId: string): Promise<KOLHolding[]> {
   try {
     const kol = await profileById(kolId);
     if (!kol) return [];
-    const balance = await fetchWalletBalance(kol.wallet_address);
+
+    const [balance, solPrice] = await Promise.all([
+      fetchWalletBalance(kol.wallet_address),
+      solUsdPrice(),
+    ]);
+
+    // Hydrate every token with metadata + price (Birdeye → Jupiter → Pump → Dex).
+    const enriched = await enrichHoldings(balance.tokens ?? [], 40);
 
     const out: KOLHolding[] = [];
     if (balance.sol > 0) {
-      const solUsd = (balance.tokens ?? []).length > 0
-        ? Math.max(0, balance.usd - (balance.tokens ?? []).reduce((acc, t) => acc + (t.usdValue ?? 0), 0))
-        : balance.usd;
+      const solValue = balance.sol * solPrice;
       out.push({
         id: `${kol.id}:SOL`,
         kol_id: kol.id,
         token_address: SOL_MINT_ADDRESS,
         symbol: "SOL",
         name: "Solana",
-        logo_url: null,
+        logo_url: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
         balance: balance.sol,
         avg_buy_price: null,
-        current_price: balance.sol > 0 && solUsd > 0 ? solUsd / balance.sol : null,
-        value_usd: solUsd,
+        current_price: solPrice > 0 ? solPrice : null,
+        value_usd: solValue,
         pnl_usd: 0,
         pnl_pct: 0,
         updated_at: new Date().toISOString(),
       });
     }
-    (balance.tokens ?? []).forEach((t) => {
-      if ((t.usdValue ?? 0) <= 0 && (t.uiAmount ?? 0) <= 0) return;
+    enriched.forEach((t) => {
+      if ((t.uiAmount ?? 0) <= 0) return;
       out.push(holdingFromToken(kol, t));
     });
     return out.sort((a, b) => b.value_usd - a.value_usd);
@@ -483,34 +504,43 @@ export async function getKOLPortfolio(kolId: string): Promise<KOLPortfolio | nul
     }
 
     // Hydrate live on-chain numbers so the screen always has real data even
-    // when the server-side aggregator returns zeros.
+    // when the server-side aggregator returns zeros. We pull the wallet via
+    // RPC (SPL + Token-2022) then enrich every holding with Birdeye/Jupiter/
+    // Pump/Dex metadata + price so portfolio_value, token_count, and the top
+    // holding are always populated.
     try {
-      const balance = await fetchWalletBalance(portfolio.wallet_address);
-      const tokens = (balance.tokens ?? []).filter((t) => (t.usdValue ?? 0) > 0 || (t.uiAmount ?? 0) > 0);
-      const totalUsd = balance.usd;
-      const tokenCount = tokens.length + (balance.sol > 0 ? 1 : 0);
-      let topSym: string | null = portfolio.top_holding_symbol ?? null;
-      let topVal: number | null = portfolio.top_holding_value_usd ?? null;
-      tokens.forEach((t) => {
-        const v = t.usdValue ?? 0;
-        if (v > (topVal ?? 0)) {
+      const [balance, solPrice] = await Promise.all([
+        fetchWalletBalance(portfolio.wallet_address),
+        solUsdPrice(),
+      ]);
+      const enriched = await enrichHoldings(balance.tokens ?? [], 40);
+      const heldTokens = enriched.filter((t) => (t.uiAmount ?? 0) > 0);
+
+      const tokensUsd = heldTokens.reduce((acc, t) => acc + (Number(t.usdValue ?? 0) || 0), 0);
+      const solUsd = balance.sol * solPrice;
+      const totalUsd = solUsd + tokensUsd;
+      const tokenCount = heldTokens.length + (balance.sol > 0 ? 1 : 0);
+
+      let topSym: string | null = null;
+      let topVal: number = 0;
+      heldTokens.forEach((t) => {
+        const v = Number(t.usdValue ?? 0) || 0;
+        if (v > topVal) {
           topVal = v;
           topSym = t.symbol ?? shortMint(t.mint);
         }
       });
-      const solUsd = balance.sol > 0
-        ? Math.max(0, balance.usd - tokens.reduce((acc, t) => acc + (t.usdValue ?? 0), 0))
-        : 0;
-      if (solUsd > (topVal ?? 0)) {
+      if (solUsd > topVal) {
         topVal = solUsd;
         topSym = "SOL";
       }
+
       portfolio = {
         ...portfolio,
         total_value_usd: totalUsd > 0 ? totalUsd : portfolio.total_value_usd,
         token_count: tokenCount > 0 ? tokenCount : portfolio.token_count,
         top_holding_symbol: topSym ?? portfolio.top_holding_symbol,
-        top_holding_value_usd: topVal ?? portfolio.top_holding_value_usd,
+        top_holding_value_usd: topVal > 0 ? topVal : portfolio.top_holding_value_usd,
       };
     } catch (e) {
       console.log("[kol] portfolio hydrate failed", e);
