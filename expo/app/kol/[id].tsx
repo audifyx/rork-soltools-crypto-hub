@@ -37,6 +37,7 @@ import * as Clipboard from "expo-clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
+import KOLHoldingCard from "@/components/KOLHoldingCard";
 import KOLTransactionCard from "@/components/KOLTransactionCard";
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
@@ -97,7 +98,10 @@ export default function KOLProfileScreen() {
   );
 
   const portfolio: KOLPortfolio | null = portfolioQuery.data ?? null;
-  const holdings: KOLHolding[] = holdingsQuery.data ?? [];
+  const holdings: KOLHolding[] = useMemo(
+    () => [...(holdingsQuery.data ?? [])].sort((a, b) => b.value_usd - a.value_usd),
+    [holdingsQuery.data],
+  );
 
   const followMutation = useMutation({
     mutationFn: () => toggleFollowKOL(kolId),
@@ -395,39 +399,67 @@ function HoldingsSection({ holdings, loading }: { holdings: KOLHolding[]; loadin
       ) : holdings.length === 0 ? (
         <Text style={styles.emptyBody}>No tokens detected in this wallet.</Text>
       ) : (
-        <View style={{ gap: 10 }}>
-          {holdings.map((h) => (
-            <HoldingRow key={h.id} holding={h} />
-          ))}
-        </View>
+        <>
+          <PnlBreakdown holdings={holdings} />
+          <View style={styles.holdingsDivider} />
+          <View style={{ gap: 4 }}>
+            {holdings.map((h) => (
+              <KOLHoldingCard key={h.id} holding={h} />
+            ))}
+          </View>
+        </>
       )}
     </View>
   );
 }
 
-function HoldingRow({ holding }: { holding: KOLHolding }) {
-  const positive = holding.pnl_usd >= 0;
-  const pnlColor = positive ? Colors.mint : Colors.rose;
+function PnlBreakdown({ holdings }: { holdings: KOLHolding[] }) {
+  const { winners, losers, winnerValue, loserValue } = useMemo(() => {
+    let w = 0;
+    let l = 0;
+    let wv = 0;
+    let lv = 0;
+    for (const h of holdings) {
+      if (h.pnl_usd >= 0) {
+        w += 1;
+        wv += Math.max(0, h.value_usd);
+      } else {
+        l += 1;
+        lv += Math.max(0, h.value_usd);
+      }
+    }
+    return { winners: w, losers: l, winnerValue: wv, loserValue: lv };
+  }, [holdings]);
+
+  const total = Math.max(1, winnerValue + loserValue);
+  const winPct = (winnerValue / total) * 100;
+  const losePct = 100 - winPct;
+
   return (
-    <View style={styles.holdingRow}>
-      <View style={[styles.holdingLogo, { backgroundColor: Colors.card }] }>
-        {holding.logo_url ? (
-          <ExpoImage source={{ uri: holding.logo_url }} style={styles.holdingLogoImg} contentFit="cover" />
-        ) : (
-          <Text style={styles.holdingInitial}>{(holding.symbol?.[0] ?? "?").toUpperCase()}</Text>
-        )}
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.holdingSymbol} numberOfLines={1}>
-          {holding.symbol}
-        </Text>
-        <Text style={styles.holdingBalance} numberOfLines={1}>
-          {fmtNum(holding.balance)} {holding.symbol}
+    <View style={styles.breakdownWrap}>
+      <View style={styles.breakdownRow}>
+        <Text style={styles.breakdownLabel}>P&L breakdown</Text>
+        <Text style={styles.breakdownSub}>
+          {winners} up · {losers} down
         </Text>
       </View>
-      <View style={styles.holdingValues}>
-        <Text style={styles.holdingValue}>{fmtUsd(holding.value_usd)}</Text>
-        <Text style={[styles.holdingPnl, { color: pnlColor }]}>{fmtPct(holding.pnl_pct, 2)}</Text>
+      <View style={styles.breakdownBar}>
+        {winPct > 0 ? (
+          <View style={[styles.barSegmentWin, { flex: winPct }]} />
+        ) : null}
+        {losePct > 0 ? (
+          <View style={[styles.barSegmentLose, { flex: losePct }]} />
+        ) : null}
+      </View>
+      <View style={styles.breakdownLegend}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: Colors.mint }]} />
+          <Text style={styles.legendText}>{fmtUsd(winnerValue)} winners</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: Colors.rose }]} />
+          <Text style={styles.legendText}>{fmtUsd(loserValue)} losers</Text>
+        </View>
       </View>
     </View>
   );
@@ -586,30 +618,35 @@ const styles = StyleSheet.create({
   sectionTitle: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.2 },
   sectionSub: { color: Colors.muted2, fontSize: 11, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase" },
 
-  holdingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 6,
-  },
-  holdingLogo: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-  },
-  holdingLogoImg: { width: 38, height: 38, borderRadius: 19 },
-  holdingInitial: { color: Colors.text, fontSize: 13, fontWeight: "900" },
-  holdingSymbol: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2 },
-  holdingBalance: { color: Colors.muted2, fontSize: 11.5, fontWeight: "700", marginTop: 1 },
-  holdingValues: { alignItems: "flex-end" },
-  holdingValue: { color: Colors.text, fontSize: 13.5, fontWeight: "900" },
-  holdingPnl: { fontSize: 11.5, fontWeight: "800", marginTop: 1 },
   holdingsLoading: { padding: 20, alignItems: "center" },
+  holdingsDivider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    marginVertical: 4,
+  },
+  breakdownWrap: { gap: 8 },
+  breakdownRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  breakdownLabel: {
+    color: Colors.muted2,
+    fontSize: 10.5,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  breakdownSub: { color: Colors.muted, fontSize: 11.5, fontWeight: "800" },
+  breakdownBar: {
+    height: 8,
+    flexDirection: "row",
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  barSegmentWin: { backgroundColor: Colors.mint },
+  barSegmentLose: { backgroundColor: Colors.rose },
+  breakdownLegend: { flexDirection: "row", justifyContent: "space-between" },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { color: Colors.muted, fontSize: 11.5, fontWeight: "800" },
 
   empty: {
     marginTop: 14,
