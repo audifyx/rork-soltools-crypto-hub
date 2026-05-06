@@ -13,6 +13,7 @@ export interface DMUser {
   color: string;
   verified?: boolean;
   online?: boolean;
+  lastSeenAt?: number | null;
   bio?: string;
   avatarUrl?: string | null;
 }
@@ -30,6 +31,8 @@ export interface DMMessage {
   tipAmount?: number;
   tipToken?: string;
   read: boolean;
+  deliveredAt?: number | null;
+  readAt?: number | null;
 }
 
 export interface Conversation {
@@ -53,6 +56,7 @@ interface ConversationRow {
   verified: boolean | null;
   bio: string | null;
   is_online: boolean | null;
+  last_seen_at?: string | null;
   last_message: string | null;
   last_at: string | null;
   unread_count: number | null;
@@ -71,6 +75,8 @@ interface MessageRow {
   image_url: string | null;
   created_at: string;
   read?: boolean | null;
+  delivered_at?: string | null;
+  read_at?: string | null;
 }
 
 interface ProfileSuggestionRow {
@@ -83,6 +89,7 @@ interface ProfileSuggestionRow {
   verified?: boolean | null;
   bio?: string | null;
   is_online?: boolean | null;
+  last_seen_at?: string | null;
   followers_count?: number | null;
 }
 
@@ -119,6 +126,7 @@ function userFromConversationRow(row: ConversationRow): DMUser {
     color: row.avatar_color ?? hashColor(userId ?? handle),
     verified: !!row.verified,
     online: !!row.is_online,
+    lastSeenAt: row.last_seen_at ? toMs(row.last_seen_at) : null,
     bio: row.bio ?? undefined,
     avatarUrl: normalizeMediaUrl(row.avatar_url),
   };
@@ -135,6 +143,7 @@ function userFromProfileRow(row: ProfileSuggestionRow): DMUser | null {
     color: row.avatar_color ?? hashColor(userId),
     verified: !!row.verified,
     online: !!row.is_online,
+    lastSeenAt: row.last_seen_at ? toMs(row.last_seen_at) : null,
     bio: row.bio ?? undefined,
     avatarUrl: normalizeMediaUrl(row.avatar_url ?? null),
   };
@@ -156,6 +165,8 @@ function conversationFromRow(row: ConversationRow): Conversation {
 function messageFromRow(row: MessageRow, currentUserId: string | null, user?: DMUser): DMMessage {
   const mine = row.sender_id === currentUserId;
   const type = normalizeMessageType(row.message_type);
+  const deliveredAt = row.delivered_at ? toMs(row.delivered_at) : null;
+  const readAt = row.read_at ? toMs(row.read_at) : null;
   return {
     id: row.id,
     conversationId: row.conversation_id,
@@ -166,7 +177,9 @@ function messageFromRow(row: MessageRow, currentUserId: string | null, user?: DM
     type,
     ticker: row.ticker ?? undefined,
     imageUrl: row.image_url ?? undefined,
-    read: !!row.read || mine,
+    read: !!row.read || !!readAt || mine,
+    deliveredAt,
+    readAt,
   };
 }
 

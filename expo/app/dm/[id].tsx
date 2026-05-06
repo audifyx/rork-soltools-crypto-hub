@@ -61,6 +61,19 @@ function formatTime(t: number): string {
   return `${h}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
+function formatRelative(t: number): string {
+  const diff = Math.max(0, Date.now() - t);
+  const sec = Math.floor(diff / 1000);
+  if (sec < 45) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function formatDayLabel(t: number): string {
   const d = new Date(t);
   const now = new Date();
@@ -271,7 +284,11 @@ export default function DMThreadScreen() {
                 ) : null}
               </View>
               <Text style={styles.headStatus} numberOfLines={1}>
-                {conv.user.online ? "online · active now" : `last seen ${formatTime(conv.lastAt)}`}
+                {conv.user.online
+                  ? "online · active now"
+                  : conv.user.lastSeenAt
+                    ? `last seen ${formatRelative(conv.user.lastSeenAt)}`
+                    : "offline"}
               </Text>
             </View>
           </Pressable>
@@ -601,11 +618,24 @@ function Bubble({
       <View style={styles.bubbleMeta}>
         <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
         {mine ? (
-          msg.read ? (
-            <CheckCheck color={Colors.cyan} size={12} strokeWidth={2.6} />
-          ) : (
-            <Check color={Colors.muted} size={12} strokeWidth={2.6} />
-          )
+          <View style={styles.statusRow}>
+            {msg.readAt ? (
+              <>
+                <CheckCheck color={Colors.cyan} size={12} strokeWidth={2.6} />
+                <Text style={[styles.statusText, { color: Colors.cyan }]}>Seen</Text>
+              </>
+            ) : msg.deliveredAt ? (
+              <>
+                <CheckCheck color={Colors.muted} size={12} strokeWidth={2.6} />
+                <Text style={styles.statusText}>Delivered</Text>
+              </>
+            ) : (
+              <>
+                <Check color={Colors.muted} size={12} strokeWidth={2.6} />
+                <Text style={styles.statusText}>Sent</Text>
+              </>
+            )}
+          </View>
         ) : null}
       </View>
     </View>
@@ -824,6 +854,8 @@ const styles = StyleSheet.create({
   bubbleText: { fontSize: 14, lineHeight: 19, fontWeight: "500" },
   bubbleTime: { color: Colors.muted, fontSize: 9, fontWeight: "800", marginHorizontal: 6 },
   bubbleMeta: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+  statusText: { color: Colors.muted, fontSize: 9, fontWeight: "800", letterSpacing: 0.3 },
 
   tipBubble: {
     flexDirection: "row",
