@@ -227,11 +227,9 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
     enabled: isAuthenticated && !!userId && conversationIds.length > 0,
     staleTime: 5_000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("dm_messages")
-        .select("id,conversation_id,sender_id,body,message_type,ticker,image_url,created_at")
-        .in("conversation_id", conversationIds)
-        .order("created_at", { ascending: true });
+      const { data, error } = await supabase.rpc("list_dm_messages", {
+        p_conversation_ids: conversationIds,
+      });
       if (error) {
         console.log("[messages] thread fetch failed", error.message);
         return [];
