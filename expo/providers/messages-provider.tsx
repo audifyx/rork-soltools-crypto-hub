@@ -377,6 +377,86 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
     [sendMutation],
   );
 
+  const setTyping = useCallback(
+    async (conversationId: string, typing: boolean) => {
+      if (!isAuthenticated || !userId) return;
+      try {
+        await supabase.rpc("set_dm_typing", {
+          p_conversation_id: conversationId,
+          p_typing: typing,
+        });
+      } catch (e) {
+        console.log("[messages] set_dm_typing failed", e instanceof Error ? e.message : e);
+      }
+    },
+    [isAuthenticated, userId],
+  );
+
+  const reactToMessage = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to react.");
+      const { error } = await supabase.rpc("toggle_dm_reaction", {
+        p_message_id: messageId,
+        p_emoji: emoji,
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
+    },
+    [isAuthenticated, queryClient, userId],
+  );
+
+  const editMessage = useCallback(
+    async (messageId: string, body: string) => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to edit.");
+      const trimmed = body.trim();
+      if (!trimmed) return;
+      const { error } = await supabase.rpc("edit_dm_message", {
+        p_message_id: messageId,
+        p_body: trimmed,
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
+    },
+    [isAuthenticated, queryClient, userId],
+  );
+
+  const deleteMessage = useCallback(
+    async (messageId: string) => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to delete.");
+      const { error } = await supabase.rpc("delete_dm_message", {
+        p_message_id: messageId,
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
+    },
+    [isAuthenticated, queryClient, userId],
+  );
+
+  const blockUser = useCallback(
+    async (otherUserId: string, reason: string = "user_blocked") => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to block.");
+      const { error } = await supabase.rpc("block_dm_user", {
+        p_blocked_id: otherUserId,
+        p_reason: reason,
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
+    },
+    [isAuthenticated, queryClient, userId],
+  );
+
+  const unblockUser = useCallback(
+    async (otherUserId: string) => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to unblock.");
+      const { error } = await supabase.rpc("unblock_dm_user", {
+        p_blocked_id: otherUserId,
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
+    },
+    [isAuthenticated, queryClient, userId],
+  );
+
   const markRead = useCallback(
     async (id: string) => {
       if (!isAuthenticated || !userId) return;
@@ -468,6 +548,12 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
       findUser,
       suggestedUsers,
       knownUsers,
+      setTyping,
+      reactToMessage,
+      editMessage,
+      deleteMessage,
+      blockUser,
+      unblockUser,
     }),
     [
       conversationsQuery.isLoading,
@@ -487,6 +573,33 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
       findUser,
       suggestedUsers,
       knownUsers,
+      setTyping,
+      reactToMessage,
+      editMessage,
+      deleteMessage,
+      blockUser,
+      unblockUser,
     ],
   );
 });
+
+/** Reads typing presence for a single conversation. Polls every 3s while focused. */
+export function useDmTyping(conversationId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["messages", "typing", conversationId ?? "none"],
+    enabled: !!conversationId && enabled,
+    refetchInterval: 3_000,
+    staleTime: 1_500,
+    queryFn: async () => {
+      if (!conversationId) return [] as { user_id: string; username: string | null }[];
+      const { data, error } = await supabase.rpc("list_dm_typing", {
+        p_conversation_id: conversationId,
+      });
+      if (error) {
+        console.log("[messages] list_dm_typing failed", error.message);
+        return [];
+      }
+      return (data ?? []) as { user_id: string; username: string | null }[];
+    },
+  });
+}

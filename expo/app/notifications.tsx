@@ -2,7 +2,7 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   AtSign,
@@ -43,16 +43,75 @@ type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWid
 
 type Tab = "all" | "mentions" | "social" | "trades" | "whales";
 
+type NotifKind =
+  | "like"
+  | "repost"
+  | "comment"
+  | "mention"
+  | "follow"
+  | "trade"
+  | "whale"
+  | "alert"
+  | "system"
+  | "dm_message"
+  | "dm_reaction"
+  | "launchpad_update"
+  | "lobby_invite"
+  | "lobby_event"
+  | "moderation_update"
+  | "announcement";
+
 type Notif = {
   id: string;
-  kind: "like" | "repost" | "comment" | "mention" | "follow" | "trade" | "whale" | "alert" | "system";
+  kind: NotifKind;
   title: string;
   body: string;
   ts: number;
   unread: boolean;
   actor?: string;
   symbol?: string;
+  priority?: "low" | "normal" | "high" | "urgent";
+  targetType?: string | null;
+  targetId?: string | null;
+  remoteId?: string;
 };
+
+interface NotifRow {
+  id: string;
+  kind: string;
+  title: string | null;
+  message: string | null;
+  body: string | null;
+  created_at: string;
+  read_at: string | null;
+  priority: string | null;
+  actor_id: string | null;
+  actor_username: string | null;
+  target_type: string | null;
+  target_id: string | null;
+}
+
+function normalizeKind(raw: string): NotifKind {
+  const valid: NotifKind[] = [
+    "like",
+    "repost",
+    "comment",
+    "mention",
+    "follow",
+    "trade",
+    "whale",
+    "alert",
+    "system",
+    "dm_message",
+    "dm_reaction",
+    "launchpad_update",
+    "lobby_invite",
+    "lobby_event",
+    "moderation_update",
+    "announcement",
+  ];
+  return (valid.includes(raw as NotifKind) ? (raw as NotifKind) : "system");
+}
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "all", label: "All" },
@@ -78,7 +137,7 @@ function timeAgo(ts: number): string {
   return `${Math.floor(d / 7)}w`;
 }
 
-const KIND_META: Record<Notif["kind"], { Icon: LucideIcon; color: string; bg: string }> = {
+const KIND_META: Record<NotifKind, { Icon: LucideIcon; color: string; bg: string }> = {
   like: { Icon: Heart, color: Colors.rose, bg: "rgba(255,93,143,0.16)" },
   repost: { Icon: Repeat2, color: Colors.mint, bg: "rgba(85,245,178,0.16)" },
   comment: { Icon: MessageCircle, color: Colors.cyan, bg: "rgba(56,215,255,0.16)" },
@@ -88,14 +147,102 @@ const KIND_META: Record<Notif["kind"], { Icon: LucideIcon; color: string; bg: st
   whale: { Icon: Waves, color: Colors.cyan, bg: "rgba(56,215,255,0.16)" },
   alert: { Icon: Bell, color: Colors.orange, bg: "rgba(255,184,76,0.16)" },
   system: { Icon: Sparkles, color: Colors.mint, bg: "rgba(85,245,178,0.16)" },
+  dm_message: { Icon: MessageCircle, color: Colors.cyan, bg: "rgba(56,215,255,0.16)" },
+  dm_reaction: { Icon: Heart, color: Colors.rose, bg: "rgba(255,93,143,0.16)" },
+  launchpad_update: { Icon: Rocket, color: Colors.orange, bg: "rgba(255,184,76,0.16)" },
+  lobby_invite: { Icon: Zap, color: Colors.violet, bg: "rgba(184,140,255,0.16)" },
+  lobby_event: { Icon: Zap, color: Colors.violet, bg: "rgba(184,140,255,0.16)" },
+  moderation_update: { Icon: Settings, color: Colors.orange, bg: "rgba(255,184,76,0.16)" },
+  announcement: { Icon: Sparkles, color: Colors.mint, bg: "rgba(85,245,178,0.16)" },
 };
+
+const PRIORITY_TINT: Record<NonNullable<Notif["priority"]>, string | null> = {
+  urgent: Colors.rose,
+  high: Colors.goldBright,
+  normal: null,
+  low: null,
+};
+
+const PAGE_LIMIT = 30;
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { userId, isAuthenticated } = useAuth();
   const { alerts, watchlist, posts } = useApp();
   const [tab, setTab] = useState<Tab>("all");
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+
+  const remoteQ = useInfiniteQuery({
+    queryKey: ["notifications", "page", userId ?? "guest"],
+    enabled: !!userId && isAuthenticated,
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await supabase.rpc("list_notifications_page", {
+        p_before: pageParam,
+        p_limit: PAGE_LIMIT,
+        p_unread_only: false,
+      });
+      if (error) {
+        console.log("[notifications] list_notifications_page failed", error.message);
+        return [] as NotifRow[];
+      }
+      return (data ?? []) as NotifRow[];
+    },
+    getNextPageParam: (last) =>
+      last && last.length === PAGE_LIMIT ? last[last.length - 1].created_at : undefined,
+    staleTime: 15_000,
+  });
+
+  const unreadCountQ = useQuery({
+    queryKey: ["notifications", "unread-count", userId ?? "guest"],
+    enabled: !!userId && isAuthenticated,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_unread_notification_count");
+      if (error) {
+        console.log("[notifications] unread count failed", error.message);
+        return 0;
+      }
+      const n = Number(Array.isArray(data) ? data[0] : data);
+      return Number.isFinite(n) ? n : 0;
+    },
+    staleTime: 10_000,
+    refetchInterval: 60_000,
+  });
+
+  const markReadMut = useMutation({
+    mutationFn: async (notificationId: string) => {
+      const { error } = await supabase.rpc("mark_notification_read", {
+        p_notification_id: notificationId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications", "unread-count"] }).catch(() => {});
+    },
+  });
+
+  const remoteRows = useMemo<NotifRow[]>(() => {
+    return (remoteQ.data?.pages ?? []).flat();
+  }, [remoteQ.data]);
+
+  // Subscribe to realtime inserts and patch the cached page list.
+  React.useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`notif-${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["notifications"] }).catch(() => {});
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel).catch(() => {});
+    };
+  }, [queryClient, userId]);
 
   const whalesQ = useQuery({
     queryKey: ["notifications", "whales"],
@@ -153,6 +300,26 @@ export default function NotificationsScreen() {
 
   const items: Notif[] = useMemo(() => {
     const list: Notif[] = [];
+
+    remoteRows.forEach((r) => {
+      const kind = normalizeKind(r.kind);
+      list.push({
+        id: `remote-${r.id}`,
+        remoteId: r.id,
+        kind,
+        title: r.title ?? "Update",
+        body: r.message ?? r.body ?? "",
+        ts: new Date(r.created_at).getTime(),
+        unread: !r.read_at,
+        actor: r.actor_username ?? undefined,
+        priority:
+          r.priority === "urgent" || r.priority === "high" || r.priority === "low" || r.priority === "normal"
+            ? r.priority
+            : "normal",
+        targetType: r.target_type,
+        targetId: r.target_id,
+      });
+    });
 
     (followersQ.data ?? []).forEach((f, i) => {
       const display = f.display_name ?? f.username ?? `${f.follower_id.slice(0, 6)}…`;
@@ -239,7 +406,7 @@ export default function NotificationsScreen() {
     }
 
     return list.sort((a, b) => b.ts - a.ts);
-  }, [followersQ.data, whalesQ.data, alerts, posts, watchlist, isAuthenticated]);
+  }, [remoteRows, followersQ.data, whalesQ.data, alerts, posts, watchlist, isAuthenticated]);
 
   const filtered = useMemo(() => {
     if (tab === "all") return items;
@@ -251,15 +418,21 @@ export default function NotificationsScreen() {
     return items;
   }, [items, tab]);
 
-  const unreadCount = useMemo(
-    () => items.filter((i) => i.unread && !readIds.has(i.id)).length,
-    [items, readIds],
-  );
+  const unreadCount = useMemo(() => {
+    if (typeof unreadCountQ.data === "number" && unreadCountQ.data > 0) return unreadCountQ.data;
+    return items.filter((i) => i.unread && !readIds.has(i.id)).length;
+  }, [unreadCountQ.data, items, readIds]);
 
   const onMarkAllRead = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setReadIds(new Set(items.map((i) => i.id)));
-  }, [items]);
+    const allIds = items.map((i) => i.id);
+    setReadIds(new Set(allIds));
+    items.forEach((i) => {
+      if (i.remoteId && i.unread) {
+        markReadMut.mutate(i.remoteId);
+      }
+    });
+  }, [items, markReadMut]);
 
   const onTap = useCallback(
     (n: Notif) => {
@@ -269,16 +442,28 @@ export default function NotificationsScreen() {
         next.add(n.id);
         return next;
       });
+      if (n.remoteId && n.unread) {
+        markReadMut.mutate(n.remoteId);
+      }
       if (n.kind === "follow") {
         if (n.actor) {
           router.push({ pathname: "/u/[handle]", params: { handle: n.actor.replace(/^@/, "") } });
         } else {
           router.push("/(tabs)/users");
         }
-      } else if (n.kind === "whale" || n.kind === "trade" || n.kind === "alert")
+      } else if (n.kind === "dm_message" || n.kind === "dm_reaction") {
+        if (n.targetId) router.push({ pathname: "/dm/[id]", params: { id: n.targetId } });
+        else router.push("/messages");
+      } else if (n.kind === "lobby_invite" || n.kind === "lobby_event") {
+        if (n.targetId) router.push({ pathname: "/space/[id]", params: { id: n.targetId } });
+        else router.push("/spaces");
+      } else if (n.kind === "launchpad_update") {
+        if (n.targetId) router.push({ pathname: "/launch/[id]", params: { id: n.targetId } });
+      } else if (n.kind === "whale" || n.kind === "trade" || n.kind === "alert") {
         router.push("/(tabs)/discover");
+      }
     },
-    [router],
+    [router, markReadMut],
   );
 
   const renderItem: ListRenderItem<Notif> = useCallback(
@@ -361,6 +546,17 @@ export default function NotificationsScreen() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={<EmptyState tab={tab} />}
           showsVerticalScrollIndicator={false}
+          onEndReached={() => {
+            if (remoteQ.hasNextPage && !remoteQ.isFetchingNextPage) {
+              remoteQ.fetchNextPage().catch(() => {});
+            }
+          }}
+          onEndReachedThreshold={0.4}
+          refreshing={remoteQ.isRefetching}
+          onRefresh={() => {
+            remoteQ.refetch().catch(() => {});
+            unreadCountQ.refetch().catch(() => {});
+          }}
         />
       </SafeAreaView>
     </View>

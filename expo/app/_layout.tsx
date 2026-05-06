@@ -4,6 +4,9 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { enableFreeze } from "react-native-screens";
+
+enableFreeze(true);
 
 import Colors from "@/constants/colors";
 import { registerKOLSync } from "@/lib/kol-background";
@@ -20,7 +23,18 @@ SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
   console.log("SolTools splash hold skipped during boot", error);
 });
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 30,
+      gcTime: 1000 * 60 * 10,
+      retry: 1,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+    },
+  },
+});
 
 export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
   console.log("SolTools root error", error.message);
@@ -45,6 +59,9 @@ function RootLayoutNav() {
         contentStyle: styles.stackContent,
         gestureEnabled: true,
         fullScreenGestureEnabled: true,
+        animation: "ios_from_right",
+        animationDuration: 180,
+        freezeOnBlur: true,
       }}
     >
       <Stack.Screen name="index" />

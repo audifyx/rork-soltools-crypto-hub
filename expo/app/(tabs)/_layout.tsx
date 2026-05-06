@@ -2,16 +2,39 @@ import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { Compass, Home, MessageCircle, Play, User, Wrench } from "lucide-react-native";
-import React from "react";
+import React, { memo } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
 import Colors from "@/constants/colors";
+
+const TabBarBackground = memo(function TabBarBackground() {
+  return (
+    <View style={styles.barBgWrap} pointerEvents="none">
+      {Platform.OS !== "web" ? (
+        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+      ) : null}
+      <View style={styles.barBg} />
+      <LinearGradient
+        colors={["rgba(244,198,91,0.24)", "rgba(221,227,236,0.10)", "rgba(0,0,0,0.04)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.activePlate} />
+      <View style={styles.barInnerBorder} />
+    </View>
+  );
+});
 
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
+        lazy: true,
+        freezeOnBlur: true,
+        animation: "fade",
+        sceneStyle: { backgroundColor: Colors.ink },
         tabBarActiveTintColor: Colors.goldBright,
         tabBarInactiveTintColor: Colors.muted,
         tabBarShowLabel: true,
@@ -21,22 +44,7 @@ export default function TabsLayout() {
         tabBarIconStyle: styles.icon,
         tabBarAllowFontScaling: false,
         tabBarLabelPosition: "below-icon",
-        tabBarBackground: () => (
-          <View style={styles.barBgWrap} pointerEvents="none">
-            {Platform.OS !== "web" ? (
-              <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
-            ) : null}
-            <View style={styles.barBg} />
-            <LinearGradient
-              colors={["rgba(244,198,91,0.24)", "rgba(221,227,236,0.10)", "rgba(0,0,0,0.04)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.activePlate} />
-            <View style={styles.barInnerBorder} />
-          </View>
-        ),
+        tabBarBackground: () => <TabBarBackground />,
       }}
     >
       <Tabs.Screen
