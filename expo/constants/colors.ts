@@ -1,30 +1,41 @@
+/**
+ * Solana-inspired palette: deep black canvas, electric blue accents, crisp white text.
+ * All historical keys are preserved so existing screens keep compiling; values are
+ * remapped onto the new blue/black/white system.
+ */
 const Colors = {
-  ink: "#020202",
-  panel: "#070604",
-  card: "#10100E",
-  cardSoft: "#191815",
-  elevated: "#171613",
-  graphite: "#2A2924",
-  mint: "#D8B75A",
-  cyan: "#DDE3EC",
-  orange: "#F4C65B",
-  rose: "#F7F2E7",
-  neon: "#FFF8DF",
-  violet: "#AEB6C3",
-  magenta: "#E2C98B",
+  ink: "#000000",
+  panel: "#06080F",
+  card: "#0B0F1A",
+  cardSoft: "#111827",
+  elevated: "#0F1422",
+  graphite: "#1B2235",
+
+  // Accent ramp (Solana electric blue family)
+  mint: "#3FA9FF",
+  cyan: "#62D0FF",
+  orange: "#1E88FF",
+  rose: "#E6F2FF",
+  neon: "#9CD7FF",
+  violet: "#5B8DEF",
+  magenta: "#3FA9FF",
+
   text: "#FFFFFF",
-  muted: "#B4B0A6",
-  muted2: "#7D786D",
-  line: "rgba(216, 183, 90, 0.18)",
-  lineStrong: "rgba(255, 248, 223, 0.30)",
-  glass: "rgba(244, 198, 91, 0.10)",
-  gold: "#D8B75A",
-  goldBright: "#F4C65B",
-  goldSoft: "#8C6F2F",
-  silver: "#DDE3EC",
-  platinum: "#F7F2E7",
-  bronze: "#A77A37",
-  obsidian: "#020202",
+  muted: "#B6C2D9",
+  muted2: "#6B7894",
+
+  line: "rgba(63, 169, 255, 0.18)",
+  lineStrong: "rgba(255, 255, 255, 0.28)",
+  glass: "rgba(63, 169, 255, 0.10)",
+
+  // Semantic aliases
+  gold: "#3FA9FF",
+  goldBright: "#62D0FF",
+  goldSoft: "#1E5BAA",
+  silver: "#E6F2FF",
+  platinum: "#FFFFFF",
+  bronze: "#1E88FF",
+  obsidian: "#000000",
 };
 
 export default Colors;
