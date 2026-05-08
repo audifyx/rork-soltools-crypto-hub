@@ -32,6 +32,14 @@ import {
   subscribeToNews,
   toggleSaveNews,
 } from "@/lib/api/crypto-news";
+import {
+  addSocialNewsComment,
+  getNewsRepostFeed,
+  hydrateNewsSocialCounts,
+  toggleSocialNewsLike,
+  toggleSocialNewsRepost,
+  upsertNewsSocialItems,
+} from "@/lib/api/news-social";
 
 const FILTERS: { key: NewsCategory | "saved"; label: string }[] = [
   { key: "all", label: "All" },
@@ -59,6 +67,12 @@ export default function CryptoNewsScreen() {
   const isSearching = debouncedSearch.length > 0;
   const isSaved = filter === "saved";
 
+  const repostFeedQuery = useQuery({
+    queryKey: ["crypto-news", "reposts"],
+    queryFn: () => getNewsRepostFeed(25),
+    staleTime: 20_000,
+  });
+
   const feedQuery = useInfiniteQuery({
     queryKey: ["crypto-news", "feed", filter, isSearching ? debouncedSearch : ""],
     enabled: !isSaved,
@@ -66,20 +80,24 @@ export default function CryptoNewsScreen() {
     queryFn: async ({ pageParam }) => {
       if (isSearching) {
         const items = await searchCryptoNews(debouncedSearch, PAGE_SIZE);
-        return items;
+        await upsertNewsSocialItems(items);
+        return hydrateNewsSocialCounts(items);
       }
+
       const items = await getCryptoNewsFeed({
         category: filter === "saved" ? "all" : (filter as NewsCategory),
         limit: PAGE_SIZE,
         before: pageParam,
       });
-      return items;
+
+      await upsertNewsSocialItems(items);
+      return hydrateNewsSocialCounts(items);
     },
     getNextPageParam: (lastPage) => {
       if (!lastPage || lastPage.length < PAGE_SIZE) return undefined;
       return lastPage[lastPage.length - 1]?.published_at ?? undefined;
     },
-    staleTime: 30_000,
+    staleTime: 20_000,
   });
 
   const savedQuery = useQuery({
@@ -95,10 +113,35 @@ export default function CryptoNewsScreen() {
     staleTime: 60_000,
   });
 
+  const repostFeed = repostFeedQuery.data ?? [];
+
   const items: CryptoNewsItem[] = useMemo(() => {
     if (isSaved) return savedQuery.data ?? [];
-    return (feedQuery.data?.pages ?? []).flat();
-  }, [isSaved, savedQuery.data, feedQuery.data]);
+
+    const rss = (feedQuery.data?.pages ?? []).flat();
+
+    const repostMapped: CryptoNewsItem[] = repostFeed.map((r) => ({
+      id: `${r.external_id}-repost-${r.reposted_at}`,
+      source: r.username || "Community",
+      source_url: r.source_url,
+      title: `Reposted: ${r.title}`,
+      description: r.quote_text || r.description || null,
+      image_url: r.image_url,
+      category: (r.category as NewsCategory) || "trending",
+      sentiment: (r.sentiment as any) || null,
+      coin_mentions: r.coin_mentions || [],
+      engagement: {
+        likes: r.like_count || 0,
+        shares: r.repost_count || 0,
+        comments: r.comment_count || 0,
+      },
+      published_at: r.reposted_at,
+    }));
+
+    return [...repostMapped, ...rss].sort(
+      (a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime(),
+    );
+  }, [isSaved, savedQuery.data, feedQuery.data, repostFeed]);
 
   const savedIds = savedIdsQuery.data ?? new Set<string>();
 
@@ -124,13 +167,34 @@ export default function CryptoNewsScreen() {
     },
   });
 
-  // realtime push of new headlines
+  const socialRefresh = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["crypto-news", "feed"] });
+    qc.invalidateQueries({ queryKey: ["crypto-news", "reposts"] });
+  }, [qc]);
+
   useEffect(() => {
     const unsub = subscribeToNews(() => {
-      qc.invalidateQueries({ queryKey: ["crypto-news", "feed"] });
+      socialRefresh();
     });
     return unsub;
-  }, [qc]);
+  }, [socialRefresh]);
+
+  const onToggleLike = useCallback(async (item: CryptoNewsItem) => {
+    await toggleSocialNewsLike(item.id.split("-repost-")[0]);
+    socialRefresh();
+    return true;
+  }, [socialRefresh]);
+
+  const onToggleRepost = useCallback(async (item: CryptoNewsItem, quoteText?: string | null) => {
+    await toggleSocialNewsRepost(item.id.split("-repost-")[0], quoteText);
+    socialRefresh();
+    return true;
+  }, [socialRefresh]);
+
+  const onComment = useCallback(async (item: CryptoNewsItem, body: string) => {
+    await addSocialNewsComment(item.id.split("-repost-")[0], body);
+    socialRefresh();
+  }, [socialRefresh]);
 
   const onSelectFilter = useCallback((next: (typeof FILTERS)[number]["key"]) => {
     Haptics.selectionAsync().catch(() => {});
@@ -157,8 +221,11 @@ export default function CryptoNewsScreen() {
   const onRefresh = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (isSaved) savedQuery.refetch();
-    else feedQuery.refetch();
-  }, [isSaved, feedQuery, savedQuery]);
+    else {
+      repostFeedQuery.refetch();
+      feedQuery.refetch();
+    }
+  }, [isSaved, feedQuery, savedQuery, repostFeedQuery]);
 
   const onEndReached = useCallback(() => {
     if (isSaved || isSearching) return;
@@ -254,6 +321,9 @@ export default function CryptoNewsScreen() {
               onToggleSave={(n) => {
                 saveMutation.mutate({ id: n.id, item: n });
               }}
+              onToggleLike={onToggleLike}
+              onToggleRepost={onToggleRepost}
+              onComment={onComment}
               onShare={onShare}
               onPress={onPressItem}
             />
