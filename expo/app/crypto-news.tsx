@@ -3,7 +3,7 @@ import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Bookmark, Search, Sparkles, X } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -55,6 +55,7 @@ const PAGE_SIZE = 20;
 export default function CryptoNewsScreen() {
   const router = useRouter();
   const qc = useQueryClient();
+  const realtimeLock = useRef(false);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
   const [search, setSearch] = useState<string>("");
   const [debouncedSearch, setDebouncedSearch] = useState<string>("");
@@ -71,6 +72,7 @@ export default function CryptoNewsScreen() {
     queryKey: ["crypto-news", "reposts"],
     queryFn: () => getNewsRepostFeed(25),
     staleTime: 20_000,
+    refetchOnWindowFocus: false,
   });
 
   const feedQuery = useInfiniteQuery({
@@ -98,6 +100,7 @@ export default function CryptoNewsScreen() {
       return lastPage[lastPage.length - 1]?.published_at ?? undefined;
     },
     staleTime: 20_000,
+    refetchOnWindowFocus: false,
   });
 
   const savedQuery = useQuery({
@@ -138,7 +141,12 @@ export default function CryptoNewsScreen() {
       published_at: r.reposted_at,
     }));
 
-    return [...repostMapped, ...rss].sort(
+    const deduped = [...repostMapped, ...rss].reduce<CryptoNewsItem[]>((acc, cur) => {
+      if (!acc.find((i) => i.id === cur.id)) acc.push(cur);
+      return acc;
+    }, []);
+
+    return deduped.sort(
       (a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime(),
     );
   }, [isSaved, savedQuery.data, feedQuery.data, repostFeed]);
@@ -147,29 +155,19 @@ export default function CryptoNewsScreen() {
 
   const saveMutation = useMutation({
     mutationFn: async (payload: { id: string; item: CryptoNewsItem }) => toggleSaveNews(payload.id, payload.item),
-    onMutate: async (payload: { id: string; item: CryptoNewsItem }) => {
-      const id = payload.id;
-      await qc.cancelQueries({ queryKey: ["crypto-news", "saved-ids"] });
-      const prev = qc.getQueryData<Set<string>>(["crypto-news", "saved-ids"]);
-      const next = new Set(prev ?? []);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      qc.setQueryData(["crypto-news", "saved-ids"], next);
-      return { prev };
-    },
-    onError: (e, _id, ctx) => {
-      console.log("[crypto-news] save failed", e);
-      if (ctx?.prev) qc.setQueryData(["crypto-news", "saved-ids"], ctx.prev);
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ["crypto-news", "saved"] });
-      qc.invalidateQueries({ queryKey: ["crypto-news", "saved-ids"] });
-    },
   });
 
   const socialRefresh = useCallback(() => {
+    if (realtimeLock.current) return;
+
+    realtimeLock.current = true;
+
     qc.invalidateQueries({ queryKey: ["crypto-news", "feed"] });
     qc.invalidateQueries({ queryKey: ["crypto-news", "reposts"] });
+
+    setTimeout(() => {
+      realtimeLock.current = false;
+    }, 1200);
   }, [qc]);
 
   useEffect(() => {
@@ -217,6 +215,21 @@ export default function CryptoNewsScreen() {
     if (!item.source_url) return;
     Linking.openURL(item.source_url).catch((e) => console.log("[crypto-news] open url", e));
   }, []);
+
+  const renderItem = useCallback(({ item }: { item: CryptoNewsItem }) => (
+    <CryptoNewsCard
+      item={item}
+      saved={savedIds.has(item.id)}
+      onToggleSave={(n) => {
+        saveMutation.mutate({ id: n.id, item: n });
+      }}
+      onToggleLike={onToggleLike}
+      onToggleRepost={onToggleRepost}
+      onComment={onComment}
+      onShare={onShare}
+      onPress={onPressItem}
+    />
+  ), [savedIds, saveMutation, onToggleLike, onToggleRepost, onComment, onShare, onPressItem]);
 
   const onRefresh = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -312,22 +325,14 @@ export default function CryptoNewsScreen() {
         </View>
 
         <FlatList
+          removeClippedSubviews
+          maxToRenderPerBatch={6}
+          windowSize={7}
+          initialNumToRender={5}
+          updateCellsBatchingPeriod={40}
           data={items}
           keyExtractor={(it) => it.id}
-          renderItem={({ item }) => (
-            <CryptoNewsCard
-              item={item}
-              saved={savedIds.has(item.id)}
-              onToggleSave={(n) => {
-                saveMutation.mutate({ id: n.id, item: n });
-              }}
-              onToggleLike={onToggleLike}
-              onToggleRepost={onToggleRepost}
-              onComment={onComment}
-              onShare={onShare}
-              onPress={onPressItem}
-            />
-          )}
+          renderItem={renderItem}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
