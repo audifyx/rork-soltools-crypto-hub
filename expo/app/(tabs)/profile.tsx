@@ -75,6 +75,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
 import PortfolioCard from "@/components/profile/PortfolioCard";
+import BadgeRow from "@/components/social/BadgeRow";
+import { DEFAULT_BADGES, getHolderBadge, sortBadges, type UserBadge } from "@/lib/badge-system";
 import { useAdmin } from "@/providers/admin-provider";
 import { useApp, type Currency, type Language, type ThemeMode, type UserPrefs } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
@@ -89,16 +91,23 @@ import {
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
 
-type Tab = "overview" | "watchlist" | "wallets" | "alerts" | "posts" | "listings" | "activity";
+type Tab =
+  | "posts"
+  | "replies"
+  | "likes"
+  | "reposts"
+  | "holdings"
+  | "activity"
+  | "communities";
 
 const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
-  { id: "overview", label: "Overview", Icon: Sparkles },
-  { id: "watchlist", label: "Watchlist", Icon: Eye },
-  { id: "wallets", label: "Wallets", Icon: Wallet },
-  { id: "alerts", label: "Alerts", Icon: Bell },
   { id: "posts", label: "Posts", Icon: Pencil },
-  { id: "listings", label: "Listings", Icon: Rocket },
-  { id: "activity", label: "Activity", Icon: Activity },
+  { id: "replies", label: "Replies", Icon: Activity },
+  { id: "likes", label: "Likes", Icon: Star },
+  { id: "reposts", label: "Reposts", Icon: TrendingUp },
+  { id: "holdings", label: "Holdings", Icon: Gem },
+  { id: "activity", label: "Activity", Icon: Sparkles },
+  { id: "communities", label: "Communities", Icon: Users },
 ];
 
 interface AchievementDef {
@@ -358,7 +367,7 @@ export default function ProfileScreen() {
   }, [shimmer]);
 
   const ringOpacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] });
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>("posts");
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [followersOpen, setFollowersOpen] = useState<"followers" | "following" | null>(null);
@@ -370,6 +379,31 @@ export default function ProfileScreen() {
   );
 
   const computedXp = useMemo(() => profile.xp, [profile.xp]);
+
+  const stackedBadges = useMemo<UserBadge[]>(() => {
+    const out: UserBadge[] = [];
+    if (profile.verified) out.push(DEFAULT_BADGES.verified);
+    if (isAdmin && adminRole) {
+      const r = adminRole.toLowerCase();
+      if (r === "owner" || r === "superadmin" || r === "admin") out.push(DEFAULT_BADGES.admin);
+      else if (r === "moderator") out.push(DEFAULT_BADGES.mod);
+      else if (r === "support") out.push({ ...DEFAULT_BADGES.team, id: "support", label: "SUPPORT" });
+    }
+    // Holder/whale badge derived from XP as a graceful proxy until wallet balance lands.
+    const holder = getHolderBadge(profile.xp * 100);
+    if (holder) out.push(holder);
+    profile.customBadges.forEach((b) => {
+      out.push({
+        id: b.id,
+        label: b.label.toUpperCase(),
+        color: b.color ?? Colors.mint,
+        glow: true,
+        priority: 50,
+        rarity: "rare",
+      });
+    });
+    return sortBadges(out);
+  }, [profile.verified, profile.customBadges, profile.xp, isAdmin, adminRole]);
 
   const rank = useMemo(() => computeRank(computedXp), [computedXp]);
 
@@ -711,11 +745,9 @@ export default function ProfileScreen() {
                   </View>
                 ) : null}
               </View>
-              {profile.customBadges.length > 0 ? (
+              {stackedBadges.length > 0 ? (
                 <View style={styles.badgeRow}>
-                  {profile.customBadges.map((b) => (
-                    <BadgePill key={b.id} badge={b} />
-                  ))}
+                  <BadgeRow badges={stackedBadges} />
                 </View>
               ) : null}
               <Text style={[styles.bio, !profile.bio && styles.socialBioEmpty]}>
@@ -870,7 +902,7 @@ export default function ProfileScreen() {
             })}
           </ScrollView>
 
-          {tab === "overview" && (
+          {false && tab === ("overview" as unknown as Tab) && (
             <View style={styles.section}>
               <View style={styles.perfCard}>
                 <View style={styles.perfHeader}>
@@ -986,13 +1018,13 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {tab === "watchlist" && (
+          {tab === "holdings" && (
             <View style={styles.section}>
               {watchlist.length === 0 ? (
                 <EmptyTab
-                  Icon={Eye}
-                  title="No watched tokens"
-                  body="Tap the eye icon on Discover or any token to add it to your watchlist."
+                  Icon={Gem}
+                  title="No holdings tracked"
+                  body="Add tokens from Discover to track your holdings, or connect a wallet to auto-sync your portfolio."
                   ctaLabel="Open Discover"
                   onCta={() => router.push("/discover")}
                 />
@@ -1009,7 +1041,7 @@ export default function ProfileScreen() {
                       </Text>
                     </View>
                     <Pressable
-                      onPress={() => onConfirmDelete(`$${w.ticker}`, () => removeWatch(w.id))}
+                      onPress={() => onConfirmDelete(`${w.ticker}`, () => removeWatch(w.id))}
                       style={styles.listAction}
                       hitSlop={6}
                     >
@@ -1021,7 +1053,55 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {tab === "wallets" && (
+          {tab === "replies" && (
+            <View style={styles.section}>
+              <EmptyTab
+                Icon={Activity}
+                title="No replies yet"
+                body="Your replies to community posts will appear here."
+                ctaLabel="Open feed"
+                onCta={() => router.push("/posts")}
+              />
+            </View>
+          )}
+
+          {tab === "likes" && (
+            <View style={styles.section}>
+              <EmptyTab
+                Icon={Star}
+                title="No likes yet"
+                body="Posts you like will be saved here for easy access."
+                ctaLabel="Open feed"
+                onCta={() => router.push("/posts")}
+              />
+            </View>
+          )}
+
+          {tab === "reposts" && (
+            <View style={styles.section}>
+              <EmptyTab
+                Icon={TrendingUp}
+                title="No reposts yet"
+                body="Reposts of alpha you share with your followers will show up here."
+                ctaLabel="Compose post"
+                onCta={() => router.push("/compose")}
+              />
+            </View>
+          )}
+
+          {tab === "communities" && (
+            <View style={styles.section}>
+              <EmptyTab
+                Icon={Users}
+                title="No communities yet"
+                body="Join holders-only and public communities. Token-gated rooms unlock when you hold $SOLTOOLS."
+                ctaLabel="Browse communities"
+                onCta={() => router.push("/communities")}
+              />
+            </View>
+          )}
+
+          {false && tab === ("wallets" as unknown as Tab) && (
             <View style={styles.section}>
               {wallets.length === 0 ? (
                 <EmptyTab
@@ -1056,7 +1136,7 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {tab === "alerts" && (
+          {false && tab === ("alerts" as unknown as Tab) && (
             <View style={styles.section}>
               {alerts.length === 0 ? (
                 <EmptyTab
@@ -1139,7 +1219,7 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {tab === "listings" && (
+          {false && tab === ("listings" as unknown as Tab) && (
             <View style={styles.section}>
               {myListings.length === 0 ? (
                 <EmptyTab
