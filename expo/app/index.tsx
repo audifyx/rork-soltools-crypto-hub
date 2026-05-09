@@ -233,7 +233,23 @@ export default function WelcomeScreen() {
             </View>
 
             <Text style={styles.terms}>
-              By continuing you agree to our Terms and Privacy Policy.
+              By continuing you agree to our{" "}
+              <Text
+                style={styles.termsLink}
+                onPress={() => router.push("/legal/terms")}
+                testID="welcome-terms-link"
+              >
+                Terms
+              </Text>
+              {" "}and{" "}
+              <Text
+                style={styles.termsLink}
+                onPress={() => router.push("/legal/privacy")}
+                testID="welcome-privacy-link"
+              >
+                Privacy Policy
+              </Text>
+              .
             </Text>
           </View>
         </Animated.View>
@@ -364,6 +380,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 16,
     opacity: 0.8,
+  },
+  termsLink: {
+    color: Colors.mint,
+    fontWeight: "800",
   },
 
   splash: {

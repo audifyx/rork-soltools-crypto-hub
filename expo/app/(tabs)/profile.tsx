@@ -2353,19 +2353,19 @@ function SettingsModal({
                   Icon={ExternalLink}
                   label="Terms of service"
                   sub="Read the legal stuff"
-                  onPress={() => Linking.openURL("https://soltools.app/terms").catch(() => {})}
+                  onPress={() => router.push("/legal/terms")}
                 />
                 <MenuRow
                   Icon={Shield}
                   label="Privacy policy"
                   sub="How we handle data"
-                  onPress={() => Linking.openURL("https://soltools.app/privacy").catch(() => {})}
+                  onPress={() => router.push("/legal/privacy")}
                 />
                 <MenuRow
                   Icon={Camera}
                   label="Open-source licenses"
                   sub="Credits"
-                  onPress={() => Alert.alert("Licenses", "Built with React Native, Expo, lucide-react-native.")}
+                  onPress={() => router.push("/legal/licenses")}
                 />
                 <View style={{ height: 24 }} />
               </>

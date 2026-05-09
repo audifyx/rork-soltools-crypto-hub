@@ -66,6 +66,10 @@ function RootLayoutNav() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="auth" options={{ presentation: "modal" }} />
+      <Stack.Screen name="reset-password" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+      <Stack.Screen name="legal/privacy" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="legal/terms" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="legal/licenses" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="list-token" options={{ presentation: "modal" }} />
       <Stack.Screen name="compose" options={{ presentation: "modal" }} />

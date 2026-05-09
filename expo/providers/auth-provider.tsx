@@ -101,7 +101,19 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const resetPassword = useMutation({
     mutationFn: async (email: string) => {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: "soltools://reset-password",
+      });
+      if (error) throw error;
+    },
+  });
+
+  const updatePassword = useMutation({
+    mutationFn: async (newPassword: string) => {
+      if (!newPassword || newPassword.length < 6) {
+        throw new Error("Password must be at least 6 characters.");
+      }
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
     },
   });
@@ -124,6 +136,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       isSigningOut: signOut.isPending,
       resetPassword: resetPassword.mutateAsync,
       isResettingPassword: resetPassword.isPending,
+      updatePassword: updatePassword.mutateAsync,
+      isUpdatingPassword: updatePassword.isPending,
     }),
     [
       session,
@@ -139,6 +153,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       signOut.isPending,
       resetPassword.mutateAsync,
       resetPassword.isPending,
+      updatePassword.mutateAsync,
+      updatePassword.isPending,
     ],
   );
 });

@@ -252,6 +252,26 @@ export default function AuthScreen() {
             >
               <Text style={styles.skipText}>Continue as guest →</Text>
             </Pressable>
+
+            <Text style={styles.legalLine}>
+              By continuing you agree to our{" "}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push("/legal/terms")}
+                testID="auth-terms-link"
+              >
+                Terms
+              </Text>
+              {" "}and{" "}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push("/legal/privacy")}
+                testID="auth-privacy-link"
+              >
+                Privacy Policy
+              </Text>
+              .
+            </Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -375,4 +395,15 @@ const styles = StyleSheet.create({
 
   skip: { alignSelf: "center", marginTop: 26, padding: 10 },
   skipText: { color: Colors.muted, fontSize: 13, fontWeight: "800" },
+  legalLine: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 16,
+    opacity: 0.85,
+    paddingHorizontal: 12,
+  },
+  legalLink: { color: Colors.mint, fontWeight: "800" },
 });
