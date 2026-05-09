@@ -3,6 +3,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { clearSignedOutCache, invalidateCacheScopes } from "@/lib/provider-cache";
 import { saveOwnProfilePatch } from "@/lib/profile-db";
 import { supabase } from "@/lib/supabase";
 import { clearAllUserCache } from "@/lib/user-cache";
@@ -39,13 +40,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       currentUserIdRef.current = nextId;
       setSession(s ?? null);
       setUser(nextUser);
-      // If the signed-in user changed, drop every cached query so the
-      // previous account's data can't bleed into the new session. Token
-      // refreshes for the same user should only invalidate, not wipe queries.
+
       if (prevId !== nextId) {
-        qc.removeQueries();
+        clearSignedOutCache(qc).catch(() => {});
       } else {
-        qc.invalidateQueries();
+        invalidateCacheScopes(qc, ["profile", "social", "feed", "notifications"]).catch(() => {});
       }
     });
     return () => {
@@ -93,12 +92,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     mutationFn: async () => {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      // Clear local AsyncStorage so the next account doesn't inherit
-      // this user's profile / watchlist / posts cache.
       await clearAllUserCache();
     },
     onSuccess: () => {
-      qc.clear();
+      clearSignedOutCache(qc).catch(() => {});
     },
   });
 
