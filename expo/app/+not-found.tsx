@@ -13,11 +13,19 @@ export default function SolToolsNotFoundScreen() {
         <View style={styles.iconShell}>
           <Radar color={Colors.mint} size={42} strokeWidth={2.4} />
         </View>
-        <Text style={styles.kicker}>SolTools route not found</Text>
-        <Text style={styles.title}>This signal is off-chain.</Text>
-        <Text style={styles.body}>Head back to SolTools and keep scanning wallets, pairs, and social market moves.</Text>
+
+        <Text style={styles.kicker}>Signal unavailable</Text>
+
+        <Text style={styles.title}>
+          This route is still syncing or no longer active.
+        </Text>
+
+        <Text style={styles.body}>
+          Continue scanning wallets, whale activity, token movement, and social momentum inside SolTools.
+        </Text>
+
         <Link href="/" style={styles.link} testID="soltools-not-found-home-link">
-          Back to SolTools scanner
+          Return to Scanner
         </Link>
       </LinearGradient>
     </>
@@ -52,7 +60,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: Colors.text,
-    fontSize: 32,
+    fontSize: 30,
     lineHeight: 36,
     fontWeight: "900",
     textAlign: "center",
@@ -64,7 +72,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
     marginBottom: 24,
-    maxWidth: 320,
+    maxWidth: 340,
   },
   link: {
     color: Colors.ink,
