@@ -10,8 +10,20 @@ import {
   type WalletTransaction,
 } from "@/lib/api/wallet";
 
-export type NewsCategory = "all" | "trending" | "meme" | "viral" | "kol";
+export type NewsCategory =
+  | "all"
+  | "solana"
+  | "bitcoin"
+  | "ethereum"
+  | "defi"
+  | "nft"
+  | "meme"
+  | "market"
+  | "trending"
+  | "viral"
+  | "kol";
 export type NewsSentiment = "bullish" | "bearish" | "neutral";
+export type NewsTimeRange = "24h" | "7d" | "all";
 
 export interface CryptoNewsItem {
   id: string;
@@ -45,7 +57,7 @@ interface RawNewsRow {
   published_at: string;
 }
 
-export interface NewsFeedParams { category?: NewsCategory; limit?: number; before?: string | null }
+export interface NewsFeedParams { category?: NewsCategory; range?: NewsTimeRange; limit?: number; before?: string | null }
 
 export interface NewsComment {
   id: string;
@@ -59,10 +71,58 @@ export interface NewsComment {
 type RssSource = { name: string; url: string; categoryHint?: Exclude<NewsCategory, "all"> };
 
 const RSS_SOURCES: RssSource[] = [
-  { name: "Cointelegraph", url: "https://cointelegraph.com/rss" },
-  { name: "Decrypt", url: "https://decrypt.co/feed" },
-  { name: "CoinDesk", url: "https://www.coindesk.com/arc/outboundfeeds/rss/" },
-  { name: "Bitcoin Magazine", url: "https://bitcoinmagazine.com/.rss/full/" },
+  { name: "Cointelegraph", url: "https://cointelegraph.com/rss", categoryHint: "trending" },
+  { name: "CoinDesk", url: "https://www.coindesk.com/arc/outboundfeeds/rss/", categoryHint: "market" },
+  { name: "Decrypt", url: "https://decrypt.co/feed", categoryHint: "trending" },
+  { name: "The Block", url: "https://www.theblock.co/rss.xml", categoryHint: "market" },
+  { name: "CryptoSlate", url: "https://cryptoslate.com/feed/", categoryHint: "trending" },
+  { name: "CryptoPotato", url: "https://cryptopotato.com/feed/", categoryHint: "market" },
+  { name: "NewsBTC", url: "https://www.newsbtc.com/feed/", categoryHint: "bitcoin" },
+  { name: "Bitcoinist", url: "https://bitcoinist.com/feed/", categoryHint: "bitcoin" },
+  { name: "CryptoNews", url: "https://cryptonews.com/news/feed/", categoryHint: "trending" },
+  { name: "AMBCrypto", url: "https://ambcrypto.com/feed/", categoryHint: "market" },
+  { name: "U.Today", url: "https://u.today/rss", categoryHint: "trending" },
+  { name: "BeInCrypto", url: "https://beincrypto.com/feed/", categoryHint: "market" },
+  { name: "CoinGape", url: "https://coingape.com/feed/", categoryHint: "trending" },
+  { name: "Blockworks", url: "https://blockworks.co/feed", categoryHint: "market" },
+  { name: "Coinpedia", url: "https://coinpedia.org/feed/", categoryHint: "trending" },
+  { name: "ZyCrypto", url: "https://zycrypto.com/feed/", categoryHint: "trending" },
+  { name: "CoinCu", url: "https://news.coincu.com/feed/", categoryHint: "trending" },
+  { name: "CryptoBriefing", url: "https://cryptobriefing.com/feed/", categoryHint: "trending" },
+  { name: "CoinJournal", url: "https://coinjournal.net/feed/", categoryHint: "trending" },
+  { name: "CoinSpeaker", url: "https://www.coinspeaker.com/feed/", categoryHint: "market" },
+  { name: "Bitcoin Magazine", url: "https://bitcoinmagazine.com/.rss/full/", categoryHint: "bitcoin" },
+  { name: "Bitcoin.com", url: "https://news.bitcoin.com/feed/", categoryHint: "bitcoin" },
+  { name: "The Bitcoin News", url: "https://thebitcoinnews.com/feed/", categoryHint: "bitcoin" },
+  { name: "Trustnodes", url: "https://www.trustnodes.com/feed", categoryHint: "ethereum" },
+  { name: "DLNews", url: "https://www.dlnews.com/arc/outboundfeeds/rss/", categoryHint: "market" },
+  { name: "The Defiant", url: "https://thedefiant.io/api/feed", categoryHint: "defi" },
+  { name: "Bankless", url: "https://www.bankless.com/feed", categoryHint: "defi" },
+  { name: "Protos", url: "https://protos.com/feed/", categoryHint: "trending" },
+  { name: "Watcher Guru", url: "https://watcher.guru/news/feed", categoryHint: "market" },
+  { name: "NFT Now", url: "https://nftnow.com/feed/", categoryHint: "nft" },
+  { name: "NFT Evening", url: "https://nftevening.com/feed/", categoryHint: "nft" },
+  { name: "NFT Plazas", url: "https://nftplazas.com/feed/", categoryHint: "nft" },
+  { name: "CryptoGlobe", url: "https://cryptoglobe.com/latest/feed/", categoryHint: "trending" },
+  { name: "Crypto Reporter", url: "https://www.crypto-reporter.com/feed/", categoryHint: "trending" },
+  { name: "CoinCheckup", url: "https://coincheckup.com/news/feed/", categoryHint: "market" },
+  { name: "Helius", url: "https://www.helius.dev/blog/rss.xml", categoryHint: "solana" },
+  { name: "Solana Status", url: "https://status.solana.com/history.rss", categoryHint: "solana" },
+  { name: "Magic Eden", url: "https://magiceden.io/blog/rss.xml", categoryHint: "nft" },
+  { name: "Phantom", url: "https://phantom.com/blog/feed/", categoryHint: "solana" },
+  { name: "CoinTribune", url: "https://www.cointribune.com/en/feed/", categoryHint: "trending" },
+  { name: "99Bitcoins", url: "https://99bitcoins.com/feed/", categoryHint: "bitcoin" },
+  { name: "r/solana", url: "https://www.reddit.com/r/solana/.rss", categoryHint: "solana" },
+  { name: "r/SolanaMemeCoins", url: "https://www.reddit.com/r/SolanaMemeCoins/.rss", categoryHint: "meme" },
+  { name: "r/Bitcoin", url: "https://www.reddit.com/r/Bitcoin/.rss", categoryHint: "bitcoin" },
+  { name: "r/CryptoCurrency", url: "https://www.reddit.com/r/CryptoCurrency/.rss", categoryHint: "trending" },
+  { name: "r/ethereum", url: "https://www.reddit.com/r/ethereum/.rss", categoryHint: "ethereum" },
+  { name: "r/defi", url: "https://www.reddit.com/r/defi/.rss", categoryHint: "defi" },
+  { name: "r/NFT", url: "https://www.reddit.com/r/NFT/.rss", categoryHint: "nft" },
+  { name: "r/CryptoMarkets", url: "https://www.reddit.com/r/CryptoMarkets/.rss", categoryHint: "market" },
+  { name: "r/altcoin", url: "https://www.reddit.com/r/altcoin/.rss", categoryHint: "trending" },
+  { name: "r/memecoins", url: "https://www.reddit.com/r/memecoins/.rss", categoryHint: "meme" },
+  { name: "r/SatoshiStreetBets", url: "https://www.reddit.com/r/SatoshiStreetBets/.rss", categoryHint: "viral" },
 ];
 
 const BULLISH_RE = /(surge|rally|soar|pump|breakout|ath|moon|bull|adopt|approve|inflow|gain|launch|record|jumps|climbs)/i;
@@ -88,7 +148,7 @@ function rankNews(items: CryptoNewsItem[]): CryptoNewsItem[] {
     .map((x) => x.item);
 }
 
-const NEWS_CACHE_KEY = "soltools.cryptoNews.cache.v1";
+const NEWS_CACHE_KEY = "soltools.cryptoNews.cache.v2";
 const NEWS_CACHE_TTL_MS = 1000 * 60 * 8;
 
 function decodeEntities(input: string): string {
@@ -129,10 +189,23 @@ function detectSentiment(text: string): NewsSentiment | null {
   return "neutral";
 }
 
+const SOLANA_RE = /(\bsolana\b|\bsol\b|\bspl\b|jupiter|jito|phantom|raydium|orca|magic eden|pump\.fun|bonk|wif|tensor|drift|marinade|kamino|metaplex|helius)/i;
+const BITCOIN_RE = /(\bbitcoin\b|\bbtc\b|satoshi|ordinals|brc-20|halving|mining|hashrate|lightning network)/i;
+const ETHEREUM_RE = /(\bethereum\b|\beth\b|vitalik|erc-?20|layer ?2|optimism|arbitrum|base chain|rollup)/i;
+const DEFI_RE = /(defi|liquidity|yield|lending|stablecoin|amm|swap|tvl|aave|uniswap|curve|maker)/i;
+const NFT_RE = /(\bnft\b|opensea|magic eden|tensor|mint(?:ing)? collection|pfp|jpegs?)/i;
+const MARKET_RE = /(price|etf|sec|fed|inflation|cpi|market cap|trading|chart|analysis|forecast|prediction|outlook)/i;
+
 function detectCategory(text: string, hint?: Exclude<NewsCategory, "all">): NewsCategory {
   if (KOL_RE.test(text)) return "kol";
   if (MEME_RE.test(text)) return "meme";
+  if (SOLANA_RE.test(text)) return "solana";
+  if (BITCOIN_RE.test(text)) return "bitcoin";
+  if (ETHEREUM_RE.test(text)) return "ethereum";
+  if (DEFI_RE.test(text)) return "defi";
+  if (NFT_RE.test(text)) return "nft";
   if (/(viral|trending|breaking|exclusive|leak)/i.test(text)) return "viral";
+  if (MARKET_RE.test(text)) return "market";
   return hint ?? "trending";
 }
 
@@ -207,7 +280,7 @@ async function writeCache(items: CryptoNewsItem[]): Promise<void> {
 }
 
 export async function fetchCryptoNewsFeed(params: NewsFeedParams = {}): Promise<CryptoNewsItem[]> {
-  const limit = params.limit ?? 60;
+  const limit = params.limit ?? 80;
   const cached = await readCache();
   const fresh = cached && Date.now() - cached.at < NEWS_CACHE_TTL_MS ? cached.items : null;
 
@@ -234,19 +307,32 @@ export async function fetchCryptoNewsFeed(params: NewsFeedParams = {}): Promise<
     if (merged.length) {
       const ranked = rankNews(merged);
       await writeCache(ranked);
-      return filterByCategory(ranked, params.category).slice(0, limit);
+      return applyFilters(ranked, params).slice(0, limit);
     }
-    if (cached?.items?.length) return filterByCategory(cached.items, params.category).slice(0, limit);
+    if (cached?.items?.length) return applyFilters(cached.items, params).slice(0, limit);
     return [];
   }
 
-  return filterByCategory(fresh, params.category).slice(0, limit);
+  return applyFilters(fresh, params).slice(0, limit);
+}
+
+function applyFilters(items: CryptoNewsItem[], params: NewsFeedParams): CryptoNewsItem[] {
+  return filterByTimeRange(filterByCategory(items, params.category), params.range);
 }
 
 function filterByCategory(items: CryptoNewsItem[], category?: NewsCategory): CryptoNewsItem[] {
   if (!category || category === "all") return items;
   return items.filter((i) => i.category === category);
 }
+
+function filterByTimeRange(items: CryptoNewsItem[], range?: NewsTimeRange): CryptoNewsItem[] {
+  if (!range || range === "all") return items;
+  const ms = range === "24h" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - ms;
+  return items.filter((i) => new Date(i.published_at).getTime() >= cutoff);
+}
+
+export function getActiveFeedCount(): number { return RSS_SOURCES.length; }
 
 const SAVED_KEY = "soltools.cryptoNews.saved.v1";
 

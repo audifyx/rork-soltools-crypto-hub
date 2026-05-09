@@ -1,7 +1,22 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
-import { ArrowLeft, Compass, Flame, Newspaper, RefreshCw, Sparkles, TrendingUp, Users } from "lucide-react-native";
+import {
+  ArrowLeft,
+  Bitcoin,
+  Coins,
+  Compass,
+  Flame,
+  Gem,
+  ImageIcon,
+  LineChart,
+  Newspaper,
+  RefreshCw,
+  Sparkles,
+  TrendingUp,
+  Users,
+  Zap,
+} from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -23,10 +38,12 @@ import CryptoNewsCard from "@/components/CryptoNewsCard";
 import Colors from "@/constants/colors";
 import {
   fetchCryptoNewsFeed,
+  getActiveFeedCount,
   getSavedNewsIds,
   toggleSavedNews,
   type CryptoNewsItem,
   type NewsCategory,
+  type NewsTimeRange,
 } from "@/lib/api/crypto-news";
 import {
   addSocialNewsComment,
@@ -46,15 +63,29 @@ interface CategoryTab {
 const CATEGORIES: CategoryTab[] = [
   { key: "all", label: "All", Icon: Compass, color: Colors.text },
   { key: "trending", label: "Trending", Icon: Flame, color: Colors.mint },
-  { key: "viral", label: "Viral", Icon: TrendingUp, color: Colors.cyan },
+  { key: "solana", label: "Solana", Icon: Zap, color: "#14F195" },
+  { key: "bitcoin", label: "Bitcoin", Icon: Bitcoin, color: "#F7931A" },
+  { key: "ethereum", label: "Ethereum", Icon: Gem, color: "#8AB4F8" },
+  { key: "defi", label: "DeFi", Icon: Coins, color: "#7AE7C7" },
+  { key: "nft", label: "NFT", Icon: ImageIcon, color: "#FF9DD2" },
   { key: "meme", label: "Meme", Icon: Sparkles, color: Colors.orange },
+  { key: "market", label: "Market", Icon: LineChart, color: Colors.cyan },
+  { key: "viral", label: "Viral", Icon: TrendingUp, color: Colors.cyan },
   { key: "kol", label: "KOL", Icon: Users, color: Colors.violet },
+];
+
+interface RangeTab { key: NewsTimeRange; label: string }
+const RANGES: RangeTab[] = [
+  { key: "24h", label: "Daily" },
+  { key: "7d", label: "Weekly" },
+  { key: "all", label: "All time" },
 ];
 
 export default function CryptoNewsScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const [category, setCategory] = useState<NewsCategory>("all");
+  const [range, setRange] = useState<NewsTimeRange>("24h");
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [repostedIds, setRepostedIds] = useState<Set<string>>(new Set());
@@ -64,9 +95,9 @@ export default function CryptoNewsScreen() {
   }, []);
 
   const newsQ = useQuery({
-    queryKey: ["crypto-news", category],
+    queryKey: ["crypto-news", category, range],
     queryFn: async () => {
-      const items = await fetchCryptoNewsFeed({ category, limit: 60 });
+      const items = await fetchCryptoNewsFeed({ category, range, limit: 80 });
       try {
         await upsertNewsSocialItems(items);
         const hydrated = await hydrateNewsSocialCounts(items);
@@ -175,6 +206,7 @@ export default function CryptoNewsScreen() {
             <Text style={styles.eyebrow}>Live signal</Text>
           </View>
           <Text style={styles.title}>Crypto Newswire</Text>
+          <Text style={styles.subtitle}>{getActiveFeedCount()} live feeds</Text>
         </View>
 
         <Pressable
@@ -185,6 +217,29 @@ export default function CryptoNewsScreen() {
         >
           <RefreshCw color={Colors.text} size={18} strokeWidth={2.4} />
         </Pressable>
+      </View>
+
+      <View style={styles.rangeWrap}>
+        {RANGES.map((r) => {
+          const active = range === r.key;
+          return (
+            <Pressable
+              key={r.key}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setRange(r.key);
+              }}
+              style={({ pressed }) => [
+                styles.rangeTab,
+                active && styles.rangeTabActive,
+                pressed && styles.btnPressed,
+              ]}
+              testID={`news-range-${r.key}`}
+            >
+              <Text style={[styles.rangeLabel, active && styles.rangeLabelActive]}>{r.label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       <View style={styles.tabsWrap}>
@@ -298,6 +353,48 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -0.3,
     marginTop: 2,
+  },
+  subtitle: {
+    color: Colors.muted,
+    fontSize: 10.5,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    marginTop: 2,
+    textTransform: "uppercase",
+  },
+  rangeWrap: {
+    flexDirection: "row",
+    marginHorizontal: 14,
+    marginBottom: 10,
+    padding: 4,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    gap: 4,
+  },
+  rangeTab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  rangeTabActive: {
+    backgroundColor: "rgba(0,255,180,0.14)",
+    shadowColor: Colors.mint,
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  rangeLabel: {
+    color: Colors.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  rangeLabelActive: {
+    color: Colors.mint,
   },
   tabsWrap: { paddingBottom: 8 },
   tabsContent: { paddingHorizontal: 14, gap: 8 },

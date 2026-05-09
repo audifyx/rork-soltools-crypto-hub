@@ -2,9 +2,14 @@ import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
 import {
   BadgeCheck,
+  Bitcoin,
   Bookmark,
+  Coins,
   Flame,
+  Gem,
   Heart,
+  ImageIcon,
+  LineChart,
   MessageCircle,
   MoreHorizontal,
   Repeat2,
@@ -13,6 +18,7 @@ import {
   TrendingDown,
   TrendingUp,
   Users,
+  Zap,
 } from "lucide-react-native";
 import React, { memo, useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -39,6 +45,12 @@ const CATEGORY_META: Record<Exclude<NewsCategory, "all">, { label: string; color
   meme: { label: "Meme", color: Colors.orange, Icon: Sparkles },
   viral: { label: "Viral", color: Colors.cyan, Icon: TrendingUp },
   kol: { label: "KOL", color: Colors.violet, Icon: Users },
+  solana: { label: "Solana", color: "#14F195", Icon: Zap },
+  bitcoin: { label: "Bitcoin", color: "#F7931A", Icon: Bitcoin },
+  ethereum: { label: "Ethereum", color: "#8AB4F8", Icon: Gem },
+  defi: { label: "DeFi", color: "#7AE7C7", Icon: Coins },
+  nft: { label: "NFT", color: "#FF9DD2", Icon: ImageIcon },
+  market: { label: "Market", color: Colors.cyan, Icon: LineChart },
 };
 
 const AVATAR_PALETTE = [["#D8B75A", "#8C6F2F"],["#F4C65B", "#A77A37"],["#DDE3EC", "#6E7686"],["#AEB6C3", "#4C5360"],["#E2C98B", "#8C6F2F"]];
