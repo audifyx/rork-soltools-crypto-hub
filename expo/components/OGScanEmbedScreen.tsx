@@ -10,7 +10,7 @@ import type { WebView as WebViewType } from "react-native-webview";
 
 import Colors from "@/constants/colors";
 
-export const OGSCAN_BASE_URL = "https://ogscan.fun";
+export const OGSCAN_BASE_URL = "https://www.ogscan.fun";
 
 export type OGScanEmbedProps = {
   title: string;

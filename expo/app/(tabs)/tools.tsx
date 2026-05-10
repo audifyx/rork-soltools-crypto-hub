@@ -1247,7 +1247,7 @@ function OGStandaloneToolGrid({ tools, onOpen }: { tools: OGWebTool[]; onOpen: (
                   <Text style={styles.ogEmbedPage}>PAGE {tool.page}</Text>
                 </View>
                 <Text style={styles.ogEmbedDesc} numberOfLines={2}>{tool.description}</Text>
-                <Text style={styles.ogEmbedPath} numberOfLines={1}>ogscan.fun{tool.path}</Text>
+                <Text style={styles.ogEmbedPath} numberOfLines={1}>www.ogscan.fun{tool.path}</Text>
               </View>
               <ChevronRight color={Colors.muted} size={17} strokeWidth={2.6} />
             </Pressable>
