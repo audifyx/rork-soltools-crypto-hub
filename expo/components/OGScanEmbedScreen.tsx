@@ -30,6 +30,21 @@ export default function OGScanEmbedScreen({ title, path, subtitle, showBack = tr
   const webRef = useRef<WebViewType>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const url = useMemo<string>(() => buildOgScanUrl(path), [path]);
+  const webViewUrl = OGSCAN_BASE_URL;
+  const routeBootstrapScript = useMemo<string>(() => {
+    const escapedPath = JSON.stringify(path.startsWith("/") ? path : `/${path}`);
+    return `
+      (function() {
+        try {
+          var targetPath = ${escapedPath};
+          if (window.location.pathname !== targetPath) {
+            window.history.replaceState(null, '', targetPath);
+          }
+        } catch (e) {}
+      })();
+      true;
+    `;
+  }, [path]);
 
   const onOpenExternal = useCallback(() => {
     WebBrowser.openBrowserAsync(url).catch((error: unknown) => console.log("[ogscan] open external failed", error));
@@ -75,8 +90,9 @@ export default function OGScanEmbedScreen({ title, path, subtitle, showBack = tr
           ) : null}
           <WebView
             ref={webRef}
-            source={{ uri: url }}
+            source={{ uri: webViewUrl }}
             style={styles.web}
+            injectedJavaScriptBeforeContentLoaded={routeBootstrapScript}
             originWhitelist={["*"]}
             javaScriptEnabled
             domStorageEnabled
