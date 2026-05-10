@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { getNewSolanaPairs, type DexPair } from "@/lib/api/dexscreener";
+import { fmtPrice, fmtUsd } from "@/utils/format";
 
 type LiveTrendingItem = {
   address: string;
@@ -23,6 +24,7 @@ type LiveTrendingItem = {
   priceUsd: number | null;
   change24h: number | null;
   volume24h: number | null;
+  marketCapUsd: number | null;
 };
 
 function pairToItem(pair: DexPair): LiveTrendingItem {
@@ -33,22 +35,10 @@ function pairToItem(pair: DexPair): LiveTrendingItem {
     priceUsd: pair.priceUsd ? Number(pair.priceUsd) : null,
     change24h: typeof pair.priceChange?.h24 === "number" ? pair.priceChange.h24 : null,
     volume24h: pair.volume?.h24 ?? null,
+    marketCapUsd: pair.marketCap ?? pair.fdv ?? null,
   };
 }
 
-function fmtPrice(v: number | null): string {
-  if (v == null || !isFinite(v)) return "—";
-  if (v >= 1) return `$${v.toFixed(2)}`;
-  if (v >= 0.01) return `$${v.toFixed(4)}`;
-  return `$${v.toExponential(2)}`;
-}
-
-function fmtVol(v: number | null): string {
-  if (v == null || !isFinite(v)) return "—";
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
-  return `${v.toFixed(0)}`;
-}
 
 function OGScanLiveStripImpl() {
   const router = useRouter();
@@ -151,7 +141,7 @@ function OGScanLiveStripImpl() {
                       {it.change24h == null ? "—" : `${up ? "+" : ""}${it.change24h.toFixed(1)}%`}
                     </Text>
                   </View>
-                  <Text style={styles.vol}>V {fmtVol(it.volume24h)}</Text>
+                  <Text style={styles.vol}>MC {fmtUsd(it.marketCapUsd)} · V {fmtUsd(it.volume24h)}</Text>
                 </View>
               </Pressable>
             );

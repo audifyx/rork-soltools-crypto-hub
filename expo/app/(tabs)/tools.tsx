@@ -71,6 +71,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import AppBackground from "@/components/ui/AppBackground";
 import OGScanLiveStrip from "@/components/discover/OGScanLiveStrip";
 import Colors from "@/constants/colors";
+import { fmtPrice, fmtUsd } from "@/utils/format";
 import { fetchDexToken, getNewSolanaPairs, searchSolanaPairs, type DexPair, type DexTokenSnapshot } from "@/lib/api/dexscreener";
 import { getQuote } from "@/lib/api/jupiter";
 import {
@@ -1282,8 +1283,8 @@ function OGScanMobileCommandCenter({
       </View>
 
       <View style={styles.liveStatsRow}>
-        <StatTile label="Price" value={snap?.priceUsd ? `${snap.priceUsd.toPrecision(4)}` : selectedToken.isFetching ? "sync…" : "—"} accent={Colors.mint} Icon={Gauge} />
-        <StatTile label="Liquidity" value={snap?.liquidityUsd ? `${Math.round(snap.liquidityUsd).toLocaleString()}` : "—"} accent={Colors.cyan} Icon={Droplets} />
+        <StatTile label="Price" value={snap?.priceUsd != null ? fmtPrice(snap.priceUsd) : selectedToken.isFetching ? "sync…" : "—"} accent={Colors.mint} Icon={Gauge} />
+        <StatTile label="Market cap" value={snap?.marketCapUsd != null ? fmtUsd(snap.marketCapUsd) : selectedToken.isFetching ? "sync…" : "—"} accent={Colors.cyan} Icon={Droplets} />
         <StatTile label="Live pairs" value={livePairs.isFetching && pairCount === 0 ? "sync…" : String(pairCount)} accent={Colors.goldBright} Icon={Radar} />
       </View>
 
