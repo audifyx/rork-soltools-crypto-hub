@@ -1,0 +1,1 @@
+export const FREE_MONTHLY_CREDIT_LIMIT = 10000;
