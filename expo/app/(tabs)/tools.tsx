@@ -54,6 +54,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   Easing,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -644,13 +645,35 @@ const ALL_TOOLS: Tool[] = [
 const RECENT_KEY = "tools.recent.v1";
 const MAX_RECENT = 5;
 
+const OGSCAN_TOKEN_MINT = "EfnZmcFKMXofKA5V5ujvjqtSorvuQD2MzJPz3dxXpump";
+const OGSCAN_DEV_WALLET = "CicbPxARTDrwQ4XcxWsn6SYeG4FMJHirS633cZUJeQDh";
+const OGSCAN_STATE_KEY = "ogscan.mobile.state.v1";
+
 type RecentItem = { id: string; ts: number };
+type OgScanSection = "home" | "scan" | "live" | "watch" | "more";
+type OgScanAppState = {
+  selectedMint: string;
+  watchedMints: string[];
+  watchedDevs: string[];
+  recentSearches: string[];
+  activeChain: "solana";
+};
+
+const DEFAULT_OGSCAN_STATE: OgScanAppState = {
+  selectedMint: OGSCAN_TOKEN_MINT,
+  watchedMints: [OGSCAN_TOKEN_MINT],
+  watchedDevs: [OGSCAN_DEV_WALLET],
+  recentSearches: ["OGScan", OGSCAN_TOKEN_MINT],
+  activeChain: "solana",
+};
 
 export default function ToolsScreen() {
   const router = useRouter();
   const [query, setQuery] = useState<string>("");
   const [scan, setScan] = useState<string>("");
   const [recent, setRecent] = useState<RecentItem[]>([]);
+  const [ogSection, setOgSection] = useState<OgScanSection>("home");
+  const [ogState, setOgState] = useState<OgScanAppState>(DEFAULT_OGSCAN_STATE);
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -665,7 +688,31 @@ export default function ToolsScreen() {
         }
       })
       .catch((e) => console.log("[tools] read recent error", e));
+
+    AsyncStorage.getItem(OGSCAN_STATE_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw) as Partial<OgScanAppState>;
+          setOgState({
+            ...DEFAULT_OGSCAN_STATE,
+            ...parsed,
+            activeChain: "solana",
+            selectedMint: parsed.selectedMint ?? OGSCAN_TOKEN_MINT,
+            watchedMints: Array.isArray(parsed.watchedMints) ? parsed.watchedMints : DEFAULT_OGSCAN_STATE.watchedMints,
+            watchedDevs: Array.isArray(parsed.watchedDevs) ? parsed.watchedDevs : DEFAULT_OGSCAN_STATE.watchedDevs,
+            recentSearches: Array.isArray(parsed.recentSearches) ? parsed.recentSearches : DEFAULT_OGSCAN_STATE.recentSearches,
+          });
+        } catch (e) {
+          console.log("[ogscan] parse persisted state error", e);
+        }
+      })
+      .catch((e) => console.log("[ogscan] read persisted state error", e));
   }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(OGSCAN_STATE_KEY, JSON.stringify(ogState)).catch((e) => console.log("[ogscan] persist state error", e));
+  }, [ogState]);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -747,6 +794,26 @@ export default function ToolsScreen() {
     setScan("");
   }, [scan, pushRecent, router]);
 
+  const selectOgMint = useCallback((mint: string) => {
+    const normalized = mint.trim() || OGSCAN_TOKEN_MINT;
+    setOgState((prev) => ({
+      ...prev,
+      selectedMint: normalized,
+      watchedMints: prev.watchedMints.includes(normalized) ? prev.watchedMints : [normalized, ...prev.watchedMints].slice(0, 25),
+      recentSearches: [normalized, ...prev.recentSearches.filter((item) => item !== normalized)].slice(0, 12),
+    }));
+  }, []);
+
+  const selectOgDev = useCallback((wallet: string) => {
+    const normalized = wallet.trim() || OGSCAN_DEV_WALLET;
+    setOgState((prev) => ({
+      ...prev,
+      watchedDevs: prev.watchedDevs.includes(normalized) ? prev.watchedDevs : [normalized, ...prev.watchedDevs].slice(0, 25),
+      recentSearches: [normalized, ...prev.recentSearches.filter((item) => item !== normalized)].slice(0, 12),
+    }));
+    setOgSection("watch");
+  }, []);
+
   const onPasteScan = useCallback(async () => {
     try {
       const t = await Clipboard.getStringAsync();
@@ -797,6 +864,15 @@ export default function ToolsScreen() {
           </View>
 
           <OGScanLiveStrip />
+
+          <OGScanMobileCommandCenter
+            activeSection={ogSection}
+            appState={ogState}
+            onSectionChange={setOgSection}
+            onSelectMint={selectOgMint}
+            onSelectDev={selectOgDev}
+            onOpen={onOpen}
+          />
 
           <OGTerminalHero
             scan={scan}
@@ -1161,6 +1237,115 @@ function WalletIntelligenceRail({ onOpen }: { onOpen: (route: string, id?: strin
   return <Pressable onPress={() => onOpen("/tool/wallet-tracker", "wallet-tracker")} style={styles.walletRail}><LinearGradient colors={["rgba(244,198,91,0.20)", "rgba(0,255,178,0.08)"]} style={StyleSheet.absoluteFill} /><Wallet color={Colors.goldBright} size={24} /><View style={{ flex: 1 }}><Text style={styles.walletRailTitle}>Connected wallet intelligence</Text><Text style={styles.walletRailSub}>Realized PnL, recurring wallets, labels, conviction tracking and token click-throughs.</Text></View><ChevronRight color={Colors.goldBright} size={18} /></Pressable>;
 }
 
+const OG_TABS: { key: OgScanSection; label: string; Icon: LucideIcon }[] = [
+  { key: "home", label: "Home", Icon: Home },
+  { key: "scan", label: "Scan", Icon: ScanLine },
+  { key: "live", label: "Live", Icon: Activity },
+  { key: "watch", label: "Watch", Icon: Eye },
+  { key: "more", label: "More", Icon: Layers },
+];
+
+const OG_FEATURES = {
+  scan: [
+    { title: "Token Scanner", body: "Liquidity, market cap, holders, verification, price, audit status.", route: "/tool/token-lookup", Icon: ScanLine, accent: Colors.cyan },
+    { title: "OG Finder", body: "Original vs copycats ranked by liquidity, age, holders and organic score.", route: "/tool/og-finder", Icon: Crosshair, accent: Colors.mint },
+    { title: "Market Pulse", body: "Price, volume, traders, holder growth, chart preview and risk flags.", route: "/tool/token-lookup", Icon: Gauge, accent: Colors.goldBright },
+    { title: "Launch Analyzer", body: "Fresh launches, snipers, dev inference, launch heat and rug probability.", route: "/tool/launch-analyzer", Icon: Flame, accent: Colors.orange },
+  ],
+  live: [
+    { title: "Snipe Feed", body: "Fresh boosts, hot launches, risky pools and score-ranked runners.", route: "/tool/snipe-feed", Icon: Radar, accent: Colors.mint },
+    { title: "Trending", body: "5m, 1h, 6h and 24h rankings by txns, volume, boosts and buy ratio.", route: "/tool/trending", Icon: TrendingUp, accent: Colors.cyan },
+    { title: "New Pair Radar", body: "DexScreener launches, migrations and liquidity movement.", route: "/tool/new-pairs", Icon: Route, accent: Colors.goldBright },
+    { title: "Transaction Tape", body: "Buys, sells, transfers, swaps and signatures with live polling.", route: "/tool/transaction-tape", Icon: Repeat, accent: Colors.violet },
+  ],
+  watch: [
+    { title: "Watchlist", body: "Watched tokens, devs, alerts and hot activity in one saved state.", route: "/tool/watchlist", Icon: Eye, accent: Colors.mint },
+    { title: "Dev Wallet Intel", body: "Launch history, linked wallets, funding wallets, rugs and wallet score.", route: "/tool/dev-wallet-tracker", Icon: Network, accent: Colors.rose },
+    { title: "Whales", body: "Top holders, concentration, holder distribution and whale warnings.", route: "/tool/whale-tracker", Icon: Waves, accent: Colors.cyan },
+    { title: "Alerts Center", body: "Watched dev launches, whale concentration and high-tx triggers.", route: "/tool/price-alerts", Icon: BellRing, accent: Colors.goldBright },
+  ],
+  more: [
+    { title: "Our Coin", body: "Official OGScan CA, dev wallet and community links.", route: "/tool/token-lookup", Icon: Coins, accent: Colors.mint },
+    { title: "Swap Quote", body: "Jupiter quote surface for selected mint with safety-mode routing.", route: "/wallet", Icon: Scale, accent: Colors.cyan },
+    { title: "SolTools Roadmap", body: "Community, tools, launch intelligence and multi-chain expansion.", route: "/communities", Icon: Route, accent: Colors.goldBright },
+    { title: "API Status", body: "Jupiter, DexScreener, Helius, Birdeye and Supabase surfaces.", route: "/tool/api-status", Icon: Activity, accent: Colors.violet },
+  ],
+} as const;
+
+function OGScanMobileCommandCenter({
+  activeSection,
+  appState,
+  onSectionChange,
+  onSelectMint,
+  onSelectDev,
+  onOpen,
+}: {
+  activeSection: OgScanSection;
+  appState: OgScanAppState;
+  onSectionChange: (section: OgScanSection) => void;
+  onSelectMint: (mint: string) => void;
+  onSelectDev: (wallet: string) => void;
+  onOpen: (route: string, id?: string) => void;
+}) {
+  const shortMint = `${appState.selectedMint.slice(0, 5)}…${appState.selectedMint.slice(-5)}`;
+  const openDex = useCallback(() => {
+    Linking.openURL(`https://dexscreener.com/solana/${appState.selectedMint}`).catch((e) => console.log("[ogscan] open dex error", e));
+  }, [appState.selectedMint]);
+  const copyMint = useCallback(() => {
+    Clipboard.setStringAsync(appState.selectedMint).catch((e) => console.log("[ogscan] copy ca error", e));
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }, [appState.selectedMint]);
+
+  const cards = activeSection === "home" ? [...OG_FEATURES.scan.slice(0, 2), ...OG_FEATURES.live.slice(0, 2)] : OG_FEATURES[activeSection];
+
+  return (
+    <View style={styles.mobileShell} testID="ogscan-mobile-command-center">
+      <LinearGradient colors={["rgba(98,208,255,0.14)", "rgba(0,255,178,0.08)", "rgba(0,0,0,0)"]} style={StyleSheet.absoluteFill} />
+      <View style={styles.mobileTopline}>
+        <Text style={styles.mobileEyebrow}>OGSCAN MOBILE APP</Text>
+        <Text style={styles.mobileChain}>SOLANA · SAVED STATE</Text>
+      </View>
+      <Text style={styles.mobileTitle}>Native command center, not a tools list.</Text>
+      <Text style={styles.mobileCopy}>Bottom-tab product map for token scans, live launch radar, wallet/dev watch, whales, swap quotes and OGScan community systems.</Text>
+
+      <View style={styles.mintPanel}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.mintLabel}>ACTIVE MINT</Text>
+          <Text style={styles.mintValue}>{shortMint}</Text>
+          <Text style={styles.mintSub}>Official OGScan token is loaded by default.</Text>
+        </View>
+        <Pressable onPress={() => onSelectMint(OGSCAN_TOKEN_MINT)} style={styles.mintButton}><Text style={styles.mintButtonText}>Use OG</Text></Pressable>
+      </View>
+
+      <View style={styles.mobileTabs}>
+        {OG_TABS.map((tab) => {
+          const active = activeSection === tab.key;
+          return <Pressable key={tab.key} onPress={() => onSectionChange(tab.key)} style={[styles.mobileTab, active && styles.mobileTabActive]}><tab.Icon color={active ? Colors.ink : Colors.muted} size={14} strokeWidth={3} /><Text style={[styles.mobileTabText, active && styles.mobileTabTextActive]}>{tab.label}</Text></Pressable>;
+        })}
+      </View>
+
+      <View style={styles.actionMatrix}>
+        <Pressable onPress={() => onOpen("/tool/token-lookup", "token-lookup")} style={styles.matrixBtn}><Text style={styles.matrixText}>Open Scanner</Text></Pressable>
+        <Pressable onPress={() => onOpen("/tool/whale-tracker", "whale-tracker")} style={styles.matrixBtn}><Text style={styles.matrixText}>Open Whales</Text></Pressable>
+        <Pressable onPress={() => onOpen("/tool/transaction-tape", "transaction-tape")} style={styles.matrixBtn}><Text style={styles.matrixText}>Tx Tape</Text></Pressable>
+        <Pressable onPress={copyMint} style={styles.matrixBtn}><Text style={styles.matrixText}>Copy CA</Text></Pressable>
+        <Pressable onPress={openDex} style={styles.matrixBtnWide}><Text style={styles.matrixTextAccent}>Open DexScreener</Text></Pressable>
+      </View>
+
+      <View style={styles.mobileCardGrid}>
+        {cards.map((card) => <Pressable key={card.title} onPress={() => onOpen(card.route, card.title.toLowerCase().replace(/\s+/g, "-"))} style={[styles.mobileToolCard, { borderColor: `${card.accent}44` }]}><card.Icon color={card.accent} size={21} strokeWidth={2.8} /><Text style={styles.mobileToolTitle}>{card.title}</Text><Text style={styles.mobileToolBody}>{card.body}</Text><Text style={[styles.mobileToolOpen, { color: card.accent }]}>Open full-screen tool →</Text></Pressable>)}
+      </View>
+
+      {activeSection === "watch" ? <Pressable onPress={() => onSelectDev(OGSCAN_DEV_WALLET)} style={styles.devIntel}><Network color={Colors.rose} size={18} /><View style={{ flex: 1 }}><Text style={styles.devIntelTitle}>Official dev wallet ready</Text><Text style={styles.devIntelBody}>{`${OGSCAN_DEV_WALLET.slice(0, 6)}…${OGSCAN_DEV_WALLET.slice(-6)}`} · tap to watch/unwatch and open dev intel.</Text></View></Pressable> : null}
+
+      <View style={styles.savedRail}>
+        <Text style={styles.savedTitle}>Saved mobile state</Text>
+        <Text style={styles.savedBody}>{appState.watchedMints.length} watched mints · {appState.watchedDevs.length} watched devs · {appState.recentSearches.length} recent searches</Text>
+      </View>
+    </View>
+  );
+}
+
 function StatTile({
   label,
   value,
@@ -1397,6 +1582,39 @@ const styles = StyleSheet.create({
   walletRail: { marginTop: 18, padding: 16, borderRadius: 22, borderWidth: 1, borderColor: "rgba(244,198,91,0.25)", backgroundColor: Colors.card, flexDirection: "row", alignItems: "center", gap: 12, overflow: "hidden" },
   walletRailTitle: { color: Colors.text, fontSize: 15, fontWeight: "900" },
   walletRailSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", lineHeight: 16, marginTop: 3 },
+  mobileShell: { marginTop: 16, padding: 16, borderRadius: 28, borderWidth: 1, borderColor: "rgba(98,208,255,0.22)", backgroundColor: "rgba(2,6,12,0.94)", overflow: "hidden" },
+  mobileTopline: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  mobileEyebrow: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.3 },
+  mobileChain: { color: Colors.goldBright, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  mobileTitle: { color: Colors.text, fontSize: 25, fontWeight: "900", letterSpacing: -0.8, lineHeight: 29, marginTop: 12 },
+  mobileCopy: { color: Colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 18, marginTop: 6 },
+  mintPanel: { marginTop: 14, padding: 13, borderRadius: 18, borderWidth: 1, borderColor: "rgba(98,208,255,0.18)", backgroundColor: "rgba(255,255,255,0.045)", flexDirection: "row", alignItems: "center", gap: 10 },
+  mintLabel: { color: Colors.muted2, fontSize: 9, fontWeight: "900", letterSpacing: 1.1 },
+  mintValue: { color: Colors.text, fontSize: 17, fontWeight: "900", marginTop: 2 },
+  mintSub: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 3 },
+  mintButton: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12, backgroundColor: Colors.mint },
+  mintButtonText: { color: Colors.ink, fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+  mobileTabs: { flexDirection: "row", gap: 6, marginTop: 14, padding: 5, borderRadius: 18, backgroundColor: "rgba(0,0,0,0.35)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  mobileTab: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, paddingVertical: 8, borderRadius: 14 },
+  mobileTabActive: { backgroundColor: Colors.mint },
+  mobileTabText: { color: Colors.muted, fontSize: 8.5, fontWeight: "900" },
+  mobileTabTextActive: { color: Colors.ink },
+  actionMatrix: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 },
+  matrixBtn: { width: "48%", paddingVertical: 10, paddingHorizontal: 10, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
+  matrixBtnWide: { width: "98%", paddingVertical: 11, paddingHorizontal: 10, borderRadius: 14, backgroundColor: "rgba(98,208,255,0.10)", borderWidth: 1, borderColor: "rgba(98,208,255,0.26)" },
+  matrixText: { color: Colors.text, fontSize: 11, fontWeight: "900", textAlign: "center" },
+  matrixTextAccent: { color: Colors.cyan, fontSize: 11, fontWeight: "900", textAlign: "center" },
+  mobileCardGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 },
+  mobileToolCard: { width: "48%", minHeight: 154, padding: 13, borderRadius: 19, borderWidth: 1, backgroundColor: "rgba(7,12,20,0.94)" },
+  mobileToolTitle: { color: Colors.text, fontSize: 13, fontWeight: "900", marginTop: 9 },
+  mobileToolBody: { color: Colors.muted, fontSize: 10.5, fontWeight: "700", lineHeight: 15, marginTop: 5 },
+  mobileToolOpen: { fontSize: 10, fontWeight: "900", marginTop: "auto" },
+  devIntel: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 10, padding: 13, borderRadius: 18, borderWidth: 1, borderColor: "rgba(230,242,255,0.20)", backgroundColor: "rgba(230,242,255,0.07)" },
+  devIntelTitle: { color: Colors.text, fontSize: 13, fontWeight: "900" },
+  devIntelBody: { color: Colors.muted, fontSize: 10.5, fontWeight: "700", lineHeight: 15, marginTop: 2 },
+  savedRail: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
+  savedTitle: { color: Colors.text, fontSize: 12, fontWeight: "900" },
+  savedBody: { color: Colors.muted, fontSize: 10.5, fontWeight: "700", marginTop: 3 },
   legacyHero: { opacity: 0.72 },
 
   hero: {
