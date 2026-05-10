@@ -546,6 +546,33 @@ const TOOLS: Tool[] = [
     Icon: Eye, accent: Colors.mint, glow: "rgba(255,255,255,0.14)",
     gradient: [Colors.mint, Colors.cyan], tags: ["Portfolio", "Merge"], status: "NEW", category: "wallet",
   },
+  {
+    id: "smart-money-feed",
+    route: "/tool/smart-money-feed",
+    name: "Smart Money Feed",
+    tagline: "Whales, exits, conviction entries",
+    description: "Realtime feed for whale buys/sells, smart wallet entries, recurring wallets, accumulation waves and major movements.",
+    Icon: Radar, accent: Colors.cyan, glow: "rgba(229,231,235,0.14)",
+    gradient: [Colors.cyan, Colors.mint], tags: ["Whales", "Live", "Flow"], status: "LIVE", category: "wallet",
+  },
+  {
+    id: "dev-wallet-tracker",
+    route: "/tool/dev-wallet-tracker",
+    name: "Dev Wallet Tracker",
+    tagline: "Deployer clusters and rug history",
+    description: "Track deployers, linked wallets, funding wallets, sniper wallets, connected launches, risk score and developer history.",
+    Icon: Network, accent: Colors.rose, glow: "rgba(244,244,245,0.12)",
+    gradient: [Colors.rose, Colors.orange], tags: ["Dev", "Clusters", "Risk"], status: "LIVE", category: "risk",
+  },
+  {
+    id: "narrative-engine",
+    route: "/tool/narrative-engine",
+    name: "Narrative Engine",
+    tagline: "KOL, meme, AI and macro catalysts",
+    description: "Score social acceleration, KOL mentions, political catalysts, AI narratives, Solana ecosystem trends and momentum shifts.",
+    Icon: Brain, accent: Colors.violet, glow: "rgba(184,190,200,0.14)",
+    gradient: [Colors.violet, Colors.cyan], tags: ["KOL", "Narrative", "AI"], status: "LIVE", category: "analysis",
+  },
 ];
 
 function moduleStatusToToolStatus(status: SolToolsModuleStatus): Tool["status"] {

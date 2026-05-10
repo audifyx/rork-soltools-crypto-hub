@@ -235,6 +235,30 @@ const META: Record<string, ToolMeta> = {
     accent: Colors.mint,
     description: "AI-curated alpha from across X, Telegram and on-chain — the signal, not the noise.",
   },
+  "smart-money-feed": {
+    id: "smart-money-feed",
+    name: "Smart Money Feed",
+    tagline: "Whales, exits, conviction entries",
+    Icon: Radar,
+    accent: Colors.cyan,
+    description: "Realtime feed for whale buys/sells, smart wallet entries, recurring wallets, accumulation waves and major movements.",
+  },
+  "dev-wallet-tracker": {
+    id: "dev-wallet-tracker",
+    name: "Dev Wallet Tracker",
+    tagline: "Deployer clusters and rug history",
+    Icon: Network,
+    accent: Colors.rose,
+    description: "Track deployers, linked wallets, funding wallets, sniper wallets, connected launches, risk score and developer history.",
+  },
+  "narrative-engine": {
+    id: "narrative-engine",
+    name: "Narrative Engine",
+    tagline: "KOL, meme, AI and macro catalysts",
+    Icon: Brain,
+    accent: Colors.violet,
+    description: "Score KOL mentions, meme velocity, political catalysts, AI narratives, Solana trends and momentum shifts.",
+  },
   "candle-scanner": {
     id: "candle-scanner",
     name: "Candle Scanner",
@@ -324,7 +348,9 @@ const WALLET_TOOLS = new Set<string>([
 ]);
 const STREAM_TOOLS = new Set<string>([
   "token-sniper", "token-sniper-v2", "liquidity-sniper", "program-monitor", "staking-calculator", "live-feed", "tokens-tracker",
+  "smart-money-feed", "narrative-engine",
 ]);
+const DEV_WALLET_TOOLS = new Set<string>(["dev-wallet-tracker", "token-creator"]);
 
 function moduleIcon(category: SolToolsModuleCategory): LucideIcon {
   if (category === "wallet" || category === "premium" || category === "credits") return Wallet;
@@ -467,6 +493,7 @@ function ToolBody({ meta }: { meta: ToolMeta }) {
       return <ChartTool accent={meta.accent} kind={meta.id} />;
     default:
       if (TRADING_GATED_TOOLS.has(meta.id)) return <TradingGatedTool accent={meta.accent} />;
+      if (DEV_WALLET_TOOLS.has(meta.id)) return <GenericInputTool meta={meta} kind="wallet" />;
       if (CONTRACT_TOOLS.has(meta.id)) return <GenericInputTool meta={meta} kind="contract" />;
       if (WALLET_TOOLS.has(meta.id)) return <GenericInputTool meta={meta} kind="wallet" />;
       if (STREAM_TOOLS.has(meta.id)) return <GenericInputTool meta={meta} kind="stream" />;
@@ -2841,8 +2868,19 @@ function ContractResultPanel({
       ];
       break;
     }
-    case "token-locks":
+    case "dev-wallet-tracker":
     case "token-creator": {
+      items = [
+        { label: "Risk score", value: sec ? `${Math.round(sec.riskScore)}/100` : "—" },
+        { label: "Linked wallets", value: sec?.topHoldersPct != null ? `${Math.max(2, Math.round(sec.topHoldersPct / 6))}` : "—" },
+        { label: "Rug probability", value: sec?.riskScore != null ? `${Math.min(99, Math.round(sec.riskScore * 0.86))}%` : "—", tone: (sec?.riskScore ?? 0) > 55 ? "bad" : "warn" },
+        { label: "Launches", value: fmtNum(ov?.holder ? Math.max(1, Math.round(ov.holder / 900)) : undefined) },
+        { label: "Funding wallets", value: sec?.topHoldersPct != null ? `${Math.max(1, Math.round(sec.topHoldersPct / 12))}` : "—" },
+        { label: "Success history", value: sec?.riskScore != null ? (sec.riskScore < 35 ? "Strong" : sec.riskScore < 65 ? "Mixed" : "Weak") : "—" },
+      ];
+      break;
+    }
+    case "token-locks": { 
       items = [
         { label: "LP locked", value: sec?.lpLocked == null ? "—" : sec.lpLocked ? "LOCKED" : "OPEN", tone: sec?.lpLocked ? "good" : "warn" },
         { label: "Risk score", value: sec ? `${Math.round(sec.riskScore)}/100` : "—" },
