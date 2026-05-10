@@ -641,10 +641,29 @@ function moduleToTool(module: SolToolsModuleSpec): Tool {
   };
 }
 
-const ALL_TOOLS: Tool[] = [
-  ...TOOLS,
-  ...SOLTOOLS_PLATFORM_MODULES.filter((module) => !TOOLS.some((tool) => tool.id === module.id)).map(moduleToTool),
-];
+const CORE_TOOLS: Tool[] = [
+  TOOLS.find((tool) => tool.id === "token-lookup"),
+  TOOLS.find((tool) => tool.id === "wallet-tracker"),
+  TOOLS.find((tool) => tool.id === "dev-wallet-tracker"),
+  TOOLS.find((tool) => tool.id === "narrative-engine"),
+  TOOLS.find((tool) => tool.id === "smart-money-feed"),
+  {
+    id: "admin-dashboard",
+    route: "/admin",
+    name: "Admin Dashboard",
+    tagline: "Manage users, feeds, tools, and platform ops",
+    description: "Core operator dashboard for moderation, platform checks, live data controls, and admin-only workflows.",
+    Icon: Shield,
+    accent: Colors.goldBright,
+    glow: "rgba(244,198,91,0.18)",
+    gradient: [Colors.goldBright, Colors.orange],
+    tags: ["Admin", "Ops", "Live"],
+    status: "LIVE",
+    category: "platform",
+  },
+].filter((tool): tool is Tool => Boolean(tool));
+
+const ALL_TOOLS: Tool[] = CORE_TOOLS;
 
 const RECENT_KEY = "tools.recent.v1";
 const MAX_RECENT = 5;
@@ -813,8 +832,6 @@ export default function ToolsScreen() {
   }, [recent]);
 
   const featured = ALL_TOOLS[0];
-  const liveModuleCount = getSolToolsModulesByStatus("live").length;
-  const betaModuleCount = getSolToolsModulesByStatus("beta").length;
 
   const handleScanSubmit = useCallback(() => {
     const v = scan.trim();
@@ -896,11 +913,6 @@ export default function ToolsScreen() {
 
           <OGScanLiveStrip />
 
-          <OGStandaloneToolGrid
-            tools={OG_WEB_TOOLS}
-            onOpen={(slug) => router.push({ pathname: "/ogscan/[slug]", params: { slug } } as never)}
-          />
-
           <OGScanMobileCommandCenter
             activeSection={ogSection}
             appState={ogState}
@@ -917,167 +929,6 @@ export default function ToolsScreen() {
             onPaste={onPasteScan}
             onOpen={onOpen}
           />
-
-          <LiveScannerGrid onOpen={onOpen} />
-
-          <SmartMoneyPanel onOpen={onOpen} />
-
-          <NarrativeRankings />
-
-          <WalletIntelligenceRail onOpen={onOpen} />
-
-          <Pressable
-            onPress={() => onOpen(featured.route, featured.id)}
-            style={[styles.hero, styles.legacyHero]}
-            testID="tools-hero"
-          >
-            <LinearGradient
-              colors={[`${featured.accent}38`, `${featured.gradient[1]}1A`, "rgba(3,7,8,0.0)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.heroTopRow}>
-              <View style={styles.heroBadge}>
-                <Sparkles color={Colors.mint} size={11} strokeWidth={3} />
-                <Text style={styles.heroBadgeText}>CLASSIC TOOL DECK</Text>
-              </View>
-              <View style={styles.heroLive}>
-                <View style={styles.heroLiveDot} />
-                <Text style={styles.heroLiveText}>LIVE</Text>
-              </View>
-            </View>
-
-            <View style={styles.heroBody}>
-              <LinearGradient
-                colors={featured.gradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.heroIcon}
-              >
-                <featured.Icon color={Colors.ink} size={28} strokeWidth={2.6} />
-              </LinearGradient>
-              <View style={styles.heroText}>
-                <Text style={styles.heroName}>{featured.name}</Text>
-                <Text style={styles.heroTag}>{featured.tagline}</Text>
-              </View>
-            </View>
-
-            <View style={styles.scanRow}>
-              <ScanLine color={Colors.muted} size={16} strokeWidth={2.6} />
-              <TextInput
-                value={scan}
-                onChangeText={setScan}
-                placeholder="Paste any Solana contract to scan…"
-                placeholderTextColor={Colors.muted}
-                style={styles.scanInput}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-                onSubmitEditing={handleScanSubmit}
-                testID="tools-scan-input"
-              />
-              {scan.length > 0 ? (
-                <Pressable
-                  onPress={handleScanSubmit}
-                  style={styles.scanSubmit}
-                  testID="tools-scan-submit"
-                >
-                  <ArrowRight color={Colors.ink} size={14} strokeWidth={3} />
-                </Pressable>
-              ) : (
-                <Pressable
-                  onPress={onPasteScan}
-                  style={styles.scanPaste}
-                  testID="tools-scan-paste"
-                >
-                  <ClipboardIcon color={Colors.text} size={13} strokeWidth={2.6} />
-                  <Text style={styles.scanPasteText}>Paste</Text>
-                </Pressable>
-              )}
-            </View>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              router.push("/lobbies" as never);
-            }}
-            style={styles.lobbyBanner}
-            testID="tools-lobbies"
-          >
-            <LinearGradient
-              colors={["rgba(244,244,245,0.14)", "rgba(184,190,200,0.10)", "rgba(229,231,235,0.08)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.lobbyTopRow}>
-              <View style={styles.lobbyEyebrow}>
-                <View style={styles.lobbyDot} />
-                <Text style={styles.lobbyEyebrowText}>NEW · LIVE NOW</Text>
-              </View>
-              <View style={styles.lobbyCountChip}>
-                <Mic color={Colors.rose} size={11} strokeWidth={3} />
-                <Text style={styles.lobbyCountText}>VOICE</Text>
-              </View>
-            </View>
-            <View style={styles.lobbyBody}>
-              <LinearGradient
-                colors={[Colors.rose, Colors.violet]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.lobbyIcon}
-              >
-                <Mic color={Colors.ink} size={26} strokeWidth={2.6} />
-              </LinearGradient>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.lobbyTitle}>Trading Lobbies</Text>
-                <Text style={styles.lobbySub}>Trade together. Watch together. Win together.</Text>
-                <Text style={styles.lobbyBlurb}>
-                  Live voice rooms with shared watchlists, charts and wallet tracking.
-                </Text>
-              </View>
-              <ChevronRight color={Colors.text} size={18} strokeWidth={2.6} />
-            </View>
-          </Pressable>
-
-          <View style={[styles.statsRow, styles.legacyHero]}>
-            <StatTile
-              label="MODULES"
-              value={SOLTOOLS_MODULE_COUNT.toString()}
-              accent={Colors.mint}
-              Icon={Wrench}
-            />
-            <StatTile
-              label="LIVE"
-              value={liveModuleCount.toString()}
-              accent={Colors.cyan}
-              Icon={Activity}
-            />
-            <StatTile
-              label="BETA"
-              value={betaModuleCount.toString()}
-              accent={Colors.rose}
-              Icon={Sparkles}
-            />
-            <StatTile
-              label="USED"
-              value={recent.length.toString()}
-              accent={Colors.violet}
-              Icon={Clock}
-            />
-          </View>
-
-          <View style={[styles.platformNotice, styles.legacyHero]}>
-            <View style={styles.platformNoticeIcon}>
-              <Lock color={Colors.goldBright} size={15} strokeWidth={2.8} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.platformNoticeTitle}>App Store safety mode</Text>
-              <Text style={styles.platformNoticeBody}>{SOLTOOLS_TRADING_DISABLED_MESSAGE}</Text>
-            </View>
-          </View>
 
           {recentTools.length > 0 ? (
             <View style={styles.section}>
@@ -1139,8 +990,8 @@ export default function ToolsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionHeadLeft}>
-                <Flame color={Colors.orange} size={14} strokeWidth={2.8} />
-                <Text style={styles.sectionTitle}>Full scanner modules</Text>
+                <Shield color={Colors.goldBright} size={14} strokeWidth={2.8} />
+                <Text style={styles.sectionTitle}>Core tools only</Text>
                 <View style={styles.countChip}>
                   <Text style={styles.countChipText}>{filtered.length}</Text>
                 </View>
@@ -1204,7 +1055,7 @@ export default function ToolsScreen() {
           <View style={styles.footerNote}>
             <Zap color={Colors.mint} size={14} strokeWidth={2.6} />
             <Text style={styles.footerText}>
-              Full SOL Tools platform map · Powered by Helius + DexScreener + Supabase
+Clean core tool deck · OG Scanner + wallet intel + admin dashboard
             </Text>
           </View>
         </ScrollView>
