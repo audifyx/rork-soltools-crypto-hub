@@ -55,6 +55,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="tools"
+        options={{
+          title: "Tools",
+          tabBarIcon: ({ color, size }) => <Wrench color={color} size={size} strokeWidth={2.4} />,
+        }}
+      />
+      <Tabs.Screen
         name="discover"
         options={{
           title: "Explore",
@@ -84,13 +91,6 @@ export default function TabsLayout() {
         name="users"
         options={{
           href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="tools"
-        options={{
-          title: "Tools",
-          tabBarIcon: ({ color, size }) => <Wrench color={color} size={size} strokeWidth={2.4} />,
         }}
       />
       <Tabs.Screen
