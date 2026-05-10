@@ -522,12 +522,17 @@ function CreateSpaceModal({ visible, onClose, onCreate }: { visible: boolean; on
 
   const submit = async () => {
     if (submitting) return;
+    const trimmedTitle = title.trim();
+    if (trimmedTitle.length < 3) {
+      Alert.alert("Add a title", "Give your Space a short room title first.");
+      return;
+    }
     setSubmitting(true);
     try {
       await onCreate({
-        title,
-        topic,
-        description,
+        title: trimmedTitle,
+        topic: topic.trim() || "ALPHA",
+        description: description.trim(),
         category,
         scheduledAt: schedule ? Date.now() + 30 * 60_000 : null,
         recording,
@@ -542,7 +547,13 @@ function CreateSpaceModal({ visible, onClose, onCreate }: { visible: boolean; on
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalRoot}>
         <Pressable style={styles.modalShade} onPress={onClose} />
-        <View style={styles.sheet}>
+        <ScrollView
+          style={styles.sheetScroll}
+          contentContainerStyle={styles.sheetScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.sheet}>
           <View style={styles.sheetHandle} />
           <View style={styles.sheetHeader}>
             <View>
@@ -610,11 +621,12 @@ function CreateSpaceModal({ visible, onClose, onCreate }: { visible: boolean; on
             maxLength={500}
           />
 
-          <Pressable onPress={submit} disabled={submitting} style={styles.createBtn} testID="create-space-submit">
+          <Pressable onPress={submit} disabled={submitting} style={[styles.createBtn, submitting && styles.createBtnDisabled]} testID="create-space-submit">
             <Zap color={Colors.ink} size={16} strokeWidth={3} />
             <Text style={styles.createText}>{submitting ? "CREATING..." : schedule ? "SCHEDULE SPACE" : "GO LIVE"}</Text>
           </Pressable>
-        </View>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -699,6 +711,8 @@ const styles = StyleSheet.create({
   footerSpacer: { height: 18 },
   modalRoot: { flex: 1, justifyContent: "flex-end" },
   modalShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.62)" },
+  sheetScroll: { maxHeight: "88%", width: "100%" },
+  sheetScrollContent: { paddingBottom: Platform.OS === "ios" ? 12 : 0 },
   sheet: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28, backgroundColor: "rgba(10,9,7,0.99)", borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, borderColor: "rgba(244,198,91,0.25)" },
   sheetHandle: { alignSelf: "center", width: 42, height: 4, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.18)", marginBottom: 14 },
   sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
@@ -717,5 +731,6 @@ const styles = StyleSheet.create({
   sheetCat: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
   sheetCatText: { color: Colors.muted, fontSize: 12, fontWeight: "900" },
   createBtn: { marginTop: 16, height: 51, borderRadius: 18, backgroundColor: Colors.goldBright, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  createBtnDisabled: { opacity: 0.65 },
   createText: { color: Colors.ink, fontSize: 13, fontWeight: "900", letterSpacing: 0.8 },
 });

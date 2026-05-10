@@ -175,6 +175,17 @@ async function saveJson<T>(key: string, value: T): Promise<void> {
   }
 }
 
+function mergePosts(primary: UserPost[], fallback: UserPost[]): UserPost[] {
+  const seen = new Set<string>();
+  return [...primary, ...fallback]
+    .filter((post) => {
+      if (seen.has(post.id)) return false;
+      seen.add(post.id);
+      return true;
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
 function nonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -235,14 +246,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
             comments: (row.comments_count as number) ?? 0,
             liked: false,
           }));
-          const seen = new Set<string>();
-          return [...remotePosts, ...localPosts]
-            .filter((post) => {
-              if (seen.has(post.id)) return false;
-              seen.add(post.id);
-              return true;
-            })
-            .sort((a, b) => b.createdAt - a.createdAt);
+          return mergePosts(localPosts, remotePosts);
         } catch (e) {
           console.log("[app] posts fetch fallback", e);
         }
@@ -544,7 +548,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
           comments: (data.comments_count as number) ?? 0,
           liked: false,
         };
-        const next = [post, ...posts.filter((p) => p.id !== post.id)];
+        const latestLocal = await loadJson<UserPost[]>(POSTS_KEY, []);
+        const next = mergePosts([post], mergePosts(latestLocal, posts));
         await saveJson(POSTS_KEY, next);
         return next;
       }
@@ -561,7 +566,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
         comments: 0,
         liked: false,
       };
-      const next = [post, ...posts];
+      const latestLocal = await loadJson<UserPost[]>(POSTS_KEY, []);
+      const next = mergePosts([post], mergePosts(latestLocal, posts));
       await saveJson(POSTS_KEY, next);
       return next;
     },
