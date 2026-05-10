@@ -642,29 +642,33 @@ function moduleToTool(module: SolToolsModuleSpec): Tool {
   };
 }
 
-const CORE_TOOLS: Tool[] = [
-  TOOLS.find((tool) => tool.id === "token-lookup"),
-  TOOLS.find((tool) => tool.id === "wallet-tracker"),
-  TOOLS.find((tool) => tool.id === "dev-wallet-tracker"),
-  TOOLS.find((tool) => tool.id === "narrative-engine"),
-  TOOLS.find((tool) => tool.id === "smart-money-feed"),
-  {
-    id: "admin-dashboard",
-    route: "/admin",
-    name: "Admin Dashboard",
-    tagline: "Manage users, feeds, tools, and platform ops",
-    description: "Core operator dashboard for moderation, platform checks, live data controls, and admin-only workflows.",
-    Icon: Shield,
-    accent: Colors.goldBright,
-    glow: "rgba(244,198,91,0.18)",
-    gradient: [Colors.goldBright, Colors.orange],
-    tags: ["Admin", "Ops", "Live"],
-    status: "LIVE",
-    category: "platform",
-  },
-].filter((tool): tool is Tool => Boolean(tool));
+const ADMIN_DASHBOARD_TOOL: Tool = {
+  id: "admin-dashboard",
+  route: "/admin",
+  name: "Admin Dashboard",
+  tagline: "Manage users, feeds, tools, and platform ops",
+  description: "Core operator dashboard for moderation, platform checks, live data controls, and admin-only workflows.",
+  Icon: Shield,
+  accent: Colors.goldBright,
+  glow: "rgba(244,198,91,0.18)",
+  gradient: [Colors.goldBright, Colors.orange],
+  tags: ["Admin", "Ops", "Live"],
+  status: "LIVE",
+  category: "platform",
+};
 
-const ALL_TOOLS: Tool[] = CORE_TOOLS;
+const CORE_TOOL_IDS = new Set<string>([
+  "token-lookup",
+  "wallet-tracker",
+  "dev-wallet-tracker",
+  "narrative-engine",
+  "smart-money-feed",
+]);
+
+const CORE_TOOLS: Tool[] = [
+  ...TOOLS.filter((tool) => CORE_TOOL_IDS.has(tool.id)),
+  ADMIN_DASHBOARD_TOOL,
+];
 
 const RECENT_KEY = "tools.recent.v1";
 const MAX_RECENT = 5;
@@ -699,6 +703,39 @@ const OG_WEB_TOOLS: OGWebTool[] = [
   { slug: "swap", title: "Swap", path: "/swap", page: "13", description: "Jupiter quotes and routes with scanner context.", Icon: Repeat, accent: "#B8FF3C" },
   { slug: "tech", title: "Tech", path: "/tech", page: "14", description: "Jupiter, Helius, Birdeye, QuickNode, Alchemy stack.", Icon: Network, accent: Colors.cyan },
 ];
+
+const OG_WEB_TOOLS_AS_TOOLS: Tool[] = OG_WEB_TOOLS.map((tool) => ({
+  id: `ogscan-${tool.slug}`,
+  route: `/ogscan/${tool.slug}`,
+  name: `OGScan ${tool.title}`,
+  tagline: `OG Scanner page ${tool.page} · ${tool.path}`,
+  description: tool.description,
+  Icon: tool.Icon,
+  accent: tool.accent,
+  glow: `${tool.accent}18`,
+  gradient: [tool.accent, Colors.cyan],
+  tags: ["OGScan", "Live", `Page ${tool.page}`],
+  status: "LIVE",
+  category: tool.slug === "swap" ? "trading" : tool.slug === "our-coin" || tool.slug === "tech" || tool.slug === "roadmap" || tool.slug === "command" ? "platform" : "analysis",
+}));
+
+const PLATFORM_MODULE_TOOLS: Tool[] = SOLTOOLS_PLATFORM_MODULES.map(moduleToTool);
+
+function uniqueToolsById(tools: Tool[]): Tool[] {
+  const seen = new Set<string>();
+  return tools.filter((tool) => {
+    if (seen.has(tool.id)) return false;
+    seen.add(tool.id);
+    return true;
+  });
+}
+
+const ALL_TOOLS: Tool[] = uniqueToolsById([
+  ...CORE_TOOLS,
+  ...OG_WEB_TOOLS_AS_TOOLS,
+  ...TOOLS,
+  ...PLATFORM_MODULE_TOOLS,
+]);
 
 type RecentItem = { id: string; ts: number };
 type OgScanSection = "home" | "scan" | "live" | "watch" | "more";
@@ -931,6 +968,11 @@ export default function ToolsScreen() {
             onOpen={onOpen}
           />
 
+          <OGStandaloneToolGrid
+            tools={OG_WEB_TOOLS}
+            onOpen={(slug) => onOpen(`/ogscan/${slug}`, `ogscan-${slug}`)}
+          />
+
           {recentTools.length > 0 ? (
             <View style={styles.section}>
               <View style={styles.sectionHead}>
@@ -992,7 +1034,7 @@ export default function ToolsScreen() {
             <View style={styles.sectionHead}>
               <View style={styles.sectionHeadLeft}>
                 <Shield color={Colors.goldBright} size={14} strokeWidth={2.8} />
-                <Text style={styles.sectionTitle}>Core tools only</Text>
+                <Text style={styles.sectionTitle}>Full tool set</Text>
                 <View style={styles.countChip}>
                   <Text style={styles.countChipText}>{filtered.length}</Text>
                 </View>
@@ -1056,7 +1098,7 @@ export default function ToolsScreen() {
           <View style={styles.footerNote}>
             <Zap color={Colors.mint} size={14} strokeWidth={2.6} />
             <Text style={styles.footerText}>
-Clean core tool deck · OG Scanner + wallet intel + admin dashboard
+Full tool deck · OG Scanner pages + current tools + wallet intel + admin dashboard
             </Text>
           </View>
         </ScrollView>
