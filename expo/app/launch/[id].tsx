@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
@@ -86,6 +87,15 @@ const TIMEFRAMES: { key: "5m" | "1h" | "6h" | "24h"; label: string }[] = [
 ];
 
 const QUICK_BUYS = [0.1, 0.5, 1, 5];
+const ATH_STORE_KEY = "soltools.tokenAth.v1";
+
+type TokenAthRecord = {
+  priceUsd: number;
+  marketCapUsd: number | null;
+  recordedAt: number;
+};
+
+type TokenAthStore = Record<string, TokenAthRecord>;
 
 function ageString(ts?: number | null): string {
   if (!ts) return "—";
@@ -99,6 +109,24 @@ function ageString(ts?: number | null): string {
   return `${d}d ${h % 24}h`;
 }
 
+function athAgeLabel(ts?: number | null): string {
+  if (!ts) return "—";
+  const age = ageString(ts);
+  return age === "now" ? "just now" : `${age} ago`;
+}
+
+async function readAthStore(): Promise<TokenAthStore> {
+  try {
+    const raw = await AsyncStorage.getItem(ATH_STORE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as TokenAthStore;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (e) {
+    console.log("[token-ath] read failed", e instanceof Error ? e.message : e);
+    return {};
+  }
+}
+
 export default function LaunchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -106,6 +134,7 @@ export default function LaunchDetailScreen() {
   const { userId } = useAuth();
   const [copied, setCopied] = useState<boolean>(false);
   const [watching, setWatching] = useState<boolean>(false);
+  const [ath, setAth] = useState<TokenAthRecord | null>(null);
   const [tab, setTab] = useState<TabKey>("overview");
   const [tf, setTf] = useState<"5m" | "1h" | "6h" | "24h">("24h");
 
@@ -252,11 +281,46 @@ export default function LaunchDetailScreen() {
   const liveHolders = overview?.holder ?? token?.holders ?? null;
   const pairAddress = dex?.pairAddress ?? null;
   const pairCreated = dex?.pairCreatedAt ?? null;
+  const athDropPct = ath?.priceUsd && livePrice != null && livePrice > 0
+    ? ((livePrice - ath.priceUsd) / ath.priceUsd) * 100
+    : null;
   const dexId = dex?.dexId ?? null;
   const txns24 = dex?.txns24h;
   const txns1h = dex?.txns1h;
   const totalTx = (txns24?.buys ?? 0) + (txns24?.sells ?? 0);
   const buyPressure = totalTx > 0 ? (txns24!.buys / totalTx) * 100 : 50;
+
+  useEffect(() => {
+    let cancelled = false;
+    const key = lookupAddress?.trim();
+    if (!key) {
+      setAth(null);
+      return;
+    }
+    readAthStore().then((store) => {
+      if (!cancelled) setAth(store[key] ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [lookupAddress]);
+
+  useEffect(() => {
+    const key = lookupAddress?.trim();
+    if (!key || livePrice == null || livePrice <= 0) return;
+    setAth((current) => {
+      if (current && current.priceUsd >= livePrice) return current;
+      const next: TokenAthRecord = { priceUsd: livePrice, marketCapUsd: liveMc ?? null, recordedAt: Date.now() };
+      readAthStore()
+        .then(async (store) => {
+          const existing = store[key];
+          if (existing && existing.priceUsd >= livePrice) return;
+          await AsyncStorage.setItem(ATH_STORE_KEY, JSON.stringify({ ...store, [key]: next }));
+        })
+        .catch((e) => console.log("[token-ath] persist failed", e instanceof Error ? e.message : e));
+      return next;
+    });
+  }, [lookupAddress, livePrice, liveMc]);
 
   // Live price flash animation
   const flash = useRef(new Animated.Value(0)).current;
@@ -444,6 +508,12 @@ export default function LaunchDetailScreen() {
               </View>
               <Text style={styles.heroStampTitle}>Token command center</Text>
               <Text style={styles.heroStampSub}>Live routing · chart · risk · pools</Text>
+              <View style={styles.athBannerPill}>
+                <TrendingUp color={Colors.goldBright} size={12} strokeWidth={3} />
+                <Text style={styles.athBannerLabel}>Recorded ATH</Text>
+                <Text style={styles.athBannerValue}>{ath?.priceUsd ? fmtPrice(ath.priceUsd) : "Recording…"}</Text>
+                {athDropPct != null ? <Text style={styles.athBannerDrop}>{fmtPct(athDropPct, 1)} from ATH</Text> : null}
+              </View>
             </View>
             <View style={styles.headerBar}>
               <Pressable onPress={() => navigateBack(router, "/(tabs)/discover")} style={styles.iconBtn} hitSlop={8} testID="back-btn">
@@ -524,7 +594,7 @@ export default function LaunchDetailScreen() {
           <View style={styles.commandDock}>
             <MarketMini Icon={Droplet} label="Liquidity" value={fmtUsd(liveLiq)} color={Colors.cyan} />
             <MarketMini Icon={Activity} label={`Vol ${tf.toUpperCase()}`} value={fmtUsd(liveVol)} color={Colors.mint} />
-            <MarketMini Icon={Users} label="Holders" value={liveHolders ? fmtNum(liveHolders) : "—"} color={Colors.violet} />
+            <MarketMini Icon={TrendingUp} label="ATH" value={ath?.priceUsd ? fmtPrice(ath.priceUsd) : "—"} color={Colors.goldBright} />
             <MarketMini Icon={ShieldCheck} label="Score" value={`${commandScore}`} color={accent} />
           </View>
 
@@ -546,7 +616,9 @@ export default function LaunchDetailScreen() {
                   <Text style={styles.priceValue}>
                     {livePrice != null && livePrice > 0 ? fmtPrice(livePrice) : "—"}
                   </Text>
-                  <Text style={styles.priceCaption}>DEX-indexed route · updates while open</Text>
+                  <Text style={styles.priceCaption}>
+                    DEX-indexed route · ATH {ath?.priceUsd ? `${fmtPrice(ath.priceUsd)} (${athAgeLabel(ath.recordedAt)})` : "recording now"}
+                  </Text>
                 </View>
                 {liveChange != null ? (
                   <View
@@ -1401,6 +1473,22 @@ const styles = StyleSheet.create({
   heroLiveText: { fontSize: 10, fontWeight: "900", letterSpacing: 1.1, textTransform: "uppercase" },
   heroStampTitle: { color: Colors.text, fontSize: 28, fontWeight: "900", letterSpacing: -1, marginTop: 9 },
   heroStampSub: { color: Colors.muted, fontSize: 12, fontWeight: "800", letterSpacing: 0.3, marginTop: 3 },
+  athBannerPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,198,83,0.13)",
+    borderWidth: 1,
+    borderColor: "rgba(255,198,83,0.34)",
+  },
+  athBannerLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
+  athBannerValue: { color: Colors.goldBright, fontSize: 11, fontWeight: "900" },
+  athBannerDrop: { color: Colors.text, fontSize: 10, fontWeight: "800", opacity: 0.86 },
   headerBar: {
     flexDirection: "row",
     alignItems: "center",
