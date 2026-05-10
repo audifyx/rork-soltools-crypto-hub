@@ -77,6 +77,29 @@ function RootLayoutNav() {
       <Stack.Screen name="launch/[id]" />
       <Stack.Screen name="tool/[id]" />
       <Stack.Screen name="ogscan/[slug]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="app" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="command" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="our-coin" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="roadmap" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="market-pulse" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="snipe-feed" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="scanner" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="og-finder" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="pairs" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="migrations" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="trending" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="whales" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="tx-feed" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="swap" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="tech" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="dev-wallet" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="dev-wallet-radar" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="og-scanner" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="ogscan-scanner" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="migration-tool" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="migration-tracker" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="page/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="page-[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="u/[handle]" />
       <Stack.Screen name="admin" />
       <Stack.Screen name="communities" options={{ animation: "slide_from_right" }} />
