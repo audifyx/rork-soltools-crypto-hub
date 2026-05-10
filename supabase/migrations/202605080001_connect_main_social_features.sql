@@ -97,6 +97,54 @@ create index if not exists community_posts_user_created_idx on public.community_
 create index if not exists community_posts_parent_idx on public.community_posts(parent_post_id, created_at desc);
 create index if not exists community_posts_community_created_idx on public.community_posts(community_id, created_at desc);
 
+alter table public.communities add column if not exists holder_only boolean not null default false;
+alter table public.communities add column if not exists gate_token_mint text;
+alter table public.communities add column if not exists gate_minimum_balance numeric;
+
+create or replace function public.create_community(
+  p_name text,
+  p_slug text,
+  p_description text default null,
+  p_category text default 'alpha',
+  p_icon_emoji text default '🚀',
+  p_accent_a text default '#55F5B2',
+  p_accent_b text default '#6EE7FF',
+  p_rules jsonb default '[]'::jsonb,
+  p_tags jsonb default '[]'::jsonb,
+  p_is_private boolean default false,
+  p_holder_only boolean default false,
+  p_gate_token_mint text default null,
+  p_gate_minimum_balance numeric default null,
+  p_avatar_url text default null,
+  p_banner_url text default null
+)
+returns public.communities
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  created public.communities;
+begin
+  insert into public.communities (
+    name, slug, description, owner_id, category, icon_emoji, accent_a, accent_b,
+    rules, tags, is_private, holder_only, gate_token_mint, gate_minimum_balance,
+    avatar_url, banner_url
+  ) values (
+    p_name, p_slug, p_description, auth.uid(), p_category, p_icon_emoji, p_accent_a, p_accent_b,
+    p_rules, p_tags, (p_is_private or p_holder_only), p_holder_only, p_gate_token_mint, p_gate_minimum_balance,
+    p_avatar_url, p_banner_url
+  )
+  returning * into created;
+
+  insert into public.community_members (community_id, user_id, role)
+  values (created.id, auth.uid(), 'owner')
+  on conflict do nothing;
+
+  return created;
+end;
+$;
+
 create table if not exists public.community_post_likes (
   user_id uuid not null,
   post_id uuid not null references public.community_posts(id) on delete cascade,

@@ -44,6 +44,7 @@ import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
+import { SOLTOOLS_TOKEN_MINT } from "@/lib/badge-system";
 import { Community, useSocial } from "@/providers/social-provider";
 
 type Step = 0 | 1 | 2 | 3;
@@ -97,6 +98,8 @@ export default function CreateCommunityScreen() {
   ]);
   const [ruleInput, setRuleInput] = useState<string>("");
   const [isPrivate, setIsPrivate] = useState<boolean>(false);
+  const [holderOnly, setHolderOnly] = useState<boolean>(false);
+  const [gateMinimumBalance, setGateMinimumBalance] = useState<string>("1000000");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
@@ -213,7 +216,10 @@ export default function CreateCommunityScreen() {
         accent: palette,
         tags,
         rules,
-        isPrivate,
+        isPrivate: isPrivate || holderOnly,
+        holderOnly,
+        gateTokenMint: holderOnly ? SOLTOOLS_TOKEN_MINT : null,
+        gateMinimumBalance: holderOnly ? Number(gateMinimumBalance) || 1 : null,
         ownerHandle: profile.handle || "",
         avatarUrl,
         bannerUrl,
@@ -235,6 +241,8 @@ export default function CreateCommunityScreen() {
     tags,
     rules,
     isPrivate,
+    holderOnly,
+    gateMinimumBalance,
     profile.handle,
     router,
     avatarUrl,
@@ -290,7 +298,7 @@ export default function CreateCommunityScreen() {
               palette={palette}
               members={1}
               tags={tags}
-              isPrivate={isPrivate}
+              isPrivate={isPrivate || holderOnly}
               avatarUrl={avatarUrl}
               bannerUrl={bannerUrl}
               uploadingKind={uploadingKind}
@@ -345,7 +353,14 @@ export default function CreateCommunityScreen() {
                   setRules((prev) => prev.filter((_, i) => i !== idx))
                 }
                 isPrivate={isPrivate}
+                holderOnly={holderOnly}
+                gateMinimumBalance={gateMinimumBalance}
+                onChangeGateMinimumBalance={setGateMinimumBalance}
                 onTogglePrivate={() => setIsPrivate((p) => !p)}
+                onToggleHolderOnly={() => {
+                  setHolderOnly((p) => !p);
+                  setIsPrivate(true);
+                }}
               />
             ) : null}
 
@@ -359,7 +374,9 @@ export default function CreateCommunityScreen() {
                 palette={palette}
                 tags={tags}
                 rules={rules}
-                isPrivate={isPrivate}
+                isPrivate={isPrivate || holderOnly}
+                holderOnly={holderOnly}
+                gateMinimumBalance={gateMinimumBalance}
               />
             ) : null}
           </ScrollView>
@@ -803,7 +820,11 @@ function StepRulesTags({
   onAddRule,
   onRemoveRule,
   isPrivate,
+  holderOnly,
+  gateMinimumBalance,
+  onChangeGateMinimumBalance,
   onTogglePrivate,
+  onToggleHolderOnly,
 }: {
   tags: string[];
   tagInput: string;
@@ -816,7 +837,11 @@ function StepRulesTags({
   onAddRule: () => void;
   onRemoveRule: (idx: number) => void;
   isPrivate: boolean;
+  holderOnly: boolean;
+  gateMinimumBalance: string;
+  onChangeGateMinimumBalance: (value: string) => void;
   onTogglePrivate: () => void;
+  onToggleHolderOnly: () => void;
 }) {
   return (
     <View style={styles.card}>
@@ -919,6 +944,40 @@ function StepRulesTags({
           testID="switch-private"
         />
       </View>
+
+      <View style={styles.privacyRow}>
+        <View style={styles.privacyLeft}>
+          <View style={styles.privacyIcon}>
+            <Lock color={Colors.mint} size={16} strokeWidth={2.6} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.privacyTitle}>Holder-only community</Text>
+            <Text style={styles.privacyBody}>Requires SOLTOOLS holdings to enter and gives members holder-only status.</Text>
+          </View>
+        </View>
+        <Switch
+          value={holderOnly}
+          onValueChange={onToggleHolderOnly}
+          trackColor={{ false: "rgba(255,255,255,0.12)", true: Colors.mint }}
+          thumbColor={Colors.text}
+          testID="switch-holder-only"
+        />
+      </View>
+
+      {holderOnly ? (
+        <>
+          <FieldLabel icon={Lock}>Minimum SOLTOOLS balance</FieldLabel>
+          <TextInput
+            value={gateMinimumBalance}
+            onChangeText={onChangeGateMinimumBalance}
+            placeholder="1000000"
+            placeholderTextColor={Colors.muted}
+            keyboardType="numeric"
+            style={styles.input}
+            testID="input-holder-minimum"
+          />
+        </>
+      ) : null}
     </View>
   );
 }
@@ -933,6 +992,8 @@ function StepReview({
   tags,
   rules,
   isPrivate,
+  holderOnly,
+  gateMinimumBalance,
 }: {
   name: string;
   handle: string;
@@ -943,6 +1004,8 @@ function StepReview({
   tags: string[];
   rules: string[];
   isPrivate: boolean;
+  holderOnly: boolean;
+  gateMinimumBalance: string;
 }) {
   const cat = CATEGORIES.find((c) => c.id === category);
   return (
@@ -976,8 +1039,14 @@ function StepReview({
       </View>
       <View style={styles.reviewRow}>
         <Text style={styles.reviewLabel}>Privacy</Text>
-        <Text style={styles.reviewValue}>{isPrivate ? "Private" : "Public"}</Text>
+        <Text style={styles.reviewValue}>{holderOnly ? "Holder-only" : isPrivate ? "Private" : "Public"}</Text>
       </View>
+      {holderOnly ? (
+        <View style={styles.reviewRow}>
+          <Text style={styles.reviewLabel}>Gate</Text>
+          <Text style={styles.reviewValue}>{Number(gateMinimumBalance || 0).toLocaleString()} SOLTOOLS</Text>
+        </View>
+      ) : null}
 
       <Text style={styles.reviewSection}>Description</Text>
       <Text style={styles.reviewBody}>{description}</Text>

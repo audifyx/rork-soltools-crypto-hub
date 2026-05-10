@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   ShieldOff,
   Star,
+  Tag,
   Trash2,
   Users,
   Volume2,
@@ -47,6 +48,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
+import { DEFAULT_BADGES, HOLDER_TIERS, type UserBadge } from "@/lib/badge-system";
 import { navigateBack } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAdmin, type AdminRole } from "@/providers/admin-provider";
@@ -58,6 +60,7 @@ const OWNER_EMAIL = "audifyx@gmail.com";
 type Section =
   | "overview"
   | "users"
+  | "badges"
   | "submissions"
   | "lobbies"
   | "credits"
@@ -78,6 +81,7 @@ interface TabItem {
 const TABS: TabItem[] = [
   { val: "overview", label: "Overview", Icon: BarChart3 },
   { val: "users", label: "Users", Icon: Users },
+  { val: "badges", label: "Badges", Icon: Tag },
   { val: "submissions", label: "Submissions", Icon: Rocket },
   { val: "lobbies", label: "Lobbies", Icon: Volume2 },
   { val: "credits", label: "Credits", Icon: Coins },
@@ -107,6 +111,9 @@ interface ProfileRow {
   wallet_address: string | null;
   is_public: boolean | null;
   is_banned: boolean | null;
+  verified: boolean | null;
+  badge: string | null;
+  custom_badges: UserBadge[] | null;
   followers_count: number | null;
   trades_count: number | null;
   win_rate: number | null;
@@ -306,6 +313,7 @@ export default function AdminDashboard() {
         <View style={styles.content}>
           {section === "overview" && <OverviewSection onJump={setSection} />}
           {section === "users" && <UsersSection />}
+          {section === "badges" && <BadgesSection />}
           {section === "submissions" && <SubmissionsSection />}
           {section === "lobbies" && <LobbiesSection />}
           {section === "credits" && <CreditsSection />}
@@ -400,6 +408,7 @@ function OverviewSection({ onJump }: { onJump: (s: Section) => void }) {
       <View style={styles.quickGrid}>
         <QuickAction Icon={Users} label="Users" sub="Ban, promote, reset" onPress={() => onJump("users")} />
         <QuickAction Icon={Rocket} label="Submissions" sub="Approve Pump V5" onPress={() => onJump("submissions")} />
+        <QuickAction Icon={Tag} label="Badges" sub="Grant holder/admin" onPress={() => onJump("badges")} />
         <QuickAction Icon={Coins} label="Credits" sub="Adjust balances" onPress={() => onJump("credits")} />
         <QuickAction Icon={Bell} label="Announce" sub="Broadcast to all" onPress={() => onJump("announcements")} />
         <QuickAction Icon={ShieldAlert} label="Security" sub="Roles & revokes" onPress={() => onJump("security")} />
@@ -423,7 +432,7 @@ function UsersSection() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id,user_id,username,display_name,avatar_url,sol_wallet,wallet_address,is_public,is_banned,followers_count,trades_count,win_rate,pnl_pct,created_at")
+        .select("id,user_id,username,display_name,avatar_url,sol_wallet,wallet_address,is_public,is_banned,verified,badge,custom_badges,followers_count,trades_count,win_rate,pnl_pct,created_at")
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -496,6 +505,142 @@ function UsersSection() {
             </View>
           </View>
         )}
+      />
+    </View>
+  );
+}
+
+/* -------------------------------- BADGES --------------------------------- */
+
+const BADGE_OPTIONS: UserBadge[] = [
+  DEFAULT_BADGES.admin,
+  DEFAULT_BADGES.team,
+  DEFAULT_BADGES.mod,
+  DEFAULT_BADGES.verified,
+  DEFAULT_BADGES.beta,
+  ...HOLDER_TIERS.map((tier) => tier.badge),
+];
+
+function BadgesSection() {
+  const qc = useQueryClient();
+  const logAction = useAuditLogger();
+  const [query, setQuery] = useState<string>("");
+  const [customLabel, setCustomLabel] = useState<string>("");
+  const [customColor, setCustomColor] = useState<string>(Colors.goldBright);
+
+  const usersQuery = useQuery<ProfileRow[]>({
+    queryKey: ["admin", "badge-users"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,user_id,username,display_name,avatar_url,sol_wallet,wallet_address,is_public,is_banned,verified,badge,custom_badges,followers_count,trades_count,win_rate,pnl_pct,created_at")
+        .order("created_at", { ascending: false })
+        .limit(120);
+      if (error) throw error;
+      return (data ?? []) as ProfileRow[];
+    },
+  });
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const rows = usersQuery.data ?? [];
+    if (!q) return rows;
+    return rows.filter((u) => `${u.username ?? ""} ${u.display_name ?? ""} ${u.wallet_address ?? ""} ${u.sol_wallet ?? ""} ${profileUserId(u)}`.toLowerCase().includes(q));
+  }, [query, usersQuery.data]);
+
+  const updateBadgesMutation = useMutation({
+    mutationFn: async (input: { row: ProfileRow; badge: UserBadge; remove?: boolean }) => {
+      const uid = profileUserId(input.row);
+      const current = normalizeAdminBadges(input.row.custom_badges);
+      const next = input.remove
+        ? current.filter((b) => b.id !== input.badge.id)
+        : [{ ...input.badge, granted_at: new Date().toISOString() }, ...current.filter((b) => b.id !== input.badge.id)];
+      const patch: Record<string, unknown> = { custom_badges: next, updated_at: new Date().toISOString() };
+      if (input.badge.id === "verified") patch.verified = !input.remove;
+      if (["admin", "team", "mod", "holder", "supporter", "whale"].includes(input.badge.id)) patch.badge = input.remove ? null : input.badge.id;
+      const { error } = await supabase.from("profiles").update(patch).or(`user_id.eq.${uid},id.eq.${uid}`);
+      if (error) throw error;
+      await logAction(input.remove ? "revoke_profile_badge" : "grant_profile_badge", "user", uid, { custom_badges: current }, { badge: input.badge.id, custom_badges: next });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "badge-users"] });
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (e: Error) => Alert.alert("Badge update failed", e.message),
+  });
+
+  const makeCustomBadge = useCallback((): UserBadge | null => {
+    const label = customLabel.trim();
+    const color = customColor.trim() || Colors.goldBright;
+    if (!label) return null;
+    return {
+      id: label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `badge-${Date.now()}`,
+      label: label.toUpperCase(),
+      color,
+      glow: true,
+      priority: 70,
+      rarity: "rare",
+    };
+  }, [customColor, customLabel]);
+
+  return (
+    <View style={styles.content}>
+      <SearchBox value={query} onChangeText={setQuery} placeholder="Search user to grant badges…" />
+      <FlatList
+        data={filtered}
+        keyExtractor={(item) => profileUserId(item)}
+        contentContainerStyle={styles.listPad}
+        ListHeaderComponent={
+          <View style={styles.noticeCard}>
+            <Tag color={Colors.goldBright} size={18} strokeWidth={2.6} />
+            <Text style={styles.noticeText}>Grant admin, team, moderator, verified, beta, holder, supporter, whale, or custom badges. These write into profiles.custom_badges and immediately render on profiles/user cards.</Text>
+          </View>
+        }
+        ListEmptyComponent={usersQuery.isLoading ? <Loader /> : <EmptyState text="No users found for badge assignment." />}
+        renderItem={({ item }) => {
+          const badges = normalizeAdminBadges(item.custom_badges);
+          const customBadge = makeCustomBadge();
+          return (
+            <View style={styles.card} testID={`admin-badges-${profileUserId(item)}`}>
+              <View style={styles.rowHeader}>
+                <Avatar label={item.display_name ?? item.username ?? "U"} Icon={Tag} />
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowTitle}>{item.display_name ?? item.username ?? profileUserId(item).slice(0, 8)}</Text>
+                  <Text style={styles.rowSub}>@{item.username ?? "unset"} · {badges.length} badge{badges.length === 1 ? "" : "s"}</Text>
+                </View>
+                {item.verified ? <Pill label="VERIFIED" color={Colors.goldBright} /> : null}
+              </View>
+
+              <View style={styles.badgePreviewRow}>
+                {badges.length > 0 ? badges.map((badge) => <Pill key={badge.id} label={badge.label} color={badge.color ?? Colors.goldBright} />) : <Text style={styles.rowSub}>No badges assigned yet.</Text>}
+              </View>
+
+              <Text style={styles.inputLabel}>PRESET BADGES</Text>
+              <View style={styles.actionGrid}>
+                {BADGE_OPTIONS.map((badge) => {
+                  const hasBadge = badges.some((b) => b.id === badge.id);
+                  return (
+                    <ActionButton
+                      key={badge.id}
+                      label={hasBadge ? `Remove ${badge.label}` : badge.label}
+                      Icon={hasBadge ? X : Star}
+                      danger={hasBadge}
+                      onPress={() => updateBadgesMutation.mutate({ row: item, badge, remove: hasBadge })}
+                    />
+                  );
+                })}
+              </View>
+
+              <Text style={styles.inputLabel}>CUSTOM BADGE</Text>
+              <View style={styles.inlineInputRow}>
+                <TextInput value={customLabel} onChangeText={setCustomLabel} placeholder="Founder, OG, whale caller…" placeholderTextColor={Colors.muted2} style={styles.compactInput} />
+                <TextInput value={customColor} onChangeText={setCustomColor} placeholder="#55F5B2" placeholderTextColor={Colors.muted2} style={styles.compactInput} autoCapitalize="none" />
+                <ActionButton label="Grant custom" Icon={Tag} disabled={!customBadge} onPress={() => customBadge && updateBadgesMutation.mutate({ row: item, badge: customBadge })} />
+              </View>
+            </View>
+          );
+        }}
       />
     </View>
   );
@@ -1208,6 +1353,31 @@ function profileUserId(row: ProfileRow): string {
   return row.user_id ?? row.id;
 }
 
+function normalizeAdminBadges(input: unknown): UserBadge[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const r = row as Record<string, unknown>;
+      const id = String(r.id ?? "").trim();
+      const label = String(r.label ?? "").trim();
+      if (!id || !label) return null;
+      return {
+        id,
+        label,
+        color: typeof r.color === "string" ? r.color : Colors.goldBright,
+        icon: typeof r.icon === "string" ? r.icon : undefined,
+        glow: typeof r.glow === "boolean" ? r.glow : true,
+        priority: typeof r.priority === "number" ? r.priority : 70,
+        rarity: typeof r.rarity === "string" ? (r.rarity as UserBadge["rarity"]) : "rare",
+        background: typeof r.background === "string" ? r.background : undefined,
+        textColor: typeof r.textColor === "string" ? r.textColor : undefined,
+        animated: typeof r.animated === "boolean" ? r.animated : undefined,
+      };
+    })
+    .filter((badge): badge is UserBadge => badge !== null);
+}
+
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -1331,6 +1501,7 @@ const styles = StyleSheet.create({
   actionBtnDanger: { backgroundColor: "rgba(247,242,231,0.07)" },
   actionBtnText: { fontSize: 11, fontWeight: "900", textTransform: "capitalize" },
   tierRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 },
+  badgePreviewRow: { flexDirection: "row", flexWrap: "wrap", gap: 7, minHeight: 26, alignItems: "center" },
   dangerBtn: { width: 32, height: 32, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(247,242,231,0.08)", borderWidth: 1, borderColor: "rgba(247,242,231,0.22)" },
 
   inlineInputRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" },

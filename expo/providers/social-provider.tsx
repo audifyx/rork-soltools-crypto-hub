@@ -33,6 +33,10 @@ export interface Community {
   tags: string[];
   avatarUrl?: string | null;
   bannerUrl?: string | null;
+  isPrivate?: boolean;
+  holderOnly?: boolean;
+  gateTokenMint?: string | null;
+  gateMinimumBalance?: number | null;
 }
 
 export interface CommunityPostQuote {
@@ -212,6 +216,9 @@ type CommunityRow = {
   rules: unknown;
   tags: unknown;
   is_private: boolean | null;
+  holder_only: boolean | null;
+  gate_token_mint: string | null;
+  gate_minimum_balance: number | null;
   avatar_url: string | null;
   banner_url: string | null;
   created_at: string | null;
@@ -245,6 +252,10 @@ function applyPersistedCommunityRow(community: Community, row: PersistedCommunit
   }
   if (row.avatar_url !== undefined) community.avatarUrl = normalizeMediaUrl(row.avatar_url);
   if (row.banner_url !== undefined) community.bannerUrl = normalizeMediaUrl(row.banner_url);
+  if (typeof row.is_private === "boolean") community.isPrivate = row.is_private;
+  if (typeof row.holder_only === "boolean") community.holderOnly = row.holder_only;
+  if (typeof row.gate_token_mint === "string") community.gateTokenMint = row.gate_token_mint;
+  if (typeof row.gate_minimum_balance === "number") community.gateMinimumBalance = row.gate_minimum_balance;
 }
 
 function rowToCommunity(row: CommunityRow, ownerHandle: string): Community {
@@ -282,6 +293,10 @@ function rowToCommunity(row: CommunityRow, ownerHandle: string): Community {
     tags,
     avatarUrl: normalizeMediaUrl(row.avatar_url),
     bannerUrl: normalizeMediaUrl(row.banner_url),
+    isPrivate: !!row.is_private,
+    holderOnly: !!row.holder_only,
+    gateTokenMint: row.gate_token_mint ?? null,
+    gateMinimumBalance: row.gate_minimum_balance ?? null,
   };
 }
 
@@ -594,7 +609,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         const { data, error } = await supabase
           .from("communities")
           .select(
-            "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,avatar_url,banner_url,created_at",
+            "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,holder_only,gate_token_mint,gate_minimum_balance,avatar_url,banner_url,created_at",
           )
           .or(`is_private.eq.false,owner_id.eq.${userId ?? "00000000-0000-0000-0000-000000000000"}`)
           .order("created_at", { ascending: false })
@@ -1840,6 +1855,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       tags: string[];
       rules: string[];
       isPrivate?: boolean;
+      holderOnly?: boolean;
+      gateTokenMint?: string | null;
+      gateMinimumBalance?: number | null;
       ownerHandle?: string;
       avatarUrl?: string | null;
       bannerUrl?: string | null;
@@ -1869,6 +1887,10 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         tags: input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean),
         avatarUrl: normalizeMediaUrl(input.avatarUrl),
         bannerUrl: normalizeMediaUrl(input.bannerUrl),
+        isPrivate: !!input.isPrivate || !!input.holderOnly,
+        holderOnly: !!input.holderOnly,
+        gateTokenMint: input.gateTokenMint ?? null,
+        gateMinimumBalance: input.gateMinimumBalance ?? null,
       };
 
       let persistedRemotely = false;
@@ -1885,7 +1907,10 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             p_accent_b: community.accent[1],
             p_rules: community.rules,
             p_tags: community.tags,
-            p_is_private: !!input.isPrivate,
+            p_is_private: !!input.isPrivate || !!input.holderOnly,
+            p_holder_only: !!input.holderOnly,
+            p_gate_token_mint: input.gateTokenMint ?? null,
+            p_gate_minimum_balance: input.gateMinimumBalance ?? null,
             p_avatar_url: normalizeMediaUrl(community.avatarUrl),
             p_banner_url: normalizeMediaUrl(community.bannerUrl),
           });
@@ -1912,12 +1937,15 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
                 accent_b: community.accent[1],
                 rules: community.rules,
                 tags: community.tags,
-                is_private: !!input.isPrivate,
+                is_private: !!input.isPrivate || !!input.holderOnly,
+                holder_only: !!input.holderOnly,
+                gate_token_mint: input.gateTokenMint ?? null,
+                gate_minimum_balance: input.gateMinimumBalance ?? null,
                 avatar_url: normalizeMediaUrl(community.avatarUrl),
                 banner_url: normalizeMediaUrl(community.bannerUrl),
               })
               .select(
-                "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,avatar_url,banner_url,created_at",
+                "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,holder_only,gate_token_mint,gate_minimum_balance,avatar_url,banner_url,created_at",
               )
               .single();
             if (insertError) throw insertError;
