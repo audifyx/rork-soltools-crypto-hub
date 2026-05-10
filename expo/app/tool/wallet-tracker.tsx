@@ -7,6 +7,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
   ArrowUpRight,
   BarChart3,
@@ -22,7 +23,9 @@ import {
   RefreshCw,
   Search,
   Share2,
+  ShieldAlert,
   Star,
+  Target,
   Trash2,
   TrendingUp,
   Wallet,
@@ -56,7 +59,18 @@ import {
 } from "@/lib/api/wallet";
 import { fmtPrice, fmtUsd } from "@/utils/format";
 
-type TabKey = "overview" | "holdings" | "activity" | "stats";
+type TabKey = "overview" | "intel" | "holdings" | "activity" | "stats";
+
+type WalletIntel = {
+  rank: string;
+  trustScore: number;
+  riskScore: number;
+  convictionScore: number;
+  smartMoneyTags: string[];
+  behavior: string;
+  concentration: string;
+  recurringSignal: string;
+};
 
 interface SavedWallet {
   address: string;
@@ -303,6 +317,40 @@ export default function WalletTrackerScreen() {
       pct: ((h.usdValue ?? 0) / usd) * 100,
     }));
   }, [holdings, usd]);
+
+  const walletIntel = useMemo<WalletIntel>(() => {
+    const txCount = stats?.totalTxs ?? 0;
+    const successRate = stats?.successRate ?? 0;
+    const activeDays = stats?.activeDays ?? 0;
+    const topPct = allocations[0]?.pct ?? 0;
+    const tokenCount = holdings.length;
+    const netWorthScore = Math.min(28, Math.log10(Math.max(usd, 1)) * 7);
+    const activityScore = Math.min(24, txCount / 2);
+    const diversificationScore = Math.min(18, tokenCount * 2.4);
+    const reliabilityScore = Math.min(20, successRate / 5);
+    const ageScore = Math.min(10, activeDays / 3);
+    const trustScore = Math.round(netWorthScore + activityScore + diversificationScore + reliabilityScore + ageScore);
+    const concentrationPenalty = topPct > 75 ? 34 : topPct > 55 ? 22 : topPct > 35 ? 10 : 4;
+    const failurePenalty = Math.max(0, 100 - successRate) / 3;
+    const riskScore = Math.round(Math.min(98, concentrationPenalty + failurePenalty + (tokenCount <= 1 && usd > 100 ? 18 : 0)));
+    const convictionScore = Math.round(Math.max(5, Math.min(99, 100 - riskScore + Math.min(20, activeDays / 2))));
+    const tags = [
+      usd >= 100_000 ? "WHALE" : usd >= 10_000 ? "SMART WALLET" : "SCOUT",
+      tokenCount >= 8 ? "DIVERSIFIED" : tokenCount <= 2 && usd > 0 ? "HIGH CONVICTION" : "FOCUSED",
+      txCount >= 40 ? "ACTIVE TRADER" : activeDays >= 14 ? "PATIENT HOLDER" : "FRESH WALLET",
+      successRate >= 92 && txCount > 10 ? "CLEAN EXECUTION" : riskScore >= 45 ? "RISK WATCH" : "NORMAL RISK",
+    ];
+    return {
+      rank: trustScore >= 82 ? "S-TIER" : trustScore >= 64 ? "A-TIER" : trustScore >= 42 ? "B-TIER" : "UNRANKED",
+      trustScore,
+      riskScore,
+      convictionScore,
+      smartMoneyTags: Array.from(new Set(tags)),
+      behavior: txCount >= 40 ? "High-frequency scanner with frequent on-chain touches." : activeDays >= 14 ? "Slower moving wallet with more holder-style behavior." : "Early profile — keep watching for repeatable patterns.",
+      concentration: topPct > 55 ? "Top-heavy allocation; one position dominates portfolio risk." : topPct > 30 ? "Moderate concentration with visible lead positions." : "Balanced distribution across tracked holdings.",
+      recurringSignal: activeDays >= 7 && txCount >= 15 ? "Recurring wallet detected across multiple active days." : "Not enough history yet for recurring-wallet confirmation.",
+    };
+  }, [allocations, holdings.length, stats, usd]);
 
   return (
     <View style={styles.root}>
@@ -604,6 +652,12 @@ export default function WalletTrackerScreen() {
                   label="Overview"
                 />
                 <TabBtn
+                  active={tab === "intel"}
+                  onPress={() => setTab("intel")}
+                  icon={<ShieldAlert size={13} strokeWidth={2.8} />}
+                  label="Intel"
+                />
+                <TabBtn
                   active={tab === "holdings"}
                   onPress={() => setTab("holdings")}
                   icon={<Coins size={13} strokeWidth={2.8} />}
@@ -643,6 +697,9 @@ export default function WalletTrackerScreen() {
                       onOpenToken={onOpenToken}
                       onOpenSig={onOpenSig}
                     />
+                  )}
+                  {tab === "intel" && (
+                    <WalletIntelTab intel={walletIntel} topHolding={holdings[0]} totalUsd={usd} />
                   )}
                   {tab === "holdings" && (
                     <HoldingsTab
@@ -845,6 +902,67 @@ function OverviewTab({
           </View>
         </View>
       )}
+    </View>
+  );
+}
+
+function WalletIntelTab({
+  intel,
+  topHolding,
+  totalUsd,
+}: {
+  intel: WalletIntel;
+  topHolding?: WalletTokenHolding;
+  totalUsd: number;
+}) {
+  return (
+    <View style={{ gap: 14 }}>
+      <LinearGradient
+        colors={["rgba(85,245,178,0.15)", "rgba(255,196,87,0.06)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.intelHero}
+      >
+        <View style={styles.intelHeroTop}>
+          <View>
+            <Text style={styles.intelEyebrow}>SMART MONEY RANK</Text>
+            <Text style={styles.intelRank}>{intel.rank}</Text>
+          </View>
+          <View style={styles.intelScoreRing}>
+            <Text style={styles.intelScore}>{intel.trustScore}</Text>
+          </View>
+        </View>
+        <Text style={styles.intelBody}>{intel.behavior}</Text>
+        <View style={styles.tagWrap}>
+          {intel.smartMoneyTags.map((tag) => (
+            <View key={tag} style={styles.intelTag}>
+              <Text style={styles.intelTagText}>{tag}</Text>
+            </View>
+          ))}
+        </View>
+      </LinearGradient>
+
+      <View style={styles.statsRow}>
+        <StatCard label="Trust" value={`${intel.trustScore}/100`} tone="mint" icon={<ShieldAlert size={11} strokeWidth={2.8} color={Colors.mint} />} />
+        <StatCard label="Risk" value={`${intel.riskScore}/100`} tone={intel.riskScore > 50 ? "rose" : "orange"} icon={<AlertTriangle size={11} strokeWidth={2.8} color={intel.riskScore > 50 ? Colors.rose : Colors.orange} />} />
+        <StatCard label="Conviction" value={`${intel.convictionScore}%`} tone="cyan" icon={<Target size={11} strokeWidth={2.8} color={Colors.cyan} />} />
+      </View>
+
+      <View style={styles.cardPad}>
+        <IntelLine label="Portfolio" value={fmtUsd(totalUsd)} detail={topHolding ? `Top holding: ${topHolding.symbol ?? shorten(topHolding.mint)}` : "No SPL holdings detected yet."} />
+        <IntelLine label="Concentration" value={intel.concentration} />
+        <IntelLine label="Recurring detection" value={intel.recurringSignal} />
+      </View>
+    </View>
+  );
+}
+
+function IntelLine({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  return (
+    <View style={styles.intelLine}>
+      <Text style={styles.intelLineLabel}>{label}</Text>
+      <Text style={styles.intelLineValue}>{value}</Text>
+      {detail ? <Text style={styles.intelLineDetail}>{detail}</Text> : null}
     </View>
   );
 }
@@ -1521,6 +1639,49 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     overflow: "hidden",
   },
+  cardPad: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    backgroundColor: Colors.card,
+    overflow: "hidden",
+    paddingHorizontal: 16,
+  },
+  intelHero: {
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.25)",
+  },
+  intelHeroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  intelEyebrow: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.3 },
+  intelRank: { color: Colors.text, fontSize: 30, fontWeight: "900", letterSpacing: -1, marginTop: 4 },
+  intelScoreRing: {
+    width: 58,
+    height: 58,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(3,7,8,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.42)",
+  },
+  intelScore: { color: Colors.mint, fontSize: 20, fontWeight: "900" },
+  intelBody: { color: Colors.muted, fontSize: 13, fontWeight: "700", lineHeight: 19, marginTop: 12 },
+  tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 },
+  intelTag: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(85,245,178,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.28)",
+  },
+  intelTagText: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 0.7 },
+  intelLine: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.line },
+  intelLineLabel: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
+  intelLineValue: { color: Colors.text, fontSize: 13, fontWeight: "800", lineHeight: 18, marginTop: 5 },
+  intelLineDetail: { color: Colors.mint, fontSize: 11, fontWeight: "800", marginTop: 4 },
   divider: { borderBottomWidth: 1, borderBottomColor: Colors.line },
 
   // Holding row
