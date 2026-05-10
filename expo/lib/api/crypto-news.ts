@@ -3,11 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import {
   fetchWalletPortfolio,
-  fetchWalletTokens,
-  fetchWalletTransactions,
   isValidSolanaAddress,
   type WalletTokenHolding,
-  type WalletTransaction,
 } from "@/lib/api/wallet";
 
 export type NewsCategory =
@@ -24,6 +21,45 @@ export type NewsCategory =
   | "kol";
 export type NewsSentiment = "bullish" | "bearish" | "neutral";
 export type NewsTimeRange = "24h" | "7d" | "all";
+export type Blockchain = "solana" | "ethereum" | "base" | "bitcoin";
+
+export interface UserWalletWithBalance {
+  id: string;
+  user_id?: string | null;
+  address: string;
+  wallet_address: string;
+  blockchain: Blockchain;
+  label?: string | null;
+  created_at?: string | null;
+  balanceUsd: number;
+  tokenCount: number;
+  topHolding?: WalletTokenHolding | null;
+}
+
+export interface PortfolioStats {
+  totalUsd: number;
+  unrealizedPnlUsd: number;
+  unrealizedPnlPct: number;
+  walletCount: number;
+  tokenCount: number;
+  topHolding?: WalletTokenHolding | null;
+  wallets: UserWalletWithBalance[];
+}
+
+interface TrackedWalletRow {
+  id: string;
+  user_id?: string | null;
+  wallet_address: string;
+  blockchain?: string | null;
+  label?: string | null;
+  created_at?: string | null;
+}
+
+interface AddUserWalletInput {
+  blockchain: Blockchain;
+  address: string;
+  label?: string;
+}
 
 export interface CryptoNewsItem {
   id: string;
@@ -193,6 +229,8 @@ const RSS_SOURCES: RssSource[] = [
   { name: "r/SolanaTrading", url: "https://www.reddit.com/r/solanatrading/.rss", categoryHint: "solana" },
   { name: "r/Solana_Developers", url: "https://www.reddit.com/r/Solana_Developers/.rss", categoryHint: "solana" },
 ];
+
+const USER_WALLETS_CACHE_KEY = "soltools.userWallets.v1";
 
 const BULLISH_RE = /(surge|rally|soar|pump|breakout|ath|moon|bull|adopt|approve|inflow|gain|launch|record|jumps|climbs)/i;
 const BEARISH_RE = /(crash|plunge|dump|drop|decline|sell[- ]off|exploit|scam|rug|liquidat|bear|outflow|warning|delist|ban|lawsuit|charges)/i;
@@ -426,6 +464,149 @@ function filterByTimeRange(items: CryptoNewsItem[], range?: NewsTimeRange): Cryp
 }
 
 export function getActiveFeedCount(): number { return RSS_SOURCES.length; }
+
+function normalizeBlockchain(value?: string | null): Blockchain {
+  if (value === "ethereum" || value === "base" || value === "bitcoin") return value;
+  return "solana";
+}
+
+async function getCurrentUserId(): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  } catch (e) {
+    console.log("[wallets] auth lookup failed", e);
+    return null;
+  }
+}
+
+async function readCachedWallets(): Promise<TrackedWalletRow[]> {
+  try {
+    const raw = await AsyncStorage.getItem(USER_WALLETS_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as TrackedWalletRow[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeCachedWallets(wallets: TrackedWalletRow[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(USER_WALLETS_CACHE_KEY, JSON.stringify(wallets));
+  } catch (e) {
+    console.log("[wallets] cache write failed", e);
+  }
+}
+
+async function fetchTrackedWalletRows(): Promise<TrackedWalletRow[]> {
+  const userId = await getCurrentUserId();
+  if (!userId) return readCachedWallets();
+  try {
+    const { data, error } = await supabase
+      .from("tracked_wallets")
+      .select("id,user_id,wallet_address,blockchain,label,created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as TrackedWalletRow[];
+  } catch (e) {
+    console.log("[wallets] remote fetch failed, using cache", e);
+    return readCachedWallets();
+  }
+}
+
+export async function addUserWallet(input: AddUserWalletInput): Promise<UserWalletWithBalance> {
+  const address = input.address.trim();
+  const blockchain = input.blockchain;
+  if (blockchain !== "solana") {
+    throw new Error("Only Solana wallet tracking is live right now.");
+  }
+  if (!isValidSolanaAddress(address)) {
+    throw new Error("Enter a valid Solana wallet address.");
+  }
+
+  const userId = await getCurrentUserId();
+  const label = input.label?.trim() || null;
+  let row: TrackedWalletRow = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    user_id: userId,
+    wallet_address: address,
+    blockchain,
+    label,
+    created_at: new Date().toISOString(),
+  };
+
+  if (userId) {
+    try {
+      const { data, error } = await supabase
+        .from("tracked_wallets")
+        .insert({ user_id: userId, wallet_address: address, blockchain, label })
+        .select("id,user_id,wallet_address,blockchain,label,created_at")
+        .single();
+      if (error) throw error;
+      row = data as TrackedWalletRow;
+    } catch (e) {
+      console.log("[wallets] remote insert failed, saving local", e);
+    }
+  }
+
+  const cached = await readCachedWallets();
+  const withoutDuplicate = cached.filter((w) => w.wallet_address !== address);
+  await writeCachedWallets([row, ...withoutDuplicate]);
+  return hydrateWalletRow(row);
+}
+
+async function hydrateWalletRow(row: TrackedWalletRow): Promise<UserWalletWithBalance> {
+  const blockchain = normalizeBlockchain(row.blockchain);
+  if (blockchain !== "solana" || !isValidSolanaAddress(row.wallet_address)) {
+    return {
+      id: row.id,
+      user_id: row.user_id ?? null,
+      address: row.wallet_address,
+      wallet_address: row.wallet_address,
+      blockchain,
+      label: row.label ?? null,
+      created_at: row.created_at ?? null,
+      balanceUsd: 0,
+      tokenCount: 0,
+      topHolding: null,
+    };
+  }
+
+  const portfolio = await fetchWalletPortfolio(row.wallet_address);
+  const sortedTokens = [...portfolio.tokens].sort((a, b) => (b.usdValue ?? 0) - (a.usdValue ?? 0));
+  return {
+    id: row.id,
+    user_id: row.user_id ?? null,
+    address: row.wallet_address,
+    wallet_address: row.wallet_address,
+    blockchain,
+    label: row.label ?? null,
+    created_at: row.created_at ?? null,
+    balanceUsd: portfolio.balance.usd,
+    tokenCount: portfolio.tokens.length,
+    topHolding: sortedTokens[0] ?? null,
+  };
+}
+
+export async function getPortfolioStats(): Promise<PortfolioStats> {
+  const rows = await fetchTrackedWalletRows();
+  const wallets = await Promise.all(rows.map((row) => hydrateWalletRow(row)));
+  const totalUsd = wallets.reduce((sum, wallet) => sum + wallet.balanceUsd, 0);
+  const topHolding = wallets
+    .map((wallet) => wallet.topHolding)
+    .filter((holding): holding is WalletTokenHolding => Boolean(holding))
+    .sort((a, b) => (b.usdValue ?? 0) - (a.usdValue ?? 0))[0] ?? null;
+
+  return {
+    totalUsd,
+    unrealizedPnlUsd: 0,
+    unrealizedPnlPct: 0,
+    walletCount: wallets.length,
+    tokenCount: wallets.reduce((sum, wallet) => sum + wallet.tokenCount, 0),
+    topHolding,
+    wallets,
+  };
+}
 
 const SAVED_KEY = "soltools.cryptoNews.saved.v1";
 
