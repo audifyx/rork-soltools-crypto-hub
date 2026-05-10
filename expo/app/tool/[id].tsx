@@ -1,5 +1,5 @@
 import * as Clipboard from "expo-clipboard";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -92,6 +92,7 @@ import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import { getTokenOverview, getTokenSecurity, type TokenOverview } from "@/lib/api/birdeye";
+import { consumeCredits, creditActionForTool, fetchCreditBalance, TOOL_CREDIT_COSTS } from "@/lib/api/credits";
 import { getLiveKitToken } from "@/lib/api/livekit";
 import { useTrendingTokens } from "@/lib/api/market";
 import {
@@ -2382,6 +2383,16 @@ function GenericInputTool({
   kind: "contract" | "wallet" | "stream";
 }) {
   const accent = meta.accent;
+  const qc = useQueryClient();
+  const { isAuthenticated } = useAuth();
+  const creditAction = useMemo(() => creditActionForTool(meta.id, kind), [meta.id, kind]);
+  const creditCost = TOOL_CREDIT_COSTS[creditAction];
+  const credits = useQuery({
+    queryKey: ["credits", "balance"] as const,
+    queryFn: fetchCreditBalance,
+    enabled: isAuthenticated,
+    staleTime: 20_000,
+  });
   const [value, setValue] = useState<string>("");
   const [scanning, setScanning] = useState<boolean>(false);
   const [scanned, setScanned] = useState<boolean>(false);
@@ -2428,6 +2439,15 @@ function GenericInputTool({
     setPortfolio(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
+      if (isAuthenticated) {
+        await consumeCredits({
+          action: creditAction,
+          toolId: meta.id,
+          target: v,
+          metadata: { kind },
+        });
+        await qc.invalidateQueries({ queryKey: ["credits", "balance"] });
+      }
       if (kind === "contract") {
         const [ov, sec] = await Promise.all([
           getTokenOverview(v).catch((e) => {
@@ -2453,7 +2473,7 @@ function GenericInputTool({
     } finally {
       setScanning(false);
     }
-  }, [kind, value]);
+  }, [creditAction, isAuthenticated, kind, meta.id, qc, value]);
 
   const placeholder =
     kind === "wallet" ? "So111... wallet address" :
@@ -2524,6 +2544,20 @@ function GenericInputTool({
           </Pressable>
         </View>
       ) : null}
+
+      <View style={styles.creditMeter}>
+        <View>
+          <Text style={styles.creditLabel}>CREDITS</Text>
+          <Text style={styles.creditValue}>
+            {isAuthenticated && credits.data ? credits.data.balance.toLocaleString() : "10,000"}
+            <Text style={styles.creditMax}> / mo</Text>
+          </Text>
+        </View>
+        <View style={[styles.creditCostPill, { borderColor: `${accent}55` }]}>
+          <Zap color={accent} size={12} strokeWidth={2.8} />
+          <Text style={[styles.creditCostText, { color: accent }]}>{creditCost} credits/run</Text>
+        </View>
+      </View>
 
       <View style={styles.statRow}>
         {tiles.map((t) => (
@@ -3213,6 +3247,51 @@ const styles = StyleSheet.create({
   sectionTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: 0.2 },
   sectionAction: { marginLeft: "auto" },
 
+  creditMeter: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "rgba(85,245,178,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.18)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  creditLabel: {
+    color: Colors.muted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  creditValue: {
+    color: Colors.text,
+    fontSize: 20,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+    marginTop: 2,
+  },
+  creditMax: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  creditCostPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(3,7,8,0.45)",
+    borderWidth: 1,
+  },
+  creditCostText: {
+    fontSize: 11,
+    fontWeight: "900",
+  },
   statRow: {
     flexDirection: "row",
     gap: 8,
