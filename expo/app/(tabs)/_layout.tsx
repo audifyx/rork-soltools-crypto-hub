@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { Compass, Home, MessageCircle, Play, User, Wrench } from "lucide-react-native";
+import { Compass, House, MessageCircle, Play, User, Wrench } from "lucide-react-native";
 import React, { memo } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
@@ -51,7 +51,7 @@ export default function TabsLayout() {
         name="home"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} strokeWidth={2.4} />,
+          tabBarIcon: ({ color, size }) => <House color={color} size={size} strokeWidth={2.4} />,
         }}
       />
       <Tabs.Screen

@@ -23,6 +23,7 @@ import {
   Gauge,
   Gift,
   Hash,
+  House,
   Layers,
   LineChart,
   Lock,
@@ -1240,7 +1241,7 @@ function WalletIntelligenceRail({ onOpen }: { onOpen: (route: string, id?: strin
 }
 
 const OG_TABS: { key: OgScanSection; label: string; Icon: LucideIcon }[] = [
-  { key: "home", label: "Home", Icon: Home },
+  { key: "home", label: "Home", Icon: House },
   { key: "scan", label: "Scan", Icon: ScanLine },
   { key: "live", label: "Live", Icon: Activity },
   { key: "watch", label: "Watch", Icon: Eye },
