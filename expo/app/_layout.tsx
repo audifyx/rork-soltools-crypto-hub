@@ -10,6 +10,7 @@ enableFreeze(true);
 
 import Colors from "@/constants/colors";
 import { registerKOLSync } from "@/lib/kol-background";
+import { ensureNotificationPermission } from "@/lib/push-notifications";
 import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
 import { AuthProvider } from "@/providers/auth-provider";
@@ -129,6 +130,9 @@ export default function RootLayout() {
     });
     registerKOLSync().catch((error: unknown) => {
       console.log("SolTools kol bg sync skipped", error);
+    });
+    ensureNotificationPermission().catch((error: unknown) => {
+      console.log("SolTools notification setup skipped", error instanceof Error ? error.message : error);
     });
   }, []);
 

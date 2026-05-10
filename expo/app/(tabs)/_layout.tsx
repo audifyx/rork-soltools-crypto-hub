@@ -6,6 +6,7 @@ import React, { memo } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
 import Colors from "@/constants/colors";
+import { useMessages } from "@/providers/messages-provider";
 
 const TabBarBackground = memo(function TabBarBackground() {
   return (
@@ -27,6 +28,8 @@ const TabBarBackground = memo(function TabBarBackground() {
 });
 
 export default function TabsLayout() {
+  const { totalUnread } = useMessages();
+
   return (
     <Tabs
       screenOptions={{
@@ -98,6 +101,8 @@ export default function TabsLayout() {
         name="messages"
         options={{
           title: "Messages",
+          tabBarBadge: totalUnread > 0 ? (totalUnread > 99 ? "99+" : totalUnread) : undefined,
+          tabBarBadgeStyle: styles.badge,
           tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} strokeWidth={2.4} />,
         }}
       />
@@ -166,6 +171,14 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     borderColor: "rgba(221,227,236,0.14)",
+  },
+  badge: {
+    backgroundColor: Colors.rose,
+    color: Colors.text,
+    fontSize: 9,
+    fontWeight: "900",
+    minWidth: 18,
+    height: 18,
   },
   label: {
     fontSize: 8.4,

@@ -21,6 +21,47 @@ create table if not exists public.notifications (
 create index if not exists notifications_user_created_idx on public.notifications(user_id, created_at desc);
 create index if not exists notifications_user_unread_idx on public.notifications(user_id, read_at) where read_at is null;
 create index if not exists notifications_target_idx on public.notifications(target_type, target_id);
+create unique index if not exists notifications_user_kind_target_actor_uidx
+  on public.notifications(user_id, kind, target_type, target_id, actor_id)
+  where target_id is not null and actor_id is not null;
+
+create or replace function public.create_notification(
+  p_user_id uuid,
+  p_actor_id uuid,
+  p_kind text,
+  p_title text,
+  p_message text,
+  p_target_type text default null,
+  p_target_id uuid default null,
+  p_priority text default 'normal'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  created_id uuid;
+begin
+  if p_user_id is null or p_user_id = p_actor_id then
+    return null;
+  end if;
+
+  insert into public.notifications(user_id, actor_id, kind, title, message, body, target_type, target_id, priority)
+  values (p_user_id, p_actor_id, coalesce(p_kind, 'system'), p_title, p_message, p_message, p_target_type, p_target_id, coalesce(p_priority, 'normal'))
+  on conflict (user_id, kind, target_type, target_id, actor_id)
+  where target_id is not null and actor_id is not null
+  do update set
+    title = excluded.title,
+    message = excluded.message,
+    body = excluded.body,
+    read_at = null,
+    created_at = now()
+  returning id into created_id;
+
+  return created_id;
+end;
+$;
 
 create or replace function public.get_unread_notification_count()
 returns integer
@@ -263,6 +304,51 @@ as $$
   limit greatest(1, least(coalesce(p_limit, 80), 100));
 $$;
 
+create or replace function public.notify_dm_message()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  recipient record;
+  sender_name text;
+begin
+  select coalesce(display_name, username, 'Someone') into sender_name
+  from public.profiles
+  where user_id = new.sender_id or id = new.sender_id
+  limit 1;
+
+  for recipient in
+    select user_id, muted
+    from public.dm_participants
+    where conversation_id = new.conversation_id
+      and user_id <> new.sender_id
+      and hidden_at is null
+  loop
+    if coalesce(recipient.muted, false) = false then
+      perform public.create_notification(
+        recipient.user_id,
+        new.sender_id,
+        'dm_message',
+        coalesce(sender_name, 'New message'),
+        coalesce(nullif(new.body, ''), 'Sent you a message'),
+        'dm_conversation',
+        new.conversation_id,
+        'high'
+      );
+    end if;
+  end loop;
+
+  return new;
+end;
+$;
+
+drop trigger if exists dm_message_notification_trigger on public.dm_messages;
+create trigger dm_message_notification_trigger
+  after insert on public.dm_messages
+  for each row execute function public.notify_dm_message();
+
 alter table public.notifications enable row level security;
 alter table public.community_post_likes enable row level security;
 alter table public.community_post_reposts enable row level security;
@@ -274,6 +360,9 @@ begin
   end if;
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='notifications' and policyname='notifications_update_own') then
     create policy notifications_update_own on public.notifications for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='notifications' and policyname='notifications_insert_system') then
+    create policy notifications_insert_system on public.notifications for insert with check (user_id = auth.uid());
   end if;
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='community_post_likes' and policyname='likes_select_all') then
     create policy likes_select_all on public.community_post_likes for select using (true);

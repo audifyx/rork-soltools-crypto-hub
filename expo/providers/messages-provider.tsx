@@ -1,8 +1,10 @@
 import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { AppState } from "react-native";
 
 import { normalizeMediaUrl } from "@/lib/media";
+import { scheduleLocalNotification, setAppBadgeCount } from "@/lib/push-notifications";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -229,6 +231,7 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
   });
 
   const conversations = conversationsQuery.data ?? [];
+  const previousUnreadRef = useRef<Record<string, number>>({});
   const conversationIds = useMemo<string[]>(() => conversations.map((c) => c.id), [conversations]);
   const userByConversation = useMemo<Record<string, DMUser>>(
     () => Object.fromEntries(conversations.map((c) => [c.id, c.user] as const)),
@@ -291,6 +294,7 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
       .channel(`dm-feed-${userId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "dm_messages" }, () => {
         queryClient.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
+        queryClient.invalidateQueries({ queryKey: ["notifications"] }).catch(() => {});
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "dm_participants" }, () => {
         queryClient.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
@@ -300,6 +304,26 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
       supabase.removeChannel(channel).catch(() => {});
     };
   }, [isAuthenticated, queryClient, userId]);
+
+  useEffect(() => {
+    if (!isAuthenticated || conversations.length === 0) return;
+    const previous = previousUnreadRef.current;
+    const next: Record<string, number> = {};
+    conversations.forEach((conversation) => {
+      next[conversation.id] = conversation.unread;
+      const hadUnread = previous[conversation.id] ?? 0;
+      if (conversation.unread > hadUnread && !conversation.muted && AppState.currentState !== "active") {
+        scheduleLocalNotification({
+          title: conversation.user.name,
+          body: conversation.lastMessage || "Sent you a message",
+          data: { conversationId: conversation.id, route: `/dm/${conversation.id}` },
+        }).catch((error: unknown) => {
+          console.log("[messages] local notification skipped", error instanceof Error ? error.message : error);
+        });
+      }
+    });
+    previousUnreadRef.current = next;
+  }, [conversations, isAuthenticated]);
 
   const inbox = useMemo<Conversation[]>(
     () =>
@@ -318,6 +342,10 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
   );
 
   const totalUnread = useMemo<number>(() => inbox.reduce((sum, c) => sum + c.unread, 0), [inbox]);
+
+  useEffect(() => {
+    setAppBadgeCount(totalUnread).catch(() => {});
+  }, [totalUnread]);
 
   const getConversation = useCallback(
     (id: string) => conversations.find((c) => c.id === id),
