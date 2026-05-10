@@ -69,6 +69,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import AppBackground from "@/components/ui/AppBackground";
 import OGScanLiveStrip from "@/components/discover/OGScanLiveStrip";
 import Colors from "@/constants/colors";
+import { fetchDexToken, getNewSolanaPairs, searchSolanaPairs, type DexPair, type DexTokenSnapshot } from "@/lib/api/dexscreener";
+import { getQuote } from "@/lib/api/jupiter";
 import {
   SOLTOOLS_MODULE_COUNT,
   SOLTOOLS_PLATFORM_MODULES,
@@ -1288,6 +1290,28 @@ function OGScanMobileCommandCenter({
   onOpen: (route: string, id?: string) => void;
 }) {
   const shortMint = `${appState.selectedMint.slice(0, 5)}…${appState.selectedMint.slice(-5)}`;
+  const selectedToken = useQuery<DexTokenSnapshot | null>({
+    queryKey: ["ogscan", "selected-token", appState.selectedMint],
+    queryFn: () => fetchDexToken(appState.selectedMint),
+    enabled: appState.selectedMint.length >= 32,
+    refetchInterval: 12_000,
+    staleTime: 6_000,
+  });
+  const livePairs = useQuery<DexPair[]>({
+    queryKey: ["ogscan", "live-pairs", activeSection],
+    queryFn: () => (activeSection === "live" ? getNewSolanaPairs(12) : searchSolanaPairs("solana meme", 12)),
+    refetchInterval: activeSection === "live" ? 15_000 : 30_000,
+    staleTime: 10_000,
+  });
+  const quote = useQuery<{ outAmount?: string } | null>({
+    queryKey: ["ogscan", "jupiter-quote", appState.selectedMint],
+    queryFn: async () => {
+      if (appState.selectedMint === "So11111111111111111111111111111111111111112") return null;
+      return await getQuote({ inputMint: "So11111111111111111111111111111111111111112", outputMint: appState.selectedMint, amount: "100000000", slippageBps: 100 });
+    },
+    enabled: activeSection === "more" && appState.selectedMint.length >= 32,
+    staleTime: 20_000,
+  });
   const openDex = useCallback(() => {
     Linking.openURL(`https://dexscreener.com/solana/${appState.selectedMint}`).catch((e) => console.log("[ogscan] open dex error", e));
   }, [appState.selectedMint]);
@@ -1297,6 +1321,9 @@ function OGScanMobileCommandCenter({
   }, [appState.selectedMint]);
 
   const cards = activeSection === "home" ? [...OG_FEATURES.scan.slice(0, 2), ...OG_FEATURES.live.slice(0, 2)] : OG_FEATURES[activeSection];
+  const snap = selectedToken.data;
+  const pairCount = livePairs.data?.length ?? 0;
+  const quoteText = quote.data?.outAmount ? `${(Number(quote.data.outAmount) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} tokens / 0.1 SOL` : quote.isFetching ? "quoting…" : "open Jupiter";
 
   return (
     <View style={styles.mobileShell} testID="ogscan-mobile-command-center">
@@ -1324,8 +1351,14 @@ function OGScanMobileCommandCenter({
         })}
       </View>
 
+      <View style={styles.liveStatsRow}>
+        <StatTile label="Price" value={snap?.priceUsd ? `${snap.priceUsd.toPrecision(4)}` : selectedToken.isFetching ? "sync…" : "—"} accent={Colors.mint} Icon={Gauge} />
+        <StatTile label="Liquidity" value={snap?.liquidityUsd ? `${Math.round(snap.liquidityUsd).toLocaleString()}` : "—"} accent={Colors.cyan} Icon={Droplets} />
+        <StatTile label="Live pairs" value={livePairs.isFetching && pairCount === 0 ? "sync…" : String(pairCount)} accent={Colors.goldBright} Icon={Radar} />
+      </View>
+
       <View style={styles.actionMatrix}>
-        <Pressable onPress={() => onOpen("/tool/token-lookup", "token-lookup")} style={styles.matrixBtn}><Text style={styles.matrixText}>Open Scanner</Text></Pressable>
+        <Pressable onPress={() => onOpen(`/tool/token-lookup?ca=${encodeURIComponent(appState.selectedMint)}`, "token-lookup")} style={styles.matrixBtn}><Text style={styles.matrixText}>Open Scanner</Text></Pressable>
         <Pressable onPress={() => onOpen("/tool/whale-tracker", "whale-tracker")} style={styles.matrixBtn}><Text style={styles.matrixText}>Open Whales</Text></Pressable>
         <Pressable onPress={() => onOpen("/tool/transaction-tape", "transaction-tape")} style={styles.matrixBtn}><Text style={styles.matrixText}>Tx Tape</Text></Pressable>
         <Pressable onPress={copyMint} style={styles.matrixBtn}><Text style={styles.matrixText}>Copy CA</Text></Pressable>
@@ -1338,9 +1371,13 @@ function OGScanMobileCommandCenter({
 
       {activeSection === "watch" ? <Pressable onPress={() => onSelectDev(OGSCAN_DEV_WALLET)} style={styles.devIntel}><Network color={Colors.rose} size={18} /><View style={{ flex: 1 }}><Text style={styles.devIntelTitle}>Official dev wallet ready</Text><Text style={styles.devIntelBody}>{`${OGSCAN_DEV_WALLET.slice(0, 6)}…${OGSCAN_DEV_WALLET.slice(-6)}`} · tap to watch/unwatch and open dev intel.</Text></View></Pressable> : null}
 
+      {activeSection === "more" ? <View style={styles.apiRail}><Text style={styles.savedTitle}>Jupiter swap quote</Text><Text style={styles.savedBody}>{quoteText}</Text></View> : null}
+
+      {livePairs.isError || selectedToken.isError ? <View style={styles.apiRail}><Text style={styles.apiError}>One source is rate-limited. Showing cached/fallback data and retrying automatically.</Text></View> : null}
+
       <View style={styles.savedRail}>
         <Text style={styles.savedTitle}>Saved mobile state</Text>
-        <Text style={styles.savedBody}>{appState.watchedMints.length} watched mints · {appState.watchedDevs.length} watched devs · {appState.recentSearches.length} recent searches</Text>
+        <Text style={styles.savedBody}>{appState.watchedMints.length} watched mints · {appState.watchedDevs.length} watched devs · {appState.recentSearches.length} recent searches · DexScreener/Jupiter live</Text>
       </View>
     </View>
   );
@@ -1599,6 +1636,7 @@ const styles = StyleSheet.create({
   mobileTabActive: { backgroundColor: Colors.mint },
   mobileTabText: { color: Colors.muted, fontSize: 8.5, fontWeight: "900" },
   mobileTabTextActive: { color: Colors.ink },
+  liveStatsRow: { flexDirection: "row", gap: 8, marginTop: 14 },
   actionMatrix: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 },
   matrixBtn: { width: "48%", paddingVertical: 10, paddingHorizontal: 10, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
   matrixBtnWide: { width: "98%", paddingVertical: 11, paddingHorizontal: 10, borderRadius: 14, backgroundColor: "rgba(98,208,255,0.10)", borderWidth: 1, borderColor: "rgba(98,208,255,0.26)" },
@@ -1612,6 +1650,8 @@ const styles = StyleSheet.create({
   devIntel: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 10, padding: 13, borderRadius: 18, borderWidth: 1, borderColor: "rgba(230,242,255,0.20)", backgroundColor: "rgba(230,242,255,0.07)" },
   devIntelTitle: { color: Colors.text, fontSize: 13, fontWeight: "900" },
   devIntelBody: { color: Colors.muted, fontSize: 10.5, fontWeight: "700", lineHeight: 15, marginTop: 2 },
+  apiRail: { marginTop: 12, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: "rgba(98,208,255,0.18)", backgroundColor: "rgba(98,208,255,0.07)" },
+  apiError: { color: Colors.goldBright, fontSize: 10.5, fontWeight: "800", lineHeight: 15 },
   savedRail: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
   savedTitle: { color: Colors.text, fontSize: 12, fontWeight: "900" },
   savedBody: { color: Colors.muted, fontSize: 10.5, fontWeight: "700", marginTop: 3 },
