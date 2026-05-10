@@ -777,9 +777,9 @@ export default function ToolsScreen() {
                 <Wrench color={Colors.mint} size={14} strokeWidth={2.6} />
                 <Text style={styles.headerBadgeText}>TOOL DECK</Text>
               </View>
-              <Text style={styles.headerTitle}>Tools</Text>
+              <Text style={styles.headerTitle}>OG Scanner</Text>
               <Text style={styles.headerSub}>
-                Live on-chain intelligence, one tap away.
+                Meme market terminal for wallets, narratives, whales and holder risk.
               </Text>
             </View>
             <View style={styles.statusBlock}>
@@ -792,15 +792,31 @@ export default function ToolsScreen() {
                 />
                 <View style={styles.statusDot} />
               </View>
-              <Text style={styles.statusText}>RPC LIVE</Text>
+              <Text style={styles.statusText}>OG LIVE</Text>
             </View>
           </View>
 
           <OGScanLiveStrip />
 
+          <OGTerminalHero
+            scan={scan}
+            setScan={setScan}
+            onSubmit={handleScanSubmit}
+            onPaste={onPasteScan}
+            onOpen={onOpen}
+          />
+
+          <LiveScannerGrid onOpen={onOpen} />
+
+          <SmartMoneyPanel onOpen={onOpen} />
+
+          <NarrativeRankings />
+
+          <WalletIntelligenceRail onOpen={onOpen} />
+
           <Pressable
             onPress={() => onOpen(featured.route, featured.id)}
-            style={styles.hero}
+            style={[styles.hero, styles.legacyHero]}
             testID="tools-hero"
           >
             <LinearGradient
@@ -812,7 +828,7 @@ export default function ToolsScreen() {
             <View style={styles.heroTopRow}>
               <View style={styles.heroBadge}>
                 <Sparkles color={Colors.mint} size={11} strokeWidth={3} />
-                <Text style={styles.heroBadgeText}>FEATURED</Text>
+                <Text style={styles.heroBadgeText}>CLASSIC TOOL DECK</Text>
               </View>
               <View style={styles.heroLive}>
                 <View style={styles.heroLiveDot} />
@@ -914,7 +930,7 @@ export default function ToolsScreen() {
             </View>
           </Pressable>
 
-          <View style={styles.statsRow}>
+          <View style={[styles.statsRow, styles.legacyHero]}>
             <StatTile
               label="MODULES"
               value={SOLTOOLS_MODULE_COUNT.toString()}
@@ -941,7 +957,7 @@ export default function ToolsScreen() {
             />
           </View>
 
-          <View style={styles.platformNotice}>
+          <View style={[styles.platformNotice, styles.legacyHero]}>
             <View style={styles.platformNoticeIcon}>
               <Lock color={Colors.goldBright} size={15} strokeWidth={2.8} />
             </View>
@@ -1012,7 +1028,7 @@ export default function ToolsScreen() {
             <View style={styles.sectionHead}>
               <View style={styles.sectionHeadLeft}>
                 <Flame color={Colors.orange} size={14} strokeWidth={2.8} />
-                <Text style={styles.sectionTitle}>All tools</Text>
+                <Text style={styles.sectionTitle}>Full scanner modules</Text>
                 <View style={styles.countChip}>
                   <Text style={styles.countChipText}>{filtered.length}</Text>
                 </View>
@@ -1083,6 +1099,66 @@ export default function ToolsScreen() {
       </SafeAreaView>
     </View>
   );
+}
+
+const LIVE_SCANNERS = [
+  { id: "wallet-tracker", route: "/tool/wallet-tracker", title: "Wallet Intel", sub: "PnL, holdings, tags", metric: "+42 smart entries", Icon: Wallet, accent: Colors.mint },
+  { id: "dev-wallet-tracker", route: "/tool/dev-wallet-tracker", title: "Dev Tracker", sub: "Deployers + clusters", metric: "18 risky launches", Icon: Network, accent: Colors.rose },
+  { id: "holder-analysis", route: "/tool/holder-analysis", title: "Holder Map", sub: "Insiders + diamonds", metric: "31% whale conc.", Icon: PieChart, accent: Colors.orange },
+  { id: "whale-tracker", route: "/tool/whale-tracker", title: "Whale Tape", sub: "Buys, sells, exits", metric: "$2.4M flow", Icon: Waves, accent: Colors.cyan },
+] as const;
+
+const SMART_FEED = [
+  { wallet: "7Xh…9Kq", action: "accumulated", token: "$WIF", size: "$184K", conviction: "HIGH" },
+  { wallet: "F3d…2Lm", action: "rotated into", token: "$POPCAT", size: "$91K", conviction: "MED" },
+  { wallet: "9Qa…Rug", action: "linked dev sell", token: "$NOVA", size: "$38K", conviction: "RISK" },
+] as const;
+
+const NARRATIVES = [
+  { name: "Solana AI agents", score: 94, delta: "+28%", color: Colors.cyan },
+  { name: "Political memes", score: 88, delta: "+19%", color: Colors.orange },
+  { name: "Cat meta", score: 81, delta: "+11%", color: Colors.mint },
+] as const;
+
+function OGTerminalHero({ scan, setScan, onSubmit, onPaste, onOpen }: { scan: string; setScan: (v: string) => void; onSubmit: () => void; onPaste: () => void; onOpen: (route: string, id?: string) => void }) {
+  return (
+    <View style={styles.ogHero} testID="og-scanner-dashboard">
+      <LinearGradient colors={["rgba(0,255,178,0.18)", "rgba(255,122,26,0.12)", "rgba(0,0,0,0)"]} style={StyleSheet.absoluteFill} />
+      <View style={styles.ogGridGlow} />
+      <View style={styles.ogHeroTop}>
+        <View style={styles.terminalPill}><Radar color={Colors.mint} size={13} strokeWidth={3} /><Text style={styles.terminalPillText}>OGSCAN TERMINAL</Text></View>
+        <Text style={styles.terminalLive}>LIVE FEEDS</Text>
+      </View>
+      <Text style={styles.ogTitle}>Find origin coins before CT catches up.</Text>
+      <Text style={styles.ogSub}>Scan contracts, wallets, deployers and narratives with smart-money routing in one command center.</Text>
+      <View style={styles.commandLine}>
+        <Text style={styles.prompt}>scan:</Text>
+        <TextInput value={scan} onChangeText={setScan} placeholder="contract / wallet / ticker" placeholderTextColor={Colors.muted} style={styles.commandInput} autoCapitalize="none" autoCorrect={false} onSubmitEditing={onSubmit} />
+        <Pressable onPress={scan.length ? onSubmit : onPaste} style={styles.commandBtn}><Text style={styles.commandBtnText}>{scan.length ? "RUN" : "PASTE"}</Text></Pressable>
+      </View>
+      <View style={styles.ogActions}>
+        <Pressable onPress={() => onOpen("/tool/narrative-engine", "narrative-engine")} style={styles.ogAction}><Brain color={Colors.violet} size={16} /><Text style={styles.ogActionText}>Narratives</Text></Pressable>
+        <Pressable onPress={() => onOpen("/tool/wallet-tracker", "wallet-tracker")} style={styles.ogAction}><UserSearch color={Colors.mint} size={16} /><Text style={styles.ogActionText}>Wallet lookup</Text></Pressable>
+        <Pressable onPress={() => onOpen("/tool/holder-analysis", "holder-analysis")} style={styles.ogAction}><Fingerprint color={Colors.orange} size={16} /><Text style={styles.ogActionText}>Holder risk</Text></Pressable>
+      </View>
+    </View>
+  );
+}
+
+function LiveScannerGrid({ onOpen }: { onOpen: (route: string, id?: string) => void }) {
+  return <View style={styles.ogSection}><Text style={styles.ogSectionTitle}>Live scanners</Text><View style={styles.scannerGrid}>{LIVE_SCANNERS.map((s) => <Pressable key={s.id} onPress={() => onOpen(s.route, s.id)} style={[styles.scannerCard, { borderColor: `${s.accent}44` }]}><s.Icon color={s.accent} size={22} strokeWidth={2.8} /><Text style={styles.scannerTitle}>{s.title}</Text><Text style={styles.scannerSub}>{s.sub}</Text><Text style={[styles.scannerMetric, { color: s.accent }]}>{s.metric}</Text></Pressable>)}</View></View>;
+}
+
+function SmartMoneyPanel({ onOpen }: { onOpen: (route: string, id?: string) => void }) {
+  return <View style={styles.feedPanel}><View style={styles.feedHead}><Text style={styles.ogSectionTitle}>Smart money tape</Text><Pressable onPress={() => onOpen("/tool/whale-tracker", "whale-tracker")}><Text style={styles.feedAction}>Open whale feed</Text></Pressable></View>{SMART_FEED.map((f) => <View key={`${f.wallet}-${f.token}`} style={styles.feedRow}><View style={styles.feedDot} /><Text style={styles.feedText}><Text style={styles.feedWallet}>{f.wallet}</Text> {f.action} <Text style={styles.feedToken}>{f.token}</Text></Text><View style={styles.feedSize}><Text style={styles.feedSizeText}>{f.size}</Text><Text style={styles.feedConviction}>{f.conviction}</Text></View></View>)}</View>;
+}
+
+function NarrativeRankings() {
+  return <View style={styles.feedPanel}><Text style={styles.ogSectionTitle}>Narrative rankings</Text>{NARRATIVES.map((n) => <View key={n.name} style={styles.narrativeRow}><View style={{ flex: 1 }}><Text style={styles.narrativeName}>{n.name}</Text><View style={styles.narrativeTrack}><View style={[styles.narrativeFill, { width: `${n.score}%`, backgroundColor: n.color }]} /></View></View><Text style={[styles.narrativeScore, { color: n.color }]}>{n.score}</Text><Text style={styles.narrativeDelta}>{n.delta}</Text></View>)}</View>;
+}
+
+function WalletIntelligenceRail({ onOpen }: { onOpen: (route: string, id?: string) => void }) {
+  return <Pressable onPress={() => onOpen("/tool/wallet-tracker", "wallet-tracker")} style={styles.walletRail}><LinearGradient colors={["rgba(244,198,91,0.20)", "rgba(0,255,178,0.08)"]} style={StyleSheet.absoluteFill} /><Wallet color={Colors.goldBright} size={24} /><View style={{ flex: 1 }}><Text style={styles.walletRailTitle}>Connected wallet intelligence</Text><Text style={styles.walletRailSub}>Realized PnL, recurring wallets, labels, conviction tracking and token click-throughs.</Text></View><ChevronRight color={Colors.goldBright} size={18} /></Pressable>;
 }
 
 function StatTile({
@@ -1269,6 +1345,59 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1.2,
   },
+
+  ogHero: {
+    marginTop: 16,
+    padding: 18,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,178,0.28)",
+    backgroundColor: "rgba(1,8,7,0.92)",
+    overflow: "hidden",
+  },
+  ogGridGlow: { position: "absolute", right: -35, top: -25, width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(0,255,178,0.12)" },
+  ogHeroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  terminalPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(0,255,178,0.10)", borderWidth: 1, borderColor: "rgba(0,255,178,0.28)" },
+  terminalPillText: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  terminalLive: { color: Colors.rose, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  ogTitle: { color: Colors.text, fontSize: 31, fontWeight: "900", letterSpacing: -1, lineHeight: 34, marginTop: 18 },
+  ogSub: { color: Colors.muted, fontSize: 13, fontWeight: "700", lineHeight: 19, marginTop: 8 },
+  commandLine: { marginTop: 16, flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.48)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
+  prompt: { color: Colors.mint, fontSize: 12, fontWeight: "900" },
+  commandInput: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: "800", padding: 0 },
+  commandBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 11, backgroundColor: Colors.mint },
+  commandBtnText: { color: Colors.ink, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  ogActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 },
+  ogAction: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.07)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  ogActionText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
+  ogSection: { marginTop: 18 },
+  ogSectionTitle: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.35 },
+  scannerGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
+  scannerCard: { width: "48%", minHeight: 124, padding: 14, borderRadius: 20, borderWidth: 1, backgroundColor: "rgba(9,13,14,0.92)" },
+  scannerTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", marginTop: 10 },
+  scannerSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 3 },
+  scannerMetric: { fontSize: 11, fontWeight: "900", marginTop: 12 },
+  feedPanel: { marginTop: 18, padding: 16, borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(9,13,14,0.92)" },
+  feedHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  feedAction: { color: Colors.mint, fontSize: 11, fontWeight: "900" },
+  feedRow: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 10, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.06)" },
+  feedDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.mint },
+  feedText: { flex: 1, color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  feedWallet: { color: Colors.text, fontWeight: "900" },
+  feedToken: { color: Colors.goldBright, fontWeight: "900" },
+  feedSize: { alignItems: "flex-end" },
+  feedSizeText: { color: Colors.text, fontSize: 12, fontWeight: "900" },
+  feedConviction: { color: Colors.muted, fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
+  narrativeRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 13 },
+  narrativeName: { color: Colors.text, fontSize: 12, fontWeight: "900", marginBottom: 6 },
+  narrativeTrack: { height: 7, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
+  narrativeFill: { height: 7, borderRadius: 999 },
+  narrativeScore: { width: 30, fontSize: 15, fontWeight: "900", textAlign: "right" },
+  narrativeDelta: { width: 42, color: Colors.mint, fontSize: 11, fontWeight: "900", textAlign: "right" },
+  walletRail: { marginTop: 18, padding: 16, borderRadius: 22, borderWidth: 1, borderColor: "rgba(244,198,91,0.25)", backgroundColor: Colors.card, flexDirection: "row", alignItems: "center", gap: 12, overflow: "hidden" },
+  walletRailTitle: { color: Colors.text, fontSize: 15, fontWeight: "900" },
+  walletRailSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", lineHeight: 16, marginTop: 3 },
+  legacyHero: { opacity: 0.72 },
 
   hero: {
     marginTop: 18,
