@@ -5,7 +5,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Award,
@@ -76,6 +76,7 @@ import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
 import PortfolioCard from "@/components/profile/PortfolioCard";
 import BadgeRow from "@/components/social/BadgeRow";
+import { fetchCreditBalance, fetchCreditLogs, TOOL_CREDIT_COSTS, type CreditLogEntry } from "@/lib/api/credits";
 import { DEFAULT_BADGES, getHolderBadge, sortBadges, type UserBadge } from "@/lib/badge-system";
 import { useAdmin } from "@/providers/admin-provider";
 import { useApp, type Currency, type Language, type ThemeMode, type UserPrefs } from "@/providers/app-provider";
@@ -335,6 +336,7 @@ export default function ProfileScreen() {
         qc.refetchQueries({ queryKey: ["app", "watch"] }),
         qc.refetchQueries({ queryKey: ["app", "alerts"] }),
         qc.refetchQueries({ queryKey: ["app", "wallets"] }),
+        qc.refetchQueries({ queryKey: ["credits"] }),
       ]);
     } finally {
       setRefreshing(false);
@@ -372,6 +374,19 @@ export default function ProfileScreen() {
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [followersOpen, setFollowersOpen] = useState<"followers" | "following" | null>(null);
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
+
+  const creditBalance = useQuery({
+    queryKey: ["credits", "balance"] as const,
+    queryFn: fetchCreditBalance,
+    enabled: isAuthenticated,
+    staleTime: 1000 * 20,
+  });
+  const creditLogs = useQuery({
+    queryKey: ["credits", "logs", 8] as const,
+    queryFn: () => fetchCreditLogs(8),
+    enabled: isAuthenticated,
+    staleTime: 1000 * 20,
+  });
 
   const myListings = useMemo(
     () => listings.filter((l) => !!userId && l.ownerId === userId),
@@ -853,6 +868,16 @@ export default function ProfileScreen() {
           </ScrollView>
 
           <PortfolioCard />
+
+          <CreditsPanel
+            isAuthenticated={isAuthenticated}
+            balance={creditBalance.data?.balance ?? 10000}
+            monthlyCap={creditBalance.data?.monthlyCap ?? 10000}
+            resetAt={creditBalance.data?.resetAt ?? null}
+            logs={creditLogs.data ?? []}
+            isLoading={creditBalance.isLoading || creditLogs.isLoading}
+            onOpenTools={() => router.push("/(tabs)/tools")}
+          />
 
           <View style={styles.statsGrid}>
             <StatCard label="WATCHING" value={stats.watching} accent={Colors.mint} Icon={Eye} />
@@ -1542,6 +1567,96 @@ function HighlightBubble({
       </LinearGradient>
       <Text style={styles.highlightLabel} numberOfLines={1}>{label}</Text>
     </Pressable>
+  );
+}
+
+function CreditsPanel({
+  isAuthenticated,
+  balance,
+  monthlyCap,
+  resetAt,
+  logs,
+  isLoading,
+  onOpenTools,
+}: {
+  isAuthenticated: boolean;
+  balance: number;
+  monthlyCap: number;
+  resetAt: string | null;
+  logs: CreditLogEntry[];
+  isLoading: boolean;
+  onOpenTools: () => void;
+}) {
+  const used = Math.max(0, monthlyCap - balance);
+  const percent = monthlyCap > 0 ? Math.min(1, balance / monthlyCap) : 0;
+  const resetLabel = resetAt
+    ? new Date(resetAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : "monthly";
+  return (
+    <View style={styles.creditsCard} testID="profile-credits-panel">
+      <LinearGradient
+        colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0.035)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <View style={styles.creditsTopRow}>
+        <View style={styles.creditsIconBox}>
+          <Zap color={Colors.ink} size={18} strokeWidth={3} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.creditsEyebrow}>Scanner credits</Text>
+          <Text style={styles.creditsTitle}>{isAuthenticated ? balance.toLocaleString() : "10,000"} points left</Text>
+        </View>
+        <Pressable onPress={onOpenTools} style={styles.creditsCta}>
+          <Text style={styles.creditsCtaText}>Use</Text>
+          <ChevronRight color={Colors.ink} size={13} strokeWidth={3} />
+        </Pressable>
+      </View>
+      <View style={styles.creditProgressTrack}>
+        <View style={[styles.creditProgressFill, { width: `${Math.max(4, percent * 100)}%` }]} />
+      </View>
+      <View style={styles.creditMetaRow}>
+        <Text style={styles.creditMetaText}>{used.toLocaleString()} used this month</Text>
+        <Text style={styles.creditMetaText}>resets {resetLabel}</Text>
+      </View>
+      <View style={styles.creditCostsRow}>
+        <CreditCostPill label="Token" value={TOOL_CREDIT_COSTS.tokenScan} />
+        <CreditCostPill label="Wallet" value={TOOL_CREDIT_COSTS.walletAnalysis} />
+        <CreditCostPill label="Deep" value={TOOL_CREDIT_COSTS.deepScan} />
+        <CreditCostPill label="AI" value={TOOL_CREDIT_COSTS.aiNarrativeReport} />
+      </View>
+      <View style={styles.creditLogBox}>
+        <Text style={styles.creditLogTitle}>Recent usage</Text>
+        {!isAuthenticated ? (
+          <Text style={styles.creditLogEmpty}>Sign in to sync protected scanner usage.</Text>
+        ) : isLoading ? (
+          <Text style={styles.creditLogEmpty}>Loading credit ledger…</Text>
+        ) : logs.length === 0 ? (
+          <Text style={styles.creditLogEmpty}>No scans charged yet.</Text>
+        ) : (
+          logs.slice(0, 3).map((log) => <CreditLogRow key={log.id} log={log} />)
+        )}
+      </View>
+    </View>
+  );
+}
+
+function CreditCostPill({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.creditCostMini}>
+      <Text style={styles.creditCostMiniLabel}>{label}</Text>
+      <Text style={styles.creditCostMiniValue}>{value}</Text>
+    </View>
+  );
+}
+
+function CreditLogRow({ log }: { log: CreditLogEntry }) {
+  return (
+    <View style={styles.creditLogRow}>
+      <Text style={styles.creditLogAction} numberOfLines={1}>{log.toolId.replace(/-/g, " ")}</Text>
+      <Text style={styles.creditLogCost}>-{log.cost} · {log.balanceAfter.toLocaleString()} left</Text>
+    </View>
   );
 }
 
@@ -2794,6 +2909,35 @@ const styles = StyleSheet.create({
   xpFill: { height: "100%", borderRadius: 999 },
   xpFillWrap: { height: "100%", borderRadius: 999, overflow: "hidden" },
 
+  creditsCard: {
+    marginTop: 14,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    overflow: "hidden",
+    padding: 16,
+    backgroundColor: "rgba(0,0,0,0.42)",
+  },
+  creditsTopRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  creditsIconBox: { width: 38, height: 38, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: Colors.mint },
+  creditsEyebrow: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.3, textTransform: "uppercase" },
+  creditsTitle: { color: Colors.text, fontSize: 23, fontWeight: "900", letterSpacing: -0.7, marginTop: 2 },
+  creditsCta: { flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: Colors.text, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
+  creditsCtaText: { color: Colors.ink, fontSize: 12, fontWeight: "900" },
+  creditProgressTrack: { height: 9, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden", marginTop: 14 },
+  creditProgressFill: { height: "100%", borderRadius: 999, backgroundColor: Colors.mint },
+  creditMetaRow: { flexDirection: "row", justifyContent: "space-between", gap: 10, marginTop: 8 },
+  creditMetaText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
+  creditCostsRow: { flexDirection: "row", gap: 7, marginTop: 13 },
+  creditCostMini: { flex: 1, borderRadius: 14, paddingVertical: 9, alignItems: "center", backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  creditCostMiniLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", textTransform: "uppercase" },
+  creditCostMiniValue: { color: Colors.text, fontSize: 13, fontWeight: "900", marginTop: 2 },
+  creditLogBox: { marginTop: 14, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 12 },
+  creditLogTitle: { color: Colors.text, fontSize: 12, fontWeight: "900", marginBottom: 7 },
+  creditLogEmpty: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  creditLogRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingVertical: 5 },
+  creditLogAction: { flex: 1, color: Colors.text, fontSize: 12, fontWeight: "800", textTransform: "capitalize" },
+  creditLogCost: { color: Colors.orange, fontSize: 11, fontWeight: "900" },
   statsGrid: { flexDirection: "row", gap: 8, marginTop: 14 },
   statCard: {
     flex: 1,
