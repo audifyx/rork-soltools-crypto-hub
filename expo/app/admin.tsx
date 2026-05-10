@@ -9,9 +9,7 @@ import {
   Check,
   Coins,
   Crown,
-  Database,
   FileText,
-  Flame,
   Headphones,
   Megaphone,
   Radio,
@@ -475,6 +473,16 @@ function UsersSection() {
     onError: (e: Error) => Alert.alert("Reset failed", e.message),
   });
 
+  const quickBadgeMutation = useMutation({
+    mutationFn: async (input: { row: ProfileRow; badge: UserBadge; remove?: boolean }) => updateProfileBadge(input.row, input.badge, logAction, input.remove),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      qc.invalidateQueries({ queryKey: ["admin", "badge-users"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (e: Error) => Alert.alert("Badge update failed", e.message),
+  });
+
   return (
     <View style={styles.content}>
       <SearchBox value={query} onChangeText={setQuery} placeholder="Search username, wallet, or user id…" />
@@ -498,6 +506,7 @@ function UsersSection() {
               <Metric label="TRADES" value={String(item.trades_count ?? 0)} />
               <Metric label="WIN" value={`${Number(item.win_rate ?? 0).toFixed(0)}%`} />
             </View>
+            <BadgeAdminPanel row={item} onToggle={(badge, remove) => quickBadgeMutation.mutate({ row: item, badge, remove })} />
             <View style={styles.actionGrid}>
               <ActionButton label="View" Icon={Wallet} onPress={() => Alert.alert("User activity", `PnL: ${Number(item.pnl_pct ?? 0).toFixed(1)}%\nTrades: ${item.trades_count ?? 0}\nWin rate: ${Number(item.win_rate ?? 0).toFixed(0)}%`)} />
               <ActionButton label={item.is_banned ? "Unban" : "Ban"} Icon={Ban} danger onPress={() => banMutation.mutate(item)} />
@@ -549,19 +558,7 @@ function BadgesSection() {
   }, [query, usersQuery.data]);
 
   const updateBadgesMutation = useMutation({
-    mutationFn: async (input: { row: ProfileRow; badge: UserBadge; remove?: boolean }) => {
-      const uid = profileUserId(input.row);
-      const current = normalizeAdminBadges(input.row.custom_badges);
-      const next = input.remove
-        ? current.filter((b) => b.id !== input.badge.id)
-        : [{ ...input.badge, granted_at: new Date().toISOString() }, ...current.filter((b) => b.id !== input.badge.id)];
-      const patch: Record<string, unknown> = { custom_badges: next, updated_at: new Date().toISOString() };
-      if (input.badge.id === "verified") patch.verified = !input.remove;
-      if (["admin", "team", "mod", "holder", "supporter", "whale"].includes(input.badge.id)) patch.badge = input.remove ? null : input.badge.id;
-      const { error } = await supabase.from("profiles").update(patch).or(`user_id.eq.${uid},id.eq.${uid}`);
-      if (error) throw error;
-      await logAction(input.remove ? "revoke_profile_badge" : "grant_profile_badge", "user", uid, { custom_badges: current }, { badge: input.badge.id, custom_badges: next });
-    },
+    mutationFn: async (input: { row: ProfileRow; badge: UserBadge; remove?: boolean }) => updateProfileBadge(input.row, input.badge, logAction, input.remove),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "badge-users"] });
       qc.invalidateQueries({ queryKey: ["admin", "users"] });
@@ -642,6 +639,27 @@ function BadgesSection() {
           );
         }}
       />
+    </View>
+  );
+}
+
+function BadgeAdminPanel({ row, onToggle }: { row: ProfileRow; onToggle: (badge: UserBadge, remove: boolean) => void }) {
+  const badges = normalizeAdminBadges(row.custom_badges);
+  return (
+    <View style={styles.badgeAdminPanel}>
+      <View style={styles.badgePanelHeader}>
+        <Text style={styles.inputLabel}>USER BADGES</Text>
+        <Text style={styles.badgePanelCount}>{badges.length} active</Text>
+      </View>
+      <View style={styles.badgePreviewRow}>
+        {badges.length > 0 ? badges.map((badge) => <Pill key={badge.id} label={badge.label} color={badge.color ?? Colors.goldBright} />) : <Text style={styles.rowSub}>No badges yet. Tap below to add one.</Text>}
+      </View>
+      <View style={styles.actionGrid}>
+        {BADGE_OPTIONS.slice(0, 6).map((badge) => {
+          const hasBadge = badges.some((b) => b.id === badge.id);
+          return <ActionButton key={badge.id} label={hasBadge ? `Remove ${badge.label}` : `Add ${badge.label}`} Icon={hasBadge ? X : Tag} danger={hasBadge} onPress={() => onToggle(badge, hasBadge)} />;
+        })}
+      </View>
     </View>
   );
 }
@@ -1353,6 +1371,25 @@ function profileUserId(row: ProfileRow): string {
   return row.user_id ?? row.id;
 }
 
+async function updateProfileBadge(
+  row: ProfileRow,
+  badge: UserBadge,
+  logAction: ReturnType<typeof useAuditLogger>,
+  remove?: boolean,
+): Promise<void> {
+  const uid = profileUserId(row);
+  const current = normalizeAdminBadges(row.custom_badges);
+  const next = remove
+    ? current.filter((b) => b.id !== badge.id)
+    : [{ ...badge, granted_at: new Date().toISOString() }, ...current.filter((b) => b.id !== badge.id)];
+  const patch: Record<string, unknown> = { custom_badges: next, updated_at: new Date().toISOString() };
+  if (badge.id === "verified") patch.verified = !remove;
+  if (["admin", "team", "mod", "holder", "supporter", "whale"].includes(badge.id)) patch.badge = remove ? null : badge.id;
+  const { error } = await supabase.from("profiles").update(patch).or(`user_id.eq.${uid},id.eq.${uid}`);
+  if (error) throw error;
+  await logAction(remove ? "revoke_profile_badge" : "grant_profile_badge", "user", uid, { custom_badges: current }, { badge: badge.id, custom_badges: next });
+}
+
 function normalizeAdminBadges(input: unknown): UserBadge[] {
   if (!Array.isArray(input)) return [];
   return input
@@ -1502,6 +1539,9 @@ const styles = StyleSheet.create({
   actionBtnText: { fontSize: 11, fontWeight: "900", textTransform: "capitalize" },
   tierRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 },
   badgePreviewRow: { flexDirection: "row", flexWrap: "wrap", gap: 7, minHeight: 26, alignItems: "center" },
+  badgeAdminPanel: { backgroundColor: "rgba(216,183,90,0.055)", borderWidth: 1, borderColor: "rgba(216,183,90,0.16)", borderRadius: 14, padding: 10, gap: 9 },
+  badgePanelHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  badgePanelCount: { color: Colors.goldBright, fontSize: 10, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
   dangerBtn: { width: 32, height: 32, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(247,242,231,0.08)", borderWidth: 1, borderColor: "rgba(247,242,231,0.22)" },
 
   inlineInputRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" },
