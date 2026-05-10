@@ -76,6 +76,7 @@ function RootLayoutNav() {
       <Stack.Screen name="upload-reel" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="launch/[id]" />
       <Stack.Screen name="tool/[id]" />
+      <Stack.Screen name="ogscan/[slug]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="u/[handle]" />
       <Stack.Screen name="admin" />
       <Stack.Screen name="communities" options={{ animation: "slide_from_right" }} />

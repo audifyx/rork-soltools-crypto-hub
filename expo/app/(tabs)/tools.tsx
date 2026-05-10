@@ -653,6 +653,33 @@ const OGSCAN_TOKEN_MINT = "EfnZmcFKMXofKA5V5ujvjqtSorvuQD2MzJPz3dxXpump";
 const OGSCAN_DEV_WALLET = "CicbPxARTDrwQ4XcxWsn6SYeG4FMJHirS633cZUJeQDh";
 const OGSCAN_STATE_KEY = "ogscan.mobile.state.v1";
 
+type OGWebTool = {
+  slug: string;
+  title: string;
+  path: string;
+  page: string;
+  description: string;
+  Icon: LucideIcon;
+  accent: string;
+};
+
+const OG_WEB_TOOLS: OGWebTool[] = [
+  { slug: "command", title: "Command", path: "/app", page: "1", description: "Main OGScan dashboard and tool launcher.", Icon: House, accent: "#B8FF3C" },
+  { slug: "our-coin", title: "Our Coin", path: "/our-coin", page: "2", description: "Official CA, dev wallet, chart links, and copy actions.", Icon: Coins, accent: Colors.goldBright },
+  { slug: "roadmap", title: "Roadmap", path: "/roadmap", page: "3", description: "SolTools mission, rollout plan, and community links.", Icon: Route, accent: Colors.cyan },
+  { slug: "market-pulse", title: "Market Pulse", path: "/market-pulse", page: "4", description: "Live token stats, liquidity, holders, score, and flags.", Icon: Activity, accent: "#B8FF3C" },
+  { slug: "snipe-feed", title: "Snipe Feed", path: "/snipe-feed", page: "5", description: "Fresh launches, repeat dev wallets, risk, and heat scoring.", Icon: Radar, accent: Colors.orange },
+  { slug: "scanner", title: "Scanner", path: "/scanner", page: "6", description: "Paste mint or ticker and inspect token safety signals.", Icon: ScanLine, accent: Colors.cyan },
+  { slug: "og-finder", title: "OG Finder", path: "/og-finder", page: "7", description: "Find the original token and separate it from copycats.", Icon: Fingerprint, accent: "#B8FF3C" },
+  { slug: "pairs", title: "Pairs", path: "/pairs", page: "8", description: "Fresh Solana pairs and early liquidity discovery.", Icon: Layers, accent: Colors.cyan },
+  { slug: "migrations", title: "Migrations", path: "/migrations", page: "9", description: "Pump.fun and liquidity migration breakout watch.", Icon: Repeat, accent: Colors.goldBright },
+  { slug: "trending", title: "Trending", path: "/trending", page: "10", description: "Moving Solana coins by 5m, 1h, 6h, and 24h.", Icon: TrendingUp, accent: "#B8FF3C" },
+  { slug: "whales", title: "Whales", path: "/whales", page: "11", description: "Largest holders, concentration, and whale warnings.", Icon: Waves, accent: Colors.cyan },
+  { slug: "tx-feed", title: "Tx Feed", path: "/tx-feed", page: "12", description: "Live parsed transaction tape for the selected mint.", Icon: ClipboardIcon, accent: Colors.orange },
+  { slug: "swap", title: "Swap", path: "/swap", page: "13", description: "Jupiter quotes and routes with scanner context.", Icon: Repeat, accent: "#B8FF3C" },
+  { slug: "tech", title: "Tech", path: "/tech", page: "14", description: "Jupiter, Helius, Birdeye, QuickNode, Alchemy stack.", Icon: Network, accent: Colors.cyan },
+];
+
 type RecentItem = { id: string; ts: number };
 type OgScanSection = "home" | "scan" | "live" | "watch" | "more";
 type OgScanAppState = {
@@ -868,6 +895,11 @@ export default function ToolsScreen() {
           </View>
 
           <OGScanLiveStrip />
+
+          <OGStandaloneToolGrid
+            tools={OG_WEB_TOOLS}
+            onOpen={(slug) => router.push({ pathname: "/ogscan/[slug]", params: { slug } } as never)}
+          />
 
           <OGScanMobileCommandCenter
             activeSection={ogSection}
@@ -1177,6 +1209,51 @@ export default function ToolsScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+    </View>
+  );
+}
+
+function OGStandaloneToolGrid({ tools, onOpen }: { tools: OGWebTool[]; onOpen: (slug: string) => void }) {
+  return (
+    <View style={styles.ogEmbedDeck} testID="ogscan-standalone-tool-grid">
+      <View style={styles.ogEmbedHeadRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.ogEmbedEyebrow}>STANDALONE WEB TOOLS</Text>
+          <Text style={styles.ogEmbedTitle}>One page per scanner</Text>
+          <Text style={styles.ogEmbedSub}>Each card opens its own mobile screen and embeds the direct OGScan URL.</Text>
+        </View>
+        <View style={styles.ogEmbedLivePill}>
+          <View style={styles.ogEmbedLiveDot} />
+          <Text style={styles.ogEmbedLiveText}>WEB API</Text>
+        </View>
+      </View>
+      <View style={styles.ogEmbedGrid}>
+        {tools.map((tool) => {
+          const Icon = tool.Icon;
+          return (
+            <Pressable
+              key={tool.slug}
+              onPress={() => onOpen(tool.slug)}
+              style={({ pressed }) => [styles.ogEmbedCard, pressed && styles.cardPressed]}
+              testID={`open-ogscan-${tool.slug}`}
+            >
+              <LinearGradient colors={[`${tool.accent}22`, "rgba(0,0,0,0.05)"]} style={StyleSheet.absoluteFill} />
+              <View style={[styles.ogEmbedIcon, { borderColor: `${tool.accent}55` }]}>
+                <Icon color={tool.accent} size={18} strokeWidth={2.8} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={styles.ogEmbedTitleRow}>
+                  <Text style={styles.ogEmbedCardTitle} numberOfLines={1}>{tool.title}</Text>
+                  <Text style={styles.ogEmbedPage}>PAGE {tool.page}</Text>
+                </View>
+                <Text style={styles.ogEmbedDesc} numberOfLines={2}>{tool.description}</Text>
+                <Text style={styles.ogEmbedPath} numberOfLines={1}>ogscan.fun{tool.path}</Text>
+              </View>
+              <ChevronRight color={Colors.muted} size={17} strokeWidth={2.6} />
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -1658,6 +1735,60 @@ const styles = StyleSheet.create({
   savedTitle: { color: Colors.text, fontSize: 12, fontWeight: "900" },
   savedBody: { color: Colors.muted, fontSize: 10.5, fontWeight: "700", marginTop: 3 },
   legacyHero: { opacity: 0.72 },
+  ogEmbedDeck: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: "rgba(184,255,60,0.24)",
+    backgroundColor: "rgba(0,8,12,0.92)",
+    overflow: "hidden",
+  },
+  ogEmbedHeadRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 },
+  ogEmbedEyebrow: { color: "#B8FF3C", fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  ogEmbedTitle: { color: Colors.text, fontSize: 22, fontWeight: "900", letterSpacing: -0.6, marginTop: 3 },
+  ogEmbedSub: { color: Colors.muted, fontSize: 11.5, fontWeight: "700", lineHeight: 16, marginTop: 4 },
+  ogEmbedLivePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(98,208,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(98,208,255,0.24)",
+  },
+  ogEmbedLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#B8FF3C" },
+  ogEmbedLiveText: { color: Colors.cyan, fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  ogEmbedGrid: { gap: 10 },
+  ogEmbedCard: {
+    minHeight: 92,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(4,10,18,0.96)",
+    overflow: "hidden",
+  },
+  cardPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
+  ogEmbedIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    backgroundColor: "rgba(255,255,255,0.055)",
+  },
+  ogEmbedTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  ogEmbedCardTitle: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.2, flexShrink: 1 },
+  ogEmbedPage: { color: "#B8FF3C", fontSize: 8.5, fontWeight: "900", letterSpacing: 0.8 },
+  ogEmbedDesc: { color: Colors.muted, fontSize: 11, fontWeight: "700", lineHeight: 15, marginTop: 4 },
+  ogEmbedPath: { color: Colors.cyan, fontSize: 10, fontWeight: "900", marginTop: 6 },
 
   hero: {
     marginTop: 18,
