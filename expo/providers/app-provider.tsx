@@ -210,6 +210,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const postsQ = useQuery<UserPost[]>({
     queryKey: ["app", "posts", userId ?? "guest"],
     queryFn: async () => {
+      const localPosts = await loadJson<UserPost[]>(POSTS_KEY, []);
       if (isAuthenticated && userId) {
         try {
           const { data, error } = await supabase
@@ -221,7 +222,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
             .order("created_at", { ascending: false })
             .limit(200);
           if (error) throw error;
-          return (data ?? []).map((row): UserPost => ({
+          const remotePosts = (data ?? []).map((row): UserPost => ({
             id: row.id as string,
             text: (row.content as string) ?? "",
             ticker: (row.ticker as string) ?? undefined,
@@ -234,11 +235,19 @@ export const [AppProvider, useApp] = createContextHook(() => {
             comments: (row.comments_count as number) ?? 0,
             liked: false,
           }));
+          const seen = new Set<string>();
+          return [...remotePosts, ...localPosts]
+            .filter((post) => {
+              if (seen.has(post.id)) return false;
+              seen.add(post.id);
+              return true;
+            })
+            .sort((a, b) => b.createdAt - a.createdAt);
         } catch (e) {
           console.log("[app] posts fetch fallback", e);
         }
       }
-      return loadJson<UserPost[]>(POSTS_KEY, []);
+      return localPosts;
     },
     staleTime: 30_000,
   });
@@ -535,7 +544,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
           comments: (data.comments_count as number) ?? 0,
           liked: false,
         };
-        return [post, ...posts];
+        const next = [post, ...posts.filter((p) => p.id !== post.id)];
+        await saveJson(POSTS_KEY, next);
+        return next;
       }
       const post: UserPost = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -554,7 +565,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await saveJson(POSTS_KEY, next);
       return next;
     },
-    onSuccess: (next) => qc.setQueryData(["app", "posts", userId ?? "guest"], next),
+    onSuccess: (next) => {
+      qc.setQueryData(["app", "posts", userId ?? "guest"], next);
+      qc.invalidateQueries({ queryKey: ["home", "following-feed"] }).catch(() => {});
+    },
   });
 
   const togglePostLike = useCallback(
