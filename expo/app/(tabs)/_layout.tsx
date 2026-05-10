@@ -58,6 +58,7 @@ export default function TabsLayout() {
         name="tools"
         options={{
           title: "Tools",
+          href: "/(tabs)/tools",
           tabBarIcon: ({ color, size }) => <Wrench color={color} size={size} strokeWidth={2.4} />,
         }}
       />
@@ -167,7 +168,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(221,227,236,0.14)",
   },
   label: {
-    fontSize: 7.8,
+    fontSize: 8.4,
     fontWeight: "800",
     letterSpacing: 0.3,
     marginTop: 2,
