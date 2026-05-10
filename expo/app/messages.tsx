@@ -1,15 +1,16 @@
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   ArrowLeft,
   BadgeCheck,
   BellOff,
+  ChevronRight,
   Coins,
   Inbox,
-  MessageCircle,
+  Pencil,
   Pin,
-  Plus,
   Search,
   Sparkles,
   UserPlus,
@@ -34,11 +35,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import AppBackground from "@/components/ui/AppBackground";
 import { navigateBack } from "@/lib/navigation";
 import { Conversation, DMUser, useMessageableUsersSearch, useMessages } from "@/providers/messages-provider";
 
 type Tab = "inbox" | "requests";
+
+const IOS_BLUE = "#007AFF";
+const IOS_BG = "#F2F2F7";
+const IOS_CARD = "#FFFFFF";
+const IOS_TEXT = "#111111";
+const IOS_SECONDARY = "#6B6B70";
+const IOS_SEPARATOR = "#D9D9DE";
 
 function timeAgo(t: number): string {
   const s = Math.max(1, Math.floor((Date.now() - t) / 1000));
@@ -101,42 +108,38 @@ export default function MessagesScreen() {
 
   return (
     <View style={styles.root} testID="messages-screen">
-      <AppBackground variant="social" />
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
 
       <SafeAreaView edges={["top"]} style={styles.safe}>
-        <View style={styles.header}>
+        <View style={styles.navBar}>
           <Pressable
             onPress={() => navigateBack(router, "/(tabs)/home")}
-            style={styles.iconBtn}
+            style={styles.navTextButton}
             testID="messages-back"
           >
-            <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
+            <ArrowLeft color={IOS_BLUE} size={18} strokeWidth={2.4} />
+            <Text style={styles.navText}>Home</Text>
           </Pressable>
-          <View style={styles.headTitleWrap}>
-            <View style={styles.eyebrowRow}>
-              <MessageCircle color={Colors.cyan} size={12} strokeWidth={2.8} />
-              <Text style={styles.eyebrow}>DIRECT</Text>
-              {totalUnread > 0 ? (
-                <View style={styles.unreadPill}>
-                  <Text style={styles.unreadPillText}>{totalUnread}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={styles.title}>Messages</Text>
-          </View>
           <Pressable
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              Haptics.selectionAsync().catch(() => {});
               setComposeOpen(true);
             }}
-            style={styles.composeBtn}
+            style={styles.circleCompose}
             testID="compose-dm"
           >
-            <Plus color={Colors.ink} size={14} strokeWidth={3} />
-            <Text style={styles.composeText}>NEW</Text>
+            <Pencil color={IOS_BLUE} size={19} strokeWidth={2.3} />
           </Pressable>
+        </View>
+
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Messages</Text>
+          {totalUnread > 0 ? (
+            <View style={styles.titleBadge}>
+              <Text style={styles.titleBadgeText}>{totalUnread}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.searchWrap}>
@@ -144,7 +147,7 @@ export default function MessagesScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search messages and traders..."
+            placeholder="Search"
             placeholderTextColor={Colors.muted}
             style={styles.searchInput}
             autoCapitalize="none"
@@ -157,7 +160,7 @@ export default function MessagesScreen() {
           ) : null}
         </View>
 
-        <View style={styles.tabsWrap}>
+        <View style={styles.filterWrap}>
           {(["inbox", "requests"] as Tab[]).map((t) => {
             const active = tab === t;
             const count = t === "inbox" ? inbox.length : requests.length;
@@ -168,15 +171,17 @@ export default function MessagesScreen() {
                   Haptics.selectionAsync().catch(() => {});
                   setTab(t);
                 }}
-                style={[styles.tab, active && styles.tabActive]}
+                style={[styles.filterChip, active && styles.filterChipActive]}
                 testID={`messages-tab-${t}`}
               >
-                <Text style={[styles.tabText, active && { color: Colors.text }]}>
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>
                   {t === "inbox" ? "Inbox" : "Requests"}
                 </Text>
-                <View style={styles.tabCount}>
-                  <Text style={styles.tabCountText}>{count}</Text>
-                </View>
+                {count > 0 ? (
+                  <View style={[styles.filterCount, active && styles.filterCountActive]}>
+                    <Text style={[styles.filterCountText, active && styles.filterCountTextActive]}>{count}</Text>
+                  </View>
+                ) : null}
               </Pressable>
             );
           })}
@@ -193,8 +198,8 @@ export default function MessagesScreen() {
             tab === "inbox" && suggestedUsers.length > 0 ? (
               <View style={styles.suggestionsWrap}>
                 <View style={styles.suggestionsHead}>
-                  <Sparkles color={Colors.violet} size={12} strokeWidth={2.8} />
-                  <Text style={styles.suggestionsTitle}>Start a conversation</Text>
+                  <Sparkles color={IOS_BLUE} size={13} strokeWidth={2.6} />
+                  <Text style={styles.suggestionsTitle}>Pinned</Text>
                 </View>
                 <ScrollView
                   horizontal
@@ -208,12 +213,12 @@ export default function MessagesScreen() {
                       style={styles.suggestCard}
                       testID={`suggest-${u.handle}`}
                     >
-                      <View style={[styles.suggestAvatar, { backgroundColor: u.color }]}>
+                      <LinearGradient colors={[u.color, `${u.color}99`]} style={styles.suggestAvatar}>
                         <Text style={styles.suggestInit}>
                           {u.name.slice(0, 1).toUpperCase()}
                         </Text>
                         {u.online ? <View style={styles.onlineRing} /> : null}
-                      </View>
+                      </LinearGradient>
                       <Text style={styles.suggestName} numberOfLines={1}>
                         {u.name}
                       </Text>
@@ -227,12 +232,12 @@ export default function MessagesScreen() {
             ) : null
           }
           ListEmptyComponent={
-            <View style={styles.empty}>
+              <View style={styles.empty}>
               <View style={styles.emptyIcon}>
                 {tab === "inbox" ? (
-                  <Inbox color={Colors.cyan} size={28} strokeWidth={2.4} />
+                  <Inbox color={IOS_BLUE} size={28} strokeWidth={2.4} />
                 ) : (
-                  <UserPlus color={Colors.violet} size={28} strokeWidth={2.4} />
+                  <UserPlus color={IOS_BLUE} size={28} strokeWidth={2.4} />
                 )}
               </View>
               <Text style={styles.emptyTitle}>
@@ -240,7 +245,7 @@ export default function MessagesScreen() {
               </Text>
               <Text style={styles.emptyBody}>
                 {tab === "inbox"
-                  ? "Tap NEW to message a trader, founder, or whale on SolTools."
+                  ? "Tap the compose button to message a trader, founder, or whale on SolTools."
                   : "When traders you don't follow message you, they'll land here first."}
               </Text>
             </View>
@@ -274,22 +279,20 @@ function ConversationRow({ conv, onPress }: { conv: Conversation; onPress: () =>
             {conv.user.name}
           </Text>
           {conv.user.verified ? (
-            <BadgeCheck color={Colors.cyan} size={13} strokeWidth={2.8} />
+            <BadgeCheck color={IOS_BLUE} size={13} strokeWidth={2.8} />
           ) : null}
           <Text style={styles.rowHandle} numberOfLines={1}>
             {conv.user.handle}
           </Text>
-          <Text style={styles.rowDot}>·</Text>
-          <Text style={styles.rowTime}>{timeAgo(conv.lastAt)}</Text>
         </View>
         <Text
           style={[
             styles.rowLast,
-            conv.unread > 0 && { color: Colors.text, fontWeight: "800" },
+            conv.unread > 0 && styles.rowLastUnread,
           ]}
           numberOfLines={1}
         >
-          {conv.lastMessage || "Say hi 👋"}
+          {conv.lastMessage || "iMessage"}
         </Text>
       </View>
       <View style={styles.rowEnd}>
@@ -299,11 +302,17 @@ function ConversationRow({ conv, onPress }: { conv: Conversation; onPress: () =>
         {conv.muted ? (
           <BellOff color={Colors.muted} size={11} strokeWidth={2.4} />
         ) : null}
-        {conv.unread > 0 ? (
-          <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>{conv.unread}</Text>
-          </View>
-        ) : null}
+        <Text style={[styles.rowTimeEnd, conv.unread > 0 && styles.rowTimeUnread]}>{timeAgo(conv.lastAt)}</Text>
+        <View style={styles.endMetaRow}>
+          {conv.pinned ? (
+            <Pin color={IOS_SECONDARY} size={11} strokeWidth={2.4} />
+          ) : null}
+          {conv.muted ? (
+            <BellOff color={IOS_SECONDARY} size={11} strokeWidth={2.2} />
+          ) : null}
+          {conv.unread > 0 ? <View style={styles.unreadDot} /> : null}
+          <ChevronRight color="#C7C7CC" size={16} strokeWidth={2.1} />
+        </View>
       </View>
     </Pressable>
   );
@@ -378,7 +387,7 @@ function ComposeModal({
             <View style={styles.modalHead}>
               <Text style={styles.modalTitle}>New message</Text>
               <Pressable onPress={onClose} style={styles.iconBtnSmall}>
-                <X color={Colors.text} size={16} strokeWidth={2.4} />
+                <X color={IOS_BLUE} size={16} strokeWidth={2.4} />
               </Pressable>
             </View>
             <View style={styles.modalSearch}>
@@ -413,7 +422,7 @@ function ComposeModal({
                       <View style={styles.modalNameRow}>
                         <Text style={styles.modalName}>{item.name}</Text>
                         {item.verified ? (
-                          <BadgeCheck color={Colors.cyan} size={12} strokeWidth={2.8} />
+                          <BadgeCheck color={IOS_BLUE} size={12} strokeWidth={2.8} />
                         ) : null}
                       </View>
                       <Text style={styles.modalSub} numberOfLines={1}>
@@ -426,7 +435,7 @@ function ComposeModal({
                         <Text style={styles.existingText}>OPEN</Text>
                       </View>
                     ) : (
-                      <Coins color={Colors.muted} size={14} strokeWidth={2.4} />
+                      <Coins color={IOS_SECONDARY} size={14} strokeWidth={2.4} />
                     )}
                   </Pressable>
                 );
@@ -443,15 +452,31 @@ function ComposeModal({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
+  root: { flex: 1, backgroundColor: IOS_BG, overflow: "hidden" },
   safe: { flex: 1 },
-  header: {
-    paddingHorizontal: 18,
-    paddingTop: 6,
+  navBar: {
+    paddingHorizontal: 16,
+    paddingTop: 2,
     paddingBottom: 4,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    justifyContent: "space-between",
+  },
+  navTextButton: { flexDirection: "row", alignItems: "center", gap: 2, paddingVertical: 8 },
+  navText: { color: IOS_BLUE, fontSize: 17, fontWeight: "400" },
+  circleCompose: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  titleRow: {
+    paddingHorizontal: 20,
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   iconBtn: {
     width: 38,
@@ -475,7 +500,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   unreadPillText: { color: Colors.text, fontSize: 9, fontWeight: "900" },
-  title: { color: Colors.text, fontSize: 26, fontWeight: "900", letterSpacing: -0.8, marginTop: 2 },
+  title: { color: IOS_TEXT, fontSize: 34, fontWeight: "800", letterSpacing: -1.2 },
+  titleBadge: {
+    minWidth: 25,
+    height: 25,
+    borderRadius: 13,
+    backgroundColor: IOS_BLUE,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 7,
+    marginTop: 5,
+  },
+  titleBadgeText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
   composeBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -488,56 +524,53 @@ const styles = StyleSheet.create({
   composeText: { color: Colors.ink, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
 
   searchWrap: {
-    marginHorizontal: 18,
-    marginTop: 12,
+    marginHorizontal: 20,
+    marginTop: 10,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "ios" ? 12 : 8,
-    borderRadius: 14,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 9 : 7,
+    borderRadius: 11,
+    backgroundColor: "#E3E3E8",
   },
-  searchInput: { flex: 1, color: Colors.text, fontSize: 14, fontWeight: "600", padding: 0 },
+  searchInput: { flex: 1, color: IOS_TEXT, fontSize: 17, fontWeight: "400", padding: 0 },
 
-  tabsWrap: {
+  filterWrap: {
     flexDirection: "row",
-    gap: 6,
+    gap: 8,
     marginTop: 14,
-    marginHorizontal: 18,
-    padding: 4,
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    marginHorizontal: 20,
   },
-  tab: {
-    flex: 1,
+  filterChip: {
     flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#E5E5EA",
+  },
+  filterChipActive: { backgroundColor: IOS_BLUE },
+  filterText: { color: IOS_SECONDARY, fontSize: 15, fontWeight: "600" },
+  filterTextActive: { color: "#FFFFFF" },
+  filterCount: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "rgba(0,0,0,0.09)",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 10,
+    paddingHorizontal: 5,
   },
-  tabActive: { backgroundColor: "rgba(255,255,255,0.06)" },
-  tabText: { color: Colors.muted, fontSize: 12, fontWeight: "900", letterSpacing: 0.4 },
-  tabCount: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    minWidth: 20,
-    alignItems: "center",
-  },
-  tabCountText: { color: Colors.text, fontSize: 9, fontWeight: "900" },
+  filterCountActive: { backgroundColor: "rgba(255,255,255,0.24)" },
+  filterCountText: { color: IOS_SECONDARY, fontSize: 11, fontWeight: "700" },
+  filterCountTextActive: { color: "#FFFFFF" },
 
-  listContent: { paddingTop: 8, paddingBottom: 140 },
-  sep: { height: 1, marginHorizontal: 18, backgroundColor: "rgba(255,255,255,0.04)" },
+  listContent: { paddingTop: 10, paddingBottom: 140 },
+  sep: { height: StyleSheet.hairlineWidth, marginLeft: 88, backgroundColor: IOS_SEPARATOR },
 
-  suggestionsWrap: { marginTop: 14, marginBottom: 6 },
+  suggestionsWrap: { marginTop: 16, marginBottom: 8 },
   suggestionsHead: {
     paddingHorizontal: 18,
     flexDirection: "row",
@@ -545,26 +578,22 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 10,
   },
-  suggestionsTitle: { color: Colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 0.4 },
-  suggestionsRow: { paddingHorizontal: 14, gap: 10 },
+  suggestionsTitle: { color: IOS_SECONDARY, fontSize: 13, fontWeight: "700" },
+  suggestionsRow: { paddingHorizontal: 16, gap: 14 },
   suggestCard: {
-    width: 92,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 16,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    width: 76,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
     alignItems: "center",
   },
   suggestAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     alignItems: "center",
     justifyContent: "center",
   },
-  suggestInit: { color: Colors.ink, fontSize: 18, fontWeight: "900" },
+  suggestInit: { color: "#FFFFFF", fontSize: 22, fontWeight: "700" },
   onlineRing: {
     position: "absolute",
     bottom: -2,
@@ -574,27 +603,29 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: Colors.mint,
     borderWidth: 2,
-    borderColor: Colors.ink,
+    borderColor: IOS_BG,
   },
-  suggestName: { color: Colors.text, fontSize: 11, fontWeight: "900", marginTop: 8 },
-  suggestHandle: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 1 },
+  suggestName: { color: IOS_TEXT, fontSize: 12, fontWeight: "600", marginTop: 7 },
+  suggestHandle: { color: IOS_SECONDARY, fontSize: 11, fontWeight: "400", marginTop: 1 },
 
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    paddingLeft: 20,
+    paddingRight: 10,
+    paddingVertical: 10,
+    backgroundColor: IOS_CARD,
   },
   avatarWrap: { position: "relative" },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarInit: { color: Colors.ink, fontSize: 20, fontWeight: "900" },
+  avatarInit: { color: "#FFFFFF", fontSize: 21, fontWeight: "700" },
   onlineDot: {
     position: "absolute",
     bottom: -1,
@@ -604,25 +635,26 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: Colors.mint,
     borderWidth: 2,
-    borderColor: Colors.ink,
+    borderColor: IOS_CARD,
   },
-  rowMid: { flex: 1 },
-  rowTop: { flexDirection: "row", alignItems: "center", gap: 5 },
-  rowName: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2, flexShrink: 1 },
-  rowHandle: { color: Colors.muted, fontSize: 11, fontWeight: "700", maxWidth: 100 },
-  rowDot: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
-  rowTime: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
-  rowLast: { color: Colors.muted, fontSize: 12, fontWeight: "600", marginTop: 3 },
-  rowEnd: { alignItems: "flex-end", gap: 4 },
-  unreadBadge: {
-    minWidth: 20,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: Colors.cyan,
-    alignItems: "center",
+  rowMid: { flex: 1, minWidth: 0 },
+  rowTop: { flexDirection: "row", alignItems: "center", gap: 4 },
+  rowName: { color: IOS_TEXT, fontSize: 17, fontWeight: "600", letterSpacing: -0.2, flexShrink: 1 },
+  rowHandle: { color: IOS_SECONDARY, fontSize: 13, fontWeight: "400", maxWidth: 82 },
+  rowDot: { color: IOS_SECONDARY, fontSize: 13, fontWeight: "400" },
+  rowTime: { color: IOS_SECONDARY, fontSize: 13, fontWeight: "400" },
+  rowLast: { color: IOS_SECONDARY, fontSize: 15, fontWeight: "400", marginTop: 2 },
+  rowLastUnread: { color: IOS_TEXT, fontWeight: "600" },
+  rowEnd: { alignItems: "flex-end", gap: 5, minWidth: 42 },
+  rowTimeEnd: { color: IOS_SECONDARY, fontSize: 13, fontWeight: "400" },
+  rowTimeUnread: { color: IOS_BLUE, fontWeight: "600" },
+  endMetaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  unreadDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: IOS_BLUE,
   },
-  unreadText: { color: Colors.ink, fontSize: 10, fontWeight: "900" },
 
   empty: {
     paddingHorizontal: 32,
@@ -633,16 +665,16 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 18,
-    backgroundColor: "rgba(56,215,255,0.14)",
+    backgroundColor: "#E5E5EA",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 14,
   },
-  emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: "900" },
+  emptyTitle: { color: IOS_TEXT, fontSize: 18, fontWeight: "700" },
   emptyBody: {
-    color: Colors.muted,
-    fontSize: 12,
-    fontWeight: "600",
+    color: IOS_SECONDARY,
+    fontSize: 14,
+    fontWeight: "400",
     textAlign: "center",
     marginTop: 6,
     lineHeight: 17,
@@ -650,16 +682,14 @@ const styles = StyleSheet.create({
 
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.22)",
     justifyContent: "flex-end",
   },
   modalSheet: {
     height: "82%",
-    backgroundColor: Colors.panel,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: IOS_BG,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: 18,
     paddingTop: 10,
   },
@@ -668,7 +698,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "#C7C7CC",
     marginBottom: 14,
   },
   modalHead: {
@@ -677,14 +707,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  modalTitle: { color: Colors.text, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
+  modalTitle: { color: IOS_TEXT, fontSize: 22, fontWeight: "700", letterSpacing: -0.4 },
   iconBtnSmall: {
     width: 32,
     height: 32,
-    borderRadius: 10,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderRadius: 16,
+    backgroundColor: "#E5E5EA",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -693,18 +721,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "ios" ? 12 : 8,
-    borderRadius: 14,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    paddingVertical: Platform.OS === "ios" ? 10 : 8,
+    borderRadius: 11,
+    backgroundColor: "#E3E3E8",
     marginBottom: 12,
   },
   modalSearchInput: {
     flex: 1,
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: "600",
+    color: IOS_TEXT,
+    fontSize: 17,
+    fontWeight: "400",
     padding: 0,
   },
   modalRow: {
@@ -714,17 +740,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   modalAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
   },
-  modalAvatarInit: { color: Colors.ink, fontSize: 16, fontWeight: "900" },
+  modalAvatarInit: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
   modalNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  modalName: { color: Colors.text, fontSize: 13, fontWeight: "900" },
-  modalSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
-  modalSep: { height: 1, backgroundColor: "rgba(255,255,255,0.04)" },
+  modalName: { color: IOS_TEXT, fontSize: 16, fontWeight: "600" },
+  modalSub: { color: IOS_SECONDARY, fontSize: 13, fontWeight: "400", marginTop: 2 },
+  modalSep: { height: StyleSheet.hairlineWidth, backgroundColor: IOS_SEPARATOR, marginLeft: 56 },
   existingPill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
