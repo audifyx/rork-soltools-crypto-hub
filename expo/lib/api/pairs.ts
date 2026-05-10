@@ -11,7 +11,8 @@ const JUP_LITE = "https://lite-api.jup.ag";
  * Tokens with at least this much 24h volume (USD) are retained on the launchpad
  * across daily refresh cycles. Anything below drops off as new pairs come in.
  */
-export const MIN_RETAIN_VOLUME_USD = 300_000;
+export const MIN_RETAIN_VOLUME_USD = 75_000;
+const PUMPFUN_DISCOVERY_LIMIT = 700;
 
 type JupTokenV2 = {
   id: string;
@@ -293,7 +294,7 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
     fetchTopOrganic(),
     (async () => {
       try {
-        return await fetchPumpFunDiscoveryTokens(360);
+        return await fetchPumpFunDiscoveryTokens(PUMPFUN_DISCOVERY_LIMIT);
       } catch (e) {
         console.log("[pairs] pump.fun discovery feed failed", e);
         return [] as PumpFunToken[];
@@ -354,26 +355,31 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
     .map(dexPairToLaunchToken)
     .filter((t): t is LaunchToken => t != null);
 
-  // Retain high-volume daily runners from Jupiter + Birdeye + DexScreener, then
-  // layer in newest Pump/Jupiter/Dex pairs so fresh charity/utility launches can appear.
+  // Retain daily runners from Jupiter + Birdeye + DexScreener, then layer in
+  // the full Pump.fun discovery set. Pump.fun's feed is often missing liquidity
+  // and holder fields for very fresh mints, so we only drop obvious dead/scam
+  // rows there instead of applying the stricter cross-market safety gate.
   const retained = [...top, ...organic, ...birdTokens, ...dexTokens, ...pumpTokens].filter(
     (t) => (t.volume24hUsd ?? 0) >= MIN_RETAIN_VOLUME_USD,
   );
   [...retained, ...newp, ...pumpTokens, ...dexTokens].forEach((t) => {
     if (!t.contract) return;
-    const safe = isSafeToken({
-      marketCapUsd: t.marketCapUsd,
-      liquidityUsd: t.liquidityUsd,
-      volume24hUsd: t.volume24hUsd,
-      holders: t.holders,
-      priceUsd: t.price,
-      priceChange24hPct: t.change24hPct,
-      venue: t.venue,
-      tags: t.tags,
-    });
+    const isPumpSource = t.tags.includes("pump.fun");
+    const safe = isPumpSource
+      ? (t.marketCapUsd ?? 0) >= 1_000 && (t.change24hPct ?? 0) > -80
+      : isSafeToken({
+          marketCapUsd: t.marketCapUsd,
+          liquidityUsd: t.liquidityUsd,
+          volume24hUsd: t.volume24hUsd,
+          holders: t.holders,
+          priceUsd: t.price,
+          priceChange24hPct: t.change24hPct,
+          venue: t.venue,
+          tags: t.tags,
+        });
     if (!safe) return;
     const existing = map.get(t.contract);
     map.set(t.contract, existing ? mergeToken(existing, t) : { ...t, featured: false });
   });
-  return Array.from(map.values());
+  return Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
 }

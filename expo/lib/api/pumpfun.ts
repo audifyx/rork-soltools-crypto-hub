@@ -112,17 +112,18 @@ async function fetchPumpFunListUrl(url: string): Promise<PumpFunToken[]> {
  * hundreds of fresh launches, migrations, and current runners instead of the
  * small DexScreener profile cap.
  */
-export async function fetchPumpFunDiscoveryTokens(limit: number = 300): Promise<PumpFunToken[]> {
+export async function fetchPumpFunDiscoveryTokens(limit: number = 700): Promise<PumpFunToken[]> {
   const pageSize = 50;
-  const offsets = Array.from({ length: Math.ceil(Math.min(limit, 500) / pageSize) }, (_, i) => i * pageSize);
+  const maxRows = Math.min(Math.max(limit, 300), 900);
+  const offsets = Array.from({ length: Math.ceil(maxRows / pageSize) }, (_, i) => i * pageSize);
   const queries = [
     ...offsets.map((offset) =>
       `${PUMPFUN_FRONTEND_V3}/coins?offset=${offset}&limit=${pageSize}&sort=created_timestamp&order=DESC&includeNsfw=false`,
     ),
-    ...offsets.slice(0, 4).map((offset) =>
+    ...offsets.slice(0, 8).map((offset) =>
       `${PUMPFUN_FRONTEND_V3}/coins?offset=${offset}&limit=${pageSize}&sort=last_trade_timestamp&order=DESC&includeNsfw=false`,
     ),
-    ...offsets.slice(0, 4).map((offset) =>
+    ...offsets.slice(0, 8).map((offset) =>
       `${PUMPFUN_FRONTEND_V3}/coins?offset=${offset}&limit=${pageSize}&sort=market_cap&order=DESC&includeNsfw=false`,
     ),
   ];
