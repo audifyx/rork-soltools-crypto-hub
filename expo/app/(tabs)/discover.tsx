@@ -514,13 +514,13 @@ export default function DiscoverScreen() {
           <View style={styles.headerLeft}>
             <View style={styles.eyebrowRow}>
               <Compass color={Colors.cyan} size={13} strokeWidth={2.6} />
-              <Text style={styles.eyebrow}>ALPHA RADAR</Text>
+              <Text style={styles.eyebrow}>EXPLORER GRID</Text>
             </View>
-            <Text style={styles.title}>Discover</Text>
+            <Text style={styles.title}>Explorer</Text>
             <Text style={styles.sub}>
               {listings.length > 0
-                ? `${stats.total} coins · tokens, AI runners, OG memes, live data`
-                : "Tokens, AI runners, OG memes, and Solana market feeds"}
+                ? `${stats.total} live coins · runners, migrations, watchlists`
+                : "Fresh tokens, AI runners, OG memes, and Solana market feeds"}
             </Text>
           </View>
           <View style={styles.headerActions}>
@@ -1006,7 +1006,7 @@ function DiscoverLaunchHero({ stats, onListToken }: { stats: DiscoverStats; onLi
   return (
     <View style={styles.launchHero} testID="discover-listing-hero">
       <LinearGradient
-        colors={["rgba(244,198,91,0.18)", "rgba(229,231,235,0.065)", "rgba(0,0,0,0.1)"]}
+        colors={["rgba(63,169,255,0.18)", "rgba(229,231,235,0.065)", "rgba(0,0,0,0.1)"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -1016,10 +1016,10 @@ function DiscoverLaunchHero({ stats, onListToken }: { stats: DiscoverStats; onLi
           <Rocket color={Colors.ink} size={22} strokeWidth={3} />
         </View>
         <View style={styles.launchHeroCopy}>
-          <Text style={styles.launchHeroEyebrow}>FEATURED TOKEN QUEUE</Text>
-          <Text style={styles.launchHeroTitle}>List direct to Discover</Text>
+          <Text style={styles.launchHeroEyebrow}>TOKEN LAUNCH CONTROL</Text>
+          <Text style={styles.launchHeroTitle}>Surface the next runner</Text>
           <Text style={styles.launchHeroSub}>
-            Submit any Solana token for the Featured rail. Admin approval keeps the front page clean and protects users.
+            Submit any Solana token into the Explorer rails. Admin review keeps the signal clean without breaking live discovery.
           </Text>
         </View>
       </View>
@@ -1664,9 +1664,15 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
 
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 4,
+    marginHorizontal: 14,
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 14,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(98,208,255,0.22)",
+    backgroundColor: "rgba(3,8,18,0.86)",
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
@@ -1675,8 +1681,8 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: "row", gap: 8 },
   eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   eyebrow: { color: Colors.cyan, fontSize: 10, fontWeight: "900", letterSpacing: 1.6 },
-  title: { color: Colors.text, fontSize: 32, fontWeight: "900", letterSpacing: -1, marginTop: 6 },
-  sub: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  title: { color: Colors.text, fontSize: 34, fontWeight: "900", letterSpacing: -1.2, marginTop: 6 },
+  sub: { color: Colors.muted, fontSize: 12, fontWeight: "800", marginTop: 3, lineHeight: 17 },
   iconBtn: {
     width: 38,
     height: 38,
@@ -1689,17 +1695,17 @@ const styles = StyleSheet.create({
   },
 
   searchWrap: {
-    marginHorizontal: 20,
-    marginTop: 14,
+    marginHorizontal: 14,
+    marginTop: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 12 : 8,
-    borderRadius: 16,
-    backgroundColor: "rgba(16,19,29,0.76)",
+    borderRadius: 20,
+    backgroundColor: "rgba(5,12,28,0.84)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(98,208,255,0.22)",
   },
   searchInput: { flex: 1, color: Colors.text, fontSize: 14, fontWeight: "600", padding: 0 },
   searchKbd: {
@@ -1717,15 +1723,15 @@ const styles = StyleSheet.create({
   searchHeadSub: { color: Colors.muted, fontSize: 13, fontWeight: "700" },
 
   launchHero: {
-    marginHorizontal: 16,
+    marginHorizontal: 14,
     marginTop: 18,
-    borderRadius: 24,
+    borderRadius: 30,
     overflow: "hidden",
     padding: 16,
-    backgroundColor: Colors.card,
+    backgroundColor: "rgba(3,9,22,0.94)",
     borderWidth: 1,
-    borderColor: "rgba(244,198,91,0.22)",
-    shadowColor: Colors.goldBright,
+    borderColor: "rgba(98,208,255,0.34)",
+    shadowColor: Colors.cyan,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.18,
     shadowRadius: 26,
@@ -1795,7 +1801,7 @@ const styles = StyleSheet.create({
   recentText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
   clearText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
 
-  statsRow: { flexDirection: "row", gap: 6, paddingHorizontal: 20, marginTop: 16 },
+  statsRow: { flexDirection: "row", gap: 8, paddingHorizontal: 14, marginTop: 16 },
   statTile: {
     flex: 1,
     padding: 10,
@@ -1951,7 +1957,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  ovalWatchOn: { backgroundColor: "rgba(216,183,90,0.12)", borderColor: "rgba(216,183,90,0.28)" },
+  ovalWatchOn: { backgroundColor: "rgba(98,208,255,0.12)", borderColor: "rgba(98,208,255,0.28)" },
 
   spotlightWrap: { marginTop: 22 },
   spotlightContent: { paddingHorizontal: 16, gap: 12 },
@@ -2021,7 +2027,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.3)",
   },
 
-  categoriesWrap: { marginTop: 26, paddingHorizontal: 20 },
+  categoriesWrap: { marginTop: 26, paddingHorizontal: 14 },
   categoriesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   catCard: {
     width: "31.5%",
@@ -2037,7 +2043,7 @@ const styles = StyleSheet.create({
   catIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   catLabel: { color: Colors.text, fontSize: 12, fontWeight: "800" },
 
-  gainerLoserRow: { flexDirection: "row", gap: 10, marginTop: 22, paddingHorizontal: 16 },
+  gainerLoserRow: { flexDirection: "row", gap: 10, marginTop: 22, paddingHorizontal: 14 },
   moverCard: {
     flex: 1,
     padding: 12,
