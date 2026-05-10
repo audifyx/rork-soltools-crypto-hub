@@ -217,6 +217,12 @@ function rankNews(items: CryptoNewsItem[]): CryptoNewsItem[] {
     .map((x) => x.item);
 }
 
+function sortByDateDesc(items: CryptoNewsItem[]): CryptoNewsItem[] {
+  return [...items].sort(
+    (a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime(),
+  );
+}
+
 const NEWS_CACHE_KEY = "soltools.cryptoNews.cache.v2";
 const NEWS_CACHE_TTL_MS = 1000 * 60 * 8;
 
@@ -374,9 +380,10 @@ export async function fetchCryptoNewsFeed(params: NewsFeedParams = {}): Promise<
       }
     }
     if (merged.length) {
-      const ranked = rankNews(merged);
-      await writeCache(ranked);
-      return applyFilters(ranked, params).slice(0, limit);
+      // Cache the union sorted by date — ranking is applied per-request based on range.
+      const cacheable = sortByDateDesc(merged);
+      await writeCache(cacheable);
+      return applyFilters(cacheable, params).slice(0, limit);
     }
     if (cached?.items?.length) return applyFilters(cached.items, params).slice(0, limit);
     return [];
@@ -386,7 +393,24 @@ export async function fetchCryptoNewsFeed(params: NewsFeedParams = {}): Promise<
 }
 
 function applyFilters(items: CryptoNewsItem[], params: NewsFeedParams): CryptoNewsItem[] {
-  return filterByTimeRange(filterByCategory(items, params.category), params.range);
+  // Filter first, then sort/rank, then dedupe — "all" bypasses recency-biased ranking
+  // and surfaces the full historical feed sorted by date.
+  const filtered = filterByTimeRange(filterByCategory(items, params.category), params.range);
+  const deduped = dedupeByTitle(filtered);
+  if (params.range === "all") return sortByDateDesc(deduped);
+  return rankNews(deduped);
+}
+
+function dedupeByTitle(items: CryptoNewsItem[]): CryptoNewsItem[] {
+  const seen = new Set<string>();
+  const out: CryptoNewsItem[] = [];
+  for (const it of items) {
+    const key = (it.title ?? "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 90);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+  return out;
 }
 
 function filterByCategory(items: CryptoNewsItem[], category?: NewsCategory): CryptoNewsItem[] {

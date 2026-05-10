@@ -66,6 +66,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import AppBackground from "@/components/ui/AppBackground";
+import OGScanLiveStrip from "@/components/discover/OGScanLiveStrip";
 import Colors from "@/constants/colors";
 import {
   SOLTOOLS_MODULE_COUNT,
@@ -767,6 +768,8 @@ export default function ToolsScreen() {
               <Text style={styles.statusText}>RPC LIVE</Text>
             </View>
           </View>
+
+          <OGScanLiveStrip />
 
           <Pressable
             onPress={() => onOpen(featured.route, featured.id)}
