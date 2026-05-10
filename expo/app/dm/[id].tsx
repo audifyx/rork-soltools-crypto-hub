@@ -51,6 +51,14 @@ import { useAuth } from "@/providers/auth-provider";
 import { DMMessage, useMessages } from "@/providers/messages-provider";
 
 const QUICK_TICKERS = ["$SOL", "$BONK", "$WIF", "$JUP", "$AGNT", "$PYTH"];
+const IOS_BLUE = "#007AFF";
+const IOS_BG = "#F2F2F7";
+const IOS_CARD = "#FFFFFF";
+const IOS_TEXT = "#111111";
+const IOS_SECONDARY = "#6B6B70";
+const IOS_SEPARATOR = "#D9D9DE";
+const IOS_GREEN = "#34C759";
+const IOS_RED = "#FF3B30";
 
 function formatTime(t: number): string {
   const d = new Date(t);
@@ -232,14 +240,7 @@ export default function DMThreadScreen() {
   return (
     <View style={styles.root} testID="dm-thread">
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
-
-      <LinearGradient
-        colors={[`${conv.user.color}14`, "transparent", Colors.ink]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0.5, y: 0.6 }}
-        style={StyleSheet.absoluteFill}
-      />
+      <StatusBar style="dark" />
 
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
@@ -248,7 +249,7 @@ export default function DMThreadScreen() {
             style={styles.iconBtn}
             testID="dm-back"
           >
-            <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
+            <ArrowLeft color={IOS_BLUE} size={22} strokeWidth={2.4} />
           </Pressable>
           <Pressable
             onPress={() =>
@@ -274,13 +275,13 @@ export default function DMThreadScreen() {
                   {conv.user.name}
                 </Text>
                 {conv.user.verified ? (
-                  <BadgeCheck color={Colors.cyan} size={14} strokeWidth={2.8} />
+                  <BadgeCheck color={IOS_BLUE} size={14} strokeWidth={2.8} />
                 ) : null}
                 {conv.muted ? (
-                  <BellOff color={Colors.muted} size={11} strokeWidth={2.4} />
+                  <BellOff color={IOS_SECONDARY} size={11} strokeWidth={2.4} />
                 ) : null}
                 {conv.pinned ? (
-                  <Pin color={Colors.orange} size={11} strokeWidth={2.8} />
+                  <Pin color="#FF9500" size={11} strokeWidth={2.8} />
                 ) : null}
               </View>
               <Text style={styles.headStatus} numberOfLines={1}>
@@ -297,7 +298,7 @@ export default function DMThreadScreen() {
             style={styles.iconBtn}
             testID="dm-start-space"
           >
-            <Phone color={Colors.text} size={16} strokeWidth={2.4} />
+            <Phone color={IOS_BLUE} size={18} strokeWidth={2.4} />
           </Pressable>
           <Pressable
             onPress={() => {
@@ -307,7 +308,7 @@ export default function DMThreadScreen() {
             style={styles.iconBtn}
             testID="dm-menu"
           >
-            <MoreHorizontal color={Colors.text} size={16} strokeWidth={2.4} />
+            <MoreHorizontal color={IOS_BLUE} size={20} strokeWidth={2.4} />
           </Pressable>
         </View>
 
@@ -368,7 +369,7 @@ export default function DMThreadScreen() {
                     style={styles.tickerChip}
                     testID={`pick-${t}`}
                   >
-                    <Hash color={Colors.cyan} size={11} strokeWidth={2.8} />
+                    <Hash color={IOS_BLUE} size={11} strokeWidth={2.8} />
                     <Text style={styles.tickerChipText}>{t}</Text>
                   </Pressable>
                 ))}
@@ -382,10 +383,10 @@ export default function DMThreadScreen() {
                 Haptics.selectionAsync().catch(() => {});
                 setPicker((p) => !p);
               }}
-              style={[styles.composerBtn, picker && { backgroundColor: `${Colors.cyan}26` }]}
+              style={[styles.composerBtn, picker && { backgroundColor: "#D8ECFF" }]}
               testID="ticker-toggle"
             >
-              <Hash color={picker ? Colors.cyan : Colors.muted} size={16} strokeWidth={2.6} />
+              <Hash color={picker ? IOS_BLUE : IOS_SECONDARY} size={18} strokeWidth={2.6} />
             </Pressable>
             <Pressable
               style={[styles.composerBtn, uploading && { opacity: 0.55 }]}
@@ -393,14 +394,14 @@ export default function DMThreadScreen() {
               disabled={uploading}
               testID="dm-image-attach"
             >
-              <ImageIcon color={uploading ? Colors.cyan : Colors.muted} size={16} strokeWidth={2.4} />
+              <ImageIcon color={uploading ? IOS_BLUE : IOS_SECONDARY} size={18} strokeWidth={2.4} />
             </Pressable>
             <View style={styles.inputWrap}>
               <TextInput
                 value={text}
                 onChangeText={setText}
                 placeholder={`Message ${conv.user.name}...`}
-                placeholderTextColor={Colors.muted}
+                placeholderTextColor={IOS_SECONDARY}
                 style={styles.input}
                 multiline
                 testID="dm-input"
@@ -410,13 +411,13 @@ export default function DMThreadScreen() {
               onPress={() => onSend()}
               style={[
                 styles.sendBtn,
-                { backgroundColor: text.trim().length > 0 ? Colors.cyan : "rgba(255,255,255,0.06)" },
+                { backgroundColor: text.trim().length > 0 ? IOS_BLUE : "#D1D1D6" },
               ]}
               disabled={text.trim().length === 0}
               testID="dm-send"
             >
               <Send
-                color={text.trim().length > 0 ? Colors.ink : Colors.muted}
+                color={IOS_CARD}
                 size={16}
                 strokeWidth={2.6}
               />
@@ -497,7 +498,7 @@ function ProfileBlurb({
         {bio ? <Text style={styles.blurbBio}>{bio}</Text> : null}
         <View style={styles.blurbCta}>
           <Text style={styles.blurbCtaText}>View profile</Text>
-          <ChevronRight color={Colors.text} size={12} strokeWidth={2.6} />
+          <ChevronRight color={IOS_BLUE} size={12} strokeWidth={2.6} />
         </View>
       </LinearGradient>
     </Pressable>
@@ -544,14 +545,14 @@ function Bubble({
         <View
           style={[
             styles.imageBubble,
-            mine ? { borderColor: Colors.cyan } : { borderColor: `${accent}55` },
+            mine ? { borderColor: IOS_BLUE } : { borderColor: IOS_CARD },
           ]}
         >
           <ExpoImage source={{ uri: msg.imageUrl }} style={styles.messageImage} contentFit="cover" />
         </View>
         {msg.text && msg.text !== "Photo" ? (
-          <View style={[styles.bubble, mine ? { backgroundColor: Colors.cyan } : { backgroundColor: Colors.card }]}>
-            <Text style={[styles.bubbleText, { color: mine ? Colors.ink : Colors.text }]}>{msg.text}</Text>
+          <View style={[styles.bubble, mine ? { backgroundColor: IOS_BLUE } : { backgroundColor: IOS_CARD }]}>
+            <Text style={[styles.bubbleText, { color: mine ? IOS_CARD : IOS_TEXT }]}>{msg.text}</Text>
           </View>
         ) : null}
         <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
@@ -566,18 +567,18 @@ function Bubble({
           style={[
             styles.bubble,
             mine
-              ? { backgroundColor: Colors.cyan }
-              : { backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
+              ? { backgroundColor: IOS_BLUE, borderBottomRightRadius: 6 }
+              : { backgroundColor: IOS_CARD, borderBottomLeftRadius: 6 },
           ]}
         >
           <View
             style={[
               styles.tickerCard,
-              { backgroundColor: mine ? "rgba(0,0,0,0.18)" : `${accent}14` },
+              { backgroundColor: mine ? "rgba(255,255,255,0.22)" : "#EFEFF4" },
             ]}
           >
-            <Coins color={mine ? Colors.ink : accent} size={13} strokeWidth={2.8} />
-            <Text style={[styles.tickerText, { color: mine ? Colors.ink : accent }]}>
+            <Coins color={mine ? IOS_CARD : IOS_BLUE} size={13} strokeWidth={2.8} />
+            <Text style={[styles.tickerText, { color: mine ? IOS_CARD : IOS_BLUE }]}>
               {msg.ticker}
             </Text>
             <View style={styles.tickerChange}>
@@ -585,11 +586,11 @@ function Bubble({
               <Text style={styles.tickerChangeText}>+{(Math.random() * 12 + 2).toFixed(1)}%</Text>
             </View>
           </View>
-          <Text style={[styles.bubbleText, { color: mine ? Colors.ink : Colors.text }]}>
+          <Text style={[styles.bubbleText, { color: mine ? IOS_CARD : IOS_TEXT }]}>
             {msg.text}
           </Text>
         </View>
-        <Text style={[styles.bubbleTime, mine && { color: Colors.muted }]}>
+        <Text style={[styles.bubbleTime, mine && { color: IOS_SECONDARY }]}>
           {formatTime(msg.createdAt)}
         </Text>
       </View>
@@ -602,16 +603,14 @@ function Bubble({
         style={[
           styles.bubble,
           mine
-            ? { backgroundColor: Colors.cyan, borderBottomRightRadius: 6 }
+            ? { backgroundColor: IOS_BLUE, borderBottomRightRadius: 6 }
             : {
-                backgroundColor: Colors.card,
-                borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.06)",
+                backgroundColor: IOS_CARD,
                 borderBottomLeftRadius: 6,
               },
         ]}
       >
-        <Text style={[styles.bubbleText, { color: mine ? Colors.ink : Colors.text }]}>
+        <Text style={[styles.bubbleText, { color: mine ? IOS_CARD : IOS_TEXT }]}>
           {msg.text}
         </Text>
       </View>
@@ -621,17 +620,17 @@ function Bubble({
           <View style={styles.statusRow}>
             {msg.readAt ? (
               <>
-                <CheckCheck color={Colors.cyan} size={12} strokeWidth={2.6} />
-                <Text style={[styles.statusText, { color: Colors.cyan }]}>Seen</Text>
+                <CheckCheck color={IOS_BLUE} size={12} strokeWidth={2.6} />
+                <Text style={[styles.statusText, { color: IOS_BLUE }]}>Seen</Text>
               </>
             ) : msg.deliveredAt ? (
               <>
-                <CheckCheck color={Colors.muted} size={12} strokeWidth={2.6} />
+                <CheckCheck color={IOS_SECONDARY} size={12} strokeWidth={2.6} />
                 <Text style={styles.statusText}>Delivered</Text>
               </>
             ) : (
               <>
-                <Check color={Colors.muted} size={12} strokeWidth={2.6} />
+                <Check color={IOS_SECONDARY} size={12} strokeWidth={2.6} />
                 <Text style={styles.statusText}>Sent</Text>
               </>
             )}
@@ -687,30 +686,30 @@ function ActionMenu({
         >
           <View style={styles.modalHandle} />
           <MenuItem
-            icon={<UserCheck color={Colors.text} size={16} strokeWidth={2.4} />}
+            icon={<UserCheck color={IOS_TEXT} size={16} strokeWidth={2.4} />}
             label="View profile"
             onPress={onProfile}
           />
           <MenuItem
-            icon={<Pin color={pinned ? Colors.orange : Colors.text} size={16} strokeWidth={2.4} />}
+            icon={<Pin color={pinned ? "#FF9500" : IOS_TEXT} size={16} strokeWidth={2.4} />}
             label={pinned ? "Unpin chat" : "Pin chat"}
             onPress={onPin}
           />
           <MenuItem
-            icon={<BellOff color={muted ? Colors.cyan : Colors.text} size={16} strokeWidth={2.4} />}
+            icon={<BellOff color={muted ? IOS_BLUE : IOS_TEXT} size={16} strokeWidth={2.4} />}
             label={muted ? "Unmute" : "Mute notifications"}
             onPress={onMute}
           />
           <MenuItem
-            icon={<Video color={Colors.text} size={16} strokeWidth={2.4} />}
+            icon={<Video color={IOS_TEXT} size={16} strokeWidth={2.4} />}
             label="Schedule a Space"
             onPress={onClose}
           />
           <View style={styles.menuSep} />
           <MenuItem
-            icon={<Trash2 color={Colors.rose} size={16} strokeWidth={2.4} />}
+            icon={<Trash2 color={IOS_RED} size={16} strokeWidth={2.4} />}
             label="Delete conversation"
-            tone={Colors.rose}
+            tone={IOS_RED}
             onPress={onDelete}
           />
         </Animated.View>
@@ -734,48 +733,47 @@ function MenuItem({
     <Pressable onPress={onPress} style={styles.menuItem}>
       <View style={styles.menuIconWrap}>{icon}</View>
       <Text style={[styles.menuLabel, tone ? { color: tone } : null]}>{label}</Text>
-      <ChevronRight color={Colors.muted} size={14} strokeWidth={2.4} />
+      <ChevronRight color={IOS_SECONDARY} size={14} strokeWidth={2.4} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: IOS_BG },
   safe: { flex: 1 },
   header: {
-    paddingHorizontal: 14,
-    paddingTop: 6,
-    paddingBottom: 8,
+    paddingHorizontal: 10,
+    paddingTop: 4,
+    paddingBottom: 7,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    backgroundColor: "rgba(248,248,248,0.94)",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_SEPARATOR,
   },
   iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
   headInfo: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 3,
     paddingHorizontal: 4,
   },
   headAvatarWrap: { position: "relative" },
   headAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
   },
-  headAvatarInit: { color: Colors.ink, fontSize: 15, fontWeight: "900" },
+  headAvatarInit: { color: IOS_CARD, fontSize: 14, fontWeight: "800" },
   headOnline: {
     position: "absolute",
     bottom: -1,
@@ -783,79 +781,77 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: Colors.mint,
+    backgroundColor: IOS_GREEN,
     borderWidth: 2,
-    borderColor: Colors.ink,
+    borderColor: IOS_CARD,
   },
-  headNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  headName: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2, flexShrink: 1 },
-  headStatus: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 1 },
+  headNameRow: { flexDirection: "row", alignItems: "center", gap: 4, maxWidth: 190 },
+  headName: { color: IOS_TEXT, fontSize: 12, fontWeight: "700", letterSpacing: -0.1, flexShrink: 1 },
+  headStatus: { color: IOS_SECONDARY, fontSize: 10, fontWeight: "500", marginTop: -1 },
 
-  listContent: { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 16 },
+  listContent: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 14 },
 
   blurb: {
     borderRadius: 22,
     overflow: "hidden",
     marginBottom: 18,
     marginTop: 4,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    backgroundColor: Colors.card,
+    backgroundColor: IOS_CARD,
   },
-  blurbInner: { padding: 18, alignItems: "center" },
+  blurbInner: { padding: 18, alignItems: "center", backgroundColor: IOS_CARD },
   blurbAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: "center",
     justifyContent: "center",
   },
-  blurbInit: { color: Colors.ink, fontSize: 28, fontWeight: "900" },
-  blurbName: { color: Colors.text, fontSize: 18, fontWeight: "900", marginTop: 12, letterSpacing: -0.4 },
-  blurbHandle: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  blurbInit: { color: IOS_CARD, fontSize: 30, fontWeight: "800" },
+  blurbName: { color: IOS_TEXT, fontSize: 20, fontWeight: "700", marginTop: 12, letterSpacing: -0.4 },
+  blurbHandle: { color: IOS_SECONDARY, fontSize: 13, fontWeight: "500", marginTop: 2 },
   blurbBio: {
-    color: Colors.text,
-    fontSize: 12,
-    fontWeight: "600",
+    color: IOS_SECONDARY,
+    fontSize: 13,
+    fontWeight: "500",
     textAlign: "center",
     marginTop: 8,
-    opacity: 0.86,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   blurbCta: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     marginTop: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 13,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#EFEFF4",
   },
-  blurbCtaText: { color: Colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
+  blurbCtaText: { color: IOS_BLUE, fontSize: 13, fontWeight: "600" },
 
   daySep: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     marginVertical: 12,
   },
-  dayLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.06)" },
-  dayText: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  dayLine: { display: "none" },
+  dayText: { color: IOS_SECONDARY, fontSize: 12, fontWeight: "600" },
 
-  bubbleWrap: { marginBottom: 8, maxWidth: "82%" },
+  bubbleWrap: { marginBottom: 7, maxWidth: "78%" },
   bubbleLeft: { alignSelf: "flex-start", alignItems: "flex-start" },
   bubbleRight: { alignSelf: "flex-end", alignItems: "flex-end" },
   bubble: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 19,
   },
-  bubbleText: { fontSize: 14, lineHeight: 19, fontWeight: "500" },
-  bubbleTime: { color: Colors.muted, fontSize: 9, fontWeight: "800", marginHorizontal: 6 },
+  bubbleText: { fontSize: 16, lineHeight: 21, fontWeight: "400" },
+  bubbleTime: { color: IOS_SECONDARY, fontSize: 10, fontWeight: "500", marginHorizontal: 6 },
   bubbleMeta: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 3 },
-  statusText: { color: Colors.muted, fontSize: 9, fontWeight: "800", letterSpacing: 0.3 },
+  statusText: { color: IOS_SECONDARY, fontSize: 10, fontWeight: "500", letterSpacing: 0.1 },
 
   tipBubble: {
     flexDirection: "row",
@@ -877,16 +873,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tipLabel: { color: Colors.mint, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
-  tipAmount: { color: Colors.text, fontSize: 18, fontWeight: "900", marginTop: 2 },
-  tipNote: { color: Colors.text, fontSize: 11, fontWeight: "600", opacity: 0.8, marginTop: 2 },
+  tipAmount: { color: IOS_TEXT, fontSize: 18, fontWeight: "800", marginTop: 2 },
+  tipNote: { color: IOS_TEXT, fontSize: 11, fontWeight: "600", opacity: 0.8, marginTop: 2 },
 
   imageBubble: {
     width: 230,
     height: 170,
     borderRadius: 18,
     overflow: "hidden",
-    borderWidth: 1.5,
-    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: IOS_CARD,
     marginBottom: 4,
   },
   messageImage: { width: "100%", height: "100%" },
@@ -922,9 +918,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 14,
   },
-  emptyTitle: { color: Colors.text, fontSize: 16, fontWeight: "900" },
+  emptyTitle: { color: IOS_TEXT, fontSize: 17, fontWeight: "700" },
   emptyBody: {
-    color: Colors.muted,
+    color: IOS_SECONDARY,
     fontSize: 12,
     fontWeight: "600",
     textAlign: "center",
@@ -934,9 +930,9 @@ const styles = StyleSheet.create({
 
   tickerStrip: {
     paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "rgba(11,8,24,0.7)",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_SEPARATOR,
+    backgroundColor: "rgba(242,242,247,0.94)",
   },
   tickerRow: { paddingHorizontal: 14, gap: 6 },
   tickerChip: {
@@ -946,11 +942,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "rgba(56,215,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(56,215,255,0.3)",
+    backgroundColor: IOS_CARD,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOS_SEPARATOR,
   },
-  tickerChipText: { color: Colors.cyan, fontSize: 11, fontWeight: "900" },
+  tickerChipText: { color: IOS_BLUE, fontSize: 12, fontWeight: "700" },
 
   composer: {
     flexDirection: "row",
@@ -959,26 +955,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: Platform.OS === "ios" ? 18 : 14,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.05)",
-    backgroundColor: "rgba(7,17,19,0.9)",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_SEPARATOR,
+    backgroundColor: "rgba(248,248,248,0.96)",
   },
   composerBtn: {
     width: 38,
     height: 38,
-    borderRadius: 12,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderRadius: 19,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
   },
   inputWrap: {
     flex: 1,
-    backgroundColor: Colors.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: IOS_CARD,
+    borderRadius: 19,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#C7C7CC",
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 10 : 6,
     minHeight: 38,
@@ -986,9 +980,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   input: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: "500",
+    color: IOS_TEXT,
+    fontSize: 16,
+    fontWeight: "400",
     padding: 0,
     minHeight: Platform.OS === "ios" ? 18 : 26,
     maxHeight: 90,
@@ -996,29 +990,29 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 38,
     height: 38,
-    borderRadius: 12,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
   },
 
   notFound: { flex: 1, justifyContent: "center", alignItems: "center", padding: 32 },
-  notFoundTitle: { color: Colors.text, fontSize: 18, fontWeight: "900" },
+  notFoundTitle: { color: IOS_TEXT, fontSize: 18, fontWeight: "700" },
   notFoundBtn: {
     marginTop: 14,
     paddingHorizontal: 18,
     paddingVertical: 10,
-    backgroundColor: Colors.cyan,
+    backgroundColor: IOS_BLUE,
     borderRadius: 12,
   },
-  notFoundBtnText: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
+  notFoundBtnText: { color: IOS_CARD, fontSize: 13, fontWeight: "700" },
 
-  menuBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  menuBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.28)", justifyContent: "flex-end" },
   menuSheet: {
-    backgroundColor: Colors.panel,
+    backgroundColor: IOS_CARD,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    borderTopWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: IOS_SEPARATOR,
     padding: 14,
     paddingBottom: Platform.OS === "ios" ? 32 : 22,
   },
@@ -1027,7 +1021,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "#C7C7CC",
     marginBottom: 12,
   },
   menuItem: {
@@ -1042,10 +1036,10 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "#EFEFF4",
     alignItems: "center",
     justifyContent: "center",
   },
-  menuLabel: { flex: 1, color: Colors.text, fontSize: 14, fontWeight: "800" },
-  menuSep: { height: 1, backgroundColor: "rgba(255,255,255,0.05)", marginVertical: 4 },
+  menuLabel: { flex: 1, color: IOS_TEXT, fontSize: 16, fontWeight: "500" },
+  menuSep: { height: StyleSheet.hairlineWidth, backgroundColor: IOS_SEPARATOR, marginVertical: 4 },
 });
