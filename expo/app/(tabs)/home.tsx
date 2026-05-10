@@ -1,9 +1,9 @@
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
   BadgeCheck,
@@ -91,6 +91,7 @@ type FeedItem =
 
 export default function HomeFeedScreen() {
   const router = useRouter();
+  const qc = useQueryClient();
   const { posts: userPosts, togglePostLike, deletePost, profile } = useApp();
   const { listings } = useLaunchpad();
   const { data: trendingTokens } = useTrendingTokens(40);
@@ -98,6 +99,13 @@ export default function HomeFeedScreen() {
   const { userId, isAuthenticated } = useAuth();
   const [filter, setFilter] = useState<Filter>("For You");
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      qc.invalidateQueries({ queryKey: ["app", "posts", userId ?? "guest"] }).catch(() => {});
+      return undefined;
+    }, [qc, userId]),
+  );
 
   const onSelectFilter = useCallback((next: Filter) => {
     Haptics.selectionAsync().catch(() => {});
