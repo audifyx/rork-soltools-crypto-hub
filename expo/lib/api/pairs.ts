@@ -1,5 +1,6 @@
 import { getTrending, type TokenOverview } from "@/lib/api/birdeye";
 import { getNewSolanaPairs, searchSolanaPairs, type DexPair } from "@/lib/api/dexscreener";
+import { fetchPumpFunDiscoveryTokens, pumpFunVolume24h, type PumpFunToken } from "@/lib/api/pumpfun";
 import { OG_MEME_TOKEN_SEARCH_TERMS } from "@/lib/alpha-runners";
 import { isSafeToken } from "@/lib/safety";
 import { LaunchToken, LaunchVenue } from "@/types/launchpad";
@@ -83,6 +84,43 @@ function toLaunchToken(t: JupTokenV2, opts: { hot?: boolean; featured?: boolean 
     volume24hUsd: vol > 0 ? vol : null,
     holders: t.holderCount ?? null,
     upvotes: Math.max(0, Math.round((t.organicScore ?? 0) * 10)),
+    watchers: 0,
+  };
+}
+
+function pumpFunToLaunchToken(t: PumpFunToken): LaunchToken | null {
+  const address = t.id ?? t.mint ?? t.address;
+  if (!address) return null;
+  const volume = pumpFunVolume24h(t);
+  const created = t.createdAt
+    ? new Date(t.createdAt).getTime()
+    : typeof t.created_timestamp === "number"
+      ? t.created_timestamp * (t.created_timestamp < 10_000_000_000 ? 1000 : 1)
+      : Date.now();
+  const migrated = !!(t.graduatedPool ?? t.raydium_pool ?? t.complete);
+  return {
+    id: address,
+    name: t.name || t.symbol || "Pump.fun token",
+    ticker: (t.symbol || "PUMP").replace("$", "").toUpperCase(),
+    description: t.description ?? (migrated ? "Fresh Pump.fun migration." : "Fresh Pump.fun launch."),
+    logoUrl: t.icon ?? t.image_uri ?? null,
+    bannerUrl: null,
+    contract: address,
+    venue: migrated ? "pumpswap" : mapVenue(t.launchpad ?? "pumpfun"),
+    status: migrated ? "graduated" : "live",
+    tags: ["pump.fun", migrated ? "migrated" : "fresh", ...(t.tags ?? [])].filter(Boolean),
+    featured: false,
+    hot: (volume ?? 0) >= MIN_RETAIN_VOLUME_USD || (t.liquidity ?? 0) >= 25_000,
+    verified: t.organicScoreLabel === "high",
+    createdAt: created,
+    submittedBy: "system",
+    price: t.usdPrice ?? null,
+    change24hPct: t.stats24h?.priceChange ?? null,
+    liquidityUsd: t.liquidity ?? null,
+    marketCapUsd: t.mcap ?? t.fdv ?? null,
+    volume24hUsd: volume,
+    holders: t.holderCount ?? null,
+    upvotes: Math.max(0, Math.round((t.organicScore ?? 0) * 10 + ((t.stats24h?.numBuys ?? 0) + (t.stats24h?.numSells ?? 0)) / 10)),
     watchers: 0,
   };
 }
@@ -213,7 +251,7 @@ export async function fetchNewPairs(): Promise<LaunchToken[]> {
   return items
     .map((t) => ({ t, lt: toLaunchToken(t, { hot: false }) }))
     .filter(({ t, lt }) => safeFromJupiter(t, lt))
-    .slice(0, 60)
+    .slice(0, 180)
     .map(({ lt }) => lt);
 }
 
@@ -249,14 +287,22 @@ export async function fetchTopOrganic(): Promise<LaunchToken[]> {
  * Featured flag is intentionally never set here.
  */
 export async function fetchLivePairs(): Promise<LaunchToken[]> {
-  const [newp, top, organic, birdeyeVolume, dexFresh, dexRunnerSearches] = await Promise.all([
+  const [newp, top, organic, pumpFunDiscovery, birdeyeVolume, dexFresh, dexRunnerSearches] = await Promise.all([
     fetchNewPairs(),
     fetchTopTraded(),
     fetchTopOrganic(),
     (async () => {
       try {
+        return await fetchPumpFunDiscoveryTokens(360);
+      } catch (e) {
+        console.log("[pairs] pump.fun discovery feed failed", e);
+        return [] as PumpFunToken[];
+      }
+    })(),
+    (async () => {
+      try {
         return await getTrending({
-          limit: 80,
+          limit: 200,
           sort_by: "volume24hUSD",
           sort_type: "desc",
           timeframe: "24h",
@@ -268,7 +314,7 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
     })(),
     (async () => {
       try {
-        return await getNewSolanaPairs(80);
+        return await getNewSolanaPairs(220);
       } catch (e) {
         console.log("[pairs] dexscreener fresh feed failed", e);
         return [] as DexPair[];
@@ -301,16 +347,19 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
   const birdTokens = birdeyeVolume
     .map(overviewToLaunchToken)
     .filter((t): t is LaunchToken => t != null);
+  const pumpTokens = pumpFunDiscovery
+    .map(pumpFunToLaunchToken)
+    .filter((t): t is LaunchToken => t != null);
   const dexTokens = [...dexFresh, ...dexRunnerSearches]
     .map(dexPairToLaunchToken)
     .filter((t): t is LaunchToken => t != null);
 
   // Retain high-volume daily runners from Jupiter + Birdeye + DexScreener, then
   // layer in newest Pump/Jupiter/Dex pairs so fresh charity/utility launches can appear.
-  const retained = [...top, ...organic, ...birdTokens, ...dexTokens].filter(
+  const retained = [...top, ...organic, ...birdTokens, ...dexTokens, ...pumpTokens].filter(
     (t) => (t.volume24hUsd ?? 0) >= MIN_RETAIN_VOLUME_USD,
   );
-  [...retained, ...newp, ...dexTokens].forEach((t) => {
+  [...retained, ...newp, ...pumpTokens, ...dexTokens].forEach((t) => {
     if (!t.contract) return;
     const safe = isSafeToken({
       marketCapUsd: t.marketCapUsd,

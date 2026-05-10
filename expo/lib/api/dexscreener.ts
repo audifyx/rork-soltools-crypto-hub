@@ -284,7 +284,7 @@ export async function getNewSolanaPairs(limit: number = 20): Promise<DexPair[]> 
       }
     }),
   );
-  const addrList = Array.from(addresses).slice(0, 60);
+  const addrList = Array.from(addresses).slice(0, Math.max(limit * 3, 240));
   if (addrList.length === 0) return [];
   const snapshots = await fetchDexTokenBatch(addrList);
   const pairs: DexPair[] = [];
