@@ -2022,8 +2022,51 @@ function SettingsModal({
   onResetData: () => Promise<void>;
 }) {
   const router = useRouter();
-  const { isAuthenticated, email: authEmail, signOut } = useAuth();
+  const { isAuthenticated, email: authEmail, signOut, deleteAccount, isDeletingAccount } = useAuth();
   const [section, setSection] = useState<"main" | "trading" | "privacy" | "appearance" | "about">("main");
+
+  const onConfirmDelete = useCallback(() => {
+    if (!isAuthenticated) {
+      Alert.alert("Sign in", "You must be signed in to delete your account.");
+      return;
+    }
+    Alert.alert(
+      "Delete account?",
+      "This permanently deletes your SolTools account, profile, posts, and synced data. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "Are you absolutely sure?",
+              "This is your final confirmation. Your account and data will be erased.",
+              [
+                { text: "Keep account", style: "cancel" },
+                {
+                  text: "Delete forever",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      await deleteAccount();
+                      onClose();
+                      router.replace("/auth");
+                    } catch (e) {
+                      Alert.alert(
+                        "Delete failed",
+                        e instanceof Error ? e.message : "Could not delete account. Try again.",
+                      );
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  }, [deleteAccount, isAuthenticated, onClose, router]);
 
   const onConfirmReset = useCallback(() => {
     Alert.alert(
@@ -2160,6 +2203,15 @@ function SettingsModal({
                   danger
                   onPress={onConfirmReset}
                 />
+                {isAuthenticated ? (
+                  <MenuRow
+                    Icon={Trash2}
+                    label={isDeletingAccount ? "Deleting account…" : "Delete account"}
+                    sub="Permanently erase your data"
+                    danger
+                    onPress={onConfirmDelete}
+                  />
+                ) : null}
                 <MenuRow
                   Icon={LogOut}
                   label={isAuthenticated ? "Sign out" : "Sign in / Create account"}

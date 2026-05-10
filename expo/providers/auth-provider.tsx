@@ -118,6 +118,42 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     },
   });
 
+  const deleteAccount = useMutation({
+    mutationFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("You must be signed in to delete your account.");
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
+      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
+      if (!supabaseUrl) throw new Error("Supabase is not configured.");
+      const res = await fetch(`${supabaseUrl}/functions/v1/delete-account`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: anonKey,
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: "{}",
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let msg = "Failed to delete account.";
+        try {
+          const parsed = JSON.parse(text) as { error?: string };
+          if (parsed?.error) msg = parsed.error;
+        } catch {}
+        throw new Error(msg);
+      }
+      try {
+        await supabase.auth.signOut();
+      } catch {}
+      await clearAllUserCache();
+    },
+    onSuccess: () => {
+      clearSignedOutCache(qc).catch(() => {});
+    },
+  });
+
   return useMemo(
     () => ({
       session,
@@ -138,6 +174,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       isResettingPassword: resetPassword.isPending,
       updatePassword: updatePassword.mutateAsync,
       isUpdatingPassword: updatePassword.isPending,
+      deleteAccount: deleteAccount.mutateAsync,
+      isDeletingAccount: deleteAccount.isPending,
     }),
     [
       session,
@@ -155,6 +193,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       resetPassword.isPending,
       updatePassword.mutateAsync,
       updatePassword.isPending,
+      deleteAccount.mutateAsync,
+      deleteAccount.isPending,
     ],
   );
 });
