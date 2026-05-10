@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Crypto from "expo-crypto";
 import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -542,6 +543,18 @@ function nameFromProfile(profile: ProfileMiniRow | undefined, fallback: string):
   return (profile?.display_name?.trim() || profile?.username?.trim() || fallback) ?? fallback;
 }
 
+function isMissingSpaceRpcError(error: unknown): boolean {
+  const message =
+    typeof error === "object" && error !== null && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : String(error ?? "");
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+  return code === "PGRST202" || message.includes("Could not find the function") || message.includes("schema cache");
+}
+
 const KEY_FOLLOW_SPACES = "soltools.social.followspaces.v1";
 const KEY_JOINED_GUEST = "soltools.social.joined.guest.v1";
 const KEY_LOCAL_COMMUNITIES_BASE = "soltools.social.communities.local.v2";
@@ -865,18 +878,63 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       const title = input.title.trim();
       if (title.length < 3) throw new Error("Give your Space a stronger title.");
       const palette = paletteFor(`${title}-${Date.now()}`);
+      const topic = (input.topic?.trim() || "ALPHA").slice(0, 28);
+      const description = (input.description?.trim() || "").slice(0, 500);
+      const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt).toISOString() : null;
+      let id = "";
       const { data, error } = await supabase.rpc("create_space", {
         p_name: title,
-        p_topic: (input.topic?.trim() || "ALPHA").slice(0, 28),
-        p_description: (input.description?.trim() || "").slice(0, 500),
+        p_topic: topic,
+        p_description: description,
         p_category: input.category ?? "alpha",
-        p_scheduled_at: input.scheduledAt ? new Date(input.scheduledAt).toISOString() : null,
+        p_scheduled_at: scheduledAt,
         p_recording: !!input.recording,
         p_accent_a: palette[0],
         p_accent_b: palette[1],
       });
-      if (error) throw error;
-      const id = typeof data === "string" ? data : String(data ?? "");
+      if (error) {
+        if (!isMissingSpaceRpcError(error)) throw error;
+        const createdId = Crypto.randomUUID();
+        const roomName = `space-${createdId.replace(/-/g, "")}`;
+        const { data: inserted, error: insertError } = await supabase
+          .from("livekit_rooms")
+          .insert({
+            id: createdId,
+            name: title,
+            topic: topic.toUpperCase(),
+            description,
+            host_id: userId,
+            livekit_room_name: roomName,
+            status: scheduledAt ? "scheduled" : "live",
+            is_active: !scheduledAt,
+            started_at: scheduledAt ? null : new Date().toISOString(),
+            scheduled_at: scheduledAt,
+            category: input.category ?? "alpha",
+            recording: !!input.recording,
+            accent_a: palette[0],
+            accent_b: palette[1],
+          })
+          .select("id")
+          .single();
+        if (insertError) throw insertError;
+        id = String(inserted?.id ?? createdId);
+        await supabase
+          .from("livekit_participants")
+          .upsert({
+            room_id: id,
+            user_id: userId,
+            identity: userId,
+            display_name: "Host",
+            role: "host",
+            muted: false,
+            hand_raised: false,
+            speaking: false,
+            left_at: null,
+            last_seen_at: new Date().toISOString(),
+          }, { onConflict: "room_id,user_id" });
+      } else {
+        id = typeof data === "string" ? data : String(data ?? "");
+      }
       if (!id) throw new Error("Space could not be created.");
       await qc.invalidateQueries({ queryKey: ["social", "spaces"] });
       return id;
@@ -888,7 +946,15 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     async (id: string): Promise<void> => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to start this Space.");
       const { error } = await supabase.rpc("start_space", { target_room_id: id });
-      if (error) throw error;
+      if (error) {
+        if (!isMissingSpaceRpcError(error)) throw error;
+        const { error: updateError } = await supabase
+          .from("livekit_rooms")
+          .update({ status: "live", is_active: true, started_at: new Date().toISOString(), ended_at: null, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .eq("host_id", userId);
+        if (updateError) throw updateError;
+      }
       await qc.invalidateQueries({ queryKey: ["social", "spaces"] });
     },
     [isAuthenticated, userId, qc],
@@ -898,13 +964,30 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     async (id: string): Promise<void> => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to join Spaces.");
       const { error } = await supabase.rpc("join_space", { target_room_id: id });
-      if (error) throw error;
+      if (error) {
+        if (!isMissingSpaceRpcError(error)) throw error;
+        const space = spaces.find((s) => s.id === id);
+        await supabase
+          .from("livekit_participants")
+          .upsert({
+            room_id: id,
+            user_id: userId,
+            identity: userId,
+            display_name: "Trader",
+            role: space?.hostId === userId ? "host" : "listener",
+            muted: space?.hostId === userId ? false : true,
+            hand_raised: false,
+            speaking: false,
+            left_at: null,
+            last_seen_at: new Date().toISOString(),
+          }, { onConflict: "room_id,user_id" });
+      }
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["social", "spaces"] }),
         qc.invalidateQueries({ queryKey: ["space", "participants", id] }),
       ]);
     },
-    [isAuthenticated, userId, qc],
+    [isAuthenticated, userId, qc, spaces],
   );
 
   const leaveSpace = useCallback(
