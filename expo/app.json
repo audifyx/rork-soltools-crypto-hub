@@ -16,6 +16,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.rork.ct333efmdotyxkemvlyk6",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "$OGS token needs the microphone to let you speak in live Spaces."
+      },
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -25,7 +28,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#030708"
       },
-      "package": "app.rork.ct333efmdotyxkemvlyk6"
+      "package": "app.rork.ct333efmdotyxkemvlyk6",
+      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"

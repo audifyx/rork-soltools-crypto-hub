@@ -51,11 +51,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import LiveKitVoice, { LiveKitVoiceEvent, LiveKitVoiceHandle } from "@/components/space/LiveKitVoice";
 import { getLiveKitToken } from "@/lib/api/livekit";
 import { navigateBack } from "@/lib/navigation";
 import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 import { SpaceMessage, SpaceParticipant, useSocial } from "@/providers/social-provider";
+import { MicOff as MicOffIcon, VolumeX, Lock as LockIcon, Unlock as UnlockIcon, UserMinus } from "lucide-react-native";
 
 function shortTime(t: number): string {
   const diff = Math.max(1, Math.floor((Date.now() - t) / 1000));
@@ -98,6 +100,9 @@ export default function SpaceDetailScreen() {
     setSpaceHand,
     setSpaceParticipantRole,
     removeSpaceParticipant,
+    forceMuteParticipant,
+    muteAllInSpace,
+    lowerSpaceHand,
     heartbeatSpace,
     sendSpaceMessage,
     addSpaceReaction,
@@ -121,6 +126,12 @@ export default function SpaceDetailScreen() {
   const [message, setMessage] = useState<string>("");
   const [reactionCount, setReactionCount] = useState<number>(0);
   const [livekitRoom, setLivekitRoom] = useState<string>("");
+  const [voiceToken, setVoiceToken] = useState<{ url: string; token: string; identity: string } | null>(null);
+  const [voiceReady, setVoiceReady] = useState<boolean>(false);
+  const [stageLocked, setStageLocked] = useState<boolean>(false);
+  const [adminTarget, setAdminTarget] = useState<SpaceParticipant | null>(null);
+  const [activeSpeakers, setActiveSpeakers] = useState<Set<string>>(new Set());
+  const voiceRef = useRef<LiveKitVoiceHandle | null>(null);
   const [floaters, setFloaters] = useState<{ id: string; emoji: string; x: number }[]>([]);
   const [reactionPickerOpen, setReactionPickerOpen] = useState<boolean>(false);
   const [pinnedNote, setPinnedNote] = useState<string | null>(null);
@@ -192,6 +203,7 @@ export default function SpaceDetailScreen() {
         name: me?.name ?? profile.displayName ?? profileHandle,
       });
       setLivekitRoom(token.room);
+      setVoiceToken({ url: token.url, token: token.token, identity: token.identity });
       setConnected(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch (e) {
@@ -208,6 +220,9 @@ export default function SpaceDetailScreen() {
     if (!space) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setConnected(false);
+    try { voiceRef.current?.leave(); } catch {}
+    setVoiceToken(null);
+    setVoiceReady(false);
     try {
       if (isHost && space.isLive) {
         Alert.alert("End Space?", "You are hosting. End this Space for everyone?", [
@@ -234,9 +249,11 @@ export default function SpaceDetailScreen() {
     setMuted(next);
     Haptics.selectionAsync().catch(() => {});
     try {
+      voiceRef.current?.setMicEnabled(!next);
       await setSpaceMute(space.id, next);
     } catch (e) {
       setMuted(!next);
+      try { voiceRef.current?.setMicEnabled(false); } catch {}
       Alert.alert("Mic locked", e instanceof Error ? e.message : "Raise your hand to request speaker access.");
     }
   }, [space, requireAuth, canSpeak, muted, setSpaceMute]);
@@ -371,35 +388,63 @@ export default function SpaceDetailScreen() {
   const manageParticipant = useCallback(
     (participant: SpaceParticipant) => {
       if (!space || !isHost || participant.userId === userId) return;
-      const makeSpeaker = participant.role === "listener";
-      Alert.alert(participant.name, "Manage this participant in the Space.", [
-        {
-          text: makeSpeaker ? "Bring on stage" : "Move to listener",
-          onPress: () =>
-            setSpaceParticipantRole(space.id, participant.id, makeSpeaker ? "speaker" : "listener").catch((e: unknown) =>
-              Alert.alert("Could not update role", e instanceof Error ? e.message : "Try again."),
-            ),
-        },
-        {
-          text: "Make co-host",
-          onPress: () =>
-            setSpaceParticipantRole(space.id, participant.id, "co-host").catch((e: unknown) =>
-              Alert.alert("Could not add co-host", e instanceof Error ? e.message : "Try again."),
-            ),
-        },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () =>
-            removeSpaceParticipant(space.id, participant.id).catch((e: unknown) =>
-              Alert.alert("Could not remove user", e instanceof Error ? e.message : "Try again."),
-            ),
-        },
-        { text: "Cancel", style: "cancel" },
-      ]);
+      Haptics.selectionAsync().catch(() => {});
+      setAdminTarget(participant);
     },
-    [isHost, removeSpaceParticipant, setSpaceParticipantRole, space, userId],
+    [isHost, space, userId],
   );
+
+  const closeAdminTarget = useCallback(() => setAdminTarget(null), []);
+
+  const onMuteAll = useCallback(async () => {
+    if (!space) return;
+    try {
+      voiceRef.current?.forceMuteAll();
+      await muteAllInSpace(space.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch (e) {
+      Alert.alert("Could not mute room", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [space, muteAllInSpace]);
+
+  const onToggleStageLock = useCallback(() => {
+    setStageLocked((v) => {
+      Haptics.selectionAsync().catch(() => {});
+      return !v;
+    });
+  }, []);
+
+  const onVoiceEvent = useCallback(
+    (event: LiveKitVoiceEvent) => {
+      if (event.type === "ready") {
+        setVoiceReady(true);
+      } else if (event.type === "connected") {
+        console.log("[space] voice connected", event.identity);
+      } else if (event.type === "disconnected") {
+        setVoiceReady(false);
+      } else if (event.type === "mic") {
+        if (!event.enabled) setMuted(true);
+      } else if (event.type === "speakers") {
+        setActiveSpeakers(new Set(event.identities));
+      } else if (event.type === "force-muted-by") {
+        setMuted(true);
+        Alert.alert("You were muted by the host");
+      } else if (event.type === "error") {
+        console.log("[space] voice error", event.message);
+        setVoiceError(event.message);
+      }
+    },
+    [],
+  );
+
+  // Listen for moderator mute decisions on my row: when DB says I am muted,
+  // silence the WebRTC publisher immediately so the host's force-mute sticks
+  // even if the data channel packet was missed.
+  useEffect(() => {
+    if (!me) return;
+    if (me.muted && !muted) setMuted(true);
+    try { voiceRef.current?.setMicEnabled(!me.muted && canSpeak && !muted); } catch {}
+  }, [me, muted, canSpeak]);
 
   if (!space) {
     return (
@@ -535,12 +580,29 @@ export default function SpaceDetailScreen() {
               ) : null}
             </View>
 
+            {isHost ? (
+              <View style={styles.hostToolsRow}>
+                <Pressable onPress={onMuteAll} style={styles.hostToolBtn} testID="space-mute-all">
+                  <VolumeX color={Colors.text} size={14} strokeWidth={2.6} />
+                  <Text style={styles.hostToolText}>Mute all</Text>
+                </Pressable>
+                <Pressable onPress={onToggleStageLock} style={[styles.hostToolBtn, stageLocked && styles.hostToolBtnActive]} testID="space-stage-lock">
+                  {stageLocked ? <LockIcon color={Colors.goldBright} size={14} strokeWidth={2.8} /> : <UnlockIcon color={Colors.text} size={14} strokeWidth={2.6} />}
+                  <Text style={[styles.hostToolText, stageLocked && { color: Colors.goldBright }]}>{stageLocked ? "Stage locked" : "Lock stage"}</Text>
+                </Pressable>
+                <Pressable onPress={() => endSpace(space.id).then(() => navigateBack(router, "/spaces")).catch((e) => Alert.alert("End failed", e instanceof Error ? e.message : "Try again."))} style={[styles.hostToolBtn, styles.hostToolBtnDanger]} testID="space-end">
+                  <PhoneOff color={Colors.rose} size={14} strokeWidth={2.8} />
+                  <Text style={[styles.hostToolText, { color: Colors.rose }]}>End</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {speakers.length === 0 ? (
               <EmptyBox icon={<Mic color={Colors.muted} size={20} strokeWidth={2.4} />} text="No speakers on stage yet" />
             ) : (
               <View style={styles.stageGrid}>
                 {speakers.map((p) => (
-                  <SpeakerTile key={p.id} p={p} accent={space.accent[0]} onPress={() => manageParticipant(p)} canManage={isHost && p.userId !== userId} />
+                  <SpeakerTile key={p.id} p={{ ...p, speaking: p.speaking || activeSpeakers.has(p.identity) }} accent={space.accent[0]} onPress={() => manageParticipant(p)} canManage={isHost && p.userId !== userId} />
                 ))}
               </View>
             )}
@@ -649,6 +711,68 @@ export default function SpaceDetailScreen() {
       </SafeAreaView>
 
       <FloatingEmojis floaters={floaters} />
+
+      {voiceToken ? (
+        <LiveKitVoice
+          ref={voiceRef}
+          url={voiceToken.url}
+          token={voiceToken.token}
+          myIdentity={voiceToken.identity}
+          canPublish={canSpeak}
+          onEvent={onVoiceEvent}
+        />
+      ) : null}
+
+      <Modal visible={!!adminTarget} animationType="fade" transparent onRequestClose={closeAdminTarget}>
+        <Pressable style={styles.modalBackdrop} onPress={closeAdminTarget}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            {adminTarget ? (
+              <>
+                <View style={styles.modalHead}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalTitle}>{adminTarget.name}</Text>
+                    <Text style={styles.adminSub}>{adminTarget.handle} · {adminTarget.role}</Text>
+                  </View>
+                  <Pressable onPress={closeAdminTarget} style={styles.modalClose}><X color={Colors.text} size={16} strokeWidth={2.6} /></Pressable>
+                </View>
+                {adminTarget.role === "listener" ? (
+                  <Pressable onPress={() => { const t = adminTarget; closeAdminTarget(); setSpaceParticipantRole(space.id, t.id, "speaker").catch((e) => Alert.alert("Could not promote", e instanceof Error ? e.message : "Try again.")); }} style={styles.adminAction}>
+                    <UserPlus color={Colors.goldBright} size={16} strokeWidth={2.8} />
+                    <Text style={styles.adminActionText}>Bring on stage</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable onPress={() => { const t = adminTarget; closeAdminTarget(); setSpaceParticipantRole(space.id, t.id, "listener").catch((e) => Alert.alert("Could not move", e instanceof Error ? e.message : "Try again.")); }} style={styles.adminAction}>
+                    <UsersIcon color={Colors.text} size={16} strokeWidth={2.6} />
+                    <Text style={styles.adminActionText}>Move to audience</Text>
+                  </Pressable>
+                )}
+                {adminTarget.role !== "co-host" && adminTarget.role !== "host" ? (
+                  <Pressable onPress={() => { const t = adminTarget; closeAdminTarget(); setSpaceParticipantRole(space.id, t.id, "co-host").catch((e) => Alert.alert("Could not add co-host", e instanceof Error ? e.message : "Try again.")); }} style={styles.adminAction}>
+                    <Crown color={Colors.goldBright} size={16} strokeWidth={2.8} />
+                    <Text style={styles.adminActionText}>Make co-host</Text>
+                  </Pressable>
+                ) : null}
+                {!adminTarget.muted && adminTarget.role !== "listener" ? (
+                  <Pressable onPress={() => { const t = adminTarget; closeAdminTarget(); voiceRef.current?.forceMuteIdentity(t.identity); forceMuteParticipant(space.id, t.id).catch((e) => Alert.alert("Could not mute", e instanceof Error ? e.message : "Try again.")); }} style={styles.adminAction}>
+                    <MicOffIcon color={Colors.text} size={16} strokeWidth={2.6} />
+                    <Text style={styles.adminActionText}>Force mute mic</Text>
+                  </Pressable>
+                ) : null}
+                {adminTarget.handRaised ? (
+                  <Pressable onPress={() => { const t = adminTarget; closeAdminTarget(); lowerSpaceHand(space.id, t.id).catch((e) => Alert.alert("Could not lower hand", e instanceof Error ? e.message : "Try again.")); }} style={styles.adminAction}>
+                    <Hand color={Colors.text} size={16} strokeWidth={2.6} />
+                    <Text style={styles.adminActionText}>Lower hand</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable onPress={() => { const t = adminTarget; closeAdminTarget(); Alert.alert("Remove", `Remove ${t.name} from the Space?`, [{ text: "Cancel", style: "cancel" }, { text: "Remove", style: "destructive", onPress: () => { voiceRef.current?.forceMuteIdentity(t.identity); removeSpaceParticipant(space.id, t.id).catch((e) => Alert.alert("Could not remove", e instanceof Error ? e.message : "Try again.")); } }]); }} style={[styles.adminAction, styles.adminActionDanger]}>
+                  <UserMinus color={Colors.rose} size={16} strokeWidth={2.8} />
+                  <Text style={[styles.adminActionText, { color: Colors.rose }]}>Remove from Space</Text>
+                </Pressable>
+              </>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {reactionPickerOpen ? (
         <View pointerEvents="box-none" style={styles.reactionPickerWrap}>
@@ -1053,4 +1177,13 @@ const styles = StyleSheet.create({
   pollOptRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   pollAddOpt: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: "rgba(244,198,91,0.08)", borderWidth: 1, borderColor: "rgba(244,198,91,0.25)" },
   pollAddOptText: { color: Colors.goldBright, fontSize: 11, fontWeight: "900" },
+  hostToolsRow: { flexDirection: "row", gap: 8, marginBottom: 14, marginTop: -4 },
+  hostToolBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.055)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
+  hostToolBtnActive: { backgroundColor: "rgba(244,198,91,0.12)", borderColor: "rgba(244,198,91,0.45)" },
+  hostToolBtnDanger: { backgroundColor: "rgba(255,77,109,0.10)", borderColor: "rgba(255,77,109,0.35)" },
+  hostToolText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
+  adminSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 3 },
+  adminAction: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, borderColor: "rgba(255,255,255,0.07)" },
+  adminActionDanger: { backgroundColor: "rgba(255,77,109,0.08)", borderColor: "rgba(255,77,109,0.30)" },
+  adminActionText: { color: Colors.text, fontSize: 13, fontWeight: "800" },
 });

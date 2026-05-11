@@ -1087,6 +1087,73 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     [isAuthenticated, userId, qc],
   );
 
+  /**
+   * Host-only: force-mute a single participant by flipping their
+   * `livekit_participants.muted` flag. Clients listen to that row through
+   * the realtime channel and disable their mic automatically.
+   */
+  const forceMuteParticipant = useCallback(
+    async (id: string, participantId: string): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Only hosts can force-mute.");
+      const { error } = await supabase.rpc("set_space_participant_mute", {
+        target_room_id: id,
+        target_participant_id: participantId,
+        p_muted: true,
+      });
+      if (error) {
+        if (!isMissingSpaceRpcError(error)) throw error;
+        const { error: updateError } = await supabase
+          .from("livekit_participants")
+          .update({ muted: true })
+          .eq("room_id", id)
+          .eq("id", participantId);
+        if (updateError) throw updateError;
+      }
+      await qc.invalidateQueries({ queryKey: ["space", "participants", id] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  /**
+   * Host-only: mute every non-host participant in the room at once.
+   */
+  const muteAllInSpace = useCallback(
+    async (id: string): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Only hosts can mute the room.");
+      const { error } = await supabase.rpc("mute_all_space_participants", {
+        target_room_id: id,
+      });
+      if (error) {
+        if (!isMissingSpaceRpcError(error)) throw error;
+        const { error: updateError } = await supabase
+          .from("livekit_participants")
+          .update({ muted: true })
+          .eq("room_id", id)
+          .neq("role", "host");
+        if (updateError) throw updateError;
+      }
+      await qc.invalidateQueries({ queryKey: ["space", "participants", id] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  /**
+   * Host-only: lower a single raised hand without granting stage access.
+   */
+  const lowerSpaceHand = useCallback(
+    async (id: string, participantId: string): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Only hosts can lower hands.");
+      const { error } = await supabase
+        .from("livekit_participants")
+        .update({ hand_raised: false })
+        .eq("room_id", id)
+        .eq("id", participantId);
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["space", "participants", id] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
   const heartbeatSpace = useCallback(
     async (id: string): Promise<void> => {
       if (!isAuthenticated || !userId) return;
@@ -2218,6 +2285,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       setSpaceHand,
       setSpaceParticipantRole,
       removeSpaceParticipant,
+      forceMuteParticipant,
+      muteAllInSpace,
+      lowerSpaceHand,
       heartbeatSpace,
       sendSpaceMessage,
       addSpaceReaction,
@@ -2261,6 +2331,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       setSpaceHand,
       setSpaceParticipantRole,
       removeSpaceParticipant,
+      forceMuteParticipant,
+      muteAllInSpace,
+      lowerSpaceHand,
       heartbeatSpace,
       sendSpaceMessage,
       addSpaceReaction,
