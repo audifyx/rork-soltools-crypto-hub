@@ -48,7 +48,7 @@ import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import { uploadDMImage } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
-import { DMMessage, useMessages } from "@/providers/messages-provider";
+import { DMMessage, useDmTyping, useMessages } from "@/providers/messages-provider";
 
 const QUICK_TICKERS = ["$SOL", "$BONK", "$WIF", "$JUP", "$AGNT", "$PYTH"];
 const IOS_BLUE = "#007AFF";
@@ -82,6 +82,20 @@ function formatRelative(t: number): string {
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function formatLastSeen(online: boolean | undefined, lastSeenAt: number | null | undefined): string {
+  if (online) return "Active now";
+  if (!lastSeenAt) return "offline";
+  const diff = Math.max(0, Date.now() - lastSeenAt);
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "Active just now";
+  if (min < 60) return `Active ${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `Active ${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `Last seen ${day}d ago`;
+  return `Last seen ${new Date(lastSeenAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
+
 function formatDayLabel(t: number): string {
   const d = new Date(t);
   const now = new Date();
@@ -111,8 +125,13 @@ export default function DMThreadScreen() {
     togglePin,
     toggleMute,
     deleteConversation,
+    setTyping,
   } = useMessages();
   const [uploading, setUploading] = useState<boolean>(false);
+  const typingQuery = useDmTyping(id, !!id);
+  const otherTyping = (typingQuery.data ?? []).length > 0;
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef<boolean>(false);
 
   const conv = id ? getConversation(id) : undefined;
   const messages = useMemo<DMMessage[]>(() => (id ? getMessages(id) : []), [id, getMessages]);
@@ -125,6 +144,47 @@ export default function DMThreadScreen() {
   useEffect(() => {
     if (id) markRead(id);
   }, [id, markRead]);
+
+  // Clear typing state on unmount.
+  useEffect(() => {
+    return () => {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      if (id && isTypingRef.current) {
+        setTyping(id, false).catch(() => {});
+        isTypingRef.current = false;
+      }
+    };
+  }, [id, setTyping]);
+
+  const onTextChange = useCallback(
+    (next: string) => {
+      setText(next);
+      if (!id) return;
+      if (next.trim().length === 0) {
+        if (isTypingRef.current) {
+          setTyping(id, false).catch(() => {});
+          isTypingRef.current = false;
+        }
+        if (typingTimerRef.current) {
+          clearTimeout(typingTimerRef.current);
+          typingTimerRef.current = null;
+        }
+        return;
+      }
+      if (!isTypingRef.current) {
+        setTyping(id, true).catch(() => {});
+        isTypingRef.current = true;
+      }
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        if (isTypingRef.current && id) {
+          setTyping(id, false).catch(() => {});
+          isTypingRef.current = false;
+        }
+      }, 3500);
+    },
+    [id, setTyping],
+  );
 
   const rows = useMemo<ListRow[]>(() => {
     const out: ListRow[] = [];
@@ -153,11 +213,19 @@ export default function DMThreadScreen() {
       const t = override?.text ?? text;
       if (!t.trim() && !override?.imageUrl) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      if (isTypingRef.current) {
+        setTyping(id, false).catch(() => {});
+        isTypingRef.current = false;
+      }
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
       await sendMessage(id, t, override?.ticker, override?.imageUrl);
       setText("");
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 30);
     },
-    [id, conv, text, sendMessage],
+    [id, conv, text, sendMessage, setTyping],
   );
 
   const onPickImage = useCallback(async () => {
@@ -284,13 +352,16 @@ export default function DMThreadScreen() {
                   <Pin color="#FF9500" size={11} strokeWidth={2.8} />
                 ) : null}
               </View>
-              <Text style={styles.headStatus} numberOfLines={1}>
-                {conv.user.online
-                  ? "online · active now"
-                  : conv.user.lastSeenAt
-                    ? `last seen ${formatRelative(conv.user.lastSeenAt)}`
-                    : "offline"}
-              </Text>
+              {otherTyping ? (
+                <View style={styles.typingHeadRow}>
+                  <TypingDots color={IOS_BLUE} />
+                  <Text style={styles.headStatusTyping}>typing…</Text>
+                </View>
+              ) : (
+                <Text style={styles.headStatus} numberOfLines={1}>
+                  {formatLastSeen(conv.user.online, conv.user.lastSeenAt)}
+                </Text>
+              )}
             </View>
           </Pressable>
           <Pressable
@@ -324,6 +395,15 @@ export default function DMThreadScreen() {
             renderItem={renderRow}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            ListFooterComponent={
+              otherTyping ? (
+                <View style={styles.typingBubbleWrap} testID="dm-typing-bubble">
+                  <View style={styles.typingBubble}>
+                    <TypingDots color={IOS_SECONDARY} />
+                  </View>
+                </View>
+              ) : null
+            }
             ListHeaderComponent={
               <ProfileBlurb
                 name={conv.user.name}
@@ -399,7 +479,7 @@ export default function DMThreadScreen() {
             <View style={styles.inputWrap}>
               <TextInput
                 value={text}
-                onChangeText={setText}
+                onChangeText={onTextChange}
                 placeholder={`Message ${conv.user.name}...`}
                 placeholderTextColor={IOS_SECONDARY}
                 style={styles.input}
@@ -465,6 +545,36 @@ export default function DMThreadScreen() {
           );
         }}
       />
+    </View>
+  );
+}
+
+function TypingDots({ color }: { color: string }) {
+  const a = useRef(new Animated.Value(0)).current;
+  const b = useRef(new Animated.Value(0)).current;
+  const c = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const make = (val: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(val, { toValue: 1, duration: 380, delay, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(val, { toValue: 0, duration: 380, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+          Animated.delay(220),
+        ]),
+      );
+    const anims = [make(a, 0), make(b, 140), make(c, 280)];
+    anims.forEach((x) => x.start());
+    return () => anims.forEach((x) => x.stop());
+  }, [a, b, c]);
+  const dotStyle = (val: Animated.Value) => ({
+    opacity: val.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }),
+    transform: [{ translateY: val.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) }],
+  });
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <Animated.View style={[styles.typingDot, { backgroundColor: color }, dotStyle(a)]} />
+      <Animated.View style={[styles.typingDot, { backgroundColor: color }, dotStyle(b)]} />
+      <Animated.View style={[styles.typingDot, { backgroundColor: color }, dotStyle(c)]} />
     </View>
   );
 }
@@ -788,6 +898,19 @@ const styles = StyleSheet.create({
   headNameRow: { flexDirection: "row", alignItems: "center", gap: 4, maxWidth: 190 },
   headName: { color: IOS_TEXT, fontSize: 12, fontWeight: "700", letterSpacing: -0.1, flexShrink: 1 },
   headStatus: { color: IOS_SECONDARY, fontSize: 10, fontWeight: "500", marginTop: -1 },
+  headStatusTyping: { color: IOS_BLUE, fontSize: 10, fontWeight: "700", marginTop: -1, letterSpacing: 0.1 },
+  typingHeadRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 1 },
+  typingBubbleWrap: { alignSelf: "flex-start", marginTop: 2, marginBottom: 6, marginLeft: 2 },
+  typingBubble: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderBottomLeftRadius: 6,
+    backgroundColor: IOS_CARD,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  typingDot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: 2 },
 
   listContent: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 14 },
 

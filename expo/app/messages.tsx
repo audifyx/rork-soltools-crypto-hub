@@ -58,6 +58,20 @@ function timeAgo(t: number): string {
   return `${Math.floor(d / 7)}w`;
 }
 
+function presenceLabel(online: boolean | undefined, lastSeenAt: number | null | undefined): string | null {
+  if (online) return "Active now";
+  if (!lastSeenAt) return null;
+  const diff = Math.max(0, Date.now() - lastSeenAt);
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "Active just now";
+  if (min < 60) return `Active ${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `Active ${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `Last seen ${day}d ago`;
+  return null;
+}
+
 export default function MessagesScreen() {
   const router = useRouter();
   const {
@@ -263,6 +277,7 @@ export default function MessagesScreen() {
 }
 
 function ConversationRow({ conv, onPress }: { conv: Conversation; onPress: () => void }) {
+  const presence = presenceLabel(conv.user.online, conv.user.lastSeenAt);
   return (
     <Pressable onPress={onPress} style={styles.row} testID={`convo-${conv.id}`}>
       <View style={[styles.avatarWrap]}>
@@ -294,6 +309,14 @@ function ConversationRow({ conv, onPress }: { conv: Conversation; onPress: () =>
         >
           {conv.lastMessage || "iMessage"}
         </Text>
+        {presence ? (
+          <View style={styles.presenceRow}>
+            {conv.user.online ? <View style={styles.presenceDot} /> : null}
+            <Text style={[styles.presenceText, conv.user.online && styles.presenceTextOnline]}>
+              {presence}
+            </Text>
+          </View>
+        ) : null}
       </View>
       <View style={styles.rowEnd}>
         {conv.pinned ? (
@@ -626,6 +649,10 @@ const styles = StyleSheet.create({
   rowTimeUnread: { color: ACCENT, fontWeight: "900" },
   endMetaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: ACCENT },
+  presenceRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 3 },
+  presenceDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.mint },
+  presenceText: { color: Colors.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.1 },
+  presenceTextOnline: { color: Colors.mint },
 
   empty: { marginHorizontal: 18, marginTop: 28, paddingHorizontal: 28, paddingVertical: 44, alignItems: "center", borderRadius: 28, backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, borderColor: CARD_BORDER },
   emptyIcon: {
