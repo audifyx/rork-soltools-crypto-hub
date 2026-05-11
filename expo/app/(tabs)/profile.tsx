@@ -5,6 +5,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import * as LocalAuthentication from "expo-local-authentication";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -2074,6 +2075,38 @@ function SettingsModal({
     );
   }, [onResetData]);
 
+  const onToggleBiometric = useCallback(
+    async (next: boolean) => {
+      if (!next) {
+        await onUpdate({ biometric: false });
+        return;
+      }
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        if (!hasHardware || !enrolled) {
+          Alert.alert(
+            "Biometrics unavailable",
+            "Set up Face ID, Touch ID, or a fingerprint in your device settings first.",
+          );
+          return;
+        }
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: "Confirm to enable biometric unlock",
+          fallbackLabel: "Use passcode",
+          disableDeviceFallback: false,
+        });
+        if (result.success) {
+          await onUpdate({ biometric: true });
+        }
+      } catch (e) {
+        console.log("[profile] biometric enable failed", e);
+        Alert.alert("Biometric error", e instanceof Error ? e.message : "Try again.");
+      }
+    },
+    [onUpdate],
+  );
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -2136,8 +2169,8 @@ function SettingsModal({
                 />
                 <MenuRow
                   Icon={Lock}
-                  label="Privacy & security"
-                  sub="2FA, biometrics, profile"
+                  label="Privacy"
+                  sub="Private profile & biometric unlock"
                   onPress={() => setSection("privacy")}
                 />
                 <MenuRow
@@ -2271,35 +2304,21 @@ function SettingsModal({
 
             {section === "privacy" && (
               <>
-                <Text style={styles.settingsGroup}>SECURITY</Text>
-                <SettingRow
-                  label="Two-factor auth"
-                  sub="Extra layer on sign-in"
-                  Icon={ShieldCheck}
-                  value={prefs.twoFactor}
-                  onChange={(v) => onUpdate({ twoFactor: v })}
-                />
-                <SettingRow
-                  label="Biometric unlock"
-                  sub="Face / fingerprint"
-                  Icon={Fingerprint}
-                  value={prefs.biometric}
-                  onChange={(v) => onUpdate({ biometric: v })}
-                />
                 <Text style={styles.settingsGroup}>PROFILE PRIVACY</Text>
                 <SettingRow
                   label="Private profile"
-                  sub="Only followers see posts"
+                  sub="Only followers see your posts, reels & activity"
                   Icon={Lock}
                   value={prefs.privateProfile}
                   onChange={(v) => onUpdate({ privateProfile: v })}
                 />
+                <Text style={styles.settingsGroup}>BIOMETRICS</Text>
                 <SettingRow
-                  label="Hide balances"
-                  sub="Mask wallet PnL & holdings"
-                  Icon={Eye}
-                  value={prefs.hideBalance}
-                  onChange={(v) => onUpdate({ hideBalance: v })}
+                  label="Biometric unlock"
+                  sub="Use Face ID / fingerprint to open the app"
+                  Icon={Fingerprint}
+                  value={prefs.biometric}
+                  onChange={onToggleBiometric}
                 />
                 <View style={{ height: 24 }} />
               </>

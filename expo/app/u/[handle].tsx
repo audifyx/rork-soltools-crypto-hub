@@ -46,8 +46,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { Lock as LockIcon } from "lucide-react-native";
 import { navigateBack } from "@/lib/navigation";
 import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useMessages } from "@/providers/messages-provider";
 import {
@@ -92,8 +94,27 @@ export default function PublicProfileScreen() {
   const followersQ = useFollowList(targetUserId, "followers");
   const followingQ = useFollowList(targetUserId, "following");
   const followCountsQ = useFollowCounts(targetUserId);
-  const userPosts = postsQ.data ?? [];
-  const userReels = reelsQ.data ?? [];
+  const privacyQ = useQuery<{ isPrivate: boolean }>({
+    queryKey: ["profile", "privacy", targetUserId ?? "none"],
+    enabled: !!targetUserId,
+    queryFn: async () => {
+      if (!targetUserId) return { isPrivate: false };
+      const { data, error } = await supabase
+        .from("user_settings")
+        .select("private_profile")
+        .eq("user_id", targetUserId)
+        .maybeSingle();
+      if (error) {
+        console.log("[profile] privacy fetch failed", error.message);
+        return { isPrivate: false };
+      }
+      return { isPrivate: !!data?.private_profile };
+    },
+    staleTime: 30_000,
+  });
+  const isLockedByPrivacy = !!privacyQ.data?.isPrivate && !isSelf && !profile?.is_following;
+  const userPosts = isLockedByPrivacy ? [] : (postsQ.data ?? []);
+  const userReels = isLockedByPrivacy ? [] : (reelsQ.data ?? []);
   const followersCount = Math.max(profile?.followers_count ?? 0, followersQ.data?.length ?? 0, followCountsQ.data?.followers ?? 0);
   const followingCount = Math.max(profile?.following_count ?? 0, followingQ.data?.length ?? 0, followCountsQ.data?.following ?? 0);
 
@@ -409,7 +430,15 @@ export default function PublicProfileScreen() {
             />
           </View>
 
-          {feedTab === "posts" ? (
+          {isLockedByPrivacy ? (
+            <View style={styles.privateLock}>
+              <View style={styles.privateLockIcon}>
+                <LockIcon color={Colors.goldBright} size={26} strokeWidth={2.6} />
+              </View>
+              <Text style={styles.privateLockTitle}>This account is private</Text>
+              <Text style={styles.privateLockBody}>Follow @{profile.username ?? "trader"} to see their posts, reels and activity.</Text>
+            </View>
+          ) : feedTab === "posts" ? (
             <PostsList
               posts={userPosts}
               loading={postsQ.isLoading}
@@ -1073,6 +1102,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
   },
   feedTabActive: { backgroundColor: Colors.mint, borderColor: Colors.mint },
+  privateLock: { alignItems: "center", paddingVertical: 44, paddingHorizontal: 24, marginTop: 14, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  privateLockIcon: { width: 64, height: 64, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(63,169,255,0.12)", borderWidth: 1, borderColor: "rgba(98,208,255,0.22)", marginBottom: 16 },
+  privateLockTitle: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
+  privateLockBody: { color: Colors.muted, fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 8, lineHeight: 19 },
   feedTabText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
   feedTabTextActive: { color: Colors.ink, fontWeight: "900" },
 

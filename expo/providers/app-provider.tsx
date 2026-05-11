@@ -107,12 +107,8 @@ export type Language = "en" | "es" | "fr" | "de" | "jp";
 export interface UserPrefs {
   push: boolean;
   haptics: boolean;
-  voiceLobbies: boolean;
   whaleAlerts: boolean;
-  aiNarration: boolean;
   privateProfile: boolean;
-  hideBalance: boolean;
-  twoFactor: boolean;
   biometric: boolean;
   currency: Currency;
   theme: ThemeMode;
@@ -148,12 +144,8 @@ const DEFAULT_PROFILE: UserProfile = {
 const DEFAULT_PREFS: UserPrefs = {
   push: true,
   haptics: true,
-  voiceLobbies: false,
   whaleAlerts: true,
-  aiNarration: false,
   privateProfile: false,
-  hideBalance: false,
-  twoFactor: false,
   biometric: false,
   currency: "USD",
   theme: "dark",
@@ -438,7 +430,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         const { data, error } = await supabase
           .from("user_settings")
           .select(
-            "push,haptics,voice_lobbies,whale_alerts,ai_narration,private_profile,hide_balance,two_factor,biometric,currency,theme,language,slippage,priority_fee,mev_protection",
+            "push,haptics,whale_alerts,private_profile,biometric,currency,theme,language,slippage,priority_fee,mev_protection",
           )
           .eq("user_id", userId)
           .maybeSingle();
@@ -447,12 +439,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
         const remote: UserPrefs = {
           push: data.push ?? localPrefs.push,
           haptics: data.haptics ?? localPrefs.haptics,
-          voiceLobbies: data.voice_lobbies ?? localPrefs.voiceLobbies,
           whaleAlerts: data.whale_alerts ?? localPrefs.whaleAlerts,
-          aiNarration: data.ai_narration ?? localPrefs.aiNarration,
           privateProfile: data.private_profile ?? localPrefs.privateProfile,
-          hideBalance: data.hide_balance ?? localPrefs.hideBalance,
-          twoFactor: data.two_factor ?? localPrefs.twoFactor,
           biometric: data.biometric ?? localPrefs.biometric,
           currency: (data.currency as Currency | null) ?? localPrefs.currency,
           theme: (data.theme as ThemeMode | null) ?? localPrefs.theme,
@@ -960,12 +948,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
                 user_id: userId,
                 push: next.push,
                 haptics: next.haptics,
-                voice_lobbies: next.voiceLobbies,
                 whale_alerts: next.whaleAlerts,
-                ai_narration: next.aiNarration,
                 private_profile: next.privateProfile,
-                hide_balance: next.hideBalance,
-                two_factor: next.twoFactor,
                 biometric: next.biometric,
                 currency: next.currency,
                 theme: next.theme,

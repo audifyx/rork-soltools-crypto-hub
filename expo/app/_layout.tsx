@@ -13,6 +13,7 @@ import { registerKOLSync } from "@/lib/kol-background";
 import { ensureNotificationPermission } from "@/lib/push-notifications";
 import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
+import BiometricGate from "@/components/ui/BiometricGate";
 import { AuthProvider } from "@/providers/auth-provider";
 import { LaunchpadProvider } from "@/providers/launchpad-provider";
 import { LobbiesProvider } from "@/providers/lobbies-provider";
@@ -148,7 +149,9 @@ export default function RootLayout() {
                   <MessagesProvider>
                     <LobbiesProvider>
                       <GestureHandlerRootView style={styles.gestureRoot}>
-                        <RootLayoutNav />
+                        <BiometricGate>
+                          <RootLayoutNav />
+                        </BiometricGate>
                       </GestureHandlerRootView>
                     </LobbiesProvider>
                   </MessagesProvider>

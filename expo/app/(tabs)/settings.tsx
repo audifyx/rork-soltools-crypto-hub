@@ -7,7 +7,6 @@ import {
   Bot,
   ChevronRight,
   DollarSign,
-  Eye,
   Fingerprint,
   Gem,
   HelpCircle,
@@ -28,6 +27,8 @@ import {
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import * as LocalAuthentication from "expo-local-authentication";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
@@ -66,6 +67,39 @@ export default function SettingsScreen() {
     async (patch: Partial<UserPrefs>) => {
       haptic();
       await updatePrefs(patch);
+    },
+    [updatePrefs],
+  );
+
+  const onToggleBiometric = useCallback(
+    async (next: boolean) => {
+      haptic();
+      if (!next) {
+        await updatePrefs({ biometric: false });
+        return;
+      }
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        if (!hasHardware || !enrolled) {
+          Alert.alert(
+            "Biometrics unavailable",
+            "Set up Face ID, Touch ID, or a fingerprint in your device settings first.",
+          );
+          return;
+        }
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: "Confirm to enable biometric unlock",
+          fallbackLabel: "Use passcode",
+          disableDeviceFallback: false,
+        });
+        if (result.success) {
+          await updatePrefs({ biometric: true });
+        }
+      } catch (e) {
+        console.log("[settings] biometric enable failed", e);
+        Alert.alert("Biometric error", e instanceof Error ? e.message : "Try again.");
+      }
     },
     [updatePrefs],
   );
@@ -180,7 +214,7 @@ export default function SettingsScreen() {
               <Group title="SETTINGS">
                 <MenuRow Icon={Bell} label="Notifications" sub="Push, whales, haptics" onPress={() => openSection("notifications")} />
                 <MenuRow Icon={DollarSign} label="Trading defaults" sub={`Slippage ${prefs.slippage}% · Priority ${prefs.priorityFee} SOL`} onPress={() => openSection("trading")} />
-                <MenuRow Icon={Shield} label="Privacy & security" sub="Profile privacy, balances, biometrics" onPress={() => openSection("privacy")} />
+                <MenuRow Icon={Shield} label="Privacy" sub="Private profile and biometric unlock" onPress={() => openSection("privacy")} />
                 <MenuRow Icon={Palette} label="Appearance" sub={`${prefs.theme} · ${prefs.currency} · ${prefs.language.toUpperCase()}`} onPress={() => openSection("appearance")} />
                 <MenuRow Icon={UserRound} label="Account" sub="Connected accounts, auth, data controls" onPress={() => openSection("account")} />
                 <MenuRow Icon={HelpCircle} label="Support & legal" sub="Help, terms, privacy, licenses" onPress={() => openSection("support")} />
@@ -205,11 +239,9 @@ export default function SettingsScreen() {
           ) : null}
 
           {section === "privacy" ? (
-            <Group title="PRIVACY & SECURITY">
-              <ToggleRow Icon={Lock} label="Private profile" sub="Only followers can see profile posts" value={prefs.privateProfile} onChange={(privateProfile) => setPrefs({ privateProfile })} />
-              <ToggleRow Icon={Eye} label="Hide balances" sub="Mask wallet PnL and holdings in UI" value={prefs.hideBalance} onChange={(hideBalance) => setPrefs({ hideBalance })} />
-              <ToggleRow Icon={ShieldCheck} label="Two-factor auth" sub="Require another verification step" value={prefs.twoFactor} onChange={(twoFactor) => setPrefs({ twoFactor })} />
-              <ToggleRow Icon={Fingerprint} label="Biometric unlock" sub="Use Face ID or fingerprint when available" value={prefs.biometric} onChange={(biometric) => setPrefs({ biometric })} />
+            <Group title="PRIVACY">
+              <ToggleRow Icon={Lock} label="Private profile" sub="Only followers can see your posts, reels and activity" value={prefs.privateProfile} onChange={(privateProfile) => setPrefs({ privateProfile })} />
+              <ToggleRow Icon={Fingerprint} label="Biometric unlock" sub="Use Face ID or fingerprint to open the app" value={prefs.biometric} onChange={onToggleBiometric} />
             </Group>
           ) : null}
 
