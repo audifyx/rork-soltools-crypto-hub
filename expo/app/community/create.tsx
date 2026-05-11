@@ -952,7 +952,7 @@ function StepRulesTags({
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.privacyTitle}>Holder-only community</Text>
-            <Text style={styles.privacyBody}>Requires SOLTOOLS holdings to enter and gives members holder-only status.</Text>
+            <Text style={styles.privacyBody}>Requires $OGS holdings to enter and gives members holder-only status.</Text>
           </View>
         </View>
         <Switch
@@ -966,7 +966,7 @@ function StepRulesTags({
 
       {holderOnly ? (
         <>
-          <FieldLabel icon={Lock}>Minimum SOLTOOLS balance</FieldLabel>
+          <FieldLabel icon={Lock}>Minimum $OGS balance</FieldLabel>
           <TextInput
             value={gateMinimumBalance}
             onChangeText={onChangeGateMinimumBalance}
@@ -1044,7 +1044,7 @@ function StepReview({
       {holderOnly ? (
         <View style={styles.reviewRow}>
           <Text style={styles.reviewLabel}>Gate</Text>
-          <Text style={styles.reviewValue}>{Number(gateMinimumBalance || 0).toLocaleString()} SOLTOOLS</Text>
+          <Text style={styles.reviewValue}>{Number(gateMinimumBalance || 0).toLocaleString()} $OGS</Text>
         </View>
       ) : null}
 

@@ -38,7 +38,7 @@ export default function HoldersOnlyCard({
       <Text style={styles.title}>{title}</Text>
 
       <Text style={styles.description}>
-        Requires {minimumBalance.toLocaleString()} SOLTOOLS to join
+        Requires {minimumBalance.toLocaleString()} $OGS to join
       </Text>
 
       <View style={styles.footerRow}>

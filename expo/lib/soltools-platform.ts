@@ -28,7 +28,10 @@ export interface SolToolsModuleSpec {
 
 export const SOLTOOLS_ADMIN_EMAIL = "audifyx@gmail.com";
 export const SOLTOOLS_RESERVED_USERNAME = "administrator";
-export const SOLTOOLS_OFFICIAL_TOKEN_CA = "HEivoBHhWT939vcaevGgZBtoArS4CAywCMjdVBTSpump";
+/** Official $OGS (OG Scan) token contract on Solana. */
+export const SOLTOOLS_OFFICIAL_TOKEN_CA = "EfnZmcFKMXofKA5V5ujvjqtSorvuQD2MzJPz3dxXpump";
+export const SOLTOOLS_OFFICIAL_TOKEN_TICKER = "$OGS";
+export const SOLTOOLS_OFFICIAL_TOKEN_NAME = "OG Scan";
 
 export const SOLTOOLS_TRADING_DISABLED_MESSAGE =
   "Wallet connection, wallet creation/import/export, Phantom, Jupiter swaps, buying, and selling are paused until the App Store launch. $OGS token is currently live for social, discovery, charts, alerts, communities, and wallet/token research.";

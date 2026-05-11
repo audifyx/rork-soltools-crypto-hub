@@ -11,7 +11,7 @@ export default function HoldersRequirementPill({ amount }: Props) {
   return (
     <View style={styles.pill}>
       <Text style={styles.text}>
-        Requires {amount} SOLTOOLS
+        Requires {amount} $OGS
       </Text>
     </View>
   );

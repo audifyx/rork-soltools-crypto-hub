@@ -56,6 +56,7 @@ import QuickAccessMenu from "@/components/QuickAccessMenu";
 import TokenAvatar from "@/components/TokenAvatar";
 import LiveTicker from "@/components/ui/LiveTicker";
 import CommunitiesRail from "@/components/home/CommunitiesRail";
+import OurTokenBadge from "@/components/home/OurTokenBadge";
 import VoiceRoomsRail from "@/components/home/VoiceRoomsRail";
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
@@ -881,6 +882,7 @@ function FeedHeader({
           <View style={styles.tickerWrap}>
             <LiveTicker />
           </View>
+          <OurTokenBadge />
           <MarketStrip />
           <VoiceRoomsRail />
           <CommunitiesRail />

@@ -26,7 +26,7 @@ export function validateCommunityAccess(
 
   return {
     allowed: false,
-    reason: `Requires ${requirement.minimumBalance.toLocaleString()} SOLTOOLS`,
+    reason: `Requires ${requirement.minimumBalance.toLocaleString()} $OGS`,
   };
 }
 

@@ -106,22 +106,58 @@ export interface NewsComment {
 
 type RssSource = { name: string; url: string; categoryHint?: Exclude<NewsCategory, "all"> };
 
-// Trimmed to the most active, highest-signal feeds to keep fetch volume light
-// and avoid memory pressure / crashes on lower-end devices.
+// 25+ high-signal feeds covering majors, Solana, DeFi, NFTs, memes,
+// market structure and viral news. Fetched in small parallel batches with
+// per-feed timeouts so we keep memory pressure and crash risk low.
 const RSS_SOURCES: RssSource[] = [
+  // Majors
   { name: "Cointelegraph", url: "https://cointelegraph.com/rss", categoryHint: "trending" },
   { name: "CoinDesk", url: "https://www.coindesk.com/arc/outboundfeeds/rss/", categoryHint: "market" },
   { name: "Decrypt", url: "https://decrypt.co/feed", categoryHint: "trending" },
   { name: "The Block", url: "https://www.theblock.co/rss.xml", categoryHint: "market" },
   { name: "Blockworks", url: "https://blockworks.co/feed", categoryHint: "market" },
+  { name: "DLNews", url: "https://www.dlnews.com/arc/outboundfeeds/rss/?outputType=xml", categoryHint: "market" },
+  { name: "CryptoSlate", url: "https://cryptoslate.com/feed/", categoryHint: "trending" },
+  { name: "BeInCrypto", url: "https://beincrypto.com/feed/", categoryHint: "trending" },
+  { name: "CryptoBriefing", url: "https://cryptobriefing.com/feed/", categoryHint: "trending" },
+  { name: "AMBCrypto", url: "https://ambcrypto.com/feed/", categoryHint: "trending" },
+  { name: "U.Today", url: "https://u.today/rss", categoryHint: "trending" },
+  { name: "NewsBTC", url: "https://www.newsbtc.com/feed/", categoryHint: "market" },
+  { name: "Bitcoinist", url: "https://bitcoinist.com/feed/", categoryHint: "bitcoin" },
+  { name: "CoinGape", url: "https://coingape.com/feed/", categoryHint: "trending" },
+  // Bitcoin / ETH
   { name: "Bitcoin Magazine", url: "https://bitcoinmagazine.com/.rss/full/", categoryHint: "bitcoin" },
+  // DeFi
   { name: "The Defiant", url: "https://thedefiant.io/api/feed", categoryHint: "defi" },
+  // Solana
   { name: "Solana Blog", url: "https://solana.com/news/rss.xml", categoryHint: "solana" },
   { name: "Solana Floor", url: "https://solanafloor.com/feed", categoryHint: "solana" },
+  { name: "Solana Compass", url: "https://solanacompass.com/rss.xml", categoryHint: "solana" },
+  // Reddit (viral / community signal)
   { name: "r/solana", url: "https://www.reddit.com/r/solana/.rss", categoryHint: "solana" },
   { name: "r/CryptoCurrency", url: "https://www.reddit.com/r/CryptoCurrency/.rss", categoryHint: "trending" },
+  { name: "r/CryptoMarkets", url: "https://www.reddit.com/r/CryptoMarkets/.rss", categoryHint: "market" },
+  { name: "r/Memecoins", url: "https://www.reddit.com/r/memecoins/.rss", categoryHint: "meme" },
+  { name: "r/SolanaNFT", url: "https://www.reddit.com/r/SolanaNFT/.rss", categoryHint: "nft" },
+  // Aggregators
   { name: "CryptoPanic Hot", url: "https://cryptopanic.com/news/rss/", categoryHint: "trending" },
 ];
+
+const RSS_FETCH_TIMEOUT_MS = 6_500;
+const RSS_BATCH_SIZE = 6;
+
+async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, {
+      signal: ctrl.signal,
+      headers: { Accept: "application/rss+xml, application/xml, text/xml" },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const USER_WALLETS_CACHE_KEY = "soltools.userWallets.v1";
 
@@ -291,23 +327,27 @@ export async function fetchCryptoNewsFeed(params: NewsFeedParams = {}): Promise<
   const fresh = cached && Date.now() - cached.at < NEWS_CACHE_TTL_MS ? cached.items : null;
 
   if (!fresh) {
-    const settled = await Promise.allSettled(
-      RSS_SOURCES.map(async (src) => {
-        const res = await fetch(src.url, { headers: { Accept: "application/rss+xml, application/xml, text/xml" } });
-        if (!res.ok) throw new Error(`status ${res.status}`);
-        const xml = await res.text();
-        return parseRssFeed(xml, src);
-      }),
-    );
     const merged: CryptoNewsItem[] = [];
     const seen = new Set<string>();
-    for (const r of settled) {
-      if (r.status !== "fulfilled") continue;
-      for (const it of r.value) {
-        const key = `${it.source}|${(it.title ?? "").toLowerCase().slice(0, 80)}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        merged.push(it);
+    // Process in small batches so we don't open 25+ sockets at once on mobile.
+    for (let i = 0; i < RSS_SOURCES.length; i += RSS_BATCH_SIZE) {
+      const batch = RSS_SOURCES.slice(i, i + RSS_BATCH_SIZE);
+      const settled = await Promise.allSettled(
+        batch.map(async (src) => {
+          const res = await fetchWithTimeout(src.url, RSS_FETCH_TIMEOUT_MS);
+          if (!res.ok) throw new Error(`status ${res.status}`);
+          const xml = await res.text();
+          return parseRssFeed(xml, src);
+        }),
+      );
+      for (const r of settled) {
+        if (r.status !== "fulfilled") continue;
+        for (const it of r.value) {
+          const key = `${it.source}|${(it.title ?? "").toLowerCase().slice(0, 80)}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push(it);
+        }
       }
     }
     if (merged.length) {
