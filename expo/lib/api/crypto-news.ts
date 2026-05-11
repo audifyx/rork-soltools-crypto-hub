@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { supabase, SUPABASE_ANON_KEY, SUPABASE_READY, SUPABASE_URL } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import {
   fetchWalletPortfolio,
   isValidSolanaAddress,
@@ -330,70 +330,164 @@ async function writeCache(items: CryptoNewsItem[]): Promise<void> {
   }
 }
 
-type SocialFeedRow = {
-  id: string;
-  source: "telegram" | "x";
-  source_label: string;
-  url: string;
-  text: string;
-  image_url: string | null;
-  published_at: string;
-};
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
-function socialRowToNewsItem(row: SocialFeedRow): CryptoNewsItem {
-  const title = row.text.length > 140 ? `${row.text.slice(0, 137)}\u2026` : row.text;
-  const isTelegram = row.source === "telegram";
-  return {
-    id: row.id,
-    source: row.source_label,
-    source_url: row.url,
-    title,
-    description: row.text.slice(0, 280),
-    image_url: row.image_url,
-    category: "viral",
-    sentiment: detectSentiment(row.text),
-    coin_mentions: extractMentions(row.text),
-    engagement: isTelegram
-      ? { likes: 120, shares: 30, comments: 18 }
-      : { likes: 150, shares: 40, comments: 22 },
-    published_at: row.published_at,
-  };
+async function fetchTelegramChannelPosts(channel: string): Promise<CryptoNewsItem[]> {
+  // t.me/s/<channel> exposes a public, no-auth HTML preview that lists the most
+  // recent posts. React Native has no CORS, so we can hit it directly. We
+  // spoof a desktop UA because t.me serves a stripped page to mobile clients.
+  const url = `https://t.me/s/${channel}`;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 9_000);
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": BROWSER_UA, Accept: "text/html" },
+    }).finally(() => clearTimeout(timer));
+    if (!res.ok) {
+      console.log("[news] telegram non-ok", res.status);
+      return [];
+    }
+    const html = await res.text();
+    const blocks =
+      html.match(
+        /<div class="tgme_widget_message_wrap[\s\S]*?(?=<div class="tgme_widget_message_wrap|<\/section>)/g,
+      ) ?? [];
+    const items: CryptoNewsItem[] = [];
+    for (const block of blocks) {
+      const textMatch = block.match(
+        /<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/,
+      );
+      const text = stripHtml(textMatch?.[1] ?? "");
+      const linkMatch = block.match(/<a class="tgme_widget_message_date"[^>]*href="([^"]+)"/);
+      const link = linkMatch?.[1] ?? `https://t.me/${channel}`;
+      const timeMatch = block.match(/<time[^>]*datetime="([^"]+)"/);
+      const published_at = timeMatch?.[1]
+        ? new Date(timeMatch[1]).toISOString()
+        : new Date().toISOString();
+      const photoMatch = block.match(
+        /tgme_widget_message_photo_wrap[^>]*background-image:url\('([^']+)'\)/,
+      );
+      const image_url = photoMatch?.[1] ?? null;
+      if (!text && !image_url) continue;
+      const body = text || "(Photo)";
+      const title = body.length > 140 ? `${body.slice(0, 137)}\u2026` : body;
+      items.push({
+        id: hashId(`telegram:${link}:${published_at}`),
+        source: "OG Updates (Telegram)",
+        source_url: link,
+        title,
+        description: body.slice(0, 280),
+        image_url,
+        category: "viral",
+        sentiment: detectSentiment(body),
+        coin_mentions: extractMentions(body),
+        engagement: { likes: 120, shares: 30, comments: 18 },
+        published_at,
+      });
+    }
+    return items;
+  } catch (e) {
+    console.log("[news] telegram fetch failed", e instanceof Error ? e.message : e);
+    return [];
+  }
 }
 
-async function fetchOfficialSocialPosts(): Promise<CryptoNewsItem[]> {
-  // We call our Supabase Edge Function instead of hitting Nitter/RSSHub/t.me
-  // directly from the client. Mobile networks (especially carrier-side) block
-  // or rate-limit those endpoints, and most public Nitter mirrors are dead.
-  // The edge function spoofs a desktop browser UA and hits Twitter's public
-  // syndication endpoint + Telegram's web preview, so it works reliably.
-  if (!SUPABASE_READY || !SUPABASE_URL || !SUPABASE_ANON_KEY) return [];
-  const url = `${SUPABASE_URL}/functions/v1/social-feed`;
+async function fetchXHandlePosts(handle: string): Promise<CryptoNewsItem[]> {
+  // We use Rork's Exa search proxy to surface the latest @handle posts on x.com.
+  // Direct syndication.twitter.com is rate-limited from mobile carrier IPs and
+  // Nitter mirrors are unreliable in 2026. Exa indexes x.com pages with dates.
+  const toolkitUrl = process.env.EXPO_PUBLIC_TOOLKIT_URL;
+  const secret = process.env.EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY;
+  if (!toolkitUrl || !secret) {
+    console.log("[news] x: toolkit env missing");
+    return [];
+  }
   try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token ?? SUPABASE_ANON_KEY;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10_000);
-    const res = await fetch(url, {
+    const timer = setTimeout(() => ctrl.abort(), 12_000);
+    const res = await fetch(`${toolkitUrl}/v2/exa/search`, {
       method: "POST",
       signal: ctrl.signal,
       headers: {
         "Content-Type": "application/json",
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${secret}`,
       },
-      body: JSON.stringify({ telegram: OG_TELEGRAM_CHANNEL, x: OG_X_HANDLE }),
+      body: JSON.stringify({
+        query: `latest posts from @${handle}`,
+        type: "keyword",
+        numResults: 20,
+        includeDomains: ["x.com", "twitter.com"],
+        includeText: [handle],
+        contents: {
+          text: { maxCharacters: 800 },
+          highlights: { numSentences: 2, highlightsPerUrl: 1 },
+        },
+      }),
     }).finally(() => clearTimeout(timer));
     if (!res.ok) {
-      console.log("[news] social-feed edge non-ok", res.status);
+      console.log("[news] x exa non-ok", res.status);
       return [];
     }
-    const json = (await res.json()) as { telegram?: SocialFeedRow[]; twitter?: SocialFeedRow[] };
-    const rows = [...(json.telegram ?? []), ...(json.twitter ?? [])];
-    return rows.map(socialRowToNewsItem);
+    const json = (await res.json()) as {
+      results?: {
+        url: string;
+        title?: string;
+        text?: string;
+        publishedDate?: string | null;
+        author?: string | null;
+        highlights?: string[];
+        image?: string | null;
+      }[];
+    };
+    const hits = json.results ?? [];
+    const items: CryptoNewsItem[] = [];
+    const handleLc = handle.toLowerCase();
+    for (const h of hits) {
+      if (!h.url) continue;
+      // Only keep actual status URLs from this handle.
+      const statusMatch = h.url.match(/^https?:\/\/(?:x|twitter)\.com\/([^/]+)\/status\/(\d+)/i);
+      if (!statusMatch) continue;
+      if (statusMatch[1].toLowerCase() !== handleLc) continue;
+      const body = stripHtml(
+        (h.highlights?.[0] ?? h.text ?? h.title ?? "").replace(/\s+/g, " "),
+      ).trim();
+      if (!body) continue;
+      const title = body.length > 140 ? `${body.slice(0, 137)}\u2026` : body;
+      const published_at = h.publishedDate
+        ? new Date(h.publishedDate).toISOString()
+        : new Date().toISOString();
+      items.push({
+        id: hashId(`x:${handle}:${statusMatch[2]}`),
+        source: `@${handle} on X`,
+        source_url: h.url,
+        title,
+        description: body.slice(0, 280),
+        image_url: h.image ?? null,
+        category: "viral",
+        sentiment: detectSentiment(body),
+        coin_mentions: extractMentions(body),
+        engagement: { likes: 150, shares: 40, comments: 22 },
+        published_at,
+      });
+    }
+    // Dedupe by id.
+    const seen = new Set<string>();
+    return items.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)));
   } catch (e) {
-    console.log("[news] social-feed edge fetch failed", e instanceof Error ? e.message : e);
+    console.log("[news] x exa failed", e instanceof Error ? e.message : e);
     return [];
   }
+}
+
+async function fetchOfficialSocialPosts(): Promise<CryptoNewsItem[]> {
+  const [telegram, x] = await Promise.all([
+    fetchTelegramChannelPosts(OG_TELEGRAM_CHANNEL),
+    fetchXHandlePosts(OG_X_HANDLE),
+  ]);
+  return [...telegram, ...x];
 }
 
 export async function fetchCryptoNewsFeed(params: NewsFeedParams = {}): Promise<CryptoNewsItem[]> {
