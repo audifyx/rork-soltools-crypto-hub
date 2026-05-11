@@ -26,6 +26,7 @@ export interface UserPost {
   reposts: number;
   comments: number;
   liked: boolean;
+  reposted?: boolean;
   authorId?: string;
   authorUsername?: string | null;
   authorDisplayName?: string | null;
@@ -251,6 +252,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
             reposts: (row.reposts_count as number) ?? 0,
             comments: (row.comments_count as number) ?? 0,
             liked: false,
+            reposted: false,
             authorId: row.user_id as string,
           }));
           return mergePosts(localPosts, remotePosts);
@@ -580,6 +582,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         reposts: 0,
         comments: 0,
         liked: false,
+        reposted: false,
       };
       const latestLocal = await loadJson<UserPost[]>(POSTS_KEY, []);
       const next = mergePosts([post], mergePosts(latestLocal, posts));
@@ -620,6 +623,37 @@ export const [AppProvider, useApp] = createContextHook(() => {
       }
     },
     [posts, qc, userId, isAuthenticated],
+  );
+
+  const togglePostRepost = useCallback(
+    async (id: string) => {
+      const next = posts.map((p) =>
+        p.id === id ? { ...p, reposted: !p.reposted, reposts: Math.max(0, p.reposts + (p.reposted ? -1 : 1)) } : p,
+      );
+      qc.setQueryData(["app", "posts", userId ?? "guest"], next);
+      if (isAuthenticated && userId) {
+        try {
+          const { data, error } = await supabase.rpc("toggle_post_repost", {
+            target_post_id: id,
+          });
+          if (error) throw error;
+          const row = Array.isArray(data) ? (data[0] as { reposted: boolean; reposts_count: number } | undefined) : undefined;
+          if (row) {
+            const synced = next.map((p) =>
+              p.id === id ? { ...p, reposted: !!row.reposted, reposts: Number(row.reposts_count ?? p.reposts) } : p,
+            );
+            qc.setQueryData(["app", "posts", userId], synced);
+            qc.invalidateQueries({ queryKey: ["home", "live-feed"] });
+            qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
+          }
+        } catch (e) {
+          console.log("[app] post repost sync failed", e);
+        }
+      } else {
+        await saveJson(POSTS_KEY, next);
+      }
+    },
+    [posts, qc, userId, isAuthenticated, POSTS_KEY],
   );
 
   const deletePost = useCallback(
@@ -942,6 +976,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       addPost: addPost.mutateAsync,
       isPosting: addPost.isPending,
       togglePostLike,
+      togglePostRepost,
       deletePost,
       watchlist,
       addWatch,
@@ -964,6 +999,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       addPost.mutateAsync,
       addPost.isPending,
       togglePostLike,
+      togglePostRepost,
       deletePost,
       watchlist,
       addWatch,

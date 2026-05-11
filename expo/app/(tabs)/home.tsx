@@ -137,6 +137,7 @@ async function hydrateLikedPosts(rows: FeedPostRow[], userId: string): Promise<U
       reposts: row.reposts_count ?? 0,
       comments: row.comments_count ?? 0,
       liked: false,
+      reposted: false,
       authorId: row.user_id,
       authorUsername: row.author_username ?? (author?.username as string | null | undefined) ?? null,
       authorDisplayName: row.author_display_name ?? (author?.display_name as string | null | undefined) ?? null,
@@ -147,19 +148,27 @@ async function hydrateLikedPosts(rows: FeedPostRow[], userId: string): Promise<U
   });
   if (posts.length === 0) return posts;
   const ids = posts.map((p) => p.id);
-  const { data: likes } = await supabase
-    .from("community_post_likes")
-    .select("post_id")
-    .eq("user_id", userId)
-    .in("post_id", ids);
+  const [{ data: likes }, { data: reposts }] = await Promise.all([
+    supabase
+      .from("community_post_likes")
+      .select("post_id")
+      .eq("user_id", userId)
+      .in("post_id", ids),
+    supabase
+      .from("community_post_reposts")
+      .select("post_id")
+      .eq("user_id", userId)
+      .in("post_id", ids),
+  ]);
   const likedSet = new Set((likes ?? []).map((r) => r.post_id as string));
-  return posts.map((p) => ({ ...p, liked: likedSet.has(p.id) }));
+  const repostedSet = new Set((reposts ?? []).map((r) => r.post_id as string));
+  return posts.map((p) => ({ ...p, liked: likedSet.has(p.id), reposted: repostedSet.has(p.id) }));
 }
 
 export default function HomeFeedScreen() {
   const router = useRouter();
   const qc = useQueryClient();
-  const { posts: userPosts, togglePostLike, deletePost, profile } = useApp();
+  const { posts: userPosts, togglePostLike, togglePostRepost, deletePost, profile } = useApp();
   const { listings } = useLaunchpad();
   const { data: trendingTokens } = useTrendingTokens(40);
   const { data: newPairsData } = useNewSolanaPairs(40);
@@ -202,6 +211,7 @@ export default function HomeFeedScreen() {
           reposts: row.reposts_count ?? 0,
           comments: row.comments_count ?? 0,
           liked: false,
+          reposted: false,
           authorId: row.user_id,
         }));
       } catch (e) {
@@ -281,6 +291,61 @@ export default function HomeFeedScreen() {
     staleTime: 15_000,
     refetchInterval: filter === "Whales" ? 30_000 : false,
   });
+
+  const patchTimelinePost = useCallback(
+    (postId: string, updater: (post: UserPost) => UserPost) => {
+      qc.setQueryData<UserPost[]>(["home", "live-feed", userId ?? "guest"], (prev) =>
+        prev?.map((post) => (post.id === postId ? updater(post) : post)),
+      );
+      qc.setQueryData<UserPost[]>(["home", "following-feed", userId ?? "guest"], (prev) =>
+        prev?.map((post) => (post.id === postId ? updater(post) : post)),
+      );
+      qc.setQueryData<UserPost[]>(["app", "posts", userId ?? "guest"], (prev) =>
+        prev?.map((post) => (post.id === postId ? updater(post) : post)),
+      );
+    },
+    [qc, userId],
+  );
+
+  const onTimelineLike = useCallback(
+    (post: UserPost) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      patchTimelinePost(post.id, (p) => ({
+        ...p,
+        liked: !p.liked,
+        likes: Math.max(0, p.likes + (p.liked ? -1 : 1)),
+      }));
+      togglePostLike(post.id).catch((e) => {
+        patchTimelinePost(post.id, (p) => ({
+          ...p,
+          liked: !p.liked,
+          likes: Math.max(0, p.likes + (p.liked ? -1 : 1)),
+        }));
+        console.log("[home] timeline like failed", e);
+      });
+    },
+    [patchTimelinePost, togglePostLike],
+  );
+
+  const onTimelineRepost = useCallback(
+    (post: UserPost) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      patchTimelinePost(post.id, (p) => ({
+        ...p,
+        reposted: !p.reposted,
+        reposts: Math.max(0, p.reposts + (p.reposted ? -1 : 1)),
+      }));
+      togglePostRepost(post.id).catch((e) => {
+        patchTimelinePost(post.id, (p) => ({
+          ...p,
+          reposted: !p.reposted,
+          reposts: Math.max(0, p.reposts + (p.reposted ? -1 : 1)),
+        }));
+        console.log("[home] timeline repost failed", e);
+      });
+    },
+    [patchTimelinePost, togglePostRepost],
+  );
 
   const combined = useMemo<FeedItem[]>(() => {
     if (filter === "Following") {
@@ -463,14 +528,15 @@ export default function HomeFeedScreen() {
             avatarUrl={item.data.authorAvatarUrl ?? profile.avatarUrl}
             verified={item.data.authorVerified ?? profile.verified}
             canDelete={!item.data.authorId || item.data.authorId === userId}
-            onLike={() => togglePostLike(item.data.id)}
+            onLike={() => onTimelineLike(item.data)}
+            onRepost={() => onTimelineRepost(item.data)}
             onDelete={() => deletePost(item.data.id)}
           />
         );
       }
       return null;
     },
-    [profile, togglePostLike, deletePost, router, userId],
+    [profile, onTimelineLike, onTimelineRepost, deletePost, router, userId],
   );
 
   return (
@@ -1493,6 +1559,7 @@ function UserPostCard({
   avatarUrl,
   verified,
   onLike,
+  onRepost,
   onDelete,
   canDelete,
 }: {
@@ -1503,6 +1570,7 @@ function UserPostCard({
   avatarUrl?: string | null;
   verified: boolean;
   onLike: () => void;
+  onRepost: () => void;
   onDelete: () => void;
   canDelete: boolean;
 }) {
@@ -1556,10 +1624,21 @@ function UserPostCard({
             icon={<MessageCircle color={Colors.muted} size={16} strokeWidth={2.2} />}
             label={formatCount(post.comments)}
           />
-          <ActionItem
-            icon={<Repeat2 color={Colors.muted} size={17} strokeWidth={2.2} />}
-            label={formatCount(post.reposts)}
-          />
+          <Pressable
+            style={styles.actionBtn}
+            onPress={onRepost}
+            hitSlop={6}
+            testID={`repost-user-${post.id}`}
+          >
+            <Repeat2
+              color={post.reposted ? Colors.mint : Colors.muted}
+              size={17}
+              strokeWidth={2.2}
+            />
+            <Text style={[styles.actionLabel, post.reposted ? { color: Colors.mint } : null]}>
+              {formatCount(post.reposts)}
+            </Text>
+          </Pressable>
           <Pressable
             style={styles.actionBtn}
             onPress={onLike}
