@@ -88,8 +88,12 @@ export default function PublicProfileScreen() {
     queryFn: () => (targetUserId ? fetchUserReels(targetUserId, userId) : Promise.resolve([])),
     staleTime: 20_000,
   });
+  const followersQ = useFollowList(targetUserId, "followers");
+  const followingQ = useFollowList(targetUserId, "following");
   const userPosts = postsQ.data ?? [];
   const userReels = reelsQ.data ?? [];
+  const followersCount = Math.max(profile?.followers_count ?? 0, followersQ.data?.length ?? 0);
+  const followingCount = Math.max(profile?.following_count ?? 0, followingQ.data?.length ?? 0);
 
   const onToggleFollow = useCallback(async () => {
     if (!isAuthenticated) {
@@ -327,7 +331,7 @@ export default function PublicProfileScreen() {
               }}
               testID="open-following"
             >
-              <Text style={styles.followNum}>{profile.following_count}</Text>
+              <Text style={styles.followNum}>{followingCount}</Text>
               <Text style={styles.followKey}>Following</Text>
             </Pressable>
             <View style={styles.followDivider} />
@@ -339,7 +343,7 @@ export default function PublicProfileScreen() {
               }}
               testID="open-followers"
             >
-              <Text style={styles.followNum}>{profile.followers_count}</Text>
+              <Text style={styles.followNum}>{followersCount}</Text>
               <Text style={styles.followKey}>Followers</Text>
             </Pressable>
             <View style={styles.followDivider} />

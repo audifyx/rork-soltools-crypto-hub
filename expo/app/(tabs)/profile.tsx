@@ -374,6 +374,10 @@ export default function ProfileScreen() {
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [followersOpen, setFollowersOpen] = useState<"followers" | "following" | null>(null);
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
+  const followersQ = useFollowList(userId, "followers");
+  const followingQ = useFollowList(userId, "following");
+  const followersCount = Math.max(profile.followers, followersQ.data?.length ?? 0);
+  const followingCount = Math.max(profile.following, followingQ.data?.length ?? 0);
 
   const creditBalance = useQuery({
     queryKey: ["credits", "balance"] as const,
@@ -795,7 +799,7 @@ export default function ProfileScreen() {
                   onPress={() => setFollowersOpen("following")}
                   testID="open-following"
                 >
-                  <Text style={styles.followNum}>{profile.following}</Text>
+                  <Text style={styles.followNum}>{followingCount}</Text>
                   <Text style={styles.followKey}>Following</Text>
                 </Pressable>
                 <View style={styles.followDivider} />
@@ -804,7 +808,7 @@ export default function ProfileScreen() {
                   onPress={() => setFollowersOpen("followers")}
                   testID="open-followers"
                 >
-                  <Text style={styles.followNum}>{profile.followers}</Text>
+                  <Text style={styles.followNum}>{followersCount}</Text>
                   <Text style={styles.followKey}>Followers</Text>
                 </Pressable>
                 <View style={styles.followDivider} />
