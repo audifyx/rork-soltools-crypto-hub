@@ -397,7 +397,6 @@ export default function ProfileScreen() {
 
   const stackedBadges = useMemo<UserBadge[]>(() => {
     const out: UserBadge[] = [];
-    if (profile.verified) out.push(DEFAULT_BADGES.verified);
     if (isAdmin && adminRole) {
       const r = adminRole.toLowerCase();
       if (r === "owner" || r === "superadmin" || r === "admin") out.push(DEFAULT_BADGES.admin);
@@ -418,7 +417,7 @@ export default function ProfileScreen() {
       });
     });
     return sortBadges(out);
-  }, [profile.verified, profile.customBadges, profile.xp, isAdmin, adminRole]);
+  }, [profile.customBadges, profile.xp, isAdmin, adminRole]);
 
   const rank = useMemo(() => computeRank(computedXp), [computedXp]);
 
@@ -753,12 +752,6 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.handleRow}>
                 <Text style={styles.handle}>{profile.handle}</Text>
-                {profile.verified ? (
-                  <View style={styles.verifiedPill}>
-                    <ShieldCheck color={Colors.cyan} size={10} strokeWidth={3} />
-                    <Text style={styles.verifiedPillText}>VERIFIED</Text>
-                  </View>
-                ) : null}
               </View>
               {stackedBadges.length > 0 ? (
                 <View style={styles.badgeRow}>
