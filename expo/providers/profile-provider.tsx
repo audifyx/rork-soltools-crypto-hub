@@ -364,18 +364,37 @@ export function useFollowList(userId: string | null | undefined, kind: "follower
       if (!userId) return [];
       const fn = kind === "followers" ? "list_followers" : "list_following";
       const { data, error } = await supabase.rpc(fn, { target_user_id: userId });
-      if (error) throw error;
-      return ((data ?? []) as Record<string, unknown>[]).map(
-        (r): ProfileSummary => ({
-          user_id: String(r.user_id),
-          username: (r.username as string | null) ?? null,
-          display_name: (r.display_name as string | null) ?? null,
-          avatar_url: normalizeMediaUrl(r.avatar_url),
-          verified: !!r.verified,
-          custom_badges: normalizeBadges(r.custom_badges),
-          followers_count: Number(r.followers_count ?? 0),
-        }),
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data.map((r): ProfileSummary => profileSummaryFromRow(r as Record<string, unknown>));
+      }
+
+      if (error) {
+        console.log("[profile] follow list rpc fallback", error.message);
+      }
+
+      const linkColumn = kind === "followers" ? "followee_id" : "follower_id";
+      const userColumn = kind === "followers" ? "follower_id" : "followee_id";
+      const { data: followRows, error: followError } = await supabase
+        .from("followers")
+        .select(userColumn)
+        .eq(linkColumn, userId);
+      if (followError) throw followError;
+
+      const ids = ((followRows ?? []) as Record<string, unknown>[])
+        .map((row) => String(row[userColumn] ?? ""))
+        .filter((id) => id.length > 0);
+      if (ids.length === 0) return [];
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id,user_id,username,display_name,avatar_url,verified,custom_badges,followers_count")
+        .in("user_id", ids);
+      if (profilesError) throw profilesError;
+
+      const byId = new Map(
+        ((profiles ?? []) as Record<string, unknown>[]).map((row) => [String(row.user_id ?? row.id), profileSummaryFromRow(row)]),
       );
+      return ids.map((id) => byId.get(id)).filter((row): row is ProfileSummary => !!row);
     },
     staleTime: 5_000,
     refetchOnMount: "always",
