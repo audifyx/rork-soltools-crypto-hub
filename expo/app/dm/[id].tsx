@@ -48,7 +48,7 @@ import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import { uploadDMImage } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
-import { DMMessage, useDmPeerProfile, useDmTyping, useMessages } from "@/providers/messages-provider";
+import { DMMessage, useDmPeerProfile, useDmThreadMessages, useDmTyping, useMessages } from "@/providers/messages-provider";
 
 const QUICK_TICKERS = ["$SOL", "$BONK", "$WIF", "$JUP", "$AGNT", "$PYTH"];
 // Dark room palette. Names kept for minimal diff.
@@ -142,7 +142,12 @@ export default function DMThreadScreen() {
   const peerBanner = peerProfile.data?.bannerUrl ?? conv?.user.bannerUrl ?? null;
   const peerAvatar = peerProfile.data?.avatarUrl ?? conv?.user.avatarUrl ?? null;
   const peerBio = peerProfile.data?.bio ?? conv?.user.bio ?? undefined;
-  const messages = useMemo<DMMessage[]>(() => (id ? getMessages(id) : []), [id, getMessages]);
+  const threadQ = useDmThreadMessages(id, conv?.user);
+  const fallbackMessages = useMemo<DMMessage[]>(() => (id ? getMessages(id) : []), [id, getMessages]);
+  const messages = useMemo<DMMessage[]>(() => {
+    const fromThread = threadQ.data ?? [];
+    return fromThread.length > 0 ? fromThread : fallbackMessages;
+  }, [threadQ.data, fallbackMessages]);
 
   const [text, setText] = useState<string>("");
   const [picker, setPicker] = useState<boolean>(false);

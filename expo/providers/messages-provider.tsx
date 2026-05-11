@@ -199,6 +199,59 @@ async function safeRpc<T>(name: string, params?: Record<string, unknown>): Promi
   return data as T;
 }
 
+/**
+ * Fetches messages for a single conversation thread. Used by the DM screen
+ * so a thread loads instantly without waiting on the aggregate inbox query.
+ */
+export function useDmThreadMessages(conversationId: string | undefined, peer?: DMUser) {
+  const queryClient = useQueryClient();
+  const { userId, isAuthenticated } = useAuth();
+  const query = useQuery<DMMessage[]>({
+    queryKey: ["messages", "thread", conversationId ?? "none", userId ?? "guest"],
+    enabled: !!conversationId && isAuthenticated && !!userId,
+    staleTime: 2_000,
+    refetchOnMount: "always",
+    refetchInterval: 8_000,
+    queryFn: async () => {
+      if (!conversationId) return [];
+      const { data, error } = await supabase.rpc("list_dm_messages", {
+        p_conversation_ids: [conversationId],
+      });
+      if (error) {
+        console.log("[messages] thread fetch failed", error.message);
+        return [];
+      }
+      return ((data ?? []) as MessageRow[])
+        .map((row) => messageFromRow(row, userId, peer))
+        .sort((a, b) => a.createdAt - b.createdAt);
+    },
+  });
+
+  useEffect(() => {
+    if (!conversationId || !isAuthenticated || !userId) return;
+    const channel = supabase
+      .channel(`dm-thread-${conversationId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dm_messages", filter: `conversation_id=eq.${conversationId}` },
+        () => {
+          queryClient
+            .invalidateQueries({ queryKey: ["messages", "thread", conversationId, userId] })
+            .catch(() => {});
+          queryClient
+            .invalidateQueries({ queryKey: ["messages", "conversations", userId] })
+            .catch(() => {});
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel).catch(() => {});
+    };
+  }, [conversationId, isAuthenticated, queryClient, userId]);
+
+  return query;
+}
+
 export function useMessageableUsersSearch(query: string) {
   const term = query.trim();
   return useQuery<DMUser[]>({
@@ -397,6 +450,35 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
       });
       if (!messageId) throw new Error("Message failed to send.");
       return messageId;
+    },
+    onMutate: async (input) => {
+      // Optimistic append so the bubble appears instantly even if the network is slow.
+      const threadKey = ["messages", "thread", input.id, userId ?? "guest"] as const;
+      await queryClient.cancelQueries({ queryKey: threadKey });
+      const previous = queryClient.getQueryData<DMMessage[]>(threadKey) ?? [];
+      const trimmed = input.text.trim();
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const optimistic: DMMessage = {
+        id: tempId,
+        conversationId: input.id,
+        fromHandle: "@you",
+        fromUserId: userId ?? undefined,
+        text: trimmed || (input.imageUrl ? "Photo" : ""),
+        createdAt: Date.now(),
+        type: input.imageUrl ? "image" : input.ticker ? "ticker" : "text",
+        ticker: input.ticker,
+        imageUrl: input.imageUrl,
+        read: true,
+        deliveredAt: null,
+        readAt: null,
+      };
+      queryClient.setQueryData<DMMessage[]>(threadKey, [...previous, optimistic]);
+      return { previous, threadKey };
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.threadKey) {
+        queryClient.setQueryData(ctx.threadKey, ctx.previous);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
