@@ -15,11 +15,10 @@ import Colors from "@/constants/colors";
  * Set EXPO_PUBLIC_SPACES_WEB_URL to override the default.
  */
 export const SPACES_WEB_BASE_URL: string =
-  process.env.EXPO_PUBLIC_SPACES_WEB_URL ?? "https://spaces.soltools.app";
+  process.env.EXPO_PUBLIC_SPACES_WEB_URL ?? "https://audifyxeventsbeta.lovable.app";
 
-export function buildSpacesUrl(path: string): string {
-  const normalized = path.startsWith("/") ? path : `/${path}`;
-  return `${SPACES_WEB_BASE_URL}${normalized}`;
+export function buildSpacesUrl(_path: string): string {
+  return SPACES_WEB_BASE_URL;
 }
 
 type Props = {
