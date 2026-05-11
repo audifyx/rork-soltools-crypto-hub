@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { Compass, House, MessageCircle, Play, Settings, User, Wrench } from "lucide-react-native";
+import { Compass, House, MessageCircle, Play, User } from "lucide-react-native";
 import React, { memo } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
@@ -60,9 +60,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="tools"
         options={{
-          title: "Tools",
-          href: "/(tabs)/tools",
-          tabBarIcon: ({ color, size }) => <Wrench color={color} size={size} strokeWidth={2.4} />,
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -117,8 +115,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: "Settings",
-          tabBarIcon: ({ color, size }) => <Settings color={color} size={size} strokeWidth={2.4} />,
+          href: null,
         }}
       />
     </Tabs>

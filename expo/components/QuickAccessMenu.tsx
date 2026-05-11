@@ -8,8 +8,10 @@ import {
   LogOut,
   Newspaper,
   Radio,
+  Settings,
   TrendingUp,
   Wallet,
+  Wrench,
   X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef } from "react";
@@ -83,6 +85,22 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
   }, [onClose, signOut, router]);
 
   const items: MenuItem[] = [
+    {
+      key: "tools",
+      label: "Tools",
+      description: "OG scanner, token lookup, wallets, AI and trading tools",
+      Icon: Wrench,
+      color: Colors.goldBright,
+      onPress: () => navigate("/(tabs)/tools"),
+    },
+    {
+      key: "settings",
+      label: "Settings",
+      description: "Preferences, privacy, notifications, account controls",
+      Icon: Settings,
+      color: Colors.text,
+      onPress: () => navigate("/(tabs)/settings"),
+    },
     {
       key: "news",
       label: "Crypto News",
