@@ -10,13 +10,11 @@ import {
   Eye,
   Fingerprint,
   Gem,
-  Headphones,
   HelpCircle,
   Languages,
   Link as LinkIcon,
   Lock,
   LogOut,
-  Mic,
   Palette,
   Shield,
   ShieldCheck,
@@ -180,7 +178,7 @@ export default function SettingsScreen() {
               </View>
 
               <Group title="SETTINGS">
-                <MenuRow Icon={Bell} label="Notifications" sub="Push, whales, AI narration, Spaces" onPress={() => openSection("notifications")} />
+                <MenuRow Icon={Bell} label="Notifications" sub="Push, whales, haptics" onPress={() => openSection("notifications")} />
                 <MenuRow Icon={DollarSign} label="Trading defaults" sub={`Slippage ${prefs.slippage}% · Priority ${prefs.priorityFee} SOL`} onPress={() => openSection("trading")} />
                 <MenuRow Icon={Shield} label="Privacy & security" sub="Profile privacy, balances, biometrics" onPress={() => openSection("privacy")} />
                 <MenuRow Icon={Palette} label="Appearance" sub={`${prefs.theme} · ${prefs.currency} · ${prefs.language.toUpperCase()}`} onPress={() => openSection("appearance")} />
@@ -194,8 +192,6 @@ export default function SettingsScreen() {
             <Group title="NOTIFICATIONS">
               <ToggleRow Icon={Bell} label="Push notifications" sub="Price moves, replies, mentions" value={prefs.push} onChange={(push) => setPrefs({ push })} />
               <ToggleRow Icon={Gem} label="Whale alerts" sub="Large buys and sells above your threshold" value={prefs.whaleAlerts} onChange={(whaleAlerts) => setPrefs({ whaleAlerts })} />
-              <ToggleRow Icon={Headphones} label="AI narration" sub="Read alpha and scanner summaries aloud" value={prefs.aiNarration} onChange={(aiNarration) => setPrefs({ aiNarration })} />
-              <ToggleRow Icon={Mic} label="Spaces voice rooms" sub="Notify and quick-join live voice rooms" value={prefs.voiceLobbies} onChange={(voiceLobbies) => setPrefs({ voiceLobbies })} />
               <ToggleRow Icon={Vibrate} label="Haptics" sub="Tactile feedback for actions" value={prefs.haptics} onChange={(haptics) => setPrefs({ haptics })} />
             </Group>
           ) : null}

@@ -24,14 +24,12 @@ import {
   Flame,
   Gem,
   Globe,
-  Headphones,
   HelpCircle,
   Languages,
   Link as LinkIcon,
   Lock,
   LogOut,
   MapPin,
-  Mic,
   Pencil,
   Rocket,
   Settings,
@@ -990,12 +988,6 @@ export default function ProfileScreen() {
                   label="Saved tokens"
                   sub={`${stats.watching} on watchlist`}
                   onPress={() => setTab("watchlist")}
-                />
-                <MenuRow
-                  Icon={Users}
-                  label="Voice Lobbies"
-                  sub="Trade with your crew"
-                  onPress={() => router.push({ pathname: "/tool/[id]", params: { id: "voice-lobby" } })}
                 />
                 <MenuRow
                   Icon={Award}
@@ -2123,20 +2115,6 @@ function SettingsModal({
                   Icon={Gem}
                   value={prefs.whaleAlerts}
                   onChange={(v) => onUpdate({ whaleAlerts: v })}
-                />
-                <SettingRow
-                  label="AI narration"
-                  sub="Read alpha aloud"
-                  Icon={Headphones}
-                  value={prefs.aiNarration}
-                  onChange={(v) => onUpdate({ aiNarration: v })}
-                />
-                <SettingRow
-                  label="Voice lobbies"
-                  sub="Auto-join crew calls"
-                  Icon={Mic}
-                  value={prefs.voiceLobbies}
-                  onChange={(v) => onUpdate({ voiceLobbies: v })}
                 />
 
                 <Text style={styles.settingsGroup}>FEEDBACK</Text>
