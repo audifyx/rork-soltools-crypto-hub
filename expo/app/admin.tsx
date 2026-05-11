@@ -65,6 +65,8 @@ type Section =
   | "logs"
   | "announcements"
   | "security"
+  | "ops"
+  | "growth"
   | "settings"
   | "support";
 
@@ -86,6 +88,8 @@ const TABS: TabItem[] = [
   { val: "logs", label: "Logs", Icon: FileText },
   { val: "announcements", label: "Announce", Icon: Bell },
   { val: "security", label: "Security", Icon: ShieldAlert },
+  { val: "ops", label: "Ops", Icon: Radio },
+  { val: "growth", label: "Growth", Icon: Megaphone },
   { val: "settings", label: "Settings", Icon: SettingsIcon },
   { val: "support", label: "Support", Icon: Headphones },
 ];
@@ -217,6 +221,33 @@ interface NotificationInput {
   type: "announcement" | "alert" | "system";
 }
 
+interface AdminTool {
+  id: string;
+  title: string;
+  subtitle: string;
+  category: "moderation" | "wallets" | "launches" | "growth" | "security" | "support" | "data" | "automation";
+  action: Section;
+  Icon: IconComponent;
+  danger?: boolean;
+}
+
+const ADMIN_TOOLKIT: AdminTool[] = [
+  { id: "user-ban-hammer", title: "Ban hammer", subtitle: "Suspend spam accounts instantly", category: "moderation", action: "users", Icon: Ban, danger: true },
+  { id: "badge-forge", title: "Badge forge", subtitle: "Grant verified, team, mod, holder, whale", category: "moderation", action: "badges", Icon: Tag },
+  { id: "wallet-lookup", title: "Wallet lookup", subtitle: "Search users by SOL wallet", category: "wallets", action: "users", Icon: Wallet },
+  { id: "credit-printer", title: "Credit printer", subtitle: "Top up or reset user credits", category: "wallets", action: "credits", Icon: Coins },
+  { id: "pump-approvals", title: "Pump approvals", subtitle: "Approve, reject, feature launches", category: "launches", action: "submissions", Icon: Rocket },
+  { id: "hot-token-toggle", title: "Hot token toggle", subtitle: "Feature high priority submissions", category: "launches", action: "submissions", Icon: Star },
+  { id: "global-broadcast", title: "Global broadcast", subtitle: "Send alerts to every user", category: "growth", action: "announcements", Icon: Megaphone },
+  { id: "notification-center", title: "Notification center", subtitle: "System, alert, announcement blasts", category: "growth", action: "announcements", Icon: Bell },
+  { id: "role-vault", title: "Role vault", subtitle: "Audit and revoke admin access", category: "security", action: "security", Icon: Crown },
+  { id: "audit-radar", title: "Audit radar", subtitle: "Realtime admin action log", category: "security", action: "logs", Icon: ShieldAlert },
+  { id: "support-inbox", title: "Support inbox", subtitle: "Close, pend, triage tickets", category: "support", action: "support", Icon: Headphones },
+  { id: "lobby-control", title: "Lobby control", subtitle: "Remove bad rooms and communities", category: "support", action: "lobbies", Icon: Volume2 },
+  { id: "platform-switches", title: "Platform switches", subtitle: "Feature flags and live settings", category: "automation", action: "settings", Icon: SettingsIcon },
+  { id: "mission-stats", title: "Mission stats", subtitle: "Users, spend, launches, tickets", category: "data", action: "overview", Icon: BarChart3 },
+];
+
 export default function AdminDashboard() {
   const router = useRouter();
   const qc = useQueryClient();
@@ -318,6 +349,8 @@ export default function AdminDashboard() {
           {section === "logs" && <LogsSection />}
           {section === "announcements" && <AnnouncementsSection />}
           {section === "security" && <SecuritySection isOwner={isOwner} />}
+          {section === "ops" && <OpsSection onJump={setSection} />}
+          {section === "growth" && <GrowthSection onJump={setSection} />}
           {section === "settings" && <SettingsSection />}
           {section === "support" && <SupportSection />}
         </View>
@@ -384,7 +417,7 @@ function OverviewSection({ onJump }: { onJump: (s: Section) => void }) {
           <Text style={styles.heroBadgeText}>OWNER LOCKED · LIVE</Text>
         </View>
         <Text style={styles.heroTitle}>SolTools mission control</Text>
-        <Text style={styles.heroBody}>Manage users, launches, credits, lobbies, settings, announcements, and support from one mobile-first console.</Text>
+        <Text style={styles.heroBody}>Manage users, launches, credits, lobbies, settings, announcements, support, security, and owner-only growth ops from one mobile-first console.</Text>
         <View style={styles.heroMetricsRow}>
           <HeroMetric label="USERS" value={s?.totalUsers} />
           <HeroMetric label="PENDING" value={s?.submissionsPending} />
@@ -410,6 +443,8 @@ function OverviewSection({ onJump }: { onJump: (s: Section) => void }) {
         <QuickAction Icon={Coins} label="Credits" sub="Adjust balances" onPress={() => onJump("credits")} />
         <QuickAction Icon={Bell} label="Announce" sub="Broadcast to all" onPress={() => onJump("announcements")} />
         <QuickAction Icon={ShieldAlert} label="Security" sub="Roles & revokes" onPress={() => onJump("security")} />
+        <QuickAction Icon={Radio} label="Ops tools" sub="Owner toolkit" onPress={() => onJump("ops")} />
+        <QuickAction Icon={Megaphone} label="Growth" sub="Promos & blasts" onPress={() => onJump("growth")} />
         <QuickAction Icon={Headphones} label="Support" sub="Realtime inbox" onPress={() => onJump("support")} />
       </View>
 
@@ -1079,6 +1114,69 @@ function SecuritySection({ isOwner }: { isOwner: boolean }) {
   );
 }
 
+/* ----------------------------------- OPS ---------------------------------- */
+
+function OpsSection({ onJump }: { onJump: (s: Section) => void }) {
+  const categories: AdminTool["category"][] = ["moderation", "wallets", "launches", "security", "support", "data", "automation"];
+  return (
+    <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <LinearGradient colors={["rgba(244,198,91,0.20)", "rgba(255,255,255,0.05)"]} style={styles.cardLarge}>
+        <Text style={styles.cardTitle}>Owner power tools</Text>
+        <Text style={styles.cardBody}>A mobile command palette for faster admin access. These shortcuts route into the real admin systems already connected to Supabase.</Text>
+        <View style={styles.metricsRow}>
+          <Metric label="TOOLS" value={`${ADMIN_TOOLKIT.length}+`} />
+          <Metric label="ACCESS" value="OWNER" />
+          <Metric label="MODE" value="LIVE" />
+        </View>
+      </LinearGradient>
+      {categories.map((category) => {
+        const tools = ADMIN_TOOLKIT.filter((tool) => tool.category === category);
+        return (
+          <View key={category}>
+            <Text style={styles.sectionLabel}>{category.toUpperCase()}</Text>
+            <View style={styles.quickGrid}>
+              {tools.map((tool) => (
+                <Pressable key={tool.id} onPress={() => onJump(tool.action)} style={({ pressed }) => [styles.toolCard, tool.danger && styles.toolCardDanger, pressed && styles.pressedDeep]}>
+                  <View style={styles.quickIcon}><tool.Icon color={tool.danger ? Colors.platinum : Colors.goldBright} size={16} strokeWidth={2.8} /></View>
+                  <Text style={styles.quickLabel}>{tool.title}</Text>
+                  <Text style={styles.quickSub}>{tool.subtitle}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/* --------------------------------- GROWTH -------------------------------- */
+
+function GrowthSection({ onJump }: { onJump: (s: Section) => void }) {
+  const plays = ADMIN_TOOLKIT.filter((tool) => tool.category === "growth" || tool.category === "launches" || tool.category === "data");
+  return (
+    <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <View style={styles.noticeCard}>
+        <Megaphone color={Colors.goldBright} size={18} strokeWidth={2.6} />
+        <Text style={styles.noticeText}>Growth console for pushing announcements, curating featured launches, checking platform pulse, and routing into monetization levers fast.</Text>
+      </View>
+      <View style={styles.statsGrid}>
+        <StatCard label="PROMO LANES" value={4} Icon={Megaphone} accent={Colors.goldBright} />
+        <StatCard label="LAUNCH LEVERS" value={3} Icon={Rocket} accent={Colors.gold} />
+        <StatCard label="AUDIENCE BLASTS" value={3} Icon={Bell} accent={Colors.silver} />
+        <StatCard label="OWNER SHORTCUTS" value={plays.length} Icon={Crown} accent={Colors.platinum} />
+      </View>
+      <Text style={styles.sectionLabel}>GROWTH SHORTCUTS</Text>
+      <View style={styles.quickGrid}>
+        {plays.map((tool) => (
+          <QuickAction key={tool.id} Icon={tool.Icon} label={tool.title} sub={tool.subtitle} onPress={() => onJump(tool.action)} />
+        ))}
+      </View>
+      <PrimaryButton label="Open broadcast composer" Icon={Megaphone} onPress={() => onJump("announcements")} />
+    </ScrollView>
+  );
+}
+
 /* -------------------------------- SETTINGS ------------------------------- */
 
 function SettingsSection() {
@@ -1502,6 +1600,8 @@ const styles = StyleSheet.create({
 
   quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   quickCard: { flexBasis: "31%", flexGrow: 1, minWidth: 104, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.line, borderRadius: 17, padding: 12, gap: 6 },
+  toolCard: { flexBasis: "47%", flexGrow: 1, minWidth: 148, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.line, borderRadius: 18, padding: 13, gap: 7 },
+  toolCardDanger: { borderColor: "rgba(247,242,231,0.25)", backgroundColor: "rgba(247,242,231,0.055)" },
   quickIcon: { width: 32, height: 32, borderRadius: 11, borderWidth: 1, borderColor: Colors.lineStrong, backgroundColor: Colors.glass, alignItems: "center", justifyContent: "center" },
   quickLabel: { color: Colors.text, fontSize: 13, fontWeight: "900" },
   quickSub: { color: Colors.muted, fontSize: 10, fontWeight: "700" },
