@@ -86,6 +86,7 @@ interface CommunityMember {
   avatarUrl?: string | null;
   verified?: boolean;
   followersCount?: number;
+  isFollowing?: boolean;
 }
 
 const MEMBER_COLORS = [Colors.mint, Colors.violet, Colors.cyan, Colors.rose, Colors.orange];
@@ -310,7 +311,7 @@ export default function CommunityDetailScreen() {
   });
 
   const membersQ = useQuery<CommunityMember[]>({
-    queryKey: ["community", "members", community?.id ?? ""],
+    queryKey: ["community", "members", community?.id ?? "", userId ?? "guest"],
     enabled: !!community?.id,
     queryFn: async () => {
       if (!community?.id) return [];
@@ -329,18 +330,40 @@ export default function CommunityDetailScreen() {
           .from("profiles")
           .select("id,user_id,username,display_name,avatar_url,avatar_color,verified,followers_count")
           .or(`id.in.(${userIds.join(",")}),user_id.in.(${userIds.join(",")})`);
-        return (profs ?? []).map((p): CommunityMember => {
+        const normalizedProfiles = (profs ?? []).map((p) => ({
+          row: p,
+          id: ((p.user_id as string | null) ?? (p.id as string)) || ((p.username as string | null) ?? ""),
+        }));
+        const followees = new Set<string>();
+        if (userId && normalizedProfiles.length > 0) {
+          const targetIds = normalizedProfiles.map((p) => p.id).filter((target) => target && target !== userId);
+          if (targetIds.length > 0) {
+            const { data: followRows, error: followError } = await supabase
+              .from("followers")
+              .select("followee_id")
+              .eq("follower_id", userId)
+              .in("followee_id", targetIds);
+            if (!followError) {
+              (followRows ?? []).forEach((row) => {
+                const followeeId = String(row.followee_id ?? "");
+                if (followeeId) followees.add(followeeId);
+              });
+            }
+          }
+        }
+        return normalizedProfiles.map(({ row: p, id: memberId }): CommunityMember => {
           const username = (p.username as string | null) ?? "";
           const display = (p.display_name as string | null) ?? username ?? "User";
           return {
-            id: ((p.user_id as string | null) ?? (p.id as string)) || username,
+            id: memberId,
             handle: username ? `@${username}` : "",
             username: username || null,
             name: display || "User",
-            color: (p.avatar_color as string | null) ?? memberColorFor(((p.user_id as string | null) ?? (p.id as string)) || username),
+            color: (p.avatar_color as string | null) ?? memberColorFor(memberId || username),
             avatarUrl: (p.avatar_url as string | null) ?? null,
             verified: !!p.verified,
             followersCount: Number(p.followers_count ?? 0),
+            isFollowing: followees.has(memberId),
           };
         });
       } catch (e) {
@@ -484,11 +507,12 @@ export default function CommunityDetailScreen() {
     if (member.id === userId) return;
     try {
       await toggleFollow(member.id);
-      showToast(`Updated follow for ${member.handle || member.name}`);
+      featureQueryClient.invalidateQueries({ queryKey: ["community", "members", community?.id ?? ""] });
+      showToast(`${member.isFollowing ? "Unfollowed" : "Following"} ${member.handle || member.name}`);
     } catch (e) {
       Alert.alert("Follow failed", e instanceof Error ? e.message : "Try again.");
     }
-  }, [ensureSignedIn, showToast, toggleFollow, userId]);
+  }, [community?.id, ensureSignedIn, featureQueryClient, showToast, toggleFollow, userId]);
 
   const onToggleNotify = useCallback(() => {
     const next = !notifyOn;
@@ -987,15 +1011,15 @@ export default function CommunityDetailScreen() {
                 ) : null}
               </View>
 
-              <View style={styles.memberRow}>
-                <Pressable
-                  style={styles.memberStack}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    setMembersOpen(true);
-                  }}
-                  testID="community-members"
-                >
+              <Pressable
+                style={styles.memberRowButton}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setMembersOpen(true);
+                }}
+                testID="community-members"
+              >
+                <View style={styles.memberStack}>
                   {(members.length > 0 ? members.slice(0, 3) : placeholderMembers()).map(
                     (m, i) => (
                       <View
@@ -1015,11 +1039,15 @@ export default function CommunityDetailScreen() {
                       </View>
                     ),
                   )}
-                </Pressable>
-                <Text style={styles.memberCount}>
-                  {fmtCount(community.members)} Members
-                </Text>
-                <View style={styles.headIcons}>
+                </View>
+                <View style={styles.memberCountWrap}>
+                  <Text style={styles.memberCount}>
+                    {fmtCount(community.members)} Members
+                  </Text>
+                  <Text style={styles.memberCountHint}>Tap to view</Text>
+                </View>
+              </Pressable>
+              <View style={styles.headIcons}>
                   <Pressable
                     style={styles.headCircle}
                     onPress={onOpenHighlights}
@@ -1051,7 +1079,6 @@ export default function CommunityDetailScreen() {
                     />
                   </Pressable>
                 </View>
-              </View>
 
               <Text style={styles.desc} numberOfLines={3}>
                 {community.description ||
@@ -1435,6 +1462,7 @@ export default function CommunityDetailScreen() {
                     member={item}
                     isSelf={item.id === userId}
                     isToggling={isToggling}
+                    isFollowing={!!item.isFollowing}
                     onOpen={() => openMemberProfile(item)}
                     onFollow={() => void onFollowMember(item)}
                   />
@@ -1640,12 +1668,14 @@ function CommunityMemberRow({
   member,
   isSelf,
   isToggling,
+  isFollowing,
   onOpen,
   onFollow,
 }: {
   member: CommunityMember;
   isSelf: boolean;
   isToggling: boolean;
+  isFollowing: boolean;
   onOpen: () => void;
   onFollow: () => void;
 }) {
@@ -1668,9 +1698,19 @@ function CommunityMemberRow({
         </Text>
       </View>
       {!isSelf ? (
-        <Pressable onPress={onFollow} disabled={isToggling} style={styles.memberFollowBtn} testID={`community-member-follow-${member.id}`}>
-          <UserPlus color={Colors.ink} size={13} strokeWidth={3} />
-          <Text style={styles.memberFollowText}>Follow</Text>
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            onFollow();
+          }}
+          disabled={isToggling}
+          style={[styles.memberFollowBtn, isFollowing && styles.memberFollowBtnActive]}
+          testID={`community-member-follow-${member.id}`}
+        >
+          <UserPlus color={isFollowing ? Colors.mint : Colors.ink} size={13} strokeWidth={3} />
+          <Text style={[styles.memberFollowText, isFollowing && styles.memberFollowTextActive]}>
+            {isFollowing ? "Following" : "Follow"}
+          </Text>
         </Pressable>
       ) : (
         <Text style={styles.memberSelfText}>You</Text>
@@ -2246,6 +2286,15 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 12,
   },
+  memberRowButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 6,
+    paddingRight: 8,
+    borderRadius: 999,
+  },
   memberStack: { flexDirection: "row", alignItems: "center" },
   stackAvatar: {
     width: 26,
@@ -2257,7 +2306,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.ink,
   },
   stackInit: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
-  memberCount: { color: Colors.muted, fontSize: 13, fontWeight: "700", flex: 1 },
+  memberCountWrap: { flex: 1, minWidth: 0 },
+  memberCount: { color: Colors.text, fontSize: 13, fontWeight: "900" },
+  memberCountHint: { color: Colors.mint, fontSize: 10, fontWeight: "900", marginTop: 1, textTransform: "uppercase", letterSpacing: 0.5 },
   headIcons: { flexDirection: "row", gap: 8 },
   headCircle: {
     width: 38,
@@ -2559,7 +2610,9 @@ const styles = StyleSheet.create({
   memberSheetName: { color: Colors.text, fontSize: 14, fontWeight: "900", maxWidth: "88%" },
   memberSheetHandle: { color: Colors.muted, fontSize: 11, fontWeight: "800", marginTop: 3 },
   memberFollowBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999, backgroundColor: Colors.mint },
+  memberFollowBtnActive: { backgroundColor: "rgba(85,245,178,0.09)", borderWidth: 1, borderColor: "rgba(85,245,178,0.32)" },
   memberFollowText: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
+  memberFollowTextActive: { color: Colors.mint },
   memberSelfText: { color: Colors.muted, fontSize: 12, fontWeight: "900" },
   memberDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.06)" },
 
