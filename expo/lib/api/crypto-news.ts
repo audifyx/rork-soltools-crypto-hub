@@ -146,6 +146,10 @@ const RSS_SOURCES: RssSource[] = [
   { name: "@ogscanfun on X", url: "https://nitter.poast.org/ogscanfun/rss", categoryHint: "viral" },
   { name: "@ogscanfun on X", url: "https://nitter.privacydev.net/ogscanfun/rss", categoryHint: "viral" },
   { name: "@ogscanfun on X", url: "https://nitter.tiekoetter.com/ogscanfun/rss", categoryHint: "viral" },
+  // Official OG SCAN Telegram updates channel (t.me/ogupdates) via RSSHub mirrors
+  { name: "OG Updates (Telegram)", url: "https://rsshub.app/telegram/channel/ogupdates", categoryHint: "viral" },
+  { name: "OG Updates (Telegram)", url: "https://rss.rssforever.com/telegram/channel/ogupdates", categoryHint: "viral" },
+  { name: "OG Updates (Telegram)", url: "https://rsshub.pseudoyu.com/telegram/channel/ogupdates", categoryHint: "viral" },
 ];
 
 const RSS_FETCH_TIMEOUT_MS = 6_500;
