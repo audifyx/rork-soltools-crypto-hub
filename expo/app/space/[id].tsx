@@ -53,6 +53,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import LiveKitVoice, { LiveKitVoiceEvent, LiveKitVoiceHandle } from "@/components/space/LiveKitVoice";
 import { getLiveKitToken } from "@/lib/api/livekit";
+import { supabase } from "@/lib/supabase";
 import { navigateBack } from "@/lib/navigation";
 import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
@@ -137,10 +138,17 @@ export default function SpaceDetailScreen() {
   const [pinnedNote, setPinnedNote] = useState<string | null>(null);
   const [pinModalOpen, setPinModalOpen] = useState<boolean>(false);
   const [pinDraft, setPinDraft] = useState<string>("");
-  const [poll, setPoll] = useState<{ q: string; options: { label: string; votes: number }[]; voted: number | null } | null>(null);
+  type PollState = {
+    id: string;
+    q: string;
+    options: string[];
+    voters: Record<string, number>;
+  };
+  const [poll, setPoll] = useState<PollState | null>(null);
   const [pollModalOpen, setPollModalOpen] = useState<boolean>(false);
   const [pollQ, setPollQ] = useState<string>("");
   const [pollOpts, setPollOpts] = useState<string[]>(["", ""]);
+  const broadcastRef = useRef<((event: string, payload: Record<string, unknown>) => void) | null>(null);
   const [peakListeners, setPeakListeners] = useState<number>(0);
 
   const me = useMemo(
@@ -336,9 +344,11 @@ export default function SpaceDetailScreen() {
 
   const savePinnedNote = useCallback(() => {
     const t = pinDraft.trim();
-    setPinnedNote(t.length > 0 ? t : null);
+    const next = t.length > 0 ? t : null;
+    setPinnedNote(next);
     setPinModalOpen(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    broadcastRef.current?.("pin", { pin: next });
   }, [pinDraft]);
 
   const openPollModal = useCallback(() => {
@@ -358,31 +368,35 @@ export default function SpaceDetailScreen() {
       Alert.alert("Add a question", "Polls need a question and at least 2 options.");
       return;
     }
-    setPoll({ q, options: opts.map((label) => ({ label, votes: 0 })), voted: null });
+    const next: PollState = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      q,
+      options: opts,
+      voters: {},
+    };
+    setPoll(next);
     setPollModalOpen(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    broadcastRef.current?.("poll", { poll: next });
   }, [pollQ, pollOpts]);
 
   const votePoll = useCallback(
     (idx: number) => {
-      if (!poll || poll.voted !== null) return;
+      if (!poll) return;
       if (!requireAuth()) return;
+      const voterId = userId;
+      if (!voterId || poll.voters[voterId] !== undefined) return;
       Haptics.selectionAsync().catch(() => {});
-      setPoll((p) => {
-        if (!p) return p;
-        return {
-          ...p,
-          voted: idx,
-          options: p.options.map((o, i) => (i === idx ? { ...o, votes: o.votes + 1 } : o)),
-        };
-      });
+      setPoll((p) => (p ? { ...p, voters: { ...p.voters, [voterId]: idx } } : p));
+      broadcastRef.current?.("vote", { pollId: poll.id, voterId, idx });
     },
-    [poll, requireAuth],
+    [poll, requireAuth, userId],
   );
 
   const closePoll = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
     setPoll(null);
+    broadcastRef.current?.("poll", { poll: null });
   }, []);
 
   const manageParticipant = useCallback(
@@ -436,6 +450,58 @@ export default function SpaceDetailScreen() {
     },
     [],
   );
+
+  // Realtime sync for pin + poll across all participants via Supabase broadcast.
+  useEffect(() => {
+    if (!space) return;
+    const channel = supabase.channel(`space-meta-${space.id}`, {
+      config: { broadcast: { self: false, ack: false } },
+    });
+    broadcastRef.current = (event, payload) => {
+      channel.send({ type: "broadcast", event, payload }).catch(() => {});
+    };
+    channel.on("broadcast", { event: "pin" }, (msg) => {
+      const next = (msg.payload as { pin?: string | null })?.pin ?? null;
+      setPinnedNote(next ?? null);
+    });
+    channel.on("broadcast", { event: "poll" }, (msg) => {
+      const next = (msg.payload as { poll?: PollState | null })?.poll ?? null;
+      setPoll(next ?? null);
+    });
+    channel.on("broadcast", { event: "vote" }, (msg) => {
+      const data = msg.payload as { pollId?: string; voterId?: string; idx?: number };
+      if (!data?.voterId || data.idx === undefined) return;
+      setPoll((p) => {
+        if (!p || (data.pollId && p.id !== data.pollId)) return p;
+        if (p.voters[data.voterId!] !== undefined) return p;
+        return { ...p, voters: { ...p.voters, [data.voterId!]: data.idx! } };
+      });
+    });
+    channel.on("broadcast", { event: "request-state" }, () => {
+      if (!isHost) return;
+      channel.send({
+        type: "broadcast",
+        event: "state",
+        payload: { pin: pinnedNote, poll },
+      }).catch(() => {});
+    });
+    channel.on("broadcast", { event: "state" }, (msg) => {
+      if (isHost) return;
+      const data = msg.payload as { pin?: string | null; poll?: PollState | null };
+      setPinnedNote(data?.pin ?? null);
+      setPoll(data?.poll ?? null);
+    });
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED" && !isHost) {
+        channel.send({ type: "broadcast", event: "request-state", payload: {} }).catch(() => {});
+      }
+    });
+    return () => {
+      broadcastRef.current = null;
+      supabase.removeChannel(channel).catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [space?.id, isHost]);
 
   // Listen for moderator mute decisions on my row: when DB says I am muted,
   // silence the WebRTC publisher immediately so the host's force-mute sticks
@@ -558,7 +624,7 @@ export default function SpaceDetailScreen() {
             ) : null}
 
             {poll ? (
-              <PollCard poll={poll} accent={space.accent[0]} onVote={votePoll} onClose={isHost ? closePoll : undefined} />
+              <PollCard poll={poll} myUserId={userId} accent={space.accent[0]} onVote={votePoll} onClose={isHost ? closePoll : undefined} />
             ) : isHost ? (
               <Pressable onPress={openPollModal} style={styles.pollAdd}>
                 <BarChart3 color={Colors.goldBright} size={14} strokeWidth={2.8} />
@@ -811,7 +877,7 @@ export default function SpaceDetailScreen() {
             />
             <View style={styles.modalRow}>
               {pinnedNote ? (
-                <Pressable onPress={() => { setPinnedNote(null); setPinModalOpen(false); }} style={styles.modalGhost}>
+                <Pressable onPress={() => { setPinnedNote(null); setPinModalOpen(false); broadcastRef.current?.("pin", { pin: null }); }} style={styles.modalGhost}>
                   <Text style={styles.modalGhostText}>Remove</Text>
                 </Pressable>
               ) : null}
@@ -899,9 +965,11 @@ function Floater({ emoji, x }: { emoji: string; x: number }) {
   );
 }
 
-function PollCard({ poll, accent, onVote, onClose }: { poll: { q: string; options: { label: string; votes: number }[]; voted: number | null }; accent: string; onVote: (i: number) => void; onClose?: () => void }) {
-  const total = poll.options.reduce((s, o) => s + o.votes, 0) || 1;
-  const showResults = poll.voted !== null;
+function PollCard({ poll, myUserId, accent, onVote, onClose }: { poll: { id: string; q: string; options: string[]; voters: Record<string, number> }; myUserId: string | null; accent: string; onVote: (i: number) => void; onClose?: () => void }) {
+  const voterValues = Object.values(poll.voters);
+  const total = voterValues.length || 1;
+  const myVote = myUserId ? poll.voters[myUserId] : undefined;
+  const showResults = myVote !== undefined;
   return (
     <View style={[styles.pollCard, { borderColor: `${accent}44` }]}> 
       <View style={styles.pollHead}>
@@ -913,14 +981,15 @@ function PollCard({ poll, accent, onVote, onClose }: { poll: { q: string; option
       </View>
       <Text style={styles.pollQ}>{poll.q}</Text>
       <View style={{ gap: 8, marginTop: 10 }}>
-        {poll.options.map((opt, i) => {
-          const pct = Math.round((opt.votes / total) * 100);
-          const isMine = poll.voted === i;
+        {poll.options.map((label, i) => {
+          const votes = voterValues.filter((v) => v === i).length;
+          const pct = Math.round((votes / total) * 100);
+          const isMine = myVote === i;
           return (
             <Pressable key={`pollopt-${i}`} onPress={() => onVote(i)} disabled={showResults} style={styles.pollOpt}>
               {showResults ? <View style={[styles.pollBar, { width: `${pct}%`, backgroundColor: isMine ? accent : "rgba(255,255,255,0.12)" }]} /> : null}
               <View style={styles.pollOptInner}>
-                <Text style={[styles.pollOptText, isMine && { color: Colors.text }]} numberOfLines={1}>{opt.label}</Text>
+                <Text style={[styles.pollOptText, isMine && { color: Colors.text }]} numberOfLines={1}>{label}</Text>
                 {showResults ? (
                   <View style={styles.pollResRow}>
                     {isMine ? <Check color={accent} size={11} strokeWidth={3} /> : null}
@@ -932,7 +1001,7 @@ function PollCard({ poll, accent, onVote, onClose }: { poll: { q: string; option
           );
         })}
       </View>
-      <Text style={styles.pollFoot}>{showResults ? `${total} vote${total === 1 ? "" : "s"} · tap closes when host ends` : "Tap to vote"}</Text>
+      <Text style={styles.pollFoot}>{showResults ? `${voterValues.length} vote${voterValues.length === 1 ? "" : "s"} · tap closes when host ends` : "Tap to vote"}</Text>
     </View>
   );
 }
