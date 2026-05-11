@@ -219,11 +219,11 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
   }, [isAuthenticated, userId]);
 
   const followMutation = useMutation({
-    mutationFn: async (target: string) => {
+    mutationFn: async (target: string): Promise<{ target: string; isFollowing: boolean }> => {
       const { data, error } = await supabase.rpc("toggle_follow", {
         target_user_id: target,
       });
-      if (!error) return data as boolean;
+      if (!error) return { target, isFollowing: !!data };
 
       console.log("[profile] toggle_follow rpc fallback", error.message);
       if (!userId) throw error;
@@ -241,11 +241,11 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
           .eq("follower_id", userId)
           .eq("followee_id", target);
         if (deleteError) throw deleteError;
-        return false;
+        return { target, isFollowing: false };
       }
       const { error: insertError } = await supabase.from("followers").insert({ follower_id: userId, followee_id: target });
       if (insertError) throw insertError;
-      return true;
+      return { target, isFollowing: true };
     },
     onMutate: async (target: string) => {
       // Optimistically flip is_following + counts so the UI updates instantly.
@@ -308,9 +308,53 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
         );
       }
     },
-    onSuccess: () => {
-      // Refresh in the background so counts/state reconcile, but the optimistic
-      // flip above keeps Follow/Following buttons "pushed in" instantly.
+    onSuccess: ({ target, isFollowing }) => {
+      // Reconcile caches against the authoritative server result so the
+      // button state never drifts out of sync (fixes inverted Follow/Following).
+      qc.setQueriesData<PublicProfile | null>({ queryKey: ["profile", "public"] }, (curr) => {
+        if (!curr || curr.user_id !== target) return curr;
+        if (curr.is_following === isFollowing) return curr;
+        return {
+          ...curr,
+          is_following: isFollowing,
+          followers_count: Math.max(0, curr.followers_count + (isFollowing ? 1 : -1)),
+        };
+      });
+
+      qc.setQueriesData<PlatformUser[] | undefined>({ queryKey: ["users", "list"] }, (curr) => {
+        if (!Array.isArray(curr)) return curr;
+        return curr.map((u) => {
+          if (u.user_id !== target) return u;
+          if (u.is_following === isFollowing) return u;
+          return {
+            ...u,
+            is_following: isFollowing,
+            followers_count: Math.max(0, u.followers_count + (isFollowing ? 1 : -1)),
+          };
+        });
+      });
+
+      qc.setQueriesData<Array<Record<string, unknown>> | undefined>(
+        { queryKey: ["community", "members"] },
+        (curr) => {
+          if (!Array.isArray(curr)) return curr;
+          return curr.map((m) => {
+            const memberId = String((m as { id?: unknown }).id ?? "");
+            if (memberId !== target) return m;
+            const wasFollowing = !!(m as { isFollowing?: boolean }).isFollowing;
+            if (wasFollowing === isFollowing) return m;
+            const currentFollowers = Number((m as { followersCount?: number }).followersCount ?? 0);
+            return {
+              ...m,
+              isFollowing,
+              followersCount: Math.max(0, currentFollowers + (isFollowing ? 1 : -1)),
+            };
+          });
+        },
+      );
+
+      // Refresh counts/feeds in the background. Skip ["users","list"] and
+      // ["profile","public"] since we just set authoritative values above.
       qc.invalidateQueries({ queryKey: ["profile", "follow-counts"] });
       qc.invalidateQueries({ queryKey: ["profile", "followers"] });
       qc.invalidateQueries({ queryKey: ["profile", "following"] });

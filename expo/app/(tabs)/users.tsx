@@ -129,12 +129,11 @@ export default function UsersScreen() {
       tap();
       try {
         await toggleFollow(u.user_id);
-        list.refetch();
       } catch (e) {
         console.log("[users] follow error", e);
       }
     },
-    [userId, toggleFollow, list],
+    [userId, toggleFollow],
   );
 
   const onMessage = useCallback(
