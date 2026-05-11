@@ -26,6 +26,12 @@ export interface UserPost {
   reposts: number;
   comments: number;
   liked: boolean;
+  authorId?: string;
+  authorUsername?: string | null;
+  authorDisplayName?: string | null;
+  authorAvatarUrl?: string | null;
+  authorAvatarColor?: string | null;
+  authorVerified?: boolean;
 }
 
 export interface PostTokenInput {
@@ -245,6 +251,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
             reposts: (row.reposts_count as number) ?? 0,
             comments: (row.comments_count as number) ?? 0,
             liked: false,
+            authorId: row.user_id as string,
           }));
           return mergePosts(localPosts, remotePosts);
         } catch (e) {
@@ -547,6 +554,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
           reposts: (data.reposts_count as number) ?? 0,
           comments: (data.comments_count as number) ?? 0,
           liked: false,
+          authorId: data.user_id as string,
+          authorUsername: profile.handle.replace(/^@/, "") || null,
+          authorDisplayName: profile.displayName || null,
+          authorAvatarUrl: profile.avatarUrl ?? null,
+          authorAvatarColor: profile.avatarColor,
+          authorVerified: profile.verified,
         };
         const latestLocal = await loadJson<UserPost[]>(POSTS_KEY, []);
         const next = mergePosts([post], mergePosts(latestLocal, posts));

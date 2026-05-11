@@ -91,33 +91,59 @@ type FeedItem =
 
 type FeedPostRow = {
   id: string;
+  user_id: string;
   content: string | null;
   image_url: string | null;
   ticker: string | null;
+  token_address?: string | null;
   change_pct: number | null;
   likes_count: number | null;
   reposts_count: number | null;
   comments_count: number | null;
   created_at: string;
+  author_username?: string | null;
+  author_display_name?: string | null;
+  author_avatar_url?: string | null;
+  author_avatar_color?: string | null;
+  author_verified?: boolean | null;
 };
 
 async function hydrateLikedPosts(rows: FeedPostRow[], userId: string): Promise<UserPost[]> {
-  const posts = rows.map((row): UserPost => ({
-    id: row.id,
-    text: row.content ?? "",
-    ticker: row.ticker ?? undefined,
-    changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
-    images: row.image_url ? [row.image_url] : undefined,
-    createdAt: new Date(row.created_at).getTime(),
-    likes: row.likes_count ?? 0,
-    reposts: row.reposts_count ?? 0,
-    comments: row.comments_count ?? 0,
-    liked: false,
-  }));
+  const missingAuthorIds = Array.from(new Set(rows.filter((row) => !row.author_username && row.user_id).map((row) => row.user_id)));
+  let authors = new Map<string, Record<string, unknown>>();
+  if (missingAuthorIds.length > 0) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("user_id,username,display_name,avatar_url,avatar_color,verified")
+      .in("user_id", missingAuthorIds);
+    authors = new Map(((data ?? []) as Record<string, unknown>[]).map((row) => [String(row.user_id), row]));
+  }
+  const posts = rows.map((row): UserPost => {
+    const author = authors.get(row.user_id);
+    return {
+      id: row.id,
+      text: row.content ?? "",
+      ticker: row.ticker ?? undefined,
+      contract: row.token_address ?? undefined,
+      changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
+      images: row.image_url ? [row.image_url] : undefined,
+      createdAt: new Date(row.created_at).getTime(),
+      likes: row.likes_count ?? 0,
+      reposts: row.reposts_count ?? 0,
+      comments: row.comments_count ?? 0,
+      liked: false,
+      authorId: row.user_id,
+      authorUsername: row.author_username ?? (author?.username as string | null | undefined) ?? null,
+      authorDisplayName: row.author_display_name ?? (author?.display_name as string | null | undefined) ?? null,
+      authorAvatarUrl: row.author_avatar_url ?? (author?.avatar_url as string | null | undefined) ?? null,
+      authorAvatarColor: row.author_avatar_color ?? (author?.avatar_color as string | null | undefined) ?? null,
+      authorVerified: !!(row.author_verified ?? author?.verified),
+    };
+  });
   if (posts.length === 0) return posts;
   const ids = posts.map((p) => p.id);
   const { data: likes } = await supabase
-    .from("post_likes")
+    .from("community_post_likes")
     .select("post_id")
     .eq("user_id", userId)
     .in("post_id", ids);
@@ -148,6 +174,41 @@ export default function HomeFeedScreen() {
     setFilter(next);
   }, []);
 
+  const livePostsQ = useQuery<UserPost[]>({
+    queryKey: ["home", "live-feed", userId ?? "guest"],
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from("community_posts")
+          .select("id,user_id,content,image_url,ticker,token_address,change_pct,likes_count,reposts_count,comments_count,created_at")
+          .is("community_id", null)
+          .is("parent_post_id", null)
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (error) throw error;
+        return userId ? hydrateLikedPosts((data ?? []) as FeedPostRow[], userId) : ((data ?? []) as FeedPostRow[]).map((row): UserPost => ({
+          id: row.id,
+          text: row.content ?? "",
+          ticker: row.ticker ?? undefined,
+          contract: row.token_address ?? undefined,
+          changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
+          images: row.image_url ? [row.image_url] : undefined,
+          createdAt: new Date(row.created_at).getTime(),
+          likes: row.likes_count ?? 0,
+          reposts: row.reposts_count ?? 0,
+          comments: row.comments_count ?? 0,
+          liked: false,
+          authorId: row.user_id,
+        }));
+      } catch (e) {
+        console.log("[home] live feed fallback", e);
+        return userPosts;
+      }
+    },
+    staleTime: 10_000,
+    refetchInterval: 20_000,
+  });
+
   const followingPostsQ = useQuery<UserPost[]>({
     queryKey: ["home", "following-feed", userId ?? "guest"],
     enabled: isAuthenticated && !!userId && filter === "Following",
@@ -168,7 +229,7 @@ export default function HomeFeedScreen() {
           if (followeeIds.length === 0) return [];
           const { data: fallbackPosts, error: postsError } = await supabase
             .from("community_posts")
-            .select("id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
+            .select("id,user_id,content,image_url,ticker,token_address,change_pct,likes_count,reposts_count,comments_count,created_at")
             .in("user_id", followeeIds)
             .is("community_id", null)
             .is("parent_post_id", null)
@@ -177,19 +238,7 @@ export default function HomeFeedScreen() {
           if (postsError) throw postsError;
           return hydrateLikedPosts(fallbackPosts ?? [], userId);
         }
-        const rows = (data ?? []) as Array<{
-          id: string;
-          user_id: string;
-          content: string | null;
-          image_url: string | null;
-          ticker: string | null;
-          change_pct: number | null;
-          likes_count: number | null;
-          reposts_count: number | null;
-          comments_count: number | null;
-          created_at: string;
-        }>;
-        return hydrateLikedPosts(rows, userId);
+        return hydrateLikedPosts((data ?? []) as FeedPostRow[], userId);
       } catch (e) {
         console.log("[home] following feed failed", e);
         return [];
@@ -377,8 +426,9 @@ export default function HomeFeedScreen() {
     if (filter === "OG Tokens") {
       return getOgMemeTokens(listings, 40).map((t): FeedItem => ({ kind: "token", data: t }));
     }
-    return userPosts.map((p): FeedItem => ({ kind: "user", data: p }));
-  }, [filter, userPosts, followingPostsQ.data, listings, trendingTokens, newPairsData, whalesQ.data]);
+    const remote = livePostsQ.data ?? [];
+    return (remote.length > 0 ? remote : userPosts).map((p): FeedItem => ({ kind: "user", data: p }));
+  }, [filter, userPosts, livePostsQ.data, followingPostsQ.data, listings, trendingTokens, newPairsData, whalesQ.data]);
 
   const openCompose = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -404,11 +454,12 @@ export default function HomeFeedScreen() {
         return (
           <UserPostCard
             post={item.data}
-            displayName={profile.displayName}
-            handle={profile.handle}
-            avatarColor={profile.avatarColor}
-            avatarUrl={profile.avatarUrl}
-            verified={profile.verified}
+            displayName={item.data.authorDisplayName ?? item.data.authorUsername ?? profile.displayName}
+            handle={item.data.authorUsername ? `@${item.data.authorUsername}` : profile.handle}
+            avatarColor={item.data.authorAvatarColor ?? profile.avatarColor}
+            avatarUrl={item.data.authorAvatarUrl ?? profile.avatarUrl}
+            verified={item.data.authorVerified ?? profile.verified}
+            canDelete={!item.data.authorId || item.data.authorId === userId}
             onLike={() => togglePostLike(item.data.id)}
             onDelete={() => deletePost(item.data.id)}
           />
@@ -416,7 +467,7 @@ export default function HomeFeedScreen() {
       }
       return null;
     },
-    [profile, togglePostLike, deletePost, router],
+    [profile, togglePostLike, deletePost, router, userId],
   );
 
   return (
@@ -1440,15 +1491,17 @@ function UserPostCard({
   verified,
   onLike,
   onDelete,
+  canDelete,
 }: {
   post: UserPost;
   displayName: string;
   handle: string;
   avatarColor: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
   verified: boolean;
   onLike: () => void;
   onDelete: () => void;
+  canDelete: boolean;
 }) {
   const time = useMemo(() => {
     const diff = Date.now() - post.createdAt;
@@ -1478,14 +1531,16 @@ function UserPostCard({
           <Text style={styles.postHandle}>{handle}</Text>
           <Text style={styles.postDot}>·</Text>
           <Text style={styles.postTime}>{time}</Text>
-          <Pressable
-            onPress={onDelete}
-            hitSlop={6}
-            style={{ marginLeft: "auto" }}
-            testID={`delete-${post.id}`}
-          >
-            <Text style={[styles.actionLabel, { color: Colors.muted, fontSize: 18 }]}>×</Text>
-          </Pressable>
+          {canDelete ? (
+            <Pressable
+              onPress={onDelete}
+              hitSlop={6}
+              style={{ marginLeft: "auto" }}
+              testID={`delete-${post.id}`}
+            >
+              <Text style={[styles.actionLabel, { color: Colors.muted, fontSize: 18 }]}>×</Text>
+            </Pressable>
+          ) : null}
         </View>
         {post.text ? <Text style={styles.postText}>{post.text}</Text> : null}
         {post.images && post.images.length > 0 ? <PostImageGrid images={post.images} /> : null}

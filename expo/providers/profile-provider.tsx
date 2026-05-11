@@ -210,11 +210,29 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       const { data, error } = await supabase.rpc("toggle_follow", {
         target_user_id: target,
       });
-      if (error) {
-        console.log("[profile] toggle_follow error", error.message);
-        throw error;
+      if (!error) return data as boolean;
+
+      console.log("[profile] toggle_follow rpc fallback", error.message);
+      if (!userId) throw error;
+      const { data: existing, error: existingError } = await supabase
+        .from("followers")
+        .select("follower_id")
+        .eq("follower_id", userId)
+        .eq("followee_id", target)
+        .maybeSingle();
+      if (existingError) throw existingError;
+      if (existing) {
+        const { error: deleteError } = await supabase
+          .from("followers")
+          .delete()
+          .eq("follower_id", userId)
+          .eq("followee_id", target);
+        if (deleteError) throw deleteError;
+        return false;
       }
-      return data as boolean;
+      const { error: insertError } = await supabase.from("followers").insert({ follower_id: userId, followee_id: target });
+      if (insertError) throw insertError;
+      return true;
     },
     onMutate: async (target: string) => {
       // Optimistically flip is_following + counts so the UI updates instantly.
@@ -251,6 +269,7 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       qc.invalidateQueries({ queryKey: ["app", "profile"] });
       qc.invalidateQueries({ queryKey: ["users"] });
       qc.invalidateQueries({ queryKey: ["posts"] });
+      qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
     },
     onError: (err, target) => {
       console.log("[profile] follow rollback", err instanceof Error ? err.message : err, target);
@@ -313,8 +332,8 @@ function publicProfileFromRow(row: Record<string, unknown>): PublicProfile {
   };
 }
 
-function profileSummaryFromRow(row: Record<string, unknown>): ProfileSummary {
-  const userId = String(row.user_id ?? row.id ?? row.follower_id ?? row.followee_id ?? "");
+function profileSummaryFromRow(row: Record<string, unknown>, fallbackUserId?: string): ProfileSummary {
+  const userId = String(row.user_id ?? row.id ?? row.follower_id ?? row.followee_id ?? fallbackUserId ?? "");
   const rawUsername =
     (row.username as string | null | undefined) ??
     (row.handle as string | null | undefined) ??
@@ -421,7 +440,7 @@ export function useFollowList(userId: string | null | undefined, kind: "follower
       const byId = new Map(
         ((profiles ?? []) as Record<string, unknown>[]).map((row) => [String(row.user_id ?? row.id), profileSummaryFromRow(row)]),
       );
-      return ids.map((id) => byId.get(id)).filter((row): row is ProfileSummary => !!row);
+      return ids.map((id) => byId.get(id) ?? profileSummaryFromRow({ username: id.slice(0, 8) }, id));
     },
     staleTime: 5_000,
     refetchOnMount: "always",
