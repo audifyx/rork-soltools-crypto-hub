@@ -92,7 +92,6 @@ import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import { getTokenOverview, getTokenSecurity, type TokenOverview } from "@/lib/api/birdeye";
-import { consumeCredits, creditActionForTool, fetchCreditBalance, TOOL_CREDIT_COSTS } from "@/lib/api/credits";
 import { getLiveKitToken } from "@/lib/api/livekit";
 import { useTrendingTokens } from "@/lib/api/market";
 import {
@@ -2389,16 +2388,6 @@ function GenericInputTool({
   kind: "contract" | "wallet" | "stream";
 }) {
   const accent = meta.accent;
-  const qc = useQueryClient();
-  const { isAuthenticated } = useAuth();
-  const creditAction = useMemo(() => creditActionForTool(meta.id, kind), [meta.id, kind]);
-  const creditCost = TOOL_CREDIT_COSTS[creditAction];
-  const credits = useQuery({
-    queryKey: ["credits", "balance"] as const,
-    queryFn: fetchCreditBalance,
-    enabled: isAuthenticated,
-    staleTime: 20_000,
-  });
   const [value, setValue] = useState<string>("");
   const [scanning, setScanning] = useState<boolean>(false);
   const [scanned, setScanned] = useState<boolean>(false);
@@ -2470,7 +2459,7 @@ function GenericInputTool({
     } finally {
       setScanning(false);
     }
-  }, [creditAction, isAuthenticated, kind, meta.id, qc, value]);
+  }, [kind, value]);
 
   const placeholder =
     kind === "wallet" ? "So111... wallet address" :
