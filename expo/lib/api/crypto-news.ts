@@ -141,6 +141,11 @@ const RSS_SOURCES: RssSource[] = [
   { name: "r/SolanaNFT", url: "https://www.reddit.com/r/SolanaNFT/.rss", categoryHint: "nft" },
   // Aggregators
   { name: "CryptoPanic Hot", url: "https://cryptopanic.com/news/rss/", categoryHint: "trending" },
+  // Official OG SCAN ($OGS) — X / Twitter via Nitter mirrors (first one that responds wins via dedupe)
+  { name: "@ogscanfun on X", url: "https://nitter.net/ogscanfun/rss", categoryHint: "viral" },
+  { name: "@ogscanfun on X", url: "https://nitter.poast.org/ogscanfun/rss", categoryHint: "viral" },
+  { name: "@ogscanfun on X", url: "https://nitter.privacydev.net/ogscanfun/rss", categoryHint: "viral" },
+  { name: "@ogscanfun on X", url: "https://nitter.tiekoetter.com/ogscanfun/rss", categoryHint: "viral" },
 ];
 
 const RSS_FETCH_TIMEOUT_MS = 6_500;
