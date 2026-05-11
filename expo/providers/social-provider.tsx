@@ -85,6 +85,13 @@ export interface CommunityPost {
   token?: CommunityTokenCard | null;
 }
 
+export interface SpacePoll {
+  id: string;
+  q: string;
+  options: string[];
+  voters: Record<string, number>;
+}
+
 export interface Space {
   id: string;
   title: string;
@@ -107,6 +114,12 @@ export interface Space {
   accent: [string, string];
   recording: boolean;
   raisedHands: number;
+  bannerUrl?: string | null;
+  viewersNow: number;
+  peakListeners: number;
+  totalViews: number;
+  pinnedNote?: string | null;
+  currentPoll?: SpacePoll | null;
 }
 
 export interface SpaceParticipant {
@@ -134,6 +147,8 @@ export interface SpaceMessage {
   body: string;
   type: "text" | "system" | "ticker" | "reaction";
   createdAt: number;
+  likes: number;
+  pinned: boolean;
 }
 
 export interface CreateSpaceInput {
@@ -143,6 +158,7 @@ export interface CreateSpaceInput {
   category?: Space["category"];
   scheduledAt?: number | null;
   recording?: boolean;
+  bannerUrl?: string | null;
 }
 
 const PALETTES: [string, string][] = [
@@ -443,6 +459,12 @@ type SpaceRow = {
   listeners_count: number | null;
   speakers_count: number | null;
   created_at: string | null;
+  banner_url?: string | null;
+  viewers_now?: number | null;
+  peak_listeners?: number | null;
+  total_views?: number | null;
+  pinned_note?: string | null;
+  current_poll?: unknown;
 };
 
 type SpaceParticipantRow = {
@@ -465,6 +487,8 @@ type SpaceMessageRow = {
   body: string | null;
   message_type: string | null;
   created_at: string | null;
+  likes_count?: number | null;
+  pinned?: boolean | null;
 };
 
 type ProfileMiniRow = {
@@ -512,6 +536,31 @@ function rowToSpace(row: SpaceRow, hostHandle: string, hostName: string): Space 
     accent,
     recording: !!row.recording,
     raisedHands: row.raised_hands ?? 0,
+    bannerUrl: normalizeMediaUrl(row.banner_url ?? null),
+    viewersNow: row.viewers_now ?? 0,
+    peakListeners: row.peak_listeners ?? 0,
+    totalViews: row.total_views ?? 0,
+    pinnedNote: row.pinned_note ?? null,
+    currentPoll: parsePoll(row.current_poll),
+  };
+}
+
+function parsePoll(value: unknown): SpacePoll | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.q !== "string" || !Array.isArray(v.options)) return null;
+  const options = v.options.filter((o): o is string => typeof o === "string");
+  const votersRaw = (v.voters && typeof v.voters === "object") ? (v.voters as Record<string, unknown>) : {};
+  const voters: Record<string, number> = {};
+  for (const [k, val] of Object.entries(votersRaw)) {
+    const n = typeof val === "number" ? val : Number(val);
+    if (Number.isFinite(n)) voters[k] = n;
+  }
+  return {
+    id: typeof v.id === "string" ? v.id : `${Date.now()}`,
+    q: v.q,
+    options,
+    voters,
   };
 }
 
@@ -712,7 +761,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         const { data, error } = await supabase
           .from("livekit_rooms")
           .select(
-            "id,name,topic,description,host_id,community_id,livekit_room_name,status,is_active,started_at,ended_at,scheduled_at,category,accent_a,accent_b,recording,raised_hands,listeners_count,speakers_count,created_at",
+            "id,name,topic,description,host_id,community_id,livekit_room_name,status,is_active,started_at,ended_at,scheduled_at,category,accent_a,accent_b,recording,raised_hands,listeners_count,speakers_count,created_at,banner_url,viewers_now,peak_listeners,total_views,pinned_note,current_poll",
           )
           .order("started_at", { ascending: false, nullsFirst: false })
           .limit(120);
@@ -893,6 +942,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         p_recording: !!input.recording,
         p_accent_a: palette[0],
         p_accent_b: palette[1],
+        p_banner_url: input.bannerUrl ?? null,
       });
 
       if (error) {
@@ -921,6 +971,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             recording: !!input.recording,
             accent_a: palette[0],
             accent_b: palette[1],
+            banner_url: input.bannerUrl ?? null,
           })
           .select("id")
           .single();
@@ -1201,6 +1252,105 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     [isAuthenticated, userId, qc],
   );
 
+  const updateSpaceBanner = useCallback(
+    async (id: string, bannerUrl: string | null): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to edit this Space.");
+      const { error } = await supabase.rpc("update_space_banner", {
+        target_room_id: id,
+        p_banner_url: bannerUrl,
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["social", "spaces"] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const setSpacePin = useCallback(
+    async (id: string, note: string | null): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to pin notes.");
+      const { error } = await supabase.rpc("set_space_pin", {
+        target_room_id: id,
+        p_note: note,
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["social", "spaces"] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const setSpacePoll = useCallback(
+    async (id: string, poll: SpacePoll | null): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to launch a poll.");
+      const { error } = await supabase.rpc("set_space_poll", {
+        target_room_id: id,
+        p_poll: poll,
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["social", "spaces"] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const voteSpacePoll = useCallback(
+    async (id: string, option: number): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to vote.");
+      const { error } = await supabase.rpc("vote_space_poll", {
+        target_room_id: id,
+        p_option: option,
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["social", "spaces"] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const likeSpaceMessage = useCallback(
+    async (messageId: string, spaceId: string): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to react.");
+      const { error } = await supabase.rpc("toggle_space_message_like", {
+        target_message_id: messageId,
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["space", "messages", spaceId] });
+      await qc.invalidateQueries({ queryKey: ["space", "liked-messages", spaceId, userId ?? "guest"] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const pinSpaceMessage = useCallback(
+    async (spaceId: string, messageId: string, pinned: boolean): Promise<void> => {
+      if (!isAuthenticated || !userId) throw new Error("Only hosts can pin messages.");
+      const { error } = await supabase.rpc("pin_space_message", {
+        target_room_id: spaceId,
+        target_message_id: messageId,
+        p_pinned: pinned,
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["space", "messages", spaceId] });
+    },
+    [isAuthenticated, userId, qc],
+  );
+
+  const useMyLikedMessages = (spaceId: string | undefined) =>
+    useQuery<Set<string>>({
+      queryKey: ["space", "liked-messages", spaceId ?? "", userId ?? "guest"],
+      enabled: !!spaceId && !!userId,
+      queryFn: async () => {
+        if (!spaceId || !userId) return new Set();
+        const { data, error } = await supabase
+          .from("space_message_likes")
+          .select("message_id, space_messages!inner(room_id)")
+          .eq("user_id", userId)
+          .eq("space_messages.room_id", spaceId);
+        if (error) {
+          console.log("[social] liked messages fetch failed", error.message);
+          return new Set();
+        }
+        return new Set((data ?? []).map((r) => String((r as { message_id: string }).message_id)));
+      },
+      staleTime: 10_000,
+    });
+
   const useSpaceParticipants = (id: string | undefined) =>
     useQuery<SpaceParticipant[]>({
       queryKey: ["space", "participants", id ?? ""],
@@ -1264,7 +1414,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         try {
           const { data, error } = await supabase
             .from("space_messages")
-            .select("id,room_id,user_id,body,message_type,created_at")
+            .select("id,room_id,user_id,body,message_type,created_at,likes_count,pinned")
             .eq("room_id", id)
             .order("created_at", { ascending: true })
             .limit(120);
@@ -1292,6 +1442,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
               body: r.body ?? "",
               type: messageType(r.message_type),
               createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+              likes: r.likes_count ?? 0,
+              pinned: !!r.pinned,
             };
           });
         } catch (e) {
@@ -2292,8 +2444,15 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       sendSpaceMessage,
       addSpaceReaction,
       endSpace,
+      updateSpaceBanner,
+      setSpacePin,
+      setSpacePoll,
+      voteSpacePoll,
+      likeSpaceMessage,
+      pinSpaceMessage,
       useSpaceParticipants,
       useSpaceMessages,
+      useMyLikedMessages,
       isLoading: communitiesQ.isLoading || spacesQ.isLoading,
     }),
     [
@@ -2338,6 +2497,12 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       sendSpaceMessage,
       addSpaceReaction,
       endSpace,
+      updateSpaceBanner,
+      setSpacePin,
+      setSpacePoll,
+      voteSpacePoll,
+      likeSpaceMessage,
+      pinSpaceMessage,
       useSpaceParticipants,
       useSpaceMessages,
       communitiesQ.isLoading,

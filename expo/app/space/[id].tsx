@@ -1,5 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -7,13 +9,13 @@ import {
   ArrowLeft,
   BarChart3,
   Bell,
-  Captions,
   Check,
   Copy,
   Crown,
+  Eye,
   Hand,
   Heart,
-  Link as LinkIcon,
+  ImagePlus,
   MessageCircle,
   Mic,
   MicOff,
@@ -30,7 +32,6 @@ import {
   Users as UsersIcon,
   Volume2,
   X,
-  Zap,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -55,10 +56,11 @@ import LiveKitVoice, { LiveKitVoiceEvent, LiveKitVoiceHandle } from "@/component
 import { getLiveKitToken } from "@/lib/api/livekit";
 import { supabase } from "@/lib/supabase";
 import { navigateBack } from "@/lib/navigation";
+import { uploadPostImage } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
-import { SpaceMessage, SpaceParticipant, useSocial } from "@/providers/social-provider";
-import { MicOff as MicOffIcon, VolumeX, Lock as LockIcon, Unlock as UnlockIcon, UserMinus } from "lucide-react-native";
+import { SpaceMessage, SpaceParticipant, SpacePoll, useSocial } from "@/providers/social-provider";
+import { MicOff as MicOffIcon, VolumeX, Lock as LockIcon, Unlock as UnlockIcon, UserMinus, PinOff } from "lucide-react-native";
 
 function shortTime(t: number): string {
   const diff = Math.max(1, Math.floor((Date.now() - t) / 1000));
@@ -108,15 +110,24 @@ export default function SpaceDetailScreen() {
     sendSpaceMessage,
     addSpaceReaction,
     endSpace,
+    updateSpaceBanner,
+    setSpacePin,
+    setSpacePoll,
+    voteSpacePoll,
+    likeSpaceMessage,
+    pinSpaceMessage,
     useSpaceParticipants,
     useSpaceMessages,
+    useMyLikedMessages,
   } = useSocial();
 
   const space = getSpace(id);
   const participantsQ = useSpaceParticipants(id);
   const messagesQ = useSpaceMessages(id);
+  const likedQ = useMyLikedMessages(id);
   const participants = participantsQ.data ?? [];
   const messages = messagesQ.data ?? [];
+  const likedSet = likedQ.data ?? new Set<string>();
   const chatRef = useRef<ScrollView | null>(null);
 
   const [connected, setConnected] = useState<boolean>(false);
@@ -138,18 +149,20 @@ export default function SpaceDetailScreen() {
   const [pinnedNote, setPinnedNote] = useState<string | null>(null);
   const [pinModalOpen, setPinModalOpen] = useState<boolean>(false);
   const [pinDraft, setPinDraft] = useState<string>("");
-  type PollState = {
-    id: string;
-    q: string;
-    options: string[];
-    voters: Record<string, number>;
-  };
-  const [poll, setPoll] = useState<PollState | null>(null);
+  type PollState = SpacePoll;
   const [pollModalOpen, setPollModalOpen] = useState<boolean>(false);
   const [pollQ, setPollQ] = useState<string>("");
   const [pollOpts, setPollOpts] = useState<string[]>(["", ""]);
   const broadcastRef = useRef<((event: string, payload: Record<string, unknown>) => void) | null>(null);
-  const [peakListeners, setPeakListeners] = useState<number>(0);
+  const [uploadingBanner, setUploadingBanner] = useState<boolean>(false);
+
+  // DB-backed pin and poll — always reflect the latest server state.
+  const pinnedNote = space?.pinnedNote ?? null;
+  const poll: PollState | null = space?.currentPoll ?? null;
+  const peakListeners = space?.peakListeners ?? 0;
+  const viewersNow = space?.viewersNow ?? 0;
+  const totalViews = space?.totalViews ?? 0;
+  const pinnedMessage = useMemo(() => messages.find((m) => m.pinned) ?? null, [messages]);
 
   const me = useMemo(
     () => participants.find((p) => p.userId === userId || p.identity === userId),
@@ -175,10 +188,6 @@ export default function SpaceDetailScreen() {
   useEffect(() => {
     requestAnimationFrame(() => chatRef.current?.scrollToEnd({ animated: true }));
   }, [messages.length]);
-
-  useEffect(() => {
-    if (space && space.listeners > peakListeners) setPeakListeners(space.listeners);
-  }, [space, peakListeners]);
 
   useEffect(() => {
     if (!connected || !space) return;
@@ -342,14 +351,19 @@ export default function SpaceDetailScreen() {
     setPinModalOpen(true);
   }, [isHost, pinnedNote]);
 
-  const savePinnedNote = useCallback(() => {
+  const savePinnedNote = useCallback(async () => {
+    if (!space) return;
     const t = pinDraft.trim();
     const next = t.length > 0 ? t : null;
-    setPinnedNote(next);
     setPinModalOpen(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     broadcastRef.current?.("pin", { pin: next });
-  }, [pinDraft]);
+    try {
+      await setSpacePin(space.id, next);
+    } catch (e) {
+      Alert.alert("Pin failed", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [pinDraft, space, setSpacePin]);
 
   const openPollModal = useCallback(() => {
     if (!isHost) {
@@ -361,7 +375,8 @@ export default function SpaceDetailScreen() {
     setPollModalOpen(true);
   }, [isHost]);
 
-  const launchPoll = useCallback(() => {
+  const launchPoll = useCallback(async () => {
+    if (!space) return;
     const q = pollQ.trim();
     const opts = pollOpts.map((o) => o.trim()).filter((o) => o.length > 0);
     if (!q || opts.length < 2) {
@@ -374,30 +389,97 @@ export default function SpaceDetailScreen() {
       options: opts,
       voters: {},
     };
-    setPoll(next);
     setPollModalOpen(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     broadcastRef.current?.("poll", { poll: next });
-  }, [pollQ, pollOpts]);
+    try {
+      await setSpacePoll(space.id, next);
+    } catch (e) {
+      Alert.alert("Poll failed", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [pollQ, pollOpts, space, setSpacePoll]);
 
   const votePoll = useCallback(
-    (idx: number) => {
-      if (!poll) return;
+    async (idx: number) => {
+      if (!space || !poll) return;
       if (!requireAuth()) return;
       const voterId = userId;
       if (!voterId || poll.voters[voterId] !== undefined) return;
       Haptics.selectionAsync().catch(() => {});
-      setPoll((p) => (p ? { ...p, voters: { ...p.voters, [voterId]: idx } } : p));
       broadcastRef.current?.("vote", { pollId: poll.id, voterId, idx });
+      try {
+        await voteSpacePoll(space.id, idx);
+      } catch (e) {
+        console.log("[space] poll vote failed", e);
+      }
     },
-    [poll, requireAuth, userId],
+    [poll, requireAuth, userId, space, voteSpacePoll],
   );
 
-  const closePoll = useCallback(() => {
+  const closePoll = useCallback(async () => {
+    if (!space) return;
     Haptics.selectionAsync().catch(() => {});
-    setPoll(null);
     broadcastRef.current?.("poll", { poll: null });
-  }, []);
+    try {
+      await setSpacePoll(space.id, null);
+    } catch (e) {
+      console.log("[space] close poll failed", e);
+    }
+  }, [space, setSpacePoll]);
+
+  const onPickBanner = useCallback(async () => {
+    if (!space || !isHost) return;
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Permission needed", "Allow photo access to set a banner.");
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.85,
+        allowsEditing: true,
+        aspect: [16, 9],
+        base64: true,
+      });
+      if (res.canceled || !res.assets[0]?.uri) return;
+      const asset = res.assets[0];
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      setUploadingBanner(true);
+      const url = await uploadPostImage(userId ?? "anon", asset.uri, asset.base64 ?? null);
+      await updateSpaceBanner(space.id, url);
+    } catch (e) {
+      Alert.alert("Banner update failed", e instanceof Error ? e.message : "Try again.");
+    } finally {
+      setUploadingBanner(false);
+    }
+  }, [space, isHost, userId, updateSpaceBanner]);
+
+  const onLikeMessage = useCallback(
+    async (messageId: string) => {
+      if (!space || !requireAuth()) return;
+      Haptics.selectionAsync().catch(() => {});
+      try {
+        await likeSpaceMessage(messageId, space.id);
+      } catch (e) {
+        console.log("[space] like failed", e);
+      }
+    },
+    [space, requireAuth, likeSpaceMessage],
+  );
+
+  const onPinMessage = useCallback(
+    async (m: SpaceMessage) => {
+      if (!space || !isHost) return;
+      Haptics.selectionAsync().catch(() => {});
+      try {
+        await pinSpaceMessage(space.id, m.id, !m.pinned);
+      } catch (e) {
+        Alert.alert("Pin failed", e instanceof Error ? e.message : "Try again.");
+      }
+    },
+    [space, isHost, pinSpaceMessage],
+  );
 
   const manageParticipant = useCallback(
     (participant: SpaceParticipant) => {
@@ -460,42 +542,16 @@ export default function SpaceDetailScreen() {
     broadcastRef.current = (event, payload) => {
       channel.send({ type: "broadcast", event, payload }).catch(() => {});
     };
-    channel.on("broadcast", { event: "pin" }, (msg) => {
-      const next = (msg.payload as { pin?: string | null })?.pin ?? null;
-      setPinnedNote(next ?? null);
+    // Realtime nudges — the source of truth lives in livekit_rooms now, but we
+    // still listen for instant broadcasts so the UI feels snappy without
+    // waiting on the next refetch tick.
+    channel.on("broadcast", { event: "pin" }, () => {
+      // The pin is server-backed; a quick refetch picks it up across devices.
+      // (No state to mutate locally.)
     });
-    channel.on("broadcast", { event: "poll" }, (msg) => {
-      const next = (msg.payload as { poll?: PollState | null })?.poll ?? null;
-      setPoll(next ?? null);
-    });
-    channel.on("broadcast", { event: "vote" }, (msg) => {
-      const data = msg.payload as { pollId?: string; voterId?: string; idx?: number };
-      if (!data?.voterId || data.idx === undefined) return;
-      setPoll((p) => {
-        if (!p || (data.pollId && p.id !== data.pollId)) return p;
-        if (p.voters[data.voterId!] !== undefined) return p;
-        return { ...p, voters: { ...p.voters, [data.voterId!]: data.idx! } };
-      });
-    });
-    channel.on("broadcast", { event: "request-state" }, () => {
-      if (!isHost) return;
-      channel.send({
-        type: "broadcast",
-        event: "state",
-        payload: { pin: pinnedNote, poll },
-      }).catch(() => {});
-    });
-    channel.on("broadcast", { event: "state" }, (msg) => {
-      if (isHost) return;
-      const data = msg.payload as { pin?: string | null; poll?: PollState | null };
-      setPinnedNote(data?.pin ?? null);
-      setPoll(data?.poll ?? null);
-    });
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED" && !isHost) {
-        channel.send({ type: "broadcast", event: "request-state", payload: {} }).catch(() => {});
-      }
-    });
+    channel.on("broadcast", { event: "poll" }, () => {});
+    channel.on("broadcast", { event: "vote" }, () => {});
+    channel.subscribe();
     return () => {
       broadcastRef.current = null;
       supabase.removeChannel(channel).catch(() => {});
@@ -557,6 +613,24 @@ export default function SpaceDetailScreen() {
 
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+            {space.bannerUrl ? (
+              <Pressable onPress={isHost ? onPickBanner : undefined} style={styles.bannerWrap}>
+                <Image source={{ uri: space.bannerUrl }} style={styles.bannerImg} contentFit="cover" />
+                <LinearGradient colors={["rgba(0,0,0,0)", "rgba(2,2,2,0.65)"]} style={StyleSheet.absoluteFill} />
+                {isHost ? (
+                  <View style={styles.bannerEditBadge}>
+                    <ImagePlus color={Colors.text} size={12} strokeWidth={2.8} />
+                    <Text style={styles.bannerEditText}>{uploadingBanner ? "Uploading…" : "Edit cover"}</Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            ) : isHost ? (
+              <Pressable onPress={onPickBanner} style={styles.bannerEmpty}>
+                <ImagePlus color={Colors.muted} size={18} strokeWidth={2.6} />
+                <Text style={styles.bannerEmptyText}>{uploadingBanner ? "Uploading…" : "Add a cover banner"}</Text>
+              </Pressable>
+            ) : null}
+
             <View style={styles.heroCard}>
               <View style={styles.heroTopRow}>
                 <View style={[styles.hostAvatar, { backgroundColor: space.accent[0] }]}>
@@ -582,10 +656,12 @@ export default function SpaceDetailScreen() {
               {space.description ? <Text style={styles.desc}>{space.description}</Text> : null}
 
               <View style={styles.metaRow}>
+                <MetaPill Icon={Eye} text={`${viewersNow} live`} color={Colors.mint} />
                 <MetaPill Icon={UsersIcon} text={`${space.listeners} listening`} />
                 <MetaPill Icon={Mic} text={`${space.speakers} speakers`} color={space.accent[0]} />
                 <MetaPill Icon={Hand} text={`${space.raisedHands} hands`} color={Colors.goldBright} />
-                {peakListeners > space.listeners ? <MetaPill Icon={TrendingUp} text={`peak ${peakListeners}`} color={Colors.mint} /> : null}
+                {peakListeners > 0 ? <MetaPill Icon={TrendingUp} text={`peak ${peakListeners}`} color={Colors.cyan} /> : null}
+                {totalViews > 0 ? <MetaPill Icon={UsersIcon} text={`${totalViews} total`} color={Colors.silver} /> : null}
                 {space.recording ? <MetaPill Icon={ShieldCheck} text="recording" color={Colors.rose} /> : null}
               </View>
 
@@ -724,6 +800,22 @@ export default function SpaceDetailScreen() {
                 <Text style={styles.sectionTitle}>{messages.length} messages</Text>
               </View>
             </View>
+            {pinnedMessage ? (
+              <View style={[styles.pinnedChatCard, { borderColor: `${space.accent[0]}44` }]}>
+                <View style={[styles.pinnedIcon, { backgroundColor: `${space.accent[0]}22` }]}>
+                  <Pin color={space.accent[0]} size={12} strokeWidth={3} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pinnedKicker}>PINNED MESSAGE</Text>
+                  <Text style={styles.pinnedText}><Text style={styles.pinnedAuthor}>{pinnedMessage.authorName}: </Text>{pinnedMessage.body}</Text>
+                </View>
+                {isHost ? (
+                  <Pressable onPress={() => onPinMessage(pinnedMessage)} hitSlop={10} style={styles.unpinBtn}>
+                    <PinOff color={Colors.muted} size={12} strokeWidth={2.8} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
             <View style={styles.chatBox}>
               <ScrollView ref={chatRef} nestedScrollEnabled style={styles.chatScroll} contentContainerStyle={styles.chatContent}>
                 {messages.length === 0 ? (
@@ -732,7 +824,16 @@ export default function SpaceDetailScreen() {
                     <Text style={styles.chatEmptyText}>No messages yet. Drop the first alpha note.</Text>
                   </View>
                 ) : (
-                  messages.map((m) => <ChatBubble key={m.id} message={m} />)
+                  messages.map((m) => (
+                    <ChatBubble
+                      key={m.id}
+                      message={m}
+                      liked={likedSet.has(m.id)}
+                      onLike={() => onLikeMessage(m.id)}
+                      onPin={isHost && m.type !== "reaction" ? () => onPinMessage(m) : undefined}
+                      accent={space.accent[0]}
+                    />
+                  ))
                 )}
               </ScrollView>
             </View>
@@ -765,9 +866,7 @@ export default function SpaceDetailScreen() {
                 <Heart color={Colors.rose} size={18} strokeWidth={2.6} fill={reactionCount > 0 ? Colors.rose : "transparent"} />
                 {reactionCount > 0 ? <View style={styles.reactCount}><Text style={styles.reactCountText}>{reactionCount}</Text></View> : null}
               </ControlButton>
-              <ControlButton onPress={() => Alert.alert("Captions", "Caption hooks are ready for the speech-to-text service.")} testID="space-cc">
-                <Captions color={Colors.text} size={18} strokeWidth={2.6} />
-              </ControlButton>
+
               <Pressable onPress={onLeave} style={[styles.controlBtn, styles.leaveBtn]} testID="space-leave">
                 <PhoneOff color={Colors.ink} size={18} strokeWidth={2.6} />
               </Pressable>
@@ -877,7 +976,7 @@ export default function SpaceDetailScreen() {
             />
             <View style={styles.modalRow}>
               {pinnedNote ? (
-                <Pressable onPress={() => { setPinnedNote(null); setPinModalOpen(false); broadcastRef.current?.("pin", { pin: null }); }} style={styles.modalGhost}>
+                <Pressable onPress={() => { setPinModalOpen(false); broadcastRef.current?.("pin", { pin: null }); if (space) setSpacePin(space.id, null).catch((e) => Alert.alert("Pin failed", e instanceof Error ? e.message : "Try again.")); }} style={styles.modalGhost}>
                   <Text style={styles.modalGhostText}>Remove</Text>
                 </Pressable>
               ) : null}
@@ -1085,20 +1184,30 @@ function SpeakerTile({ p, accent, onPress, canManage }: { p: SpaceParticipant; a
   );
 }
 
-function ChatBubble({ message }: { message: SpaceMessage }) {
+function ChatBubble({ message, liked, onLike, onPin, accent }: { message: SpaceMessage; liked: boolean; onLike: () => void; onPin?: () => void; accent: string }) {
   return (
-    <View style={styles.chatRow}>
+    <Pressable onLongPress={onPin} delayLongPress={380} style={styles.chatRow}>
       <View style={[styles.chatAvatar, { backgroundColor: message.authorColor }]}>
         <Text style={styles.chatInit}>{message.authorName.slice(0, 1).toUpperCase()}</Text>
       </View>
-      <View style={styles.chatBubble}>
+      <View style={[styles.chatBubble, message.pinned && { borderColor: accent, borderWidth: 1 }]}>
         <View style={styles.chatHead}>
           <Text style={styles.chatName}>{message.authorName}</Text>
           <Text style={styles.chatTime}>{shortTime(message.createdAt)}</Text>
         </View>
         <Text style={styles.chatText}>{message.body}</Text>
+        <View style={styles.chatFoot}>
+          <Pressable onPress={onLike} hitSlop={8} style={[styles.likeChip, liked && { backgroundColor: "rgba(255,77,109,0.16)" }]}>
+            <Heart color={liked ? Colors.rose : Colors.muted} size={11} strokeWidth={2.6} fill={liked ? Colors.rose : "transparent"} />
+            {message.likes > 0 ? <Text style={[styles.likeChipText, liked && { color: Colors.rose }]}>{message.likes}</Text> : null}
+          </Pressable>
+          {message.pinned ? (
+            <View style={styles.chatPinChip}><Pin color={accent} size={9} strokeWidth={3} /><Text style={[styles.chatPinText, { color: accent }]}>PINNED</Text></View>
+          ) : null}
+          {onPin ? <Text style={styles.pinHint}>hold to {message.pinned ? "unpin" : "pin"}</Text> : null}
+        </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -1192,6 +1301,21 @@ const styles = StyleSheet.create({
   chatName: { color: Colors.text, fontSize: 11, fontWeight: "900" },
   chatTime: { color: Colors.muted2, fontSize: 10, fontWeight: "800" },
   chatText: { color: Colors.text, fontSize: 12, lineHeight: 17, fontWeight: "650", marginTop: 3 },
+  chatFoot: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
+  likeChip: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.04)" },
+  likeChipText: { color: Colors.muted, fontSize: 10, fontWeight: "900" },
+  chatPinChip: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.05)" },
+  chatPinText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  pinHint: { color: Colors.muted2, fontSize: 9, fontWeight: "800", marginLeft: "auto" },
+  pinnedChatCard: { flexDirection: "row", alignItems: "center", gap: 10, padding: 11, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, marginTop: 12, marginBottom: 6 },
+  pinnedAuthor: { color: Colors.goldBright, fontWeight: "900" },
+  unpinBtn: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.05)" },
+  bannerWrap: { height: 150, borderRadius: 24, overflow: "hidden", marginBottom: 12, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  bannerImg: { width: "100%", height: "100%" },
+  bannerEditBadge: { position: "absolute", top: 10, right: 10, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.55)" },
+  bannerEditText: { color: Colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
+  bannerEmpty: { height: 88, borderRadius: 22, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 10, backgroundColor: "rgba(255,255,255,0.025)" },
+  bannerEmptyText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
   bottomDock: { position: "absolute", left: 12, right: 12, bottom: 18, padding: 10, borderRadius: 27, backgroundColor: "rgba(8,7,5,0.96)", borderWidth: 1, borderColor: "rgba(244,198,91,0.20)" },
   chatInputWrap: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 9 },
   chatInput: { flex: 1, height: 42, borderRadius: 16, paddingHorizontal: 12, color: Colors.text, fontSize: 13, fontWeight: "750", backgroundColor: "rgba(255,255,255,0.06)" },

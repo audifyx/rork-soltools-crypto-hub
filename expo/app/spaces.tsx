@@ -1,4 +1,6 @@
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -8,14 +10,15 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  Flame,
   Headphones,
+  Image as ImageIcon,
   Mic,
   Plus,
   Radio,
   Search,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Users as UsersIcon,
   Volume2,
   X,
@@ -43,6 +46,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
+import { uploadPostImage } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
 import { CreateSpaceInput, Space, useSocial } from "@/providers/social-provider";
 
@@ -503,6 +507,7 @@ function SpaceCapsule({
 }
 
 function CreateSpaceModal({ visible, onClose, onCreate }: { visible: boolean; onClose: () => void; onCreate: (input: CreateSpaceInput) => Promise<void> }) {
+  const { userId } = useAuth();
   const [title, setTitle] = useState<string>("");
   const [topic, setTopic] = useState<string>("ALPHA");
   const [description, setDescription] = useState<string>("");
@@ -510,6 +515,8 @@ function CreateSpaceModal({ visible, onClose, onCreate }: { visible: boolean; on
   const [schedule, setSchedule] = useState<boolean>(false);
   const [recording, setRecording] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+  const [uploadingBanner, setUploadingBanner] = useState<boolean>(false);
 
   const reset = () => {
     setTitle("");
@@ -518,6 +525,34 @@ function CreateSpaceModal({ visible, onClose, onCreate }: { visible: boolean; on
     setCategory("alpha");
     setSchedule(false);
     setRecording(false);
+    setBannerUrl(null);
+  };
+
+  const pickBanner = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Permission needed", "Allow photo access to add a banner.");
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.85,
+        allowsEditing: true,
+        aspect: [16, 9],
+        base64: true,
+      });
+      if (res.canceled || !res.assets[0]?.uri) return;
+      const asset = res.assets[0];
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      setUploadingBanner(true);
+      const url = await uploadPostImage(userId ?? "anon", asset.uri, asset.base64 ?? null);
+      setBannerUrl(url);
+    } catch (e) {
+      Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");
+    } finally {
+      setUploadingBanner(false);
+    }
   };
 
   const submit = async () => {
@@ -536,6 +571,7 @@ function CreateSpaceModal({ visible, onClose, onCreate }: { visible: boolean; on
         category,
         scheduledAt: schedule ? Date.now() + 30 * 60_000 : null,
         recording,
+        bannerUrl,
       });
       reset();
     } finally {
@@ -564,6 +600,26 @@ function CreateSpaceModal({ visible, onClose, onCreate }: { visible: boolean; on
               <X color={Colors.text} size={18} strokeWidth={2.8} />
             </Pressable>
           </View>
+
+          <Text style={styles.inputLabel}>Cover banner</Text>
+          <Pressable onPress={pickBanner} style={styles.bannerPicker} testID="space-banner-pick">
+            {bannerUrl ? (
+              <>
+                <Image source={{ uri: bannerUrl }} style={styles.bannerImg} contentFit="cover" />
+                <View style={styles.bannerOverlay}>
+                  <Pressable onPress={() => setBannerUrl(null)} style={styles.bannerClear} hitSlop={10}>
+                    <Trash2 color={Colors.text} size={13} strokeWidth={2.8} />
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <View style={styles.bannerEmpty}>
+                <ImageIcon color={Colors.muted} size={20} strokeWidth={2.4} />
+                <Text style={styles.bannerEmptyTitle}>{uploadingBanner ? "Uploading…" : "Add a cover image"}</Text>
+                <Text style={styles.bannerEmptySub}>16:9 recommended · shown to every listener</Text>
+              </View>
+            )}
+          </Pressable>
 
           <Text style={styles.inputLabel}>Room title</Text>
           <TextInput
@@ -729,6 +785,13 @@ const styles = StyleSheet.create({
   optionTextActive: { color: Colors.ink },
   sheetCategoryRail: { gap: 8, paddingRight: 16 },
   sheetCat: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  bannerPicker: { height: 120, borderRadius: 20, overflow: "hidden", backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", marginBottom: 4 },
+  bannerImg: { width: "100%", height: "100%" },
+  bannerOverlay: { position: "absolute", top: 8, right: 8 },
+  bannerClear: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.62)" },
+  bannerEmpty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
+  bannerEmptyTitle: { color: Colors.text, fontSize: 12, fontWeight: "900" },
+  bannerEmptySub: { color: Colors.muted, fontSize: 10, fontWeight: "700" },
   sheetCatText: { color: Colors.muted, fontSize: 12, fontWeight: "900" },
   createBtn: { marginTop: 16, height: 51, borderRadius: 18, backgroundColor: Colors.goldBright, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   createBtnDisabled: { opacity: 0.65 },
