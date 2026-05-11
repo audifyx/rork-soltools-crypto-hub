@@ -1,10 +1,7 @@
 import { getCanonicalBridgedMarketCap } from "@/lib/api/bridged-marketcap";
 import { fetchDexToken, getNewSolanaPairs, type DexPair } from "@/lib/api/dexscreener";
 import { fetchPumpFunToken, pumpFunVolume24h } from "@/lib/api/pumpfun";
-import { supabase } from "@/lib/supabase";
-
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
+import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase";
 
 async function call<T>(path: string, body: unknown): Promise<T> {
   const url = `${SUPABASE_URL}/functions/v1/${path}`;

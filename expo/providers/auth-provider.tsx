@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { clearSignedOutCache, invalidateCacheScopes } from "@/lib/provider-cache";
 import { saveOwnProfilePatch } from "@/lib/profile-db";
-import { SUPABASE_READY, supabase } from "@/lib/supabase";
+import { SUPABASE_ANON_KEY, SUPABASE_READY, SUPABASE_URL, supabase } from "@/lib/supabase";
 import { clearAllUserCache } from "@/lib/user-cache";
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -132,14 +132,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error("You must be signed in to delete your account.");
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
-      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
-      if (!supabaseUrl) throw new Error("Supabase is not configured.");
-      const res = await fetch(`${supabaseUrl}/functions/v1/delete-account`, {
+      if (!SUPABASE_URL) throw new Error("Supabase is not configured.");
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          apikey: anonKey,
+          apikey: SUPABASE_ANON_KEY,
           Authorization: `Bearer ${accessToken}`,
         },
         body: "{}",

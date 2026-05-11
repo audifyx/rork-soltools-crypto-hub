@@ -1,12 +1,10 @@
 import { getTokens, type JupiterToken } from "@/lib/api/jupiter";
 import { scanCommunityToken, type CommunityTokenCard } from "@/lib/community-token";
-import { supabase, SUPABASE_READY } from "@/lib/supabase";
+import { supabase, SUPABASE_ANON_KEY, SUPABASE_READY, SUPABASE_URL } from "@/lib/supabase";
 import type { LaunchToken, LaunchVenue } from "@/types/launchpad";
 
 const SOLANA_ADDRESS_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 const DEFAULT_SEARCH_BANNER = "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/o23za4or0jutesw13rqqp.jpg";
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
 const TOKEN_SEARCH_EDGE = `${SUPABASE_URL}/functions/v1/solana-token-search`;
 
 function normalizeText(input: string): string {

@@ -1,7 +1,4 @@
-import { supabase } from "@/lib/supabase";
-
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
+import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase";
 
 export const LIVEKIT_URL: string = process.env.EXPO_PUBLIC_LIVEKIT_URL ?? "";
 

@@ -1,9 +1,6 @@
 import { fetchDexToken } from "@/lib/api/dexscreener";
 import { fetchPumpFunToken } from "@/lib/api/pumpfun";
-import { supabase } from "@/lib/supabase";
-
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
+import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase";
 
 const QUOTE_FN =
   process.env.EXPO_PUBLIC_JUPITER_QUOTE_FUNCTION ??
