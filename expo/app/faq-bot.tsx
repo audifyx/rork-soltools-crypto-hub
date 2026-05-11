@@ -44,26 +44,7 @@ const RULES: Rule[] = [
     id: "spaces",
     keywords: [["space"], ["voice", "room"], ["audio", "room"], ["live", "talk"]],
     answer:
-      "Spaces are live voice rooms. Open the Streams tab to browse, tap a room to join as a listener, and request the mic to come on stage. Hosts can mute, unmute, pin posts, and run polls visible to everyone.",
-    followups: ["How do I mute someone?", "How do polls work?", "How do I start a Space?"],
-  },
-  {
-    id: "spaces_start",
-    keywords: [["start", "space"], ["create", "space"], ["host", "space"], ["new", "space"]],
-    answer:
-      "Tap the Streams tab, then Create Space. Add a title, optional banner image, topic, and choose public or token-gated. Once live, invite co-hosts and approve speakers from the request queue.",
-  },
-  {
-    id: "spaces_mute",
-    keywords: [["mute"], ["unmute"], ["kick", "speaker"], ["remove", "speaker"]],
-    answer:
-      "Hosts and co-hosts can tap any speaker avatar in the stage grid to mute, unmute, move back to listener, or remove from the room. Mute-all is in the host menu (three dots top right).",
-  },
-  {
-    id: "spaces_poll",
-    keywords: [["poll"], ["pin", "post"], ["pin", "message"]],
-    answer:
-      "Open the host menu inside a Space and choose Poll or Pin. Polls and pinned messages broadcast to every listener in real time, not just to you.",
+      "Spaces live in a dedicated web hub embedded inside the app. Open the Spaces tab to browse live and scheduled rooms, join as a listener, and request the mic to come on stage.",
   },
   {
     id: "wallet",

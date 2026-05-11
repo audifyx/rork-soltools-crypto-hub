@@ -42,8 +42,7 @@ function fmtCount(n: number): string {
 
 export default function CommunitiesScreen() {
   const router = useRouter();
-  const { communities, joinedCommunities, isJoined, liveSpaces, trendingCommunities } =
-    useSocial();
+  const { communities, joinedCommunities, isJoined, trendingCommunities } = useSocial();
   const [query, setQuery] = useState<string>("");
   const [tab, setTab] = useState<Tab>("discover");
 
@@ -134,7 +133,7 @@ export default function CommunitiesScreen() {
                   value="Live"
                   label="Activity"
                   tint={Colors.mint}
-                  small={liveSpaces.length > 0 ? `${liveSpaces.length}` : undefined}
+                  small={undefined}
                 />
                 <StatTile
                   icon={Flame}

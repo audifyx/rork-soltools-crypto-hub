@@ -5,7 +5,7 @@ export type CacheScope = "auth" | "profile" | "social" | "feed" | "notifications
 const SCOPE_QUERY_KEYS: Record<CacheScope, QueryKey[]> = {
   auth: [["auth"], ["profile"], ["social"], ["feed"], ["notifications"], ["messages"]],
   profile: [["profile"], ["profile", "activity"]],
-  social: [["social"], ["social", "communities"], ["social", "memberships"], ["social", "spaces"]],
+  social: [["social"], ["social", "communities"], ["social", "memberships"]],
   feed: [["feed"], ["posts"], ["social", "feed"]],
   notifications: [["notifications"], ["notifications", "unread-count"]],
   messages: [["messages"], ["threads"], ["conversations"]],

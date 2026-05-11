@@ -6,7 +6,6 @@ export const socialQueryKeys = {
   social: ["social"] as const,
   communities: ["social", "communities"] as const,
   memberships: ["social", "memberships"] as const,
-  spaces: ["social", "spaces"] as const,
   profile: ["profile"] as const,
   profileActivity: ["profile", "activity"] as const,
   posts: ["posts"] as const,

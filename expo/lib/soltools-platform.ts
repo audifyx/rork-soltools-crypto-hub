@@ -118,7 +118,6 @@ export const SOLTOOLS_PLATFORM_MODULES: SolToolsModuleSpec[] = [
   { id: "wallet-analyzer", name: "Wallet Analyzer", category: "ai", surface: "Tools", status: "beta", route: "/tool/ai-wallet-analyzer", creditCost: SOLTOOLS_CREDIT_COSTS.analyzeWallet },
   { id: "ai-token-analysis", name: "AI Token Analysis", category: "ai", surface: "Tools", status: "beta", route: "/tool/ai-analysis", creditCost: SOLTOOLS_CREDIT_COSTS.analyzeToken },
   { id: "communities", name: "Communities", category: "social", surface: "Communities", status: "live", route: "/communities" },
-  { id: "spaces", name: "Spaces", category: "voice", surface: "Spaces", status: "live", route: "/spaces" },
   { id: "callouts-channel", name: "Callouts Channel", category: "social", surface: "Posts", status: "beta", route: "/posts" },
   { id: "discover", name: "Discover", category: "social", surface: "Discover", status: "live", route: "/(tabs)/discover" },
   { id: "leaderboard", name: "Leaderboard", category: "social", surface: "Discover", status: "planned", route: "/(tabs)/discover" },
