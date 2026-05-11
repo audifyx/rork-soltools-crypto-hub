@@ -11,15 +11,15 @@ import {
   ImageIcon,
   LineChart,
   Newspaper,
+  Radio,
   RefreshCw,
   Send,
   Sparkles,
   TrendingUp,
-  Twitter,
   Users,
   Zap,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -34,6 +34,7 @@ import {
   type ListRenderItem,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView, type WebView as WebViewType } from "react-native-webview";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import CryptoNewsCard from "@/components/CryptoNewsCard";
@@ -62,10 +63,13 @@ interface CategoryTab {
   color: string;
 }
 
+const OG_X_EMBED_URL = "https://rss.app/embed/v1/feed/HZmuUbmuyMF88qQN";
+const OG_TELEGRAM_EMBED_URL = "https://rss.app/embed/v1/feed/XbFB8nRxWdVcLA8c";
+
 const CATEGORIES: CategoryTab[] = [
   { key: "all", label: "All", Icon: Compass, color: Colors.text },
-  { key: "x", label: "@ogscanfun", Icon: Twitter, color: "#1DA1F2" },
-  { key: "telegram", label: "OG Updates", Icon: Send, color: "#229ED9" },
+  { key: "x", label: "OG on X", Icon: Radio, color: "#B8FF3C" },
+  { key: "telegram", label: "OG Telegram", Icon: Send, color: "#62D0FF" },
   { key: "trending", label: "Trending", Icon: Flame, color: Colors.mint },
   { key: "solana", label: "Solana", Icon: Zap, color: "#14F195" },
   { key: "bitcoin", label: "Bitcoin", Icon: Bitcoin, color: "#F7931A" },
@@ -89,6 +93,10 @@ export default function CryptoNewsScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const [category, setCategory] = useState<NewsCategory>("all");
+  const embedRef = useRef<WebViewType>(null);
+  const [embedLoading, setEmbedLoading] = useState<boolean>(true);
+  const showEmbed = category === "x" || category === "telegram";
+  const embedUrl = category === "telegram" ? OG_TELEGRAM_EMBED_URL : OG_X_EMBED_URL;
   const [range, setRange] = useState<NewsTimeRange>("24h");
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
@@ -97,6 +105,10 @@ export default function CryptoNewsScreen() {
   useEffect(() => {
     getSavedNewsIds().then(setSavedIds).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (showEmbed) setEmbedLoading(true);
+  }, [showEmbed, embedUrl]);
 
   const newsQ = useQuery({
     queryKey: ["crypto-news", category, range],
@@ -117,8 +129,13 @@ export default function CryptoNewsScreen() {
 
   const onRefresh = useCallback(async () => {
     Haptics.selectionAsync().catch(() => {});
+    if (showEmbed) {
+      setEmbedLoading(true);
+      embedRef.current?.reload();
+      return;
+    }
     await qc.invalidateQueries({ queryKey: ["crypto-news"] });
-  }, [qc]);
+  }, [qc, showEmbed]);
 
   const handleSave = useCallback(async (item: CryptoNewsItem) => {
     const next = await toggleSavedNews(item.id);
@@ -276,7 +293,36 @@ export default function CryptoNewsScreen() {
         />
       </View>
 
-      {newsQ.isLoading && items.length === 0 ? (
+      {showEmbed ? (
+        <View style={styles.embedShell} testID="news-embed">
+          {embedLoading ? (
+            <View style={styles.embedLoader} pointerEvents="none">
+              <ActivityIndicator color={Colors.mint} />
+              <Text style={styles.loadingText}>Loading OG updates...</Text>
+            </View>
+          ) : null}
+          <WebView
+            key={embedUrl}
+            ref={embedRef}
+            source={{ uri: embedUrl }}
+            style={styles.embedWeb}
+            originWhitelist={["*"]}
+            javaScriptEnabled
+            domStorageEnabled
+            startInLoadingState={false}
+            onLoadEnd={() => setEmbedLoading(false)}
+            setSupportMultipleWindows={false}
+            allowsBackForwardNavigationGestures
+            pullToRefreshEnabled={Platform.OS !== "web"}
+            onShouldStartLoadWithRequest={(req) => {
+              if (req.url === embedUrl) return true;
+              if (req.url.startsWith("https://rss.app/")) return true;
+              Linking.openURL(req.url).catch(() => {});
+              return false;
+            }}
+          />
+        </View>
+      ) : newsQ.isLoading && items.length === 0 ? (
         <View style={styles.loading}>
           <ActivityIndicator color={Colors.mint} />
           <Text style={styles.loadingText}>Pulling the wire...</Text>
@@ -415,6 +461,23 @@ const styles = StyleSheet.create({
   },
   tabLabel: { fontSize: 12, fontWeight: "800", letterSpacing: 0.2 },
   listContent: { paddingHorizontal: 12, paddingTop: 6, paddingBottom: 120 },
+  embedShell: { flex: 1, backgroundColor: "#000", overflow: "hidden" },
+  embedWeb: { flex: 1, backgroundColor: "#000" },
+  embedLoader: {
+    position: "absolute",
+    top: 18,
+    alignSelf: "center",
+    zIndex: 4,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.82)",
+    borderWidth: 1,
+    borderColor: "rgba(0,255,180,0.28)",
+  },
   sep: { height: 10 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   loadingText: { color: Colors.muted, fontSize: 13, fontWeight: "700" },
