@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SolTools",
+    "name": "$OGS token",
     "slug": "soltools-agoq9mmx54xvahqna2fmv",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -43,13 +43,13 @@
         "expo-secure-store",
         {
           "configureAndroidBackup": true,
-          "faceIDPermission": "Allow SolTools to protect your trading wallet keys with Face ID."
+          "faceIDPermission": "Allow $OGS token to protect your trading wallet keys with Face ID."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow SolTools to access your photos and videos so you can upload profile media, posts, and reels."
+          "photosPermission": "Allow $OGS token to access your photos and videos so you can upload profile media, posts, and reels."
         }
       ]
     ],

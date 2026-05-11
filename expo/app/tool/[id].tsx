@@ -381,7 +381,7 @@ function moduleToMeta(module: SolToolsModuleSpec): ToolMeta {
     tagline: module.status === "gated" ? "Paused until App Store launch" : `${module.surface} · ${module.status.toUpperCase()}`,
     Icon: moduleIcon(module.category),
     accent: moduleAccent(module.category),
-    description: module.gatedReason ?? `${module.name} is connected through the existing SolTools API/data layer without changing API contracts.`,
+    description: module.gatedReason ?? `${module.name} is connected through the existing $OGS token API/data layer without changing API contracts.`,
   };
 }
 
@@ -3113,7 +3113,7 @@ function StreamResultPanel({
 
 function ConnectedModuleTool({ meta }: { meta: ToolMeta }) {
   const checks = [
-    "Route is registered in the SolTools platform map",
+    "Route is registered in the $OGS token platform map",
     "Uses existing providers and API wrappers",
     "Trading actions stay gated until App Store launch",
   ];
@@ -3151,7 +3151,7 @@ function ComingSoonTool({ accent }: { accent: string }) {
       accent={accent}
       Icon={Sparkles}
       title="Coming soon"
-      body="This module is listed in the SolTools platform map and can be promoted to a live input tool without changing API contracts."
+      body="This module is listed in the $OGS token platform map and can be promoted to a live input tool without changing API contracts."
     />
   );
 }

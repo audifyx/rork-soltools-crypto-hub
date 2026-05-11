@@ -3,5 +3,5 @@ import React from "react";
 import OGScanEmbedScreen from "@/components/OGScanEmbedScreen";
 
 export default function OGScanRoadmapRoute() {
-  return <OGScanEmbedScreen title="Roadmap" path="/roadmap" subtitle="SolTools expansion plan" />;
+  return <OGScanEmbedScreen title="Roadmap" path="/roadmap" subtitle="$OGS token expansion plan" />;
 }

@@ -539,7 +539,7 @@ export default function ProfileScreen() {
   const onShareProfile = useCallback(async () => {
     try {
       await Share.share({
-        message: `Follow ${profile.displayName} (${profile.handle}) on SolTools — pro Solana trading suite.`,
+        message: `Follow ${profile.displayName} (${profile.handle}) on $OGS token — pro Solana trading suite.`,
       });
     } catch (e) {
       console.log("[profile] share failed", e);
@@ -1197,7 +1197,7 @@ export default function ProfileScreen() {
                 <EmptyTab
                   Icon={Pencil}
                   title="No posts yet"
-                  body="Share alpha, charts, and takes with the SolTools community."
+                  body="Share alpha, charts, and takes with the $OGS community."
                   ctaLabel="Compose post"
                   onCta={() => router.push("/compose")}
                 />
@@ -2137,7 +2137,7 @@ function SettingsModal({
     }
     Alert.alert(
       "Delete account?",
-      "This permanently deletes your SolTools account, profile, posts, and synced data. This action cannot be undone.",
+      "This permanently deletes your $OGS token account, profile, posts, and synced data. This action cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -2295,7 +2295,7 @@ function SettingsModal({
                 />
                 <MenuRow
                   Icon={ExternalLink}
-                  label="About SolTools"
+                  label="About $OGS token"
                   sub="Version, terms, privacy"
                   onPress={() => setSection("about")}
                 />
@@ -2503,7 +2503,7 @@ function SettingsModal({
                   <View style={styles.aboutLogo}>
                     <Sparkles color={Colors.ink} size={22} strokeWidth={3} />
                   </View>
-                  <Text style={styles.aboutTitle}>SolTools</Text>
+                  <Text style={styles.aboutTitle}>$OGS token</Text>
                   <Text style={styles.aboutSub}>Pro Trading Suite · v5.0.0</Text>
                 </View>
                 <MenuRow

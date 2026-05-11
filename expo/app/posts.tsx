@@ -262,7 +262,7 @@ export default function PostsFeedScreen() {
     const ticker = post.ticker ? `\n\n${post.ticker.replace("$", "")}` : "";
     const author = post.authorHandle || post.authorName;
     try {
-      await Share.share({ message: `${post.text || "SolTools post"}${ticker}\n\n— ${author}` });
+      await Share.share({ message: `${post.text || "$OGS token post"}${ticker}\n\n— ${author}` });
     } catch (e) {
       console.log("[posts] share failed", e);
     }
@@ -320,7 +320,7 @@ export default function PostsFeedScreen() {
             <ArrowLeft color={Colors.text} size={22} strokeWidth={2.6} />
           </Pressable>
           <View style={styles.titleWrap}>
-            <Text style={styles.eyebrow}>SolTools feed</Text>
+            <Text style={styles.eyebrow}>$OGS token feed</Text>
             <View style={styles.titleRow}>
               <Text style={styles.title}>Posts</Text>
               <View style={styles.algoPill}>

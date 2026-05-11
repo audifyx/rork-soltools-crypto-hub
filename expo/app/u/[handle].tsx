@@ -149,7 +149,7 @@ export default function PublicProfileScreen() {
       <SafeAreaView style={styles.center} edges={["top"]}>
         <Stack.Screen options={{ headerShown: false }} />
         <Text style={styles.notFoundTitle}>Trader not found</Text>
-        <Text style={styles.notFoundBody}>@{handle.replace("@", "")} doesn&apos;t exist on SolTools.</Text>
+        <Text style={styles.notFoundBody}>@{handle.replace("@", "")} doesn&apos;t exist on $OGS token.</Text>
         <Pressable onPress={() => navigateBack(router, "/(tabs)/users")} style={styles.backCta}>
           <Text style={styles.backCtaText}>Go back</Text>
         </Pressable>
@@ -566,7 +566,7 @@ function TipModal({
             </LinearGradient>
           </Pressable>
           <Text style={tipStyles.foot}>
-            Wallet transfers are coming soon. SolTools never holds funds.
+            Wallet transfers are coming soon. $OGS token never holds funds.
           </Text>
         </Pressable>
       </Pressable>

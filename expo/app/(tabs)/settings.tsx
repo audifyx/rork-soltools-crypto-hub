@@ -48,7 +48,7 @@ const languages: { id: Language; label: string }[] = [
 ];
 
 const themes: { id: ThemeMode; label: string; sub: string }[] = [
-  { id: "dark", label: "Dark", sub: "Default SolTools black" },
+  { id: "dark", label: "Dark", sub: "Default $OGS black" },
   { id: "midnight", label: "Midnight", sub: "Lower glow, deeper panels" },
   { id: "sunset", label: "Sunset", sub: "Warmer accent mode" },
 ];
@@ -164,7 +164,7 @@ export default function SettingsScreen() {
                 <View style={styles.heroTop}>
                   <View style={styles.avatar}><UserRound color={Colors.ink} size={22} strokeWidth={3} /></View>
                   <View style={styles.heroCopy}>
-                    <Text style={styles.heroName}>{profile.displayName || profile.handle || "SolTools user"}</Text>
+                    <Text style={styles.heroName}>{profile.displayName || profile.handle || "$OGS user"}</Text>
                     <Text style={styles.heroSub}>{isAuthenticated ? accountLabel : "Sign in to sync settings across devices"}</Text>
                   </View>
                 </View>
@@ -237,7 +237,7 @@ export default function SettingsScreen() {
           {section === "support" ? (
             <Group title="SUPPORT & LEGAL">
               <MenuRow Icon={HelpCircle} label="Help & support" sub="Telegram @ogscandev" onPress={() => Alert.alert("Support", "Message us on Telegram @ogscandev")} />
-              <MenuRow Icon={Shield} label="Privacy policy" sub="How SolTools handles data" onPress={() => router.push("/legal/privacy")} />
+              <MenuRow Icon={Shield} label="Privacy policy" sub="How $OGS token handles data" onPress={() => router.push("/legal/privacy")} />
               <MenuRow Icon={Sparkles} label="Terms of service" sub="App rules and usage terms" onPress={() => router.push("/legal/terms")} />
               <MenuRow Icon={LinkIcon} label="Open-source licenses" sub="Third-party credits" onPress={() => router.push("/legal/licenses")} />
             </Group>

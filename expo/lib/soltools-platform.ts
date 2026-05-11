@@ -31,7 +31,7 @@ export const SOLTOOLS_RESERVED_USERNAME = "administrator";
 export const SOLTOOLS_OFFICIAL_TOKEN_CA = "HEivoBHhWT939vcaevGgZBtoArS4CAywCMjdVBTSpump";
 
 export const SOLTOOLS_TRADING_DISABLED_MESSAGE =
-  "Wallet connection, wallet creation/import/export, Phantom, Jupiter swaps, buying, and selling are paused until the App Store launch. SolTools is currently live for social, discovery, charts, alerts, communities, and wallet/token research.";
+  "Wallet connection, wallet creation/import/export, Phantom, Jupiter swaps, buying, and selling are paused until the App Store launch. $OGS token is currently live for social, discovery, charts, alerts, communities, and wallet/token research.";
 
 export const SOLTOOLS_EDGE_FUNCTIONS = [
   "solana-tracker",

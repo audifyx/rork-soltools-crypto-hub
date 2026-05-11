@@ -205,7 +205,7 @@ export default function ListTokenScreen() {
           </Pressable>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>List Your Token</Text>
-            <Text style={styles.headerSub}>Get discovered on SolTools</Text>
+            <Text style={styles.headerSub}>Get discovered by $OGS traders</Text>
           </View>
           <View style={styles.closeBtn} />
         </View>
@@ -478,7 +478,7 @@ export default function ListTokenScreen() {
             </Pressable>
 
             <Text style={styles.legalText}>
-              Submissions are reviewed by the SolTools team. Verified listings receive a community badge.
+              Submissions are reviewed by the $OGS team. Verified listings receive a community badge.
             </Text>
           </ScrollView>
         </KeyboardAvoidingView>

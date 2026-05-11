@@ -7,7 +7,7 @@ export const OGSCAN_TOOL_MAP: Record<string, OGScanScreenConfig> = {
   app: { title: "Command", path: "/app", subtitle: "Main scanner dashboard" },
   "our-coin": { title: "Our Coin", path: "/our-coin", subtitle: "Official OGScan token" },
   coin: { title: "Our Coin", path: "/our-coin", subtitle: "Official OGScan token" },
-  roadmap: { title: "Roadmap", path: "/roadmap", subtitle: "SolTools expansion plan" },
+  roadmap: { title: "Roadmap", path: "/roadmap", subtitle: "$OGS token expansion plan" },
   "market-pulse": { title: "Market Pulse", path: "/market-pulse", subtitle: "Selected token vitals" },
   market: { title: "Market Pulse", path: "/market-pulse", subtitle: "Selected token vitals" },
   "snipe-feed": { title: "Snipe Feed", path: "/snipe-feed", subtitle: "Launch and dev-wallet radar" },

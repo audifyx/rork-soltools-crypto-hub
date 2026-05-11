@@ -226,7 +226,7 @@ export default function NotificationsScreen() {
   const items = useMemo(() => {
     const merged = sortNotifications(dedupeNotifications([...remoteItems, ...localItems]));
     if (merged.length === 0 && isAuthenticated) {
-      return [{ id: "welcome", kind: "system", title: "Welcome to SolTools", body: "Likes, mentions, alerts, and whale moves will land here.", ts: Date.now(), unread: false }] as Notif[];
+      return [{ id: "welcome", kind: "system", title: "Welcome to $OGS token", body: "Likes, mentions, alerts, and whale moves will land here.", ts: Date.now(), unread: false }] as Notif[];
     }
     return merged;
   }, [isAuthenticated, localItems, remoteItems]);

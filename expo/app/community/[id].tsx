@@ -428,7 +428,7 @@ export default function CommunityDetailScreen() {
   const shareLink = useMemo(
     () =>
       community
-        ? `https://soltools.app/community/${community.handle ?? community.id}`
+        ? `https://ogscan.fun/community/${community.handle ?? community.id}`
         : "",
     [community],
   );
@@ -438,7 +438,7 @@ export default function CommunityDetailScreen() {
     if (!community) return;
     try {
       await Share.share({
-        message: `Join the ${community.name} community on SolTools — ${shareLink}`,
+        message: `Join the ${community.name} community on $OGS token — ${shareLink}`,
         url: shareLink,
       });
     } catch (e) {
@@ -463,7 +463,7 @@ export default function CommunityDetailScreen() {
     Haptics.selectionAsync().catch(() => {});
     try {
       await Share.share({
-        message: `Join ${community.name} on SolTools: ${shareLink}`,
+        message: `Join ${community.name} on $OGS token: ${shareLink}`,
         url: shareLink,
       });
     } catch (e) {
@@ -718,7 +718,7 @@ export default function CommunityDetailScreen() {
   const onSharePost = useCallback(async (post: CommunityPost) => {
     try {
       await Share.share({
-        message: `${post.authorName} in ${community?.name ?? "SolTools"}: ${post.content}\n${shareLink}?post=${post.id}`,
+        message: `${post.authorName} in ${community?.name ?? "$OGS token"}: ${post.content}\n${shareLink}?post=${post.id}`,
         url: `${shareLink}?post=${post.id}`,
       });
     } catch (e) {
@@ -1055,7 +1055,7 @@ export default function CommunityDetailScreen() {
 
               <Text style={styles.desc} numberOfLines={3}>
                 {community.description ||
-                  `${community.name} is the official community on SolTools.`}
+                  `${community.name} is the official community for $OGS token.`}
               </Text>
             </View>
 

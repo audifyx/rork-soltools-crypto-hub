@@ -245,7 +245,7 @@ export default function MessagesScreen() {
               </Text>
               <Text style={styles.emptyBody}>
                 {tab === "inbox"
-                  ? "Tap the compose button to message a trader, founder, or whale on SolTools."
+                  ? "Tap the compose button to message a trader, founder, or whale on $OGS token."
                   : "When traders you don't follow message you, they'll land here first."}
               </Text>
             </View>

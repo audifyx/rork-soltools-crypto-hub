@@ -146,7 +146,7 @@ export default function AuthScreen() {
             </View>
 
             <Text style={styles.headline}>
-              {mode === "signin" ? "Welcome back, trader" : "Join the SolTools edge"}
+              {mode === "signin" ? "Welcome back, trader" : "Join the $OGS edge"}
             </Text>
             <Text style={styles.sub}>
               {mode === "signin"
