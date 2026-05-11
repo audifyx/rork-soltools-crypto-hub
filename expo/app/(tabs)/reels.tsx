@@ -21,7 +21,7 @@ import {
   View,
   ViewToken,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ReelCard from "@/components/ReelCard";
 import AppBackground from "@/components/ui/AppBackground";
@@ -54,6 +54,7 @@ export default function ReelsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const { userId, isAuthenticated } = useAuth();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [commentReel, setCommentReel] = useState<Reel | null>(null);
@@ -71,7 +72,11 @@ export default function ReelsScreen() {
     [followersQuery.data],
   );
 
-  const reelHeight = Math.max(620, height);
+  // Header (eyebrow + title + actions) ~70, tabs row ~46, progress ~12, paddings ~16
+  const HEADER_BLOCK = 70 + 46 + 12 + 16;
+  // Floating tab bar: height 74 + bottom inset (ios 22 / android 14) + margin 12
+  const TAB_BAR_BLOCK = 74 + (Platform.OS === "ios" ? 22 : 14) + 12;
+  const reelHeight = Math.max(360, height - insets.top - HEADER_BLOCK - TAB_BAR_BLOCK);
 
   const feedQuery = useQuery<Reel[]>({
     queryKey: ["reels", "feed", userId ?? "guest"],
@@ -201,20 +206,25 @@ export default function ReelsScreen() {
   }, []);
 
   const renderItem: ListRenderItem<Reel> = useCallback(({ item }) => (
-    <ReelCard
-      reel={item}
-      active={item.id === visibleId}
-      height={reelHeight}
-      viewerUserId={userId}
-      muted={muted}
-      onToggleMute={onToggleMute}
-      onLike={onLike}
-      onComment={setCommentReel}
-      onShare={onShare}
-      onOpenAuthor={onOpenAuthor}
-      onOpenToken={onOpenToken}
-      onDelete={onDelete}
-    />
+    <View style={styles.reelSlot}>
+      <ReelCard
+        reel={item}
+        active={item.id === visibleId}
+        height={reelHeight}
+        viewerUserId={userId}
+        muted={muted}
+        onToggleMute={onToggleMute}
+        onLike={onLike}
+        onComment={setCommentReel}
+        onShare={onShare}
+        onOpenAuthor={onOpenAuthor}
+        onOpenToken={onOpenToken}
+        onDelete={onDelete}
+        topInset={14}
+        bottomInset={20}
+        rounded
+      />
+    </View>
   ), [muted, onDelete, onLike, onOpenAuthor, onOpenToken, onShare, onToggleMute, reelHeight, userId, visibleId]);
 
   return (
@@ -223,48 +233,7 @@ export default function ReelsScreen() {
       <StatusBar style="light" />
       <AppBackground variant="social" />
 
-      <FlatList
-        data={reels}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        pagingEnabled
-        showsVerticalScrollIndicator={false}
-        snapToInterval={reelHeight}
-        decelerationRate="fast"
-        viewabilityConfig={viewabilityConfig}
-        onViewableItemsChanged={onViewableItemsChanged}
-        refreshing={feedQuery.isFetching && reels.length > 0}
-        onRefresh={onRefresh}
-        getItemLayout={(_, index) => ({ length: reelHeight, offset: reelHeight * index, index })}
-        removeClippedSubviews={Platform.OS !== "web"}
-        ListEmptyComponent={
-          <View style={[styles.empty, { minHeight: reelHeight }]}>
-            {feedQuery.isLoading ? (
-              <ActivityIndicator color={Colors.goldBright} />
-            ) : (
-              <>
-                <View style={styles.emptyIcon}>
-                  <Sparkles color={Colors.goldBright} size={28} strokeWidth={2.8} />
-                </View>
-                <Text style={styles.emptyTitle}>No reels yet</Text>
-                <Text style={styles.emptyBody}>Upload the first short clip for token calls, chart breakdowns, and founder updates.</Text>
-                <Pressable onPress={() => router.push("/upload-reel")} style={styles.emptyBtn} testID="empty-upload-reel">
-                  <Plus color={Colors.ink} size={15} strokeWidth={3} />
-                  <Text style={styles.emptyBtnText}>Upload reel</Text>
-                </Pressable>
-              </>
-            )}
-          </View>
-        }
-      />
-
-      <SafeAreaView pointerEvents="box-none" edges={["top"]} style={styles.overlayTop}>
-        <LinearGradient
-          pointerEvents="none"
-          colors={["rgba(0,0,0,0.72)", "rgba(0,0,0,0.32)", "rgba(0,0,0,0)"]}
-          locations={[0, 0.55, 1]}
-          style={styles.topScrim}
-        />
+      <SafeAreaView edges={["top"]} style={styles.headerWrap}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.eyebrowRow}>
@@ -328,6 +297,43 @@ export default function ReelsScreen() {
           </View>
         ) : null}
       </SafeAreaView>
+
+      <View style={[styles.feedWrap, { marginBottom: TAB_BAR_BLOCK }]}>
+        <FlatList
+          data={reels}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          pagingEnabled
+          showsVerticalScrollIndicator={false}
+          snapToInterval={reelHeight}
+          decelerationRate="fast"
+          viewabilityConfig={viewabilityConfig}
+          onViewableItemsChanged={onViewableItemsChanged}
+          refreshing={feedQuery.isFetching && reels.length > 0}
+          onRefresh={onRefresh}
+          getItemLayout={(_, index) => ({ length: reelHeight, offset: reelHeight * index, index })}
+          removeClippedSubviews={Platform.OS !== "web"}
+          ListEmptyComponent={
+            <View style={[styles.empty, { minHeight: reelHeight }]}>
+              {feedQuery.isLoading ? (
+                <ActivityIndicator color={Colors.goldBright} />
+              ) : (
+                <>
+                  <View style={styles.emptyIcon}>
+                    <Sparkles color={Colors.goldBright} size={28} strokeWidth={2.8} />
+                  </View>
+                  <Text style={styles.emptyTitle}>No reels yet</Text>
+                  <Text style={styles.emptyBody}>Upload the first short clip for token calls, chart breakdowns, and founder updates.</Text>
+                  <Pressable onPress={() => router.push("/upload-reel")} style={styles.emptyBtn} testID="empty-upload-reel">
+                    <Plus color={Colors.ink} size={15} strokeWidth={3} />
+                    <Text style={styles.emptyBtnText}>Upload reel</Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          }
+        />
+      </View>
 
       <CommentsSheet
         reel={commentReel}
@@ -435,15 +441,20 @@ function CommentsSheet({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
-  overlayTop: { position: "absolute", top: 0, left: 0, right: 0 },
-  topScrim: { position: "absolute", top: 0, left: 0, right: 0, height: 220 },
+  headerWrap: {
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(244,198,91,0.14)",
+    backgroundColor: "rgba(0,0,0,0.32)",
+  },
+  feedWrap: { flex: 1 },
+  reelSlot: { paddingHorizontal: 10 },
   header: {
     marginHorizontal: 14,
-    marginTop: 6,
+    marginTop: 4,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    pointerEvents: "box-none",
   },
   headerLeft: { flex: 1 },
   eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6 },

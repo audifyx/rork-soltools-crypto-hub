@@ -23,6 +23,9 @@ interface ReelCardProps {
   onOpenAuthor: (reel: Reel) => void;
   onOpenToken: (reel: Reel) => void;
   onDelete?: (reel: Reel) => void;
+  topInset?: number;
+  bottomInset?: number;
+  rounded?: boolean;
 }
 
 function escapeAttr(value: unknown): string {
@@ -80,6 +83,9 @@ function ReelCardBase({
   onOpenAuthor,
   onOpenToken,
   onDelete,
+  topInset = Platform.OS === "ios" ? 68 : 46,
+  bottomInset = Platform.OS === "ios" ? 108 : 96,
+  rounded = false,
 }: ReelCardProps) {
   const isOwner = !!viewerUserId && viewerUserId === reel.userId;
 
@@ -139,8 +145,10 @@ function ReelCardBase({
     onLike(reel);
   };
 
+  const railBottom = bottomInset + 20;
+  const captionBottom = bottomInset;
   return (
-    <View style={[styles.card, { height }]} testID={`reel-card-${reel.id}`}>
+    <View style={[styles.card, { height }, rounded && styles.cardRounded]} testID={`reel-card-${reel.id}`}>
       {isImage ? (
         mediaUrl ? (
           <Image
@@ -186,7 +194,7 @@ function ReelCardBase({
         ) : null}
       </Pressable>
 
-      <View style={styles.topMeta}>
+      <View style={[styles.topMeta, { top: topInset }]}>
         <View style={styles.livePill} pointerEvents="none">
           <View style={styles.liveDot} />
           <Text style={styles.liveText}>{isImage ? "PHOTO" : "REELS"}</Text>
@@ -222,7 +230,7 @@ function ReelCardBase({
         </View>
       </View>
 
-      <View style={styles.sideRail}>
+      <View style={[styles.sideRail, { bottom: railBottom }]}>
         <Pressable onPress={() => onOpenAuthor(reel)} style={styles.avatarButton} testID="reel-author">
           {reel.author.avatarUrl ? (
             <Image source={{ uri: reel.author.avatarUrl }} style={styles.avatarImage} contentFit="cover" />
@@ -261,7 +269,7 @@ function ReelCardBase({
         ) : null}
       </View>
 
-      <View style={styles.captionWrap}>
+      <View style={[styles.captionWrap, { bottom: captionBottom }]}>
         <Pressable onPress={() => onOpenAuthor(reel)} style={styles.authorRow} testID="reel-author-row">
           <Text style={styles.authorName} numberOfLines={1}>{reel.author.displayName}</Text>
           {reel.author.verified ? <BadgeCheck color={Colors.goldBright} size={14} strokeWidth={2.8} /> : null}
@@ -317,6 +325,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.ink,
     overflow: "hidden",
   },
+  cardRounded: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(244,198,91,0.18)",
+  },
   tapLayer: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
@@ -336,9 +349,8 @@ const styles = StyleSheet.create({
   },
   topMeta: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 68 : 46,
-    left: 18,
-    right: 18,
+    left: 14,
+    right: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -382,7 +394,6 @@ const styles = StyleSheet.create({
   sideRail: {
     position: "absolute",
     right: 12,
-    bottom: Platform.OS === "ios" ? 128 : 116,
     alignItems: "center",
     gap: 15,
   },
@@ -419,7 +430,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 76,
-    bottom: Platform.OS === "ios" ? 108 : 96,
   },
   authorRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 7 },
   authorName: { color: Colors.text, fontSize: 15, fontWeight: "900", maxWidth: 150 },
