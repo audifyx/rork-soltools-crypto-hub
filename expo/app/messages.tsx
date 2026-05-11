@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -228,9 +229,13 @@ export default function MessagesScreen() {
                       testID={`suggest-${u.handle}`}
                     >
                       <LinearGradient colors={[u.color, `${u.color}99`]} style={styles.suggestAvatar}>
-                        <Text style={styles.suggestInit}>
-                          {u.name.slice(0, 1).toUpperCase()}
-                        </Text>
+                        {u.avatarUrl ? (
+                          <ExpoImage source={{ uri: u.avatarUrl }} style={styles.suggestAvatarImg} contentFit="cover" />
+                        ) : (
+                          <Text style={styles.suggestInit}>
+                            {u.name.slice(0, 1).toUpperCase()}
+                          </Text>
+                        )}
                         {u.online ? <View style={styles.onlineRing} /> : null}
                       </LinearGradient>
                       <Text style={styles.suggestName} numberOfLines={1}>
@@ -282,9 +287,13 @@ function ConversationRow({ conv, onPress }: { conv: Conversation; onPress: () =>
     <Pressable onPress={onPress} style={styles.row} testID={`convo-${conv.id}`}>
       <View style={[styles.avatarWrap]}>
         <View style={[styles.avatar, { backgroundColor: conv.user.color }]}>
-          <Text style={styles.avatarInit}>
-            {conv.user.name.slice(0, 1).toUpperCase()}
-          </Text>
+          {conv.user.avatarUrl ? (
+            <ExpoImage source={{ uri: conv.user.avatarUrl }} style={styles.avatarImg} contentFit="cover" />
+          ) : (
+            <Text style={styles.avatarInit}>
+              {conv.user.name.slice(0, 1).toUpperCase()}
+            </Text>
+          )}
         </View>
         {conv.user.online ? <View style={styles.onlineDot} /> : null}
       </View>
@@ -437,9 +446,13 @@ function ComposeModal({
                     testID={`pick-${item.handle}`}
                   >
                     <View style={[styles.modalAvatar, { backgroundColor: item.color }]}>
-                      <Text style={styles.modalAvatarInit}>
-                        {item.name.slice(0, 1).toUpperCase()}
-                      </Text>
+                      {item.avatarUrl ? (
+                        <ExpoImage source={{ uri: item.avatarUrl }} style={styles.modalAvatarImg} contentFit="cover" />
+                      ) : (
+                        <Text style={styles.modalAvatarInit}>
+                          {item.name.slice(0, 1).toUpperCase()}
+                        </Text>
+                      )}
                     </View>
                     <View style={{ flex: 1 }}>
                       <View style={styles.modalNameRow}>
@@ -599,7 +612,9 @@ const styles = StyleSheet.create({
     borderRadius: 29,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
+  suggestAvatarImg: { width: "100%", height: "100%" },
   suggestInit: { color: "#FFFFFF", fontSize: 22, fontWeight: "700" },
   onlineRing: {
     position: "absolute",
@@ -623,7 +638,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
+  avatarImg: { width: "100%", height: "100%" },
   avatarInit: { color: "#FFFFFF", fontSize: 21, fontWeight: "900" },
   onlineDot: {
     position: "absolute",
@@ -714,7 +731,9 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
+  modalAvatarImg: { width: "100%", height: "100%" },
   modalAvatarInit: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
   modalNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   modalName: { color: Colors.text, fontSize: 16, fontWeight: "900" },

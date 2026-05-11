@@ -48,17 +48,21 @@ import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import { uploadDMImage } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
-import { DMMessage, useDmTyping, useMessages } from "@/providers/messages-provider";
+import { DMMessage, useDmPeerProfile, useDmTyping, useMessages } from "@/providers/messages-provider";
 
 const QUICK_TICKERS = ["$SOL", "$BONK", "$WIF", "$JUP", "$AGNT", "$PYTH"];
-const IOS_BLUE = "#007AFF";
-const IOS_BG = "#F2F2F7";
-const IOS_CARD = "#FFFFFF";
-const IOS_TEXT = "#111111";
-const IOS_SECONDARY = "#6B6B70";
-const IOS_SEPARATOR = "#D9D9DE";
-const IOS_GREEN = "#34C759";
-const IOS_RED = "#FF3B30";
+// Dark room palette. Names kept for minimal diff.
+const IOS_BLUE = "#3FA9FF";
+const IOS_BG = "#05070D";
+const IOS_CARD = "#111827";
+const IOS_CARD_SOFT = "#1A2236";
+const IOS_TEXT = "#FFFFFF";
+const IOS_SECONDARY = "#94A3B8";
+const IOS_SEPARATOR = "rgba(255,255,255,0.08)";
+const IOS_GREEN = "#34D399";
+const IOS_RED = "#FF453A";
+const HEADER_BG = "rgba(8,11,20,0.92)";
+const COMPOSER_BG = "rgba(8,11,20,0.96)";
 
 function formatTime(t: number): string {
   const d = new Date(t);
@@ -134,6 +138,10 @@ export default function DMThreadScreen() {
   const isTypingRef = useRef<boolean>(false);
 
   const conv = id ? getConversation(id) : undefined;
+  const peerProfile = useDmPeerProfile(conv?.user.userId);
+  const peerBanner = peerProfile.data?.bannerUrl ?? conv?.user.bannerUrl ?? null;
+  const peerAvatar = peerProfile.data?.avatarUrl ?? conv?.user.avatarUrl ?? null;
+  const peerBio = peerProfile.data?.bio ?? conv?.user.bio ?? undefined;
   const messages = useMemo<DMMessage[]>(() => (id ? getMessages(id) : []), [id, getMessages]);
 
   const [text, setText] = useState<string>("");
@@ -308,7 +316,7 @@ export default function DMThreadScreen() {
   return (
     <View style={styles.root} testID="dm-thread">
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
 
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={styles.header}>
@@ -331,9 +339,13 @@ export default function DMThreadScreen() {
           >
             <View style={styles.headAvatarWrap}>
               <View style={[styles.headAvatar, { backgroundColor: conv.user.color }]}>
-                <Text style={styles.headAvatarInit}>
-                  {conv.user.name.slice(0, 1).toUpperCase()}
-                </Text>
+                {peerAvatar ? (
+                  <ExpoImage source={{ uri: peerAvatar }} style={styles.headAvatarImg} contentFit="cover" />
+                ) : (
+                  <Text style={styles.headAvatarInit}>
+                    {conv.user.name.slice(0, 1).toUpperCase()}
+                  </Text>
+                )}
               </View>
               {conv.user.online ? <View style={styles.headOnline} /> : null}
             </View>
@@ -409,7 +421,9 @@ export default function DMThreadScreen() {
                 name={conv.user.name}
                 handle={conv.user.handle}
                 color={conv.user.color}
-                bio={conv.user.bio}
+                bio={peerBio}
+                avatarUrl={peerAvatar}
+                bannerUrl={peerBanner}
                 onProfile={() =>
                   router.push({
                     pathname: "/u/[handle]",
@@ -497,7 +511,7 @@ export default function DMThreadScreen() {
               testID="dm-send"
             >
               <Send
-                color={IOS_CARD}
+                color={"#FFFFFF"}
                 size={16}
                 strokeWidth={2.6}
               />
@@ -584,24 +598,45 @@ function ProfileBlurb({
   handle,
   color,
   bio,
+  avatarUrl,
+  bannerUrl,
   onProfile,
 }: {
   name: string;
   handle: string;
   color: string;
   bio?: string;
+  avatarUrl?: string | null;
+  bannerUrl?: string | null;
   onProfile: () => void;
 }) {
   return (
     <Pressable onPress={onProfile} style={styles.blurb} testID="dm-blurb">
-      <LinearGradient
-        colors={[`${color}33`, `${color}08`]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.blurbInner}
-      >
+      <View style={styles.blurbBannerWrap}>
+        {bannerUrl ? (
+          <ExpoImage source={{ uri: bannerUrl }} style={styles.blurbBannerImg} contentFit="cover" />
+        ) : (
+          <LinearGradient
+            colors={[`${color}55`, `${color}18`, "transparent"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
+        <LinearGradient
+          colors={["transparent", "rgba(5,7,13,0.85)"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
+      <View style={styles.blurbInner}>
         <View style={[styles.blurbAvatar, { backgroundColor: color }]}>
-          <Text style={styles.blurbInit}>{name.slice(0, 1).toUpperCase()}</Text>
+          {avatarUrl ? (
+            <ExpoImage source={{ uri: avatarUrl }} style={styles.blurbAvatarImg} contentFit="cover" />
+          ) : (
+            <Text style={styles.blurbInit}>{name.slice(0, 1).toUpperCase()}</Text>
+          )}
         </View>
         <Text style={styles.blurbName}>{name}</Text>
         <Text style={styles.blurbHandle}>{handle}</Text>
@@ -610,7 +645,7 @@ function ProfileBlurb({
           <Text style={styles.blurbCtaText}>View profile</Text>
           <ChevronRight color={IOS_BLUE} size={12} strokeWidth={2.6} />
         </View>
-      </LinearGradient>
+      </View>
     </Pressable>
   );
 }
@@ -661,8 +696,8 @@ function Bubble({
           <ExpoImage source={{ uri: msg.imageUrl }} style={styles.messageImage} contentFit="cover" />
         </View>
         {msg.text && msg.text !== "Photo" ? (
-          <View style={[styles.bubble, mine ? { backgroundColor: IOS_BLUE } : { backgroundColor: IOS_CARD }]}>
-            <Text style={[styles.bubbleText, { color: mine ? IOS_CARD : IOS_TEXT }]}>{msg.text}</Text>
+          <View style={[styles.bubble, mine ? { backgroundColor: IOS_BLUE } : { backgroundColor: IOS_CARD_SOFT }]}>
+            <Text style={[styles.bubbleText, { color: "#FFFFFF" }]}>{msg.text}</Text>
           </View>
         ) : null}
         <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
@@ -678,17 +713,17 @@ function Bubble({
             styles.bubble,
             mine
               ? { backgroundColor: IOS_BLUE, borderBottomRightRadius: 6 }
-              : { backgroundColor: IOS_CARD, borderBottomLeftRadius: 6 },
+              : { backgroundColor: IOS_CARD_SOFT, borderBottomLeftRadius: 6 },
           ]}
         >
           <View
             style={[
               styles.tickerCard,
-              { backgroundColor: mine ? "rgba(255,255,255,0.22)" : "#EFEFF4" },
+              { backgroundColor: mine ? "rgba(255,255,255,0.22)" : "rgba(63,169,255,0.18)" },
             ]}
           >
-            <Coins color={mine ? IOS_CARD : IOS_BLUE} size={13} strokeWidth={2.8} />
-            <Text style={[styles.tickerText, { color: mine ? IOS_CARD : IOS_BLUE }]}>
+            <Coins color={mine ? "#FFFFFF" : IOS_BLUE} size={13} strokeWidth={2.8} />
+            <Text style={[styles.tickerText, { color: mine ? "#FFFFFF" : IOS_BLUE }]}>
               {msg.ticker}
             </Text>
             <View style={styles.tickerChange}>
@@ -696,7 +731,7 @@ function Bubble({
               <Text style={styles.tickerChangeText}>+{(Math.random() * 12 + 2).toFixed(1)}%</Text>
             </View>
           </View>
-          <Text style={[styles.bubbleText, { color: mine ? IOS_CARD : IOS_TEXT }]}>
+          <Text style={[styles.bubbleText, { color: "#FFFFFF" }]}>
             {msg.text}
           </Text>
         </View>
@@ -715,12 +750,12 @@ function Bubble({
           mine
             ? { backgroundColor: IOS_BLUE, borderBottomRightRadius: 6 }
             : {
-                backgroundColor: IOS_CARD,
+                backgroundColor: IOS_CARD_SOFT,
                 borderBottomLeftRadius: 6,
               },
         ]}
       >
-        <Text style={[styles.bubbleText, { color: mine ? IOS_CARD : IOS_TEXT }]}>
+        <Text style={[styles.bubbleText, { color: "#FFFFFF" }]}>
           {msg.text}
         </Text>
       </View>
@@ -858,7 +893,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(248,248,248,0.94)",
+    backgroundColor: HEADER_BG,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: IOS_SEPARATOR,
   },
@@ -883,7 +918,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  headAvatarInit: { color: IOS_CARD, fontSize: 14, fontWeight: "800" },
+  headAvatarInit: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
+  headAvatarImg: { width: "100%", height: "100%", borderRadius: 17 },
   headOnline: {
     position: "absolute",
     bottom: -1,
@@ -893,7 +929,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: IOS_GREEN,
     borderWidth: 2,
-    borderColor: IOS_CARD,
+    borderColor: IOS_BG,
   },
   headNameRow: { flexDirection: "row", alignItems: "center", gap: 4, maxWidth: 190 },
   headName: { color: IOS_TEXT, fontSize: 12, fontWeight: "700", letterSpacing: -0.1, flexShrink: 1 },
@@ -906,7 +942,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 18,
     borderBottomLeftRadius: 6,
-    backgroundColor: IOS_CARD,
+    backgroundColor: IOS_CARD_SOFT,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -920,16 +956,24 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     marginTop: 4,
     backgroundColor: IOS_CARD,
+    borderWidth: 1,
+    borderColor: IOS_SEPARATOR,
   },
-  blurbInner: { padding: 18, alignItems: "center", backgroundColor: IOS_CARD },
+  blurbBannerWrap: { height: 110, width: "100%", backgroundColor: IOS_CARD_SOFT, position: "relative", overflow: "hidden" },
+  blurbBannerImg: { width: "100%", height: "100%" },
+  blurbInner: { paddingHorizontal: 18, paddingBottom: 18, paddingTop: 0, alignItems: "center", backgroundColor: IOS_CARD, marginTop: -42 },
   blurbAvatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 4,
+    borderColor: IOS_CARD,
+    overflow: "hidden",
   },
-  blurbInit: { color: IOS_CARD, fontSize: 30, fontWeight: "800" },
+  blurbAvatarImg: { width: "100%", height: "100%" },
+  blurbInit: { color: "#FFFFFF", fontSize: 30, fontWeight: "800" },
   blurbName: { color: IOS_TEXT, fontSize: 20, fontWeight: "700", marginTop: 12, letterSpacing: -0.4 },
   blurbHandle: { color: IOS_SECONDARY, fontSize: 13, fontWeight: "500", marginTop: 2 },
   blurbBio: {
@@ -948,9 +992,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "#EFEFF4",
+    backgroundColor: "rgba(63,169,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(63,169,255,0.32)",
   },
-  blurbCtaText: { color: IOS_BLUE, fontSize: 13, fontWeight: "600" },
+  blurbCtaText: { color: IOS_BLUE, fontSize: 13, fontWeight: "700" },
 
   daySep: {
     flexDirection: "row",
@@ -996,8 +1042,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tipLabel: { color: Colors.mint, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
-  tipAmount: { color: IOS_TEXT, fontSize: 18, fontWeight: "800", marginTop: 2 },
-  tipNote: { color: IOS_TEXT, fontSize: 11, fontWeight: "600", opacity: 0.8, marginTop: 2 },
+  tipAmount: { color: "#FFFFFF", fontSize: 18, fontWeight: "800", marginTop: 2 },
+  tipNote: { color: "#FFFFFF", fontSize: 11, fontWeight: "600", opacity: 0.85, marginTop: 2 },
 
   imageBubble: {
     width: 230,
@@ -1005,7 +1051,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
-    backgroundColor: IOS_CARD,
+    backgroundColor: IOS_CARD_SOFT,
     marginBottom: 4,
   },
   messageImage: { width: "100%", height: "100%" },
@@ -1055,7 +1101,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: IOS_SEPARATOR,
-    backgroundColor: "rgba(242,242,247,0.94)",
+    backgroundColor: COMPOSER_BG,
   },
   tickerRow: { paddingHorizontal: 14, gap: 6 },
   tickerChip: {
@@ -1065,7 +1111,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: IOS_CARD,
+    backgroundColor: IOS_CARD_SOFT,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: IOS_SEPARATOR,
   },
@@ -1080,7 +1126,7 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === "ios" ? 18 : 14,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: IOS_SEPARATOR,
-    backgroundColor: "rgba(248,248,248,0.96)",
+    backgroundColor: COMPOSER_BG,
   },
   composerBtn: {
     width: 38,
@@ -1092,10 +1138,10 @@ const styles = StyleSheet.create({
   },
   inputWrap: {
     flex: 1,
-    backgroundColor: IOS_CARD,
+    backgroundColor: IOS_CARD_SOFT,
     borderRadius: 19,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#C7C7CC",
+    borderColor: IOS_SEPARATOR,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 10 : 6,
     minHeight: 38,
@@ -1127,7 +1173,7 @@ const styles = StyleSheet.create({
     backgroundColor: IOS_BLUE,
     borderRadius: 12,
   },
-  notFoundBtnText: { color: IOS_CARD, fontSize: 13, fontWeight: "700" },
+  notFoundBtnText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
 
   menuBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.28)", justifyContent: "flex-end" },
   menuSheet: {
@@ -1139,12 +1185,13 @@ const styles = StyleSheet.create({
     padding: 14,
     paddingBottom: Platform.OS === "ios" ? 32 : 22,
   },
+  menuItemDark: {},
   modalHandle: {
     alignSelf: "center",
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#C7C7CC",
+    backgroundColor: "rgba(255,255,255,0.22)",
     marginBottom: 12,
   },
   menuItem: {
@@ -1159,7 +1206,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: "#EFEFF4",
+    backgroundColor: IOS_CARD_SOFT,
     alignItems: "center",
     justifyContent: "center",
   },

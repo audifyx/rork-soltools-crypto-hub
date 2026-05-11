@@ -18,6 +18,7 @@ export interface DMUser {
   lastSeenAt?: number | null;
   bio?: string;
   avatarUrl?: string | null;
+  bannerUrl?: string | null;
 }
 
 export interface DMMessage {
@@ -54,6 +55,7 @@ interface ConversationRow {
   other_username: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  banner_url?: string | null;
   avatar_color: string | null;
   verified: boolean | null;
   bio: string | null;
@@ -87,6 +89,7 @@ interface ProfileSuggestionRow {
   username?: string | null;
   display_name?: string | null;
   avatar_url?: string | null;
+  banner_url?: string | null;
   avatar_color?: string | null;
   verified?: boolean | null;
   bio?: string | null;
@@ -131,6 +134,7 @@ function userFromConversationRow(row: ConversationRow): DMUser {
     lastSeenAt: row.last_seen_at ? toMs(row.last_seen_at) : null,
     bio: row.bio ?? undefined,
     avatarUrl: normalizeMediaUrl(row.avatar_url),
+    bannerUrl: normalizeMediaUrl(row.banner_url ?? null),
   };
 }
 
@@ -148,6 +152,7 @@ function userFromProfileRow(row: ProfileSuggestionRow): DMUser | null {
     lastSeenAt: row.last_seen_at ? toMs(row.last_seen_at) : null,
     bio: row.bio ?? undefined,
     avatarUrl: normalizeMediaUrl(row.avatar_url ?? null),
+    bannerUrl: normalizeMediaUrl(row.banner_url ?? null),
   };
 }
 
@@ -610,6 +615,32 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
     ],
   );
 });
+
+/** Fetches profile media (avatar + banner) for a DM peer. */
+export function useDmPeerProfile(userId: string | null | undefined) {
+  return useQuery<{ avatarUrl: string | null; bannerUrl: string | null; bio: string | null } | null>({
+    queryKey: ["messages", "peer-profile", userId ?? "none"],
+    enabled: !!userId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      if (!userId) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("avatar_url,banner_url,bio")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (error) {
+        console.log("[messages] peer profile failed", error.message);
+        return null;
+      }
+      return {
+        avatarUrl: normalizeMediaUrl((data?.avatar_url as string | null) ?? null),
+        bannerUrl: normalizeMediaUrl((data?.banner_url as string | null) ?? null),
+        bio: (data?.bio as string | null) ?? null,
+      };
+    },
+  });
+}
 
 /** Reads typing presence for a single conversation. Polls every 3s while focused. */
 export function useDmTyping(conversationId: string | undefined, enabled = true) {
