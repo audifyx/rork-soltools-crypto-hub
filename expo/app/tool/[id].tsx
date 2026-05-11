@@ -972,32 +972,10 @@ function AiAnalystTool({ accent }: { accent: string }) {
     setThinking(true);
     Haptics.selectionAsync().catch(() => {});
     try {
-      const base = process.env.EXPO_PUBLIC_TOOLKIT_URL ?? "https://toolkit.rork.com";
-      const res = await fetch(`${base}/text/llm/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are SolTools AI Analyst, an expert on Solana DeFi, memecoins, on-chain analysis, charting, and tokenomics. Be sharp, concise, actionable.",
-            },
-            ...history.map((m) => ({ role: m.role, content: m.text })),
-          ],
-        }),
-      });
-      if (!res.ok) throw new Error(`LLM ${res.status}`);
-      const json = (await res.json()) as { completion?: string };
-      const reply = json.completion ?? "No response.";
-      const a: Msg = { id: `a${Date.now()}`, role: "assistant", text: reply };
-      setMessages((m) => [...m, a]);
-    } catch (e) {
-      console.log("[ai] failed", e);
       const a: Msg = {
         id: `a${Date.now()}`,
         role: "assistant",
-        text: e instanceof Error ? `Error: ${e.message}` : "AI request failed.",
+        text: "AI analyst is disabled in this build, so no Rork Toolkit request was made.",
       };
       setMessages((m) => [...m, a]);
     } finally {

@@ -99,28 +99,9 @@ export default function AIChatScreen() {
           liveContext = `${tokenLine}\n${walletLine}`;
         }
 
-        const base = process.env.EXPO_PUBLIC_TOOLKIT_URL ?? "https://toolkit.rork.com";
-        const res = await fetch(`${base}/text/llm/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: [
-              {
-                role: "system",
-                content:
-                  "You are SolTools AI, a concise Solana on-chain analyst. Use the provided live context when available. Trading execution is disabled until App Store launch, so do not tell users to buy/sell inside the app.",
-              },
-              { role: "system", content: `Live context:\n${liveContext}` },
-              ...nextMessages.slice(-10).map((m) => ({
-                role: m.role === "ai" ? "assistant" : "user",
-                content: m.text,
-              })),
-            ],
-          }),
-        });
-        if (!res.ok) throw new Error(`AI ${res.status}`);
-        const json = (await res.json()) as { completion?: string };
-        const reply = json.completion ?? "I could not generate a response from the live context.";
+        const reply = address && isSolanaAddress(address)
+          ? `${liveContext}\n\nAI chat is disabled in this build, but live token and wallet context loaded successfully.`
+          : "AI chat is disabled in this build. Paste a Solana token or wallet address to load live on-chain context.";
         setMessages((prev) => prev.map((m) => (m.id === thinkingMsg.id ? { ...m, text: reply } : m)));
       } catch (e) {
         console.log("[ai-chat] send failed", e);

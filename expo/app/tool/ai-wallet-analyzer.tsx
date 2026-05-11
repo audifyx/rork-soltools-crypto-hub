@@ -82,35 +82,18 @@ export default function AiWalletAnalyzerScreen() {
         .slice(0, 6)
         .map((t) => `${t.symbol ?? t.mint.slice(0, 4)} ${fmtUsd(t.usdValue ?? 0)}`)
         .join(", ");
-      const prompt =
-        `Analyze Solana wallet ${shorten(addr)}.\n` +
-        `Net worth: ${fmtUsd(totalUsd)}\n` +
-        `SOL: ${port.balance.sol.toFixed(3)}\n` +
-        `Token count: ${port.tokens.length}\n` +
-        `Top holdings: ${tops || "none"}\n` +
-        `Total txns: ${port.stats.totalTxs}\n` +
-        `Active days: ${port.stats.activeDays}\n` +
-        `Success rate: ${port.stats.successRate.toFixed(0)}%\n` +
-        `Total fees: ${fmtUsd(port.stats.totalFeesUsd)}\n\n` +
-        `Give a 4-section analysis (Behavior, Risk traits, Strengths, Suggested actions). Be sharp, concise, no fluff.`;
-      const base = process.env.EXPO_PUBLIC_TOOLKIT_URL ?? "https://toolkit.rork.com";
-      const res = await fetch(`${base}/text/llm/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are AI Trading Assistant — an expert Solana on-chain analyst. Be sharp, structured, no fluff.",
-            },
-            { role: "user", content: prompt },
-          ],
-        }),
-      });
-      if (!res.ok) throw new Error(`LLM ${res.status}`);
-      const json = (await res.json()) as { completion?: string };
-      setAnalysis(json.completion ?? "No response.");
+      setAnalysis(
+        `Wallet ${shorten(addr)}\n\n` +
+          `Net worth: ${fmtUsd(totalUsd)}\n` +
+          `SOL: ${port.balance.sol.toFixed(3)}\n` +
+          `Token count: ${port.tokens.length}\n` +
+          `Top holdings: ${tops || "none"}\n` +
+          `Total txns: ${port.stats.totalTxs}\n` +
+          `Active days: ${port.stats.activeDays}\n` +
+          `Success rate: ${port.stats.successRate.toFixed(0)}%\n` +
+          `Total fees: ${fmtUsd(port.stats.totalFeesUsd)}\n\n` +
+          `AI analysis is disabled in this build, but live wallet data loaded successfully.`
+      );
     } catch (e) {
       console.log("[ai-wallet] failed", e);
       setAnalysis(e instanceof Error ? `Error: ${e.message}` : "Analysis failed.");
