@@ -380,8 +380,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
                   })
                   .filter((b): b is CustomBadge => b !== null)
               : [];
-            const username = nonEmptyString(data.username);
-            const displayName = nonEmptyString(data.display_name) ?? username ?? base.displayName;
+            const rawUsername = nonEmptyString(data.username);
+            const username = rawUsername && !rawUsername.includes("@") ? rawUsername : `user_${userId.slice(0, 8)}`;
+            const rawDisplayName = nonEmptyString(data.display_name);
+            const displayName = rawDisplayName && !rawDisplayName.includes("@") ? rawDisplayName : username ?? base.displayName;
             const merged: UserProfile = {
               ...base,
               handle: username ? `@${username}` : base.handle,

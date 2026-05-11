@@ -8,6 +8,12 @@ import { saveOwnProfilePatch } from "@/lib/profile-db";
 import { SUPABASE_ANON_KEY, SUPABASE_READY, SUPABASE_URL, supabase } from "@/lib/supabase";
 import { clearAllUserCache } from "@/lib/user-cache";
 
+function normalizeUsername(input: string | null | undefined, fallbackEmail?: string): string {
+  const raw = (input?.trim() || fallbackEmail?.split("@")[0] || "trader").toLowerCase();
+  const cleaned = raw.replace(/^@/, "").replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  return (cleaned || "trader").slice(0, 24);
+}
+
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const qc = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
@@ -75,19 +81,21 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const signUp = useMutation({
     mutationFn: async (input: { email: string; password: string; username?: string }) => {
+      const email = input.email.trim().toLowerCase();
+      const username = normalizeUsername(input.username, email);
       const { data, error } = await supabase.auth.signUp({
-        email: input.email.trim(),
+        email,
         password: input.password,
         options: {
-          data: { username: input.username?.trim() ?? "" },
+          data: { username, display_name: username },
         },
       });
       if (error) throw error;
-      if (data.user && input.username) {
+      if (data.user) {
         try {
           await saveOwnProfilePatch(data.user.id, {
-            username: input.username.trim(),
-            display_name: input.username.trim(),
+            username,
+            display_name: username,
           });
         } catch (e) {
           console.log("[auth] profile create best-effort failed", e);

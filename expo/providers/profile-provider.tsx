@@ -77,6 +77,19 @@ export interface UsersOverview {
   new_today: number;
 }
 
+function normalizeUsername(input: unknown, fallbackUserId?: string): string | null {
+  const raw = typeof input === "string" ? input.trim() : "";
+  if (raw && !raw.includes("@")) return raw.replace(/^@/, "");
+  const fallback = fallbackUserId?.trim();
+  return fallback ? `user_${fallback.slice(0, 8)}` : null;
+}
+
+function normalizeDisplayName(input: unknown, username: string | null): string | null {
+  const raw = typeof input === "string" ? input.trim() : "";
+  if (raw && !raw.includes("@")) return raw;
+  return username;
+}
+
 function normalizeBadges(input: unknown): CustomBadge[] {
   if (!Array.isArray(input)) return [];
   return input
@@ -303,11 +316,12 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
  */
 function publicProfileFromRow(row: Record<string, unknown>): PublicProfile {
   const userId = String(row.user_id ?? row.id);
+  const username = normalizeUsername(row.username, userId);
   return {
     id: userId,
     user_id: userId,
-    username: (row.username as string | null) ?? null,
-    display_name: (row.display_name as string | null) ?? null,
+    username,
+    display_name: normalizeDisplayName(row.display_name, username),
     bio: (row.bio as string | null) ?? null,
     avatar_url: normalizeMediaUrl(row.avatar_url),
     banner_url: normalizeMediaUrl(row.banner_url),
@@ -340,15 +354,17 @@ function profileSummaryFromRow(row: Record<string, unknown>, fallbackUserId?: st
     (row.follower_username as string | null | undefined) ??
     (row.followee_username as string | null | undefined) ??
     null;
+  const username = normalizeUsername(rawUsername, userId);
+  const rawDisplayName =
+    (row.display_name as string | null | undefined) ??
+    (row.name as string | null | undefined) ??
+    (row.follower_display_name as string | null | undefined) ??
+    (row.followee_display_name as string | null | undefined) ??
+    null;
   return {
     user_id: userId,
-    username: rawUsername?.replace(/^@/, "") ?? null,
-    display_name:
-      ((row.display_name as string | null | undefined) ??
-        (row.name as string | null | undefined) ??
-        (row.follower_display_name as string | null | undefined) ??
-        (row.followee_display_name as string | null | undefined)) ??
-      null,
+    username,
+    display_name: normalizeDisplayName(rawDisplayName, username),
     avatar_url: normalizeMediaUrl(row.avatar_url ?? row.follower_avatar_url ?? row.followee_avatar_url),
     verified: !!(row.verified ?? row.follower_verified ?? row.followee_verified),
     custom_badges: normalizeBadges(row.custom_badges ?? row.follower_custom_badges ?? row.followee_custom_badges),
@@ -357,10 +373,12 @@ function profileSummaryFromRow(row: Record<string, unknown>, fallbackUserId?: st
 }
 
 function platformUserFromRow(row: Record<string, unknown>): PlatformUser {
+  const userId = String(row.user_id ?? row.id);
+  const username = normalizeUsername(row.username, userId);
   return {
-    user_id: String(row.user_id ?? row.id),
-    username: (row.username as string | null) ?? null,
-    display_name: (row.display_name as string | null) ?? null,
+    user_id: userId,
+    username,
+    display_name: normalizeDisplayName(row.display_name, username),
     avatar_url: normalizeMediaUrl(row.avatar_url),
     banner_url: normalizeMediaUrl(row.banner_url),
     bio: (row.bio as string | null) ?? null,
