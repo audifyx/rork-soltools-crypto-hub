@@ -129,6 +129,7 @@ export default function DMThreadScreen() {
     togglePin,
     toggleMute,
     deleteConversation,
+    deleteMessage,
     setTyping,
   } = useMessages();
   const [uploading, setUploading] = useState<boolean>(false);
@@ -303,6 +304,33 @@ export default function DMThreadScreen() {
     );
   }
 
+  const onDeleteMessage = useCallback(
+    (m: DMMessage) => {
+      if (m.fromHandle !== "@you") return;
+      if (m.id.startsWith("temp-")) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      Alert.alert(
+        "Delete message?",
+        "This deletes the message for everyone in the chat. This can't be undone.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete for everyone",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await deleteMessage(m.id);
+              } catch (e) {
+                Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+              }
+            },
+          },
+        ],
+      );
+    },
+    [deleteMessage],
+  );
+
   const renderRow: ListRenderItem<ListRow> = ({ item }) => {
     if (item.kind === "day") {
       return (
@@ -315,7 +343,7 @@ export default function DMThreadScreen() {
     }
     const m = item.msg!;
     const mine = m.fromHandle === "@you";
-    return <Bubble msg={m} mine={mine} accent={conv.user.color} />;
+    return <Bubble msg={m} mine={mine} accent={conv.user.color} onLongPress={() => onDeleteMessage(m)} />;
   };
 
   return (
@@ -659,14 +687,21 @@ function Bubble({
   msg,
   mine,
   accent,
+  onLongPress,
 }: {
   msg: DMMessage;
   mine: boolean;
   accent: string;
+  onLongPress?: () => void;
 }) {
+  void accent;
   if (msg.type === "tip") {
     return (
-      <View style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}>
+      <Pressable
+        onLongPress={mine ? onLongPress : undefined}
+        delayLongPress={350}
+        style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}
+      >
         <LinearGradient
           colors={["rgba(85,245,178,0.36)", "rgba(85,245,178,0.06)"]}
           start={{ x: 0, y: 0 }}
@@ -685,13 +720,17 @@ function Bubble({
           </View>
         </LinearGradient>
         <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
-      </View>
+      </Pressable>
     );
   }
 
   if (msg.type === "image" && msg.imageUrl) {
     return (
-      <View style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}>
+      <Pressable
+        onLongPress={mine ? onLongPress : undefined}
+        delayLongPress={350}
+        style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}
+      >
         <View
           style={[
             styles.imageBubble,
@@ -706,13 +745,17 @@ function Bubble({
           </View>
         ) : null}
         <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
-      </View>
+      </Pressable>
     );
   }
 
   if (msg.type === "ticker" && msg.ticker) {
     return (
-      <View style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}>
+      <Pressable
+        onLongPress={mine ? onLongPress : undefined}
+        delayLongPress={350}
+        style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}
+      >
         <View
           style={[
             styles.bubble,
@@ -743,12 +786,16 @@ function Bubble({
         <Text style={[styles.bubbleTime, mine && { color: IOS_SECONDARY }]}>
           {formatTime(msg.createdAt)}
         </Text>
-      </View>
+      </Pressable>
     );
   }
 
   return (
-    <View style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}>
+    <Pressable
+      onLongPress={mine ? onLongPress : undefined}
+      delayLongPress={350}
+      style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}
+    >
       <View
         style={[
           styles.bubble,
@@ -787,7 +834,7 @@ function Bubble({
           </View>
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
