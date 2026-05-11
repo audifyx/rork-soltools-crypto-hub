@@ -1,6 +1,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
+import { setAudioModeAsync, requestRecordingPermissionsAsync } from "expo-audio";
 
 /**
  * LiveKitVoice
@@ -15,6 +16,7 @@ export type LiveKitVoiceHandle = {
   forceMuteIdentity: (identity: string) => void;
   forceMuteAll: () => void;
   leave: () => void;
+  setCanPublish: (enabled: boolean) => void;
 };
 
 export type LiveKitVoiceEvent =
@@ -111,6 +113,17 @@ const HTML = `<!doctype html>
       });
       await room.connect(url, token, { autoSubscribe: true });
       post('connected',{identity: room.localParticipant.identity});
+      // Always pre-flight the microphone permission so iOS/Android grant
+      // the WebView access before we actually unmute. Otherwise the first
+      // unmute tap silently fails because getUserMedia was never invoked.
+      try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          var pre = await navigator.mediaDevices.getUserMedia({ audio: true });
+          pre.getTracks().forEach(function(t){ try { t.stop(); } catch(e){} });
+        }
+      } catch(e) {
+        post('error',{message:'mic permission: '+(e && e.message ? e.message : e)});
+      }
       if (canPublish) {
         try { await room.localParticipant.setMicrophoneEnabled(false); } catch(e){}
       }
@@ -133,6 +146,13 @@ const HTML = `<!doctype html>
     }
   }
 
+  function setCanPublish(enabled){
+    canPublish = !!enabled;
+    if (!canPublish && room) {
+      try { room.localParticipant.setMicrophoneEnabled(false); } catch(e){}
+    }
+  }
+
   async function broadcast(obj){
     if (!room) return;
     try{
@@ -152,6 +172,7 @@ const HTML = `<!doctype html>
       if (!msg || !msg.cmd) return;
       if (msg.cmd === 'connect') connect(msg.url, msg.token, msg.canPublish, msg.identity);
       else if (msg.cmd === 'mic') setMic(!!msg.enabled);
+      else if (msg.cmd === 'can-publish') setCanPublish(!!msg.enabled);
       else if (msg.cmd === 'force-mute') broadcast({kind:'force-mute', target: msg.target||'*'});
       else if (msg.cmd === 'leave') leave();
     }catch(e){ post('error',{message:'bad cmd: '+e}); }
@@ -187,7 +208,41 @@ const LiveKitVoice = forwardRef<LiveKitVoiceHandle, Props>(function LiveKitVoice
     forceMuteIdentity: (identity: string) => send({ cmd: "force-mute", target: identity }),
     forceMuteAll: () => send({ cmd: "force-mute", target: "*" }),
     leave: () => send({ cmd: "leave" }),
+    setCanPublish: (enabled: boolean) => send({ cmd: "can-publish", enabled }),
   }), [send]);
+
+  // Keep the bridge's `canPublish` flag synced when role changes after connect.
+  useEffect(() => {
+    if (readyRef.current) {
+      send({ cmd: "can-publish", enabled: canPublish });
+    }
+  }, [canPublish, send]);
+
+  // Configure the native audio session so LiveKit playback routes through the
+  // loudspeaker (not the iOS earpiece) and works in silent mode. Also request
+  // mic permission upfront so the WebView's getUserMedia call succeeds.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await requestRecordingPermissionsAsync();
+        if (cancelled) return;
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          allowsRecording: true,
+          shouldPlayInBackground: false,
+          interruptionMode: "mixWithOthers",
+          interruptionModeAndroid: "duckOthers",
+          shouldRouteThroughEarpiece: false,
+        });
+      } catch (err) {
+        console.log("[livekit] audio mode failed", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const onMessage = useCallback(
     (e: WebViewMessageEvent) => {

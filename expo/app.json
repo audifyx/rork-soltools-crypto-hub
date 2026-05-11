@@ -29,7 +29,10 @@
         "backgroundColor": "#030708"
       },
       "package": "app.rork.ct333efmdotyxkemvlyk6",
-      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"]
+      "permissions": [
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -55,7 +58,8 @@
         {
           "photosPermission": "Allow $OGS token to access your photos and videos so you can upload profile media, posts, and reels."
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true
