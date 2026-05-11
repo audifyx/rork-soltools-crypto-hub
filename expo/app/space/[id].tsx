@@ -176,6 +176,11 @@ export default function SpaceDetailScreen() {
   const following = space ? isFollowingSpace(space.id) : false;
   const isHost = !!space?.hostId && !!userId && space.hostId === userId;
   const canSpeak = me?.role === "host" || me?.role === "co-host" || me?.role === "speaker";
+  const selfSpeaking = useMemo(() => {
+    if (muted || !connected) return false;
+    const id = voiceToken?.identity;
+    return !!id && activeSpeakers.has(id);
+  }, [muted, connected, voiceToken?.identity, activeSpeakers]);
 
   useEffect(() => {
     if (me) {
@@ -886,9 +891,12 @@ export default function SpaceDetailScreen() {
               </Pressable>
             </View>
             <View style={styles.controlsRow}>
-              <ControlButton active={!muted} onPress={connected ? onMute : connectLiveKit} testID="space-mute">
-                {muted ? <MicOff color={Colors.text} size={18} strokeWidth={2.6} /> : <Mic color={Colors.ink} size={18} strokeWidth={2.6} />}
-              </ControlButton>
+              <MicControl
+                muted={muted}
+                speaking={selfSpeaking}
+                onPress={connected ? onMute : connectLiveKit}
+                testID="space-mute"
+              />
               <ControlButton active={hand} onPress={onHand} warn testID="space-hand">
                 <Hand color={hand ? Colors.ink : Colors.text} size={18} strokeWidth={2.6} />
               </ControlButton>
@@ -1249,6 +1257,85 @@ function ControlButton({ children, active, warn, onPress, onLongPress, testID }:
   );
 }
 
+/**
+ * MicControl renders the user's mic button with a live "speaking" indicator —
+ * animated concentric rings that ripple outward (similar to a phone call's
+ * speaking visual). This gives instant feedback that the mic is picking up
+ * audio and reaching the room.
+ */
+function MicControl({ muted, speaking, onPress, testID }: { muted: boolean; speaking: boolean; onPress: () => void; testID?: string }) {
+  const ring1 = useRef(new Animated.Value(0)).current;
+  const ring2 = useRef(new Animated.Value(0)).current;
+  const dot = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!speaking) {
+      ring1.stopAnimation();
+      ring2.stopAnimation();
+      dot.stopAnimation();
+      ring1.setValue(0);
+      ring2.setValue(0);
+      dot.setValue(0);
+      return;
+    }
+    const makeRing = (val: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(val, { toValue: 1, duration: 1100, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+          Animated.timing(val, { toValue: 0, duration: 0, useNativeDriver: true }),
+        ]),
+      );
+    const dotLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(dot, { toValue: 1, duration: 380, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(dot, { toValue: 0, duration: 380, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    const a = makeRing(ring1, 0);
+    const b = makeRing(ring2, 550);
+    a.start();
+    b.start();
+    dotLoop.start();
+    return () => {
+      a.stop();
+      b.stop();
+      dotLoop.stop();
+    };
+  }, [speaking, ring1, ring2, dot]);
+
+  const r1Scale = ring1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] });
+  const r1Opacity = ring1.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] });
+  const r2Scale = ring2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] });
+  const r2Opacity = ring2.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0] });
+  const dotScale = dot.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] });
+
+  return (
+    <View style={styles.micWrap}>
+      {speaking ? (
+        <>
+          <Animated.View pointerEvents="none" style={[styles.micRing, { transform: [{ scale: r1Scale }], opacity: r1Opacity }]} />
+          <Animated.View pointerEvents="none" style={[styles.micRing, { transform: [{ scale: r2Scale }], opacity: r2Opacity }]} />
+        </>
+      ) : null}
+      <Pressable
+        onPress={onPress}
+        style={[styles.controlBtn, !muted && { backgroundColor: Colors.mint, borderColor: Colors.mint }, speaking && { borderColor: Colors.mint }]}
+        testID={testID}
+      >
+        {muted ? (
+          <MicOff color={Colors.text} size={18} strokeWidth={2.6} />
+        ) : (
+          <Mic color={Colors.ink} size={18} strokeWidth={2.6} />
+        )}
+        {speaking ? (
+          <Animated.View style={[styles.micLiveDot, { transform: [{ scale: dotScale }] }]} />
+        ) : null}
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
   safe: { flex: 1 },
@@ -1352,6 +1439,9 @@ const styles = StyleSheet.create({
   sendBtn: { width: 42, height: 42, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.goldBright },
   controlsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 7 },
   controlBtn: { flex: 1, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.055)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  micWrap: { flex: 1, height: 48, position: "relative", alignItems: "stretch", justifyContent: "center" },
+  micRing: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderRadius: 17, borderWidth: 2, borderColor: Colors.mint },
+  micLiveDot: { position: "absolute", top: 6, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.rose, borderWidth: 1.5, borderColor: Colors.ink },
   leaveBtn: { backgroundColor: Colors.rose, borderColor: Colors.rose },
   reactCount: { position: "absolute", top: -2, right: 6, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: Colors.rose, alignItems: "center", justifyContent: "center" },
   reactCountText: { color: Colors.ink, fontSize: 9, fontWeight: "900" },
