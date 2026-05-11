@@ -357,11 +357,6 @@ export default function PublicProfileScreen() {
               <Text style={styles.statKey}>TRADES</Text>
             </View>
             <View style={styles.statCard}>
-              <Star color={Colors.orange} size={13} strokeWidth={2.6} />
-              <Text style={styles.statNum}>{Number(profile.win_rate).toFixed(0)}%</Text>
-              <Text style={styles.statKey}>WIN RATE</Text>
-            </View>
-            <View style={styles.statCard}>
               <Wallet color={Colors.cyan} size={13} strokeWidth={2.6} />
               <Text style={styles.statNum}>
                 {profile.pnl_pct >= 0 ? "+" : ""}

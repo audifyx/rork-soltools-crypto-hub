@@ -5,7 +5,6 @@ import {
   EyeOff,
   RefreshCw,
   Sparkles,
-  Target,
   TrendingDown,
   TrendingUp,
   Wallet,
@@ -217,12 +216,6 @@ export default function PortfolioCard() {
       )}
 
       <View style={styles.statsRow}>
-        <StatCell
-          label="WIN RATE"
-          value={`${profile.winRate.toFixed(0)}%`}
-          Icon={Target}
-          color={Colors.cyan}
-        />
         <StatCell
           label="TRADES"
           value={`${profile.trades}`}
