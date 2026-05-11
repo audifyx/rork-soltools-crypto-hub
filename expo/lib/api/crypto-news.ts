@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { supabase } from "@/lib/supabase";
+import { supabase, SUPABASE_ANON_KEY, SUPABASE_READY, SUPABASE_URL } from "@/lib/supabase";
 import {
   fetchWalletPortfolio,
   isValidSolanaAddress,
@@ -330,114 +330,70 @@ async function writeCache(items: CryptoNewsItem[]): Promise<void> {
   }
 }
 
-async function fetchTelegramChannelPosts(channel: string): Promise<CryptoNewsItem[]> {
-  // Telegram exposes a public web preview at https://t.me/s/<channel> that
-  // works without any auth or API token. We parse the embedded message HTML
-  // directly — far more reliable than RSSHub public mirrors.
-  const url = `https://t.me/s/${channel}`;
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), RSS_FETCH_TIMEOUT_MS);
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { Accept: "text/html,application/xhtml+xml" },
-    }).finally(() => clearTimeout(timer));
-    if (!res.ok) return [];
-    const html = await res.text();
-    const blocks = html.match(/<div class="tgme_widget_message_wrap[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/g) ?? [];
-    const items: CryptoNewsItem[] = [];
-    for (const block of blocks) {
-      const textMatch = block.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
-      const rawText = textMatch?.[1] ?? "";
-      const text = stripHtml(rawText);
-      if (!text) continue;
-      const linkMatch = block.match(/<a class="tgme_widget_message_date"[^>]*href="([^"]+)"/);
-      const link = linkMatch?.[1] ?? `https://t.me/${channel}`;
-      const timeMatch = block.match(/<time[^>]*datetime="([^"]+)"/);
-      const published_at = timeMatch?.[1] ? new Date(timeMatch[1]).toISOString() : new Date().toISOString();
-      const photoMatch = block.match(/tgme_widget_message_photo_wrap[^>]*background-image:url\('([^']+)'\)/);
-      const image_url = photoMatch?.[1] ?? null;
-      const title = text.length > 140 ? `${text.slice(0, 137)}\u2026` : text;
-      const id = hashId(`telegram:${link}:${published_at}`);
-      items.push({
-        id,
-        source: "OG Updates (Telegram)",
-        source_url: link,
-        title,
-        description: text.slice(0, 280),
-        image_url,
-        category: "viral",
-        sentiment: detectSentiment(text),
-        coin_mentions: extractMentions(text),
-        engagement: { likes: 120, shares: 30, comments: 18 },
-        published_at,
-      });
-    }
-    return items.reverse(); // Telegram lists oldest first; we want newest first.
-  } catch (e) {
-    console.log("[news] telegram scrape failed", e);
-    return [];
-  }
-}
+type SocialFeedRow = {
+  id: string;
+  source: "telegram" | "x";
+  source_label: string;
+  url: string;
+  text: string;
+  image_url: string | null;
+  published_at: string;
+};
 
-async function fetchTwitterViaRss2Json(handle: string): Promise<CryptoNewsItem[]> {
-  // rss2json acts as a CORS/JSON proxy in front of multiple Nitter mirrors so we
-  // don't get blocked by one going down. First success wins.
-  const mirrors = [
-    `https://nitter.net/${handle}/rss`,
-    `https://nitter.privacydev.net/${handle}/rss`,
-    `https://nitter.poast.org/${handle}/rss`,
-    `https://nitter.tiekoetter.com/${handle}/rss`,
-    `https://rsshub.app/twitter/user/${handle}`,
-  ];
-  for (const mirror of mirrors) {
-    try {
-      const url = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(mirror)}`;
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), RSS_FETCH_TIMEOUT_MS);
-      const res = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
-      if (!res.ok) continue;
-      const json = (await res.json()) as {
-        status?: string;
-        items?: { title?: string; link?: string; pubDate?: string; description?: string; thumbnail?: string; enclosure?: { link?: string } }[];
-      };
-      if (json.status !== "ok" || !json.items?.length) continue;
-      const items: CryptoNewsItem[] = [];
-      for (const it of json.items) {
-        const text = stripHtml(it.description ?? it.title ?? "");
-        if (!text) continue;
-        const published_at = it.pubDate ? new Date(it.pubDate).toISOString() : new Date().toISOString();
-        const link = it.link ?? `https://x.com/${handle}`;
-        const image_url = it.thumbnail || it.enclosure?.link || null;
-        const title = text.length > 140 ? `${text.slice(0, 137)}\u2026` : text;
-        items.push({
-          id: hashId(`twitter:${link}:${published_at}`),
-          source: `@${handle} on X`,
-          source_url: link,
-          title,
-          description: text.slice(0, 280),
-          image_url,
-          category: "viral",
-          sentiment: detectSentiment(text),
-          coin_mentions: extractMentions(text),
-          engagement: { likes: 150, shares: 40, comments: 22 },
-          published_at,
-        });
-      }
-      if (items.length) return items;
-    } catch (e) {
-      console.log("[news] twitter mirror failed", mirror, e);
-    }
-  }
-  return [];
+function socialRowToNewsItem(row: SocialFeedRow): CryptoNewsItem {
+  const title = row.text.length > 140 ? `${row.text.slice(0, 137)}\u2026` : row.text;
+  const isTelegram = row.source === "telegram";
+  return {
+    id: row.id,
+    source: row.source_label,
+    source_url: row.url,
+    title,
+    description: row.text.slice(0, 280),
+    image_url: row.image_url,
+    category: "viral",
+    sentiment: detectSentiment(row.text),
+    coin_mentions: extractMentions(row.text),
+    engagement: isTelegram
+      ? { likes: 120, shares: 30, comments: 18 }
+      : { likes: 150, shares: 40, comments: 22 },
+    published_at: row.published_at,
+  };
 }
 
 async function fetchOfficialSocialPosts(): Promise<CryptoNewsItem[]> {
-  const [telegram, twitter] = await Promise.all([
-    fetchTelegramChannelPosts(OG_TELEGRAM_CHANNEL),
-    fetchTwitterViaRss2Json(OG_X_HANDLE),
-  ]);
-  return [...telegram, ...twitter];
+  // We call our Supabase Edge Function instead of hitting Nitter/RSSHub/t.me
+  // directly from the client. Mobile networks (especially carrier-side) block
+  // or rate-limit those endpoints, and most public Nitter mirrors are dead.
+  // The edge function spoofs a desktop browser UA and hits Twitter's public
+  // syndication endpoint + Telegram's web preview, so it works reliably.
+  if (!SUPABASE_READY || !SUPABASE_URL || !SUPABASE_ANON_KEY) return [];
+  const url = `${SUPABASE_URL}/functions/v1/social-feed`;
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token ?? SUPABASE_ANON_KEY;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    const res = await fetch(url, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ telegram: OG_TELEGRAM_CHANNEL, x: OG_X_HANDLE }),
+    }).finally(() => clearTimeout(timer));
+    if (!res.ok) {
+      console.log("[news] social-feed edge non-ok", res.status);
+      return [];
+    }
+    const json = (await res.json()) as { telegram?: SocialFeedRow[]; twitter?: SocialFeedRow[] };
+    const rows = [...(json.telegram ?? []), ...(json.twitter ?? [])];
+    return rows.map(socialRowToNewsItem);
+  } catch (e) {
+    console.log("[news] social-feed edge fetch failed", e instanceof Error ? e.message : e);
+    return [];
+  }
 }
 
 export async function fetchCryptoNewsFeed(params: NewsFeedParams = {}): Promise<CryptoNewsItem[]> {
