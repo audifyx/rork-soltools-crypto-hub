@@ -323,6 +323,51 @@ export default function HomeFeedScreen() {
     [qc, userId],
   );
 
+  const onTimelineDelete = useCallback(
+    (post: UserPost) => {
+      if (!userId) {
+        Alert.alert("Sign in required", "Sign in to delete your posts.");
+        return;
+      }
+      if (post.authorId && post.authorId !== userId) {
+        Alert.alert("Not allowed", "You can only delete your own posts.");
+        return;
+      }
+      Alert.alert(
+        "Delete post?",
+        "This permanently removes your post.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+              qc.setQueryData<UserPost[]>(["home", "live-feed", userId ?? "guest"], (prev) =>
+                prev?.filter((p) => p.id !== post.id),
+              );
+              qc.setQueryData<UserPost[]>(["home", "following-feed", userId ?? "guest"], (prev) =>
+                prev?.filter((p) => p.id !== post.id),
+              );
+              deletePost(post.id)
+                .then(() => {
+                  qc.invalidateQueries({ queryKey: ["home", "live-feed"] });
+                  qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
+                })
+                .catch((e: unknown) => {
+                  console.log("[home] delete post failed", e);
+                  qc.invalidateQueries({ queryKey: ["home", "live-feed"] });
+                  qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
+                  Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+                });
+            },
+          },
+        ],
+      );
+    },
+    [deletePost, qc, userId],
+  );
+
   const onTimelineLike = useCallback(
     (post: UserPost) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -658,13 +703,13 @@ export default function HomeFeedScreen() {
             avatarColor={item.data.authorAvatarColor ?? profile.avatarColor}
             avatarUrl={item.data.authorAvatarUrl ?? profile.avatarUrl}
             verified={item.data.authorVerified ?? profile.verified}
-            canDelete={!item.data.authorId || item.data.authorId === userId}
+            canDelete={!!userId && (!item.data.authorId || item.data.authorId === userId)}
             onLike={() => onTimelineLike(item.data)}
             onRepost={() => onTimelineRepost(item.data)}
             onQuote={() => openQuote(item.data)}
             onComment={() => openReply(item.data)}
             onShare={() => void onTimelineShare(item.data)}
-            onDelete={() => deletePost(item.data.id)}
+            onDelete={() => onTimelineDelete(item.data)}
           />
         );
       }
@@ -677,7 +722,7 @@ export default function HomeFeedScreen() {
       onTimelineShare,
       openReply,
       openQuote,
-      deletePost,
+      onTimelineDelete,
       router,
       userId,
     ],

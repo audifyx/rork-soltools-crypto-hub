@@ -1928,10 +1928,28 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       }
 
       try {
-        const { error } = await supabase.rpc("delete_community_post", {
+        const rpcRes = await supabase.rpc("delete_community_post", {
           target_post_id: post.id,
         });
-        if (error) throw error;
+        if (rpcRes.error) {
+          const msg = rpcRes.error.message ?? "";
+          const missingRpc = /could not find the function|function .* does not exist|schema cache/i.test(msg);
+          if (!missingRpc) throw rpcRes.error;
+          const ownsPostFallback = post.authorUserId === userId;
+          if (!ownsPostFallback) {
+            throw new Error("You can only delete your own posts.");
+          }
+          const { error: delErr, data: delData } = await supabase
+            .from("community_posts")
+            .delete()
+            .eq("id", post.id)
+            .eq("user_id", userId)
+            .select("id");
+          if (delErr) throw delErr;
+          if (!delData || delData.length === 0) {
+            throw new Error("Post not found or you do not have permission to delete it.");
+          }
+        }
         qc.invalidateQueries({ queryKey: ["social", "community-posts", post.communityId] });
         if (post.parentPostId) {
           qc.invalidateQueries({ queryKey: ["social", "post-replies", post.parentPostId] });

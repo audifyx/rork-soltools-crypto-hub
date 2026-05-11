@@ -658,13 +658,32 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const deletePost = useCallback(
     async (id: string) => {
-      const next = posts.filter((p) => p.id !== id);
+      const prev = posts;
+      const target = prev.find((p) => p.id === id);
+      if (isAuthenticated && userId && target?.authorId && target.authorId !== userId) {
+        throw new Error("You can only delete your own posts.");
+      }
+      const next = prev.filter((p) => p.id !== id);
       qc.setQueryData(["app", "posts", userId ?? "guest"], next);
-      if (isAuthenticated) {
+      if (isAuthenticated && userId) {
         try {
-          await supabase.from("community_posts").delete().eq("id", id);
+          const { error, data } = await supabase
+            .from("community_posts")
+            .delete()
+            .eq("id", id)
+            .eq("user_id", userId)
+            .select("id");
+          if (error) throw error;
+          if (!data || data.length === 0) {
+            throw new Error("Post not found or you do not have permission to delete it.");
+          }
+          qc.invalidateQueries({ queryKey: ["home", "live-feed"] });
+          qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
+          qc.invalidateQueries({ queryKey: ["social", "community-posts"] });
         } catch (e) {
+          qc.setQueryData(["app", "posts", userId ?? "guest"], prev);
           console.log("[app] post delete failed", e);
+          throw e instanceof Error ? e : new Error("Could not delete post.");
         }
       } else {
         await saveJson(POSTS_KEY, next);
