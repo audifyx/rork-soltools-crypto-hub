@@ -754,7 +754,7 @@ export default function HomeFeedScreen() {
             )}
           </Pressable>
           <View style={styles.homeTitleWrap}>
-            <Text style={styles.homeTitle}>Signal Deck</Text>
+            <Text style={styles.homeTitle}>$OGS token</Text>
             <Text style={styles.homeSubtitle}>social alpha cockpit</Text>
           </View>
           <View style={styles.topActions}>
