@@ -60,7 +60,7 @@ function haptic(): void {
 export default function SettingsScreen() {
   const router = useRouter();
   const { prefs, updatePrefs, resetAllData, profile, watchlist, alerts, wallets } = useApp();
-  const { isAuthenticated, email, signOut, deleteAccount, isDeletingAccount } = useAuth();
+  const { isAuthenticated, signOut, deleteAccount, isDeletingAccount } = useAuth();
   const [section, setSection] = useState<Section>("overview");
 
   const setPrefs = useCallback(
@@ -127,6 +127,8 @@ export default function SettingsScreen() {
     ]);
   }, [deleteAccount, isAuthenticated, router]);
 
+  const accountLabel = profile.handle || profile.displayName || "Signed in";
+
   const completion = useMemo(() => {
     const filled = [profile.displayName, profile.handle, profile.bio, profile.walletAddress, profile.twitterHandle].filter(Boolean).length;
     return Math.round((filled / 5) * 100);
@@ -163,7 +165,7 @@ export default function SettingsScreen() {
                   <View style={styles.avatar}><UserRound color={Colors.ink} size={22} strokeWidth={3} /></View>
                   <View style={styles.heroCopy}>
                     <Text style={styles.heroName}>{profile.displayName || profile.handle || "SolTools user"}</Text>
-                    <Text style={styles.heroSub}>{email ?? "Sign in to sync settings across devices"}</Text>
+                    <Text style={styles.heroSub}>{isAuthenticated ? accountLabel : "Sign in to sync settings across devices"}</Text>
                   </View>
                 </View>
                 <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${completion}%` }]} /></View>
@@ -227,7 +229,7 @@ export default function SettingsScreen() {
               <MenuRow Icon={LinkIcon} label="Connected accounts" sub="Wallets, X, Discord connection hub" onPress={() => Alert.alert("Connected accounts", "Connection management is ready for the next auth providers.")} />
               <MenuRow Icon={Wrench} label="Admin dashboard" sub="Open platform admin tools" onPress={() => router.push("/admin")} />
               <MenuRow Icon={Trash2} label="Reset local data" sub="Clear device cache and local saved data" danger onPress={resetLocalData} />
-              <MenuRow Icon={LogOut} label={isAuthenticated ? "Sign out" : "Sign in / Create account"} sub={isAuthenticated ? email ?? "Signed in" : "Sync profile and settings"} danger={isAuthenticated} onPress={confirmSignOut} />
+              <MenuRow Icon={LogOut} label={isAuthenticated ? "Sign out" : "Sign in / Create account"} sub={isAuthenticated ? accountLabel : "Sync profile and settings"} danger={isAuthenticated} onPress={confirmSignOut} />
               {isAuthenticated ? <MenuRow Icon={Trash2} label={isDeletingAccount ? "Deleting account…" : "Delete account"} sub="Permanently erase account and synced data" danger onPress={confirmDelete} /> : null}
             </Group>
           ) : null}

@@ -44,6 +44,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { getLiveKitToken } from "@/lib/api/livekit";
 import { navigateBack } from "@/lib/navigation";
+import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 import { SpaceMessage, SpaceParticipant, useSocial } from "@/providers/social-provider";
 
@@ -75,7 +76,8 @@ export default function SpaceDetailScreen() {
   const router = useRouter();
   const { id: paramId } = useLocalSearchParams<{ id: string }>();
   const id = typeof paramId === "string" ? paramId : "";
-  const { userId, email, isAuthenticated } = useAuth();
+  const { userId, isAuthenticated } = useAuth();
+  const { profile } = useApp();
   const {
     getSpace,
     isFollowingSpace,
@@ -159,11 +161,12 @@ export default function SpaceDetailScreen() {
     try {
       if (!space.isLive && isHost) await startSpace(space.id);
       await joinSpace(space.id);
-      const identity = userId ?? (email ?? "you").split("@")[0];
+      const profileHandle = profile.handle?.replace(/^@/, "").trim() || "Trader";
+      const identity = userId ?? profileHandle;
       const token = await getLiveKitToken({
         room: space.livekitRoomName || space.id,
         identity,
-        name: me?.name ?? (email ?? "Trader").split("@")[0],
+        name: me?.name ?? profile.displayName ?? profileHandle,
       });
       setLivekitRoom(token.room);
       setConnected(true);
@@ -176,7 +179,7 @@ export default function SpaceDetailScreen() {
     } finally {
       setConnecting(false);
     }
-  }, [space, requireAuth, isHost, startSpace, joinSpace, userId, email, me?.name]);
+  }, [space, requireAuth, isHost, startSpace, joinSpace, userId, profile.handle, profile.displayName, me?.name]);
 
   const onLeave = useCallback(async () => {
     if (!space) return;

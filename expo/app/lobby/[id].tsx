@@ -49,6 +49,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { getLiveKitToken } from "@/lib/api/livekit";
 import { navigateBack } from "@/lib/navigation";
+import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 import {
   type LobbyMessage,
@@ -74,7 +75,8 @@ export default function LobbyDetailScreen() {
     addWatch,
     removeWatch,
   } = useLobbies();
-  const { userId, email } = useAuth();
+  const { userId } = useAuth();
+  const { profile } = useApp();
 
   const lobby = lobbyId ? getLobby(lobbyId) : undefined;
 
@@ -133,11 +135,11 @@ export default function LobbyDetailScreen() {
     setVoiceError(null);
     setVoiceLoading(true);
     try {
-      const handle = (email ?? "you").split("@")[0];
+      const handle = profile.handle?.replace(/^@/, "").trim() || "you";
       await getLiveKitToken({
         room: lobby.livekitRoom || lobby.id,
         identity: userId ?? handle,
-        name: handle,
+        name: profile.displayName || handle,
       });
       setVoiceConnected(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -147,7 +149,7 @@ export default function LobbyDetailScreen() {
     } finally {
       setVoiceLoading(false);
     }
-  }, [lobby, userId, email]);
+  }, [lobby, userId, profile.handle, profile.displayName]);
 
   const onDisconnect = useCallback(() => {
     setVoiceConnected(false);

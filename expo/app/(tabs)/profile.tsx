@@ -306,7 +306,7 @@ export default function ProfileScreen() {
     deletePost,
   } = useApp();
   const { listings } = useLaunchpad();
-  const { isAuthenticated, email: authEmail, signOut, userId } = useAuth();
+  const { isAuthenticated, signOut, userId } = useAuth();
   const { isAdmin, role: adminRole } = useAdmin();
   const { uploadMedia, isUploading } = useProfileProvider();
   const qc = useQueryClient();
@@ -2125,7 +2125,9 @@ function SettingsModal({
   onResetData: () => Promise<void>;
 }) {
   const router = useRouter();
-  const { isAuthenticated, email: authEmail, signOut, deleteAccount, isDeletingAccount } = useAuth();
+  const { isAuthenticated, signOut, deleteAccount, isDeletingAccount } = useAuth();
+  const { profile } = useApp();
+  const accountLabel = profile.handle || profile.displayName || "Signed in";
   const [section, setSection] = useState<"main" | "trading" | "privacy" | "appearance" | "about">("main");
 
   const onConfirmDelete = useCallback(() => {
@@ -2318,7 +2320,7 @@ function SettingsModal({
                 <MenuRow
                   Icon={LogOut}
                   label={isAuthenticated ? "Sign out" : "Sign in / Create account"}
-                  sub={isAuthenticated ? (authEmail ?? "Signed in") : "Sync your data across devices"}
+                  sub={isAuthenticated ? accountLabel : "Sync your data across devices"}
                   danger={isAuthenticated}
                   onPress={async () => {
                     if (isAuthenticated) {

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 
 import { supabase, SUPABASE_READY } from "@/lib/supabase";
+import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 
 export type LobbyRole = "host" | "speaker" | "listener";
@@ -127,8 +128,9 @@ function tagsFrom(value: unknown): string[] {
     .slice(0, 8);
 }
 
-function handleFromAuth(email: string | null, userId: string | null): string {
-  if (email) return `@${email.split("@")[0].replace(/[^a-z0-9_\-.]/gi, "").toLowerCase() || "you"}`;
+function handleFromProfile(handle: string | null | undefined, userId: string | null): string {
+  const clean = handle?.replace(/^@/, "").replace(/[^a-z0-9_\-.]/gi, "").trim().toLowerCase();
+  if (clean) return `@${clean}`;
   if (userId) return `@${userId.slice(0, 6).toLowerCase()}`;
   return "@you";
 }
@@ -339,9 +341,10 @@ function rpcId(data: unknown): string | null {
 
 export const [LobbiesProvider, useLobbies] = createContextHook(() => {
   const qc = useQueryClient();
-  const { userId, email, isAuthenticated } = useAuth();
+  const { userId, isAuthenticated } = useAuth();
+  const { profile } = useApp();
 
-  const handleSelf = useMemo<string>(() => handleFromAuth(email, userId), [email, userId]);
+  const handleSelf = useMemo<string>(() => handleFromProfile(profile.handle, userId), [profile.handle, userId]);
 
   const lobbiesQ = useQuery<Lobby[]>({
     queryKey: QK,

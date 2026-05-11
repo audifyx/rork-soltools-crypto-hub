@@ -1371,20 +1371,21 @@ function VoiceLobbyTool({ accent }: { accent: string }) {
   const [members, setMembers] = useState<LobbyMember[]>([]);
   const [lobbyToken, setLobbyToken] = useState<string | null>(null);
   const [joining, setJoining] = useState<boolean>(false);
-  const { user, email } = useAuth();
+  const { user } = useAuth();
+  const { profile } = useApp();
 
   const onJoin = useCallback(async () => {
     if (!lobbyName.trim()) {
       Alert.alert("Lobby name", "Pick a lobby to join.");
       return;
     }
-    const handle = (email ?? "you").split("@")[0];
+    const handle = profile.handle?.replace(/^@/, "").trim() || "you";
     setJoining(true);
     try {
       const tok = await getLiveKitToken({
         room: lobbyName.trim(),
         identity: user?.id ?? handle,
-        name: handle,
+        name: profile.displayName || handle,
       });
       setLobbyToken(tok.token);
       setInLobby(true);
@@ -1396,7 +1397,7 @@ function VoiceLobbyTool({ accent }: { accent: string }) {
     } finally {
       setJoining(false);
     }
-  }, [lobbyName, user, email]);
+  }, [lobbyName, user, profile.handle, profile.displayName]);
 
   const onLeave = useCallback(() => {
     setInLobby(false);
