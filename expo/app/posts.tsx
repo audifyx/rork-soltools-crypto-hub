@@ -130,7 +130,7 @@ export default function PostsFeedScreen() {
           const postIds = rows.map((r) => r.id);
           const [likesRes, followsRes] = await Promise.all([
             supabase
-              .from("post_likes")
+              .from("community_post_likes")
               .select("post_id")
               .eq("user_id", userId)
               .in("post_id", postIds),
@@ -142,15 +142,34 @@ export default function PostsFeedScreen() {
           );
         }
 
+        const missingAuthorIds = Array.from(
+          new Set(rows.filter((r) => !r.author_username && r.user_id).map((r) => r.user_id)),
+        );
+        let authorMap = new Map<string, Record<string, unknown>>();
+        if (missingAuthorIds.length > 0) {
+          const { data: profiles, error: profilesError } = await supabase
+            .from("profiles")
+            .select("id,user_id,username,display_name,avatar_url,avatar_color,verified")
+            .or(`id.in.(${missingAuthorIds.join(",")}),user_id.in.(${missingAuthorIds.join(",")})`);
+          if (profilesError) console.log("[posts] author enrich failed", profilesError.message);
+          authorMap = new Map(
+            ((profiles ?? []) as Record<string, unknown>[]).flatMap((p) => [
+              [String(p.id), p],
+              [String(p.user_id), p],
+            ]),
+          );
+        }
+
         return rows.map((r): FeedPost => {
+          const author = authorMap.get(r.user_id);
           return {
             id: r.id,
             userId: r.user_id,
-            authorName: r.author_display_name || r.author_username || "Trader",
-            authorHandle: r.author_username ? `@${r.author_username}` : "",
-            authorAvatarUrl: r.author_avatar_url ?? undefined,
-            authorAvatarColor: r.author_avatar_color ?? Colors.mint,
-            authorVerified: !!r.author_verified,
+            authorName: r.author_display_name || r.author_username || (author?.display_name as string | undefined) || (author?.username as string | undefined) || "Trader",
+            authorHandle: r.author_username ? `@${r.author_username}` : author?.username ? `@${String(author.username)}` : "",
+            authorAvatarUrl: r.author_avatar_url ?? (author?.avatar_url as string | undefined) ?? undefined,
+            authorAvatarColor: r.author_avatar_color ?? (author?.avatar_color as string | undefined) ?? Colors.mint,
+            authorVerified: !!(r.author_verified ?? author?.verified),
             text: r.content ?? "",
             imageUrl: r.image_url ?? undefined,
             ticker: r.ticker ?? undefined,

@@ -1252,8 +1252,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       };
       if (!isAuthenticated || !userId || postIds.length === 0) return empty;
       const [likesRes, repostsRes, bookmarksRes, reportsRes] = await Promise.all([
-        supabase.from("post_likes").select("post_id").eq("user_id", userId).in("post_id", postIds),
-        supabase.from("post_reposts").select("post_id").eq("user_id", userId).in("post_id", postIds),
+        supabase.from("community_post_likes").select("post_id").eq("user_id", userId).in("post_id", postIds),
+        supabase.from("community_post_reposts").select("post_id").eq("user_id", userId).in("post_id", postIds),
         supabase.from("post_bookmarks").select("post_id").eq("user_id", userId).in("post_id", postIds),
         supabase.from("post_reports").select("post_id").eq("reporter_id", userId).in("post_id", postIds),
       ]);

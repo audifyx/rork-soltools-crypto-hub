@@ -152,7 +152,11 @@ as $$
   select coalesce(p.user_id, p.id), p.username, p.display_name, p.avatar_url, coalesce(p.verified, false), coalesce(p.custom_badges, '[]'::jsonb), coalesce(p.followers_count, 0)
   from public.followers f
   join public.profiles p on p.user_id = f.follower_id or p.id = f.follower_id
-  where f.followee_id = target_user_id
+  where f.followee_id in (
+    target_user_id,
+    coalesce((select pr.user_id from public.profiles pr where pr.id = target_user_id limit 1), target_user_id),
+    coalesce((select pr.id from public.profiles pr where pr.user_id = target_user_id limit 1), target_user_id)
+  )
   order by f.created_at desc;
 $$;
 
@@ -165,7 +169,11 @@ as $$
   select coalesce(p.user_id, p.id), p.username, p.display_name, p.avatar_url, coalesce(p.verified, false), coalesce(p.custom_badges, '[]'::jsonb), coalesce(p.followers_count, 0)
   from public.followers f
   join public.profiles p on p.user_id = f.followee_id or p.id = f.followee_id
-  where f.follower_id = target_user_id
+  where f.follower_id in (
+    target_user_id,
+    coalesce((select pr.user_id from public.profiles pr where pr.id = target_user_id limit 1), target_user_id),
+    coalesce((select pr.id from public.profiles pr where pr.user_id = target_user_id limit 1), target_user_id)
+  )
   order by f.created_at desc;
 $$;
 

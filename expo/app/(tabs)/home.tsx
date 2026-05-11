@@ -114,9 +114,14 @@ async function hydrateLikedPosts(rows: FeedPostRow[], userId: string): Promise<U
   if (missingAuthorIds.length > 0) {
     const { data } = await supabase
       .from("profiles")
-      .select("user_id,username,display_name,avatar_url,avatar_color,verified")
-      .in("user_id", missingAuthorIds);
-    authors = new Map(((data ?? []) as Record<string, unknown>[]).map((row) => [String(row.user_id), row]));
+      .select("id,user_id,username,display_name,avatar_url,avatar_color,verified")
+      .or(`id.in.(${missingAuthorIds.join(",")}),user_id.in.(${missingAuthorIds.join(",")})`);
+    authors = new Map(
+      ((data ?? []) as Record<string, unknown>[]).flatMap((row) => [
+        [String(row.id), row],
+        [String(row.user_id), row],
+      ]),
+    );
   }
   const posts = rows.map((row): UserPost => {
     const author = authors.get(row.user_id);
