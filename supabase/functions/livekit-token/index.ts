@@ -25,15 +25,33 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const livekitUrl = Deno.env.get("LIVEKIT_URL") ?? Deno.env.get("EXPO_PUBLIC_LIVEKIT_URL") ?? "";
-    const livekitApiKey = Deno.env.get("LIVEKIT_API_KEY") ?? "";
-    const livekitApiSecret = Deno.env.get("LIVEKIT_API_SECRET") ?? "";
+    const getEnv = (...keys: string[]): string => {
+      for (const k of keys) {
+        const v = Deno.env.get(k);
+        if (v && v.trim().length > 0) return v.trim();
+      }
+      return "";
+    };
 
-    if (!supabaseUrl || !serviceKey) return json({ error: "Missing Supabase env" }, 500);
+    const supabaseUrl = getEnv("SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_URL");
+    const serviceKey = getEnv("SUPABASE_SERVICE_ROLE_KEY", "SERVICE_ROLE_KEY");
+    const livekitUrl = getEnv("LIVEKIT_URL", "EXPO_PUBLIC_LIVEKIT_URL", "LIVEKIT_WS_URL");
+    const livekitApiKey = getEnv("LIVEKIT_API_KEY", "LK_API_KEY");
+    const livekitApiSecret = getEnv("LIVEKIT_API_SECRET", "LK_API_SECRET");
+
+    if (!supabaseUrl || !serviceKey) {
+      const missing = [!supabaseUrl && "SUPABASE_URL", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY"].filter(Boolean);
+      console.error("[livekit-token] Missing Supabase env:", missing.join(", "));
+      return json({ error: "Missing Supabase env", missing }, 500);
+    }
     if (!livekitUrl || !livekitApiKey || !livekitApiSecret) {
-      return json({ error: "Missing LiveKit env" }, 500);
+      const missing = [
+        !livekitUrl && "LIVEKIT_URL",
+        !livekitApiKey && "LIVEKIT_API_KEY",
+        !livekitApiSecret && "LIVEKIT_API_SECRET",
+      ].filter(Boolean);
+      console.error("[livekit-token] Missing LiveKit env:", missing.join(", "));
+      return json({ error: "Missing LiveKit env", missing }, 500);
     }
 
     const authHeader = req.headers.get("Authorization") ?? "";
@@ -115,7 +133,8 @@ Deno.serve(async (req) => {
       canPublish,
     });
   } catch (error) {
-    console.error("[livekit-token]", error instanceof Error ? error.message : error);
-    return json({ error: "LiveKit token failed" }, 500);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[livekit-token]", message);
+    return json({ error: "LiveKit token failed", detail: message }, 500);
   }
 });
