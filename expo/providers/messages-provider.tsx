@@ -628,6 +628,18 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
     [updateParticipantFlag],
   );
 
+  const deleteConversationForEveryone = useCallback(
+    async (id: string) => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to delete.");
+      const { error } = await supabase.rpc("delete_dm_for_everyone", {
+        p_conversation_id: id,
+      });
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ["messages"] });
+    },
+    [isAuthenticated, queryClient, userId],
+  );
+
   const suggestedUsers = useMemo<DMUser[]>(() => {
     const existingIds = new Set(conversations.map((c) => c.user.userId).filter(Boolean));
     return (suggestedQuery.data ?? []).filter((u) => !existingIds.has(u.userId));
@@ -660,6 +672,7 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
       toggleMute,
       acceptRequest,
       deleteConversation,
+      deleteConversationForEveryone,
       findUser,
       suggestedUsers,
       knownUsers,
@@ -685,6 +698,7 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
       toggleMute,
       acceptRequest,
       deleteConversation,
+      deleteConversationForEveryone,
       findUser,
       suggestedUsers,
       knownUsers,

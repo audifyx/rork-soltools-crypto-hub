@@ -129,6 +129,7 @@ export default function DMThreadScreen() {
     togglePin,
     toggleMute,
     deleteConversation,
+    deleteConversationForEveryone,
     deleteMessage,
     setTyping,
   } = useMessages();
@@ -577,15 +578,30 @@ export default function DMThreadScreen() {
           setMenu(false);
           Alert.alert(
             "Delete conversation?",
-            `This removes your chat with ${conv.user.name}. You can start a new one any time.`,
+            `Choose how to remove your chat with ${conv.user.name}.`,
             [
               { text: "Cancel", style: "cancel" },
               {
-                text: "Delete",
+                text: "Delete for me",
+                onPress: async () => {
+                  try {
+                    await deleteConversation(conv.id);
+                    navigateBack(router, "/messages");
+                  } catch (e) {
+                    Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+                  }
+                },
+              },
+              {
+                text: "Delete for everyone",
                 style: "destructive",
                 onPress: async () => {
-                  await deleteConversation(conv.id);
-                  navigateBack(router, "/messages");
+                  try {
+                    await deleteConversationForEveryone(conv.id);
+                    navigateBack(router, "/messages");
+                  } catch (e) {
+                    Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+                  }
                 },
               },
             ],

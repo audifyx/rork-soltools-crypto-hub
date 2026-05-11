@@ -81,6 +81,8 @@ export default function MessagesScreen() {
     totalUnread,
     suggestedUsers,
     ensureConversationWith,
+    deleteConversation,
+    deleteConversationForEveryone,
   } = useMessages();
   const [tab, setTab] = useState<Tab>("inbox");
   const [query, setQuery] = useState<string>("");
@@ -104,6 +106,38 @@ export default function MessagesScreen() {
     router.push({ pathname: "/dm/[id]", params: { id } });
   };
 
+  const onLongPressConvo = (conv: Conversation) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    Alert.alert(
+      "Delete conversation?",
+      `Choose how to remove your chat with ${conv.user.name}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete for me",
+          onPress: async () => {
+            try {
+              await deleteConversation(conv.id);
+            } catch (e) {
+              Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+            }
+          },
+        },
+        {
+          text: "Delete for everyone",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteConversationForEveryone(conv.id);
+            } catch (e) {
+              Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const onStartWith = async (user: DMUser) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
@@ -117,7 +151,7 @@ export default function MessagesScreen() {
   };
 
   const renderItem: ListRenderItem<Conversation> = ({ item }) => (
-    <ConversationRow conv={item} onPress={() => openConvo(item.id)} />
+    <ConversationRow conv={item} onPress={() => openConvo(item.id)} onLongPress={() => onLongPressConvo(item)} />
   );
 
   return (
@@ -281,10 +315,10 @@ export default function MessagesScreen() {
   );
 }
 
-function ConversationRow({ conv, onPress }: { conv: Conversation; onPress: () => void }) {
+function ConversationRow({ conv, onPress, onLongPress }: { conv: Conversation; onPress: () => void; onLongPress?: () => void }) {
   const presence = presenceLabel(conv.user.online, conv.user.lastSeenAt);
   return (
-    <Pressable onPress={onPress} style={styles.row} testID={`convo-${conv.id}`}>
+    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={320} style={styles.row} testID={`convo-${conv.id}`}>
       <View style={[styles.avatarWrap]}>
         <View style={[styles.avatar, { backgroundColor: conv.user.color }]}>
           {conv.user.avatarUrl ? (
