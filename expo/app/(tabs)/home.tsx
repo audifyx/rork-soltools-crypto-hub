@@ -1782,6 +1782,11 @@ function UserPostCard({
   onDelete: () => void;
   canDelete: boolean;
 }) {
+  const [commentsOpen, setCommentsOpen] = useState<boolean>(false);
+  const toggleComments = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setCommentsOpen((v) => !v);
+  }, []);
   const time = useMemo(() => {
     const diff = Date.now() - post.createdAt;
     const m = Math.floor(diff / 60000);
@@ -1830,12 +1835,19 @@ function UserPostCard({
         <View style={styles.actionsRow}>
           <Pressable
             style={styles.actionBtn}
-            onPress={onComment}
+            onPress={post.comments > 0 ? toggleComments : onComment}
+            onLongPress={onComment}
             hitSlop={6}
             testID={`comment-user-${post.id}`}
           >
-            <MessageCircle color={Colors.muted} size={16} strokeWidth={2.2} />
-            <Text style={styles.actionLabel}>{formatCount(post.comments)}</Text>
+            <MessageCircle
+              color={commentsOpen ? Colors.cyan : Colors.muted}
+              size={16}
+              strokeWidth={2.2}
+            />
+            <Text style={[styles.actionLabel, commentsOpen ? { color: Colors.cyan } : null]}>
+              {formatCount(post.comments)}
+            </Text>
           </Pressable>
           <Pressable
             style={styles.actionBtn}
@@ -1885,6 +1897,115 @@ function UserPostCard({
             <Share2 color={Colors.muted} size={15} strokeWidth={2.2} />
           </Pressable>
         </View>
+        {post.comments > 0 && !commentsOpen ? (
+          <Pressable
+            onPress={toggleComments}
+            hitSlop={6}
+            style={styles.viewCommentsBtn}
+            testID={`view-comments-${post.id}`}
+          >
+            <Text style={styles.viewCommentsText}>
+              View {formatCount(post.comments)} {post.comments === 1 ? "comment" : "comments"}
+            </Text>
+          </Pressable>
+        ) : null}
+        {commentsOpen ? (
+          <PostCommentsList
+            postId={post.id}
+            onReply={onComment}
+            onCollapse={toggleComments}
+          />
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function PostCommentsList({
+  postId,
+  onReply,
+  onCollapse,
+}: {
+  postId: string;
+  onReply: () => void;
+  onCollapse: () => void;
+}) {
+  const { usePostReplies } = useSocial();
+  const repliesQuery = usePostReplies(postId);
+  const replies = repliesQuery.data ?? [];
+  return (
+    <View style={styles.commentsBox} testID={`comments-${postId}`}>
+      <View style={styles.commentsHeader}>
+        <Text style={styles.commentsHeaderText}>Comments</Text>
+        <Pressable onPress={onCollapse} hitSlop={6}>
+          <Text style={styles.commentsHide}>Hide</Text>
+        </Pressable>
+      </View>
+      {repliesQuery.isLoading && replies.length === 0 ? (
+        <Text style={styles.commentsEmpty}>Loading…</Text>
+      ) : replies.length === 0 ? (
+        <Pressable onPress={onReply} style={styles.commentsEmptyBtn}>
+          <Text style={styles.commentsEmpty}>No comments yet. Be the first to reply.</Text>
+        </Pressable>
+      ) : (
+        replies.map((c) => <CommentRow key={c.id} reply={c} />)
+      )}
+      <Pressable onPress={onReply} style={styles.commentReplyBtn} testID={`reply-from-comments-${postId}`}>
+        <MessageCircle color={Colors.ink} size={13} strokeWidth={2.6} />
+        <Text style={styles.commentReplyBtnText}>Write a reply</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function CommentRow({
+  reply,
+}: {
+  reply: {
+    id: string;
+    authorName: string;
+    authorHandle: string;
+    authorColor: string;
+    content: string;
+    createdAt: number;
+    likes: number;
+  };
+}) {
+  const time = useMemo(() => {
+    const diff = Date.now() - reply.createdAt;
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "now";
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    return `${Math.floor(h / 24)}d`;
+  }, [reply.createdAt]);
+  const initial = (reply.authorName || reply.authorHandle || "?").replace("@", "").slice(0, 1).toUpperCase();
+  return (
+    <View style={styles.commentRow} testID={`comment-${reply.id}`}>
+      <View style={[styles.commentAvatar, { backgroundColor: reply.authorColor || Colors.mint }]}>
+        <Text style={styles.commentAvatarText}>{initial}</Text>
+      </View>
+      <View style={styles.commentBody}>
+        <View style={styles.commentHeaderRow}>
+          <Text style={styles.commentName} numberOfLines={1}>
+            {reply.authorName || "Trader"}
+          </Text>
+          {reply.authorHandle ? (
+            <Text style={styles.commentHandle} numberOfLines={1}>
+              {reply.authorHandle}
+            </Text>
+          ) : null}
+          <Text style={styles.commentDot}>·</Text>
+          <Text style={styles.commentTime}>{time}</Text>
+        </View>
+        {reply.content ? <Text style={styles.commentContent}>{reply.content}</Text> : null}
+        {reply.likes > 0 ? (
+          <View style={styles.commentLikeRow}>
+            <Heart color={Colors.muted} size={11} strokeWidth={2.4} />
+            <Text style={styles.commentLikeText}>{formatCount(reply.likes)}</Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -3154,6 +3275,120 @@ const styles = StyleSheet.create({
     color: Colors.muted,
     fontSize: 12,
     fontWeight: "700",
+  },
+  viewCommentsBtn: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+  },
+  viewCommentsText: {
+    color: Colors.cyan,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  commentsBox: {
+    marginTop: 12,
+    paddingTop: 12,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(98,208,255,0.14)",
+    gap: 10,
+  },
+  commentsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  commentsHeaderText: {
+    color: Colors.text,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  commentsHide: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  commentsEmpty: {
+    color: Colors.muted,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  commentsEmptyBtn: {
+    paddingVertical: 6,
+  },
+  commentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  commentAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  commentAvatarText: {
+    color: Colors.ink,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  commentBody: { flex: 1 },
+  commentHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  commentName: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "800",
+    maxWidth: 130,
+  },
+  commentHandle: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+    maxWidth: 110,
+  },
+  commentDot: { color: Colors.muted, fontSize: 11 },
+  commentTime: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+  commentContent: {
+    color: Colors.text,
+    fontSize: 13.5,
+    lineHeight: 19,
+    marginTop: 2,
+  },
+  commentLikeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 6,
+  },
+  commentLikeText: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+  commentReplyBtn: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: Colors.cyan,
+  },
+  commentReplyBtnText: {
+    color: Colors.ink,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.2,
   },
 
   tokenRow: {
