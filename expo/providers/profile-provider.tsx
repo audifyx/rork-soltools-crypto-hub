@@ -410,37 +410,69 @@ export function useFollowList(userId: string | null | undefined, kind: "follower
       if (!userId) return [];
       const fn = kind === "followers" ? "list_followers" : "list_following";
       const { data, error } = await supabase.rpc(fn, { target_user_id: userId });
-      if (!error && Array.isArray(data)) {
-        return data.map((r): ProfileSummary => profileSummaryFromRow(r as Record<string, unknown>));
-      }
-
       if (error) {
         console.log("[profile] follow list rpc fallback", error.message);
       }
+
+      const rpcRows = !error && Array.isArray(data)
+        ? data.map((r): ProfileSummary => profileSummaryFromRow(r as Record<string, unknown>))
+        : [];
+
+      const { data: targetProfiles } = await supabase
+        .from("profiles")
+        .select("id,user_id")
+        .or(`id.eq.${userId},user_id.eq.${userId}`)
+        .limit(2);
+      const targetIds = Array.from(
+        new Set([
+          userId,
+          ...((targetProfiles ?? []) as Record<string, unknown>[]).flatMap((row) => [String(row.id ?? ""), String(row.user_id ?? "")]),
+        ].filter((id) => id.length > 0 && id !== "null" && id !== "undefined")),
+      );
 
       const linkColumn = kind === "followers" ? "followee_id" : "follower_id";
       const userColumn = kind === "followers" ? "follower_id" : "followee_id";
       const { data: followRows, error: followError } = await supabase
         .from("followers")
         .select(userColumn)
-        .eq(linkColumn, userId);
-      if (followError) throw followError;
+        .in(linkColumn, targetIds);
+      if (followError) {
+        if (rpcRows.length > 0) return rpcRows;
+        throw followError;
+      }
 
-      const ids = ((followRows ?? []) as Record<string, unknown>[])
-        .map((row) => String(row[userColumn] ?? ""))
-        .filter((id) => id.length > 0);
-      if (ids.length === 0) return [];
+      const ids = Array.from(
+        new Set(
+          ((followRows ?? []) as Record<string, unknown>[])
+            .map((row) => String(row[userColumn] ?? ""))
+            .filter((id) => id.length > 0),
+        ),
+      );
+      if (ids.length === 0) return rpcRows;
 
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
         .select("id,user_id,username,display_name,avatar_url,verified,custom_badges,followers_count")
-        .in("user_id", ids);
-      if (profilesError) throw profilesError;
+        .or(`id.in.(${ids.join(",")}),user_id.in.(${ids.join(",")})`);
+      if (profilesError) {
+        if (rpcRows.length > 0) return rpcRows;
+        throw profilesError;
+      }
 
-      const byId = new Map(
-        ((profiles ?? []) as Record<string, unknown>[]).map((row) => [String(row.user_id ?? row.id), profileSummaryFromRow(row)]),
-      );
-      return ids.map((id) => byId.get(id) ?? profileSummaryFromRow({ username: id.slice(0, 8) }, id));
+      const byId = new Map<string, ProfileSummary>();
+      ((profiles ?? []) as Record<string, unknown>[]).forEach((row) => {
+        const summary = profileSummaryFromRow(row);
+        const rowId = String(row.id ?? "");
+        const rowUserId = String(row.user_id ?? "");
+        if (rowId) byId.set(rowId, summary);
+        if (rowUserId) byId.set(rowUserId, summary);
+      });
+      const directRows = ids.map((id) => byId.get(id) ?? profileSummaryFromRow({ user_id: id, username: id.slice(0, 8) }, id));
+      const merged = new Map<string, ProfileSummary>();
+      [...directRows, ...rpcRows].forEach((user) => {
+        if (user.user_id) merged.set(user.user_id, user);
+      });
+      return Array.from(merged.values());
     },
     staleTime: 5_000,
     refetchOnMount: "always",
