@@ -878,22 +878,30 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       const title = input.title.trim();
       if (title.length < 3) throw new Error("Give your Space a stronger title.");
       const palette = paletteFor(`${title}-${Date.now()}`);
-      const topic = (input.topic?.trim() || "ALPHA").slice(0, 28);
+      const topic = (input.topic?.trim() || "ALPHA").slice(0, 28).toUpperCase();
       const description = (input.description?.trim() || "").slice(0, 500);
       const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt).toISOString() : null;
+      const category = input.category ?? "alpha";
       let id = "";
+
       const { data, error } = await supabase.rpc("create_space", {
         p_name: title,
         p_topic: topic,
         p_description: description,
-        p_category: input.category ?? "alpha",
+        p_category: category,
         p_scheduled_at: scheduledAt,
         p_recording: !!input.recording,
         p_accent_a: palette[0],
         p_accent_b: palette[1],
       });
+
       if (error) {
-        if (!isMissingSpaceRpcError(error)) throw error;
+        const rpcMissing = isMissingSpaceRpcError(error);
+        if (!rpcMissing) {
+          console.log("[social] create_space rpc failed", error.message ?? error);
+          throw new Error(error.message || "Could not create the Space. Try again.");
+        }
+        console.log("[social] create_space rpc unavailable, using direct insert fallback");
         const createdId = Crypto.randomUUID();
         const roomName = `space-${createdId.replace(/-/g, "")}`;
         const { data: inserted, error: insertError } = await supabase
@@ -901,7 +909,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           .insert({
             id: createdId,
             name: title,
-            topic: topic.toUpperCase(),
+            topic,
             description,
             host_id: userId,
             livekit_room_name: roomName,
@@ -909,32 +917,46 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             is_active: !scheduledAt,
             started_at: scheduledAt ? null : new Date().toISOString(),
             scheduled_at: scheduledAt,
-            category: input.category ?? "alpha",
+            category,
             recording: !!input.recording,
             accent_a: palette[0],
             accent_b: palette[1],
           })
           .select("id")
           .single();
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.log("[social] livekit_rooms insert failed", insertError.message);
+          throw new Error(
+            insertError.message?.includes("row-level security")
+              ? "Spaces tables are missing permissions. Sign out and back in, then try again."
+              : insertError.message || "Could not save the Space. Try again.",
+          );
+        }
         id = String(inserted?.id ?? createdId);
-        await supabase
+        const { error: joinError } = await supabase
           .from("livekit_participants")
-          .upsert({
-            room_id: id,
-            user_id: userId,
-            identity: userId,
-            display_name: "Host",
-            role: "host",
-            muted: false,
-            hand_raised: false,
-            speaking: false,
-            left_at: null,
-            last_seen_at: new Date().toISOString(),
-          }, { onConflict: "room_id,user_id" });
+          .upsert(
+            {
+              room_id: id,
+              user_id: userId,
+              identity: userId,
+              display_name: "Host",
+              role: "host",
+              muted: false,
+              hand_raised: false,
+              speaking: false,
+              left_at: null,
+              last_seen_at: new Date().toISOString(),
+            },
+            { onConflict: "room_id,user_id" },
+          );
+        if (joinError) {
+          console.log("[social] host participant upsert failed", joinError.message);
+        }
       } else {
         id = typeof data === "string" ? data : String(data ?? "");
       }
+
       if (!id) throw new Error("Space could not be created.");
       await qc.invalidateQueries({ queryKey: ["social", "spaces"] });
       return id;

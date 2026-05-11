@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import {
   Bell,
   ChevronRight,
+  Headphones,
   LogOut,
   Newspaper,
   Radio,
@@ -94,12 +95,12 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
       onPress: () => navigate("/(tabs)/tools"),
     },
     {
-      key: "settings",
-      label: "Settings",
-      description: "Preferences, privacy, notifications, account controls",
-      Icon: Settings,
-      color: Colors.text,
-      onPress: () => navigate("/(tabs)/settings"),
+      key: "spaces",
+      label: "Spaces",
+      description: "Live audio rooms, alpha calls, AMAs and trading shows",
+      Icon: Headphones,
+      color: Colors.rose,
+      onPress: () => navigate("/spaces"),
     },
     {
       key: "news",
@@ -108,6 +109,14 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
       Icon: Newspaper,
       color: Colors.mint,
       onPress: () => navigate("/crypto-news"),
+    },
+    {
+      key: "settings",
+      label: "Settings",
+      description: "Preferences, privacy, notifications, account controls",
+      Icon: Settings,
+      color: Colors.text,
+      onPress: () => navigate("/(tabs)/settings"),
     },
     {
       key: "portfolio",
