@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { clearSignedOutCache, invalidateCacheScopes } from "@/lib/provider-cache";
 import { saveOwnProfilePatch } from "@/lib/profile-db";
-import { supabase } from "@/lib/supabase";
+import { SUPABASE_READY, supabase } from "@/lib/supabase";
 import { clearAllUserCache } from "@/lib/user-cache";
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -17,6 +17,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   useEffect(() => {
     let mounted = true;
+
+    if (!SUPABASE_READY) {
+      console.log("[auth] Supabase is not configured for this build");
+      setIsLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
     supabase.auth
       .getSession()
       .then(({ data }) => {
