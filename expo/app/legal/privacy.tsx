@@ -8,7 +8,7 @@ export default function PrivacyScreen() {
       eyebrow="LEGAL"
       title="Privacy Policy"
       effectiveDate="May 9, 2026"
-      intro="SolTools (\u201cwe\u201d, \u201cus\u201d) provides a Solana trading and social suite. This policy explains what we collect, why we collect it, and the controls you have."
+      intro="SolTools provides a Solana trading and social suite. This policy explains what data is collected, why it is collected, and the controls you have." 
       sections={[
         {
           heading: "Information we collect",
