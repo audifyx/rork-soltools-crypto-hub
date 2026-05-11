@@ -51,8 +51,7 @@
         {
           "photosPermission": "Allow SolTools to access your photos and videos so you can upload profile media, posts, and reels."
         }
-      ],
-      "expo-secure-store"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
