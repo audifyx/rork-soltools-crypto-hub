@@ -1,16 +1,19 @@
 import { LinearGradient } from "expo-linear-gradient";
+import * as Clipboard from "expo-clipboard";
 import {
   Activity,
+  Copy,
+  ExternalLink,
   Eye,
   EyeOff,
   RefreshCw,
-  Sparkles,
+  ShieldCheck,
   TrendingDown,
   TrendingUp,
   Wallet,
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useQueries } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
@@ -131,7 +134,7 @@ export default function PortfolioCard() {
             <Wallet color={accent} size={14} strokeWidth={2.6} />
           </View>
           <View>
-            <Text style={styles.eyebrow}>PORTFOLIO · LIVE</Text>
+            <Text style={styles.eyebrow}>ON-CHAIN PORTFOLIO · LIVE SCAN</Text>
             <Text style={styles.balance}>{balanceText}</Text>
             <Text style={styles.subBalance}>{solText} · {addresses.length} wallet{addresses.length === 1 ? "" : "s"}</Text>
           </View>
@@ -167,23 +170,35 @@ export default function PortfolioCard() {
           </Text>
         </View>
         <Text style={styles.changeSub}>30D realized PnL</Text>
+        <View style={styles.readOnlyPill}>
+          <ShieldCheck color={Colors.cyan} size={10} strokeWidth={3} />
+          <Text style={styles.readOnlyText}>READ-ONLY SCAN</Text>
+        </View>
       </View>
+
+      {addresses.length > 0 ? (
+        <View style={styles.addressList}>
+          {addresses.map((addr) => (
+            <AddressRow key={addr} address={addr} />
+          ))}
+        </View>
+      ) : null}
 
       {!hasWallets ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No wallets connected</Text>
+          <Text style={styles.emptyTitle}>No address linked</Text>
           <Text style={styles.emptyBody}>
-            Add your Solana address in Edit profile or track wallets to see live holdings.
+            Paste your Solana address in Edit profile — we read on-chain only. No wallet connection, no signing.
           </Text>
         </View>
       ) : isLoading && aggregate.usdTotal === 0 ? (
         <View style={styles.empty}>
           <ActivityIndicator color={Colors.mint} />
-          <Text style={styles.emptyBody}>Fetching live on-chain balances…</Text>
+          <Text style={styles.emptyBody}>Scanning Solana on-chain balances…</Text>
         </View>
       ) : allocations.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyBody}>No tokens detected for connected wallets.</Text>
+          <Text style={styles.emptyBody}>No tokens detected on-chain for this address.</Text>
         </View>
       ) : (
         <View style={styles.allocWrap}>
@@ -229,6 +244,34 @@ export default function PortfolioCard() {
           color={Colors.orange}
         />
       </View>
+    </View>
+  );
+}
+
+function AddressRow({ address }: { address: string }) {
+  const short = `${address.slice(0, 6)}…${address.slice(-6)}`;
+  const onCopy = useCallback(async () => {
+    try {
+      await Clipboard.setStringAsync(address);
+      if (Platform.OS === "web") return;
+      Alert.alert("Copied", "Address copied to clipboard.");
+    } catch (e) {
+      console.log("[portfolio] copy failed", e);
+    }
+  }, [address]);
+  const onOpen = useCallback(() => {
+    Linking.openURL(`https://solscan.io/account/${address}`).catch(() => {});
+  }, [address]);
+  return (
+    <View style={styles.addrRow} testID={`pf-addr-${address.slice(0, 6)}`}>
+      <View style={styles.addrDot} />
+      <Text style={styles.addrText} numberOfLines={1}>{short}</Text>
+      <Pressable onPress={onCopy} hitSlop={8} style={styles.addrBtn} testID="pf-addr-copy">
+        <Copy color={Colors.muted} size={11} strokeWidth={2.6} />
+      </Pressable>
+      <Pressable onPress={onOpen} hitSlop={8} style={styles.addrBtn} testID="pf-addr-open">
+        <ExternalLink color={Colors.cyan} size={11} strokeWidth={2.6} />
+      </Pressable>
     </View>
   );
 }
@@ -280,6 +323,41 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   eyebrow: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.4 },
+  readOnlyPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(95,196,232,0.35)",
+    backgroundColor: "rgba(95,196,232,0.10)",
+    marginLeft: "auto" as const,
+  },
+  readOnlyText: { color: Colors.cyan, fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  addressList: { marginTop: 10, gap: 6 },
+  addrRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  addrDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.mint },
+  addrText: { flex: 1, color: Colors.text, fontSize: 12, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  addrBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
   balance: { color: Colors.text, fontSize: 26, fontWeight: "900", letterSpacing: -0.7, marginTop: 2 },
   subBalance: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
   eyeBtn: {

@@ -1314,7 +1314,16 @@ export default function ProfileScreen() {
           await updateProfile({ bannerUrl: "" });
         }}
         onSave={async (vals) => {
-          await updateProfile(vals);
+          const w = (vals.walletAddress ?? "").trim();
+          if (w && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w)) {
+            Alert.alert(
+              "Invalid Solana address",
+              "Paste a valid base58 Solana address. We never connect to your wallet \u2014 we only read on-chain data.",
+            );
+            return;
+          }
+          await updateProfile({ ...vals, walletAddress: w });
+          qc.invalidateQueries({ queryKey: ["profile", "portfolio"] });
           setEditOpen(false);
         }}
       />
@@ -2021,7 +2030,7 @@ function EditProfileModal({
             />
             <Text style={styles.modalHint}>{bio.length}/160</Text>
 
-            <Text style={styles.modalLabel}>SOLANA WALLET</Text>
+            <Text style={styles.modalLabel}>SOLANA ADDRESS (READ-ONLY SCAN)</Text>
             <TextInput
               value={walletAddress}
               onChangeText={setWalletAddress}
@@ -2031,6 +2040,9 @@ function EditProfileModal({
               autoCapitalize="none"
               autoCorrect={false}
             />
+            <Text style={styles.modalHint}>
+              We never connect to your wallet. We only scan public on-chain data to display your holdings.
+            </Text>
 
             <Text style={styles.modalLabel}>TWITTER / X</Text>
             <TextInput
