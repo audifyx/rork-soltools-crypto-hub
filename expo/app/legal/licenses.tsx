@@ -27,7 +27,7 @@ export default function LicensesScreen() {
           body: "Each dependency is licensed under its own terms (typically MIT, Apache-2.0, or BSD). Full license text is available in the source repositories of the respective packages.",
         },
       ]}
-      contact="To request the full bundled license file email legal@soltools.app"
+      contact="To request the full bundled license file, message Telegram @ogscandev"
     />
   );
 }

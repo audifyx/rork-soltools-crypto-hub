@@ -2293,8 +2293,8 @@ function SettingsModal({
                 <MenuRow
                   Icon={HelpCircle}
                   label="Help & support"
-                  sub="FAQ, contact"
-                  onPress={() => Alert.alert("Support", "Reach us at support@soltools.app")}
+                  sub="Telegram @ogscandev"
+                  onPress={() => Alert.alert("Support", "Message us on Telegram @ogscandev")}
                 />
                 <MenuRow
                   Icon={ExternalLink}

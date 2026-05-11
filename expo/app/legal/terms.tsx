@@ -55,7 +55,7 @@ export default function TermsScreen() {
           body: "We may update these terms. Material changes will be highlighted in-app. Continued use after changes means you accept the updated terms.",
         },
       ]}
-      contact="Questions: legal@soltools.app"
+      contact="Questions: Telegram @ogscandev"
     />
   );
 }

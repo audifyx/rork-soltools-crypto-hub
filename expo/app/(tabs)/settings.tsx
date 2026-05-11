@@ -234,7 +234,7 @@ export default function SettingsScreen() {
 
           {section === "support" ? (
             <Group title="SUPPORT & LEGAL">
-              <MenuRow Icon={HelpCircle} label="Help & support" sub="support@soltools.app" onPress={() => Alert.alert("Support", "Reach us at support@soltools.app")} />
+              <MenuRow Icon={HelpCircle} label="Help & support" sub="Telegram @ogscandev" onPress={() => Alert.alert("Support", "Message us on Telegram @ogscandev")} />
               <MenuRow Icon={Shield} label="Privacy policy" sub="How SolTools handles data" onPress={() => router.push("/legal/privacy")} />
               <MenuRow Icon={Sparkles} label="Terms of service" sub="App rules and usage terms" onPress={() => router.push("/legal/terms")} />
               <MenuRow Icon={LinkIcon} label="Open-source licenses" sub="Third-party credits" onPress={() => router.push("/legal/licenses")} />

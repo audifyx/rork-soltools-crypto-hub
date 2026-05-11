@@ -28,11 +28,11 @@ export default function PrivacyScreen() {
         },
         {
           heading: "Retention",
-          body: "We keep account data while your account is active. You can request deletion at any time from Profile \u2192 Settings \u2192 Privacy, or by emailing support. Backups are purged on a rolling 30-day cycle.",
+          body: "We keep account data while your account is active. You can request deletion at any time from Profile \u2192 Settings \u2192 Privacy, or by messaging Telegram @ogscandev. Backups are purged on a rolling 30-day cycle.",
         },
         {
           heading: "Your rights",
-          body: "Depending on your jurisdiction you may request access, correction, export, or deletion of your data, and you may withdraw consent for optional processing such as analytics. Contact us to exercise these rights.",
+          body: "Depending on your jurisdiction you may request access, correction, export, or deletion of your data, and you may withdraw consent for optional processing such as analytics. Message Telegram @ogscandev to exercise these rights.",
         },
         {
           heading: "Security",
@@ -47,7 +47,7 @@ export default function PrivacyScreen() {
           body: "We may update this policy. Material changes will be highlighted in-app. Continued use after changes take effect means you accept the updated policy.",
         },
       ]}
-      contact="Questions or data requests: privacy@soltools.app"
+      contact="Questions or data requests: Telegram @ogscandev"
     />
   );
 }
