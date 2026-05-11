@@ -146,7 +146,6 @@ export default function SpaceDetailScreen() {
   const voiceRef = useRef<LiveKitVoiceHandle | null>(null);
   const [floaters, setFloaters] = useState<{ id: string; emoji: string; x: number }[]>([]);
   const [reactionPickerOpen, setReactionPickerOpen] = useState<boolean>(false);
-  const [pinnedNote, setPinnedNote] = useState<string | null>(null);
   const [pinModalOpen, setPinModalOpen] = useState<boolean>(false);
   const [pinDraft, setPinDraft] = useState<string>("");
   type PollState = SpacePoll;
