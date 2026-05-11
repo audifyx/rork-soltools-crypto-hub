@@ -97,6 +97,20 @@ export default function CryptoNewsScreen() {
   const [embedLoading, setEmbedLoading] = useState<boolean>(true);
   const showEmbed = category === "x" || category === "telegram";
   const embedUrl = category === "telegram" ? OG_TELEGRAM_EMBED_URL : OG_X_EMBED_URL;
+  const embedHtml = useMemo<string>(() => `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#000; }
+  iframe { border:0; width:100%; height:100%; display:block; background:#000; }
+</style>
+</head>
+<body>
+<iframe src="${embedUrl}" allow="clipboard-write; encrypted-media; fullscreen" referrerpolicy="no-referrer-when-downgrade" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox"></iframe>
+</body>
+</html>`, [embedUrl]);
   const [range, setRange] = useState<NewsTimeRange>("24h");
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
@@ -304,19 +318,21 @@ export default function CryptoNewsScreen() {
           <WebView
             key={embedUrl}
             ref={embedRef}
-            source={{ uri: embedUrl }}
+            source={{ html: embedHtml, baseUrl: "https://rss.app" }}
             style={styles.embedWeb}
             originWhitelist={["*"]}
             javaScriptEnabled
             domStorageEnabled
+            thirdPartyCookiesEnabled
             startInLoadingState={false}
             onLoadEnd={() => setEmbedLoading(false)}
             setSupportMultipleWindows={false}
             allowsBackForwardNavigationGestures
             pullToRefreshEnabled={Platform.OS !== "web"}
             onShouldStartLoadWithRequest={(req) => {
-              if (req.url === embedUrl) return true;
-              if (req.url.startsWith("https://rss.app/")) return true;
+              if (req.url === "about:blank") return true;
+              if (req.url.startsWith("https://rss.app")) return true;
+              if (req.url.startsWith("data:")) return true;
               Linking.openURL(req.url).catch(() => {});
               return false;
             }}
