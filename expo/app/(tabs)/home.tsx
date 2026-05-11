@@ -89,6 +89,42 @@ type FeedItem =
   | { kind: "token"; data: LaunchToken }
   | { kind: "whale"; data: WhaleFeedEvent };
 
+type FeedPostRow = {
+  id: string;
+  content: string | null;
+  image_url: string | null;
+  ticker: string | null;
+  change_pct: number | null;
+  likes_count: number | null;
+  reposts_count: number | null;
+  comments_count: number | null;
+  created_at: string;
+};
+
+async function hydrateLikedPosts(rows: FeedPostRow[], userId: string): Promise<UserPost[]> {
+  const posts = rows.map((row): UserPost => ({
+    id: row.id,
+    text: row.content ?? "",
+    ticker: row.ticker ?? undefined,
+    changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
+    images: row.image_url ? [row.image_url] : undefined,
+    createdAt: new Date(row.created_at).getTime(),
+    likes: row.likes_count ?? 0,
+    reposts: row.reposts_count ?? 0,
+    comments: row.comments_count ?? 0,
+    liked: false,
+  }));
+  if (posts.length === 0) return posts;
+  const ids = posts.map((p) => p.id);
+  const { data: likes } = await supabase
+    .from("post_likes")
+    .select("post_id")
+    .eq("user_id", userId)
+    .in("post_id", ids);
+  const likedSet = new Set((likes ?? []).map((r) => r.post_id as string));
+  return posts.map((p) => ({ ...p, liked: likedSet.has(p.id) }));
+}
+
 export default function HomeFeedScreen() {
   const router = useRouter();
   const qc = useQueryClient();
@@ -119,7 +155,28 @@ export default function HomeFeedScreen() {
       if (!userId) return [];
       try {
         const { data, error } = await supabase.rpc("get_following_feed", { max_rows: 50 });
-        if (error) throw error;
+        if (error) {
+          console.log("[home] following feed rpc fallback", error.message);
+          const { data: follows, error: followsError } = await supabase
+            .from("followers")
+            .select("followee_id")
+            .eq("follower_id", userId);
+          if (followsError) throw followsError;
+          const followeeIds = (follows ?? [])
+            .map((row) => String(row.followee_id ?? ""))
+            .filter((id) => id.length > 0);
+          if (followeeIds.length === 0) return [];
+          const { data: fallbackPosts, error: postsError } = await supabase
+            .from("community_posts")
+            .select("id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at")
+            .in("user_id", followeeIds)
+            .is("community_id", null)
+            .is("parent_post_id", null)
+            .order("created_at", { ascending: false })
+            .limit(50);
+          if (postsError) throw postsError;
+          return hydrateLikedPosts(fallbackPosts ?? [], userId);
+        }
         const rows = (data ?? []) as Array<{
           id: string;
           user_id: string;
@@ -132,30 +189,7 @@ export default function HomeFeedScreen() {
           comments_count: number | null;
           created_at: string;
         }>;
-        const posts = rows.map((row): UserPost => ({
-          id: row.id,
-          text: row.content ?? "",
-          ticker: row.ticker ?? undefined,
-          changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
-          images: row.image_url ? [row.image_url] : undefined,
-          createdAt: new Date(row.created_at).getTime(),
-          likes: row.likes_count ?? 0,
-          reposts: row.reposts_count ?? 0,
-          comments: row.comments_count ?? 0,
-          liked: false,
-        }));
-        // mark liked state for caller
-        if (posts.length > 0) {
-          const ids = posts.map((p) => p.id);
-          const { data: likes } = await supabase
-            .from("post_likes")
-            .select("post_id")
-            .eq("user_id", userId)
-            .in("post_id", ids);
-          const likedSet = new Set((likes ?? []).map((r) => r.post_id as string));
-          return posts.map((p) => ({ ...p, liked: likedSet.has(p.id) }));
-        }
-        return posts;
+        return hydrateLikedPosts(rows, userId);
       } catch (e) {
         console.log("[home] following feed failed", e);
         return [];

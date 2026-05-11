@@ -162,7 +162,15 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
 
     const beat = async (status: "online" | "away" | "offline" = "online") => {
       try {
-        await supabase.rpc("heartbeat", { set_status: status });
+        const { error } = await supabase.rpc("heartbeat", { set_status: status });
+        if (error) {
+          const patch =
+            status === "online"
+              ? { is_online: true, last_seen_at: new Date().toISOString() }
+              : { is_online: false, last_seen_at: new Date().toISOString() };
+          const { error: fallbackError } = await supabase.from("profiles").update(patch).eq("user_id", userId);
+          if (fallbackError) throw fallbackError;
+        }
       } catch (e) {
         console.log("[presence] heartbeat error", e);
       }
@@ -184,7 +192,14 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       clearInterval(id);
       sub.remove();
       supabase.rpc("set_offline").then(
-        () => undefined,
+        ({ error }) => {
+          if (!error) return undefined;
+          return supabase
+            .from("profiles")
+            .update({ is_online: false, last_seen_at: new Date().toISOString() })
+            .eq("user_id", userId)
+            .then(() => undefined);
+        },
         () => undefined,
       );
     };
@@ -299,14 +314,26 @@ function publicProfileFromRow(row: Record<string, unknown>): PublicProfile {
 }
 
 function profileSummaryFromRow(row: Record<string, unknown>): ProfileSummary {
+  const userId = String(row.user_id ?? row.id ?? row.follower_id ?? row.followee_id ?? "");
+  const rawUsername =
+    (row.username as string | null | undefined) ??
+    (row.handle as string | null | undefined) ??
+    (row.follower_username as string | null | undefined) ??
+    (row.followee_username as string | null | undefined) ??
+    null;
   return {
-    user_id: String(row.user_id ?? row.id),
-    username: (row.username as string | null) ?? null,
-    display_name: (row.display_name as string | null) ?? null,
-    avatar_url: normalizeMediaUrl(row.avatar_url),
-    verified: !!row.verified,
-    custom_badges: normalizeBadges(row.custom_badges),
-    followers_count: Number(row.followers_count ?? 0),
+    user_id: userId,
+    username: rawUsername?.replace(/^@/, "") ?? null,
+    display_name:
+      ((row.display_name as string | null | undefined) ??
+        (row.name as string | null | undefined) ??
+        (row.follower_display_name as string | null | undefined) ??
+        (row.followee_display_name as string | null | undefined)) ??
+      null,
+    avatar_url: normalizeMediaUrl(row.avatar_url ?? row.follower_avatar_url ?? row.followee_avatar_url),
+    verified: !!(row.verified ?? row.follower_verified ?? row.followee_verified),
+    custom_badges: normalizeBadges(row.custom_badges ?? row.follower_custom_badges ?? row.followee_custom_badges),
+    followers_count: Number(row.followers_count ?? row.follower_followers_count ?? row.followee_followers_count ?? 0),
   };
 }
 
@@ -322,7 +349,7 @@ function platformUserFromRow(row: Record<string, unknown>): PlatformUser {
     custom_badges: normalizeBadges(row.custom_badges),
     followers_count: Number(row.followers_count ?? 0),
     is_online: !!row.is_online,
-    last_seen: (row.last_seen as string | null) ?? null,
+    last_seen: ((row.last_seen as string | null) ?? (row.last_seen_at as string | null)) ?? null,
     created_at: (row.created_at as string) ?? new Date().toISOString(),
     is_following: !!row.is_following,
   };
@@ -364,7 +391,7 @@ export function useFollowList(userId: string | null | undefined, kind: "follower
       if (!userId) return [];
       const fn = kind === "followers" ? "list_followers" : "list_following";
       const { data, error } = await supabase.rpc(fn, { target_user_id: userId });
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         return data.map((r): ProfileSummary => profileSummaryFromRow(r as Record<string, unknown>));
       }
 
@@ -412,8 +439,20 @@ export function usePlatformUsers(opts: { q?: string; onlineOnly?: boolean }) {
         online_only: onlineOnly,
         max_rows: 200,
       });
-      if (error) throw error;
-      return ((data ?? []) as Record<string, unknown>[]).map(platformUserFromRow);
+      if (!error) return ((data ?? []) as Record<string, unknown>[]).map(platformUserFromRow);
+
+      console.log("[users] list_users fallback", error.message);
+      let req = supabase
+        .from("profiles")
+        .select("id,user_id,username,display_name,avatar_url,banner_url,bio,verified,custom_badges,followers_count,is_online,last_seen_at,created_at")
+        .order("is_online", { ascending: false })
+        .order("last_seen_at", { ascending: false })
+        .limit(200);
+      if (q.length > 0) req = req.or(`username.ilike.%${q}%,display_name.ilike.%${q}%`);
+      if (onlineOnly) req = req.eq("is_online", true);
+      const { data: fallback, error: fallbackError } = await req;
+      if (fallbackError) throw fallbackError;
+      return ((fallback ?? []) as Record<string, unknown>[]).map(platformUserFromRow);
     },
     refetchInterval: onlineOnly ? 30_000 : 60_000,
     staleTime: 15_000,
