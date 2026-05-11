@@ -276,11 +276,45 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
           };
         });
       });
+
+      // Community member sheets: ['community', 'members', communityId, viewerId]
+      qc.setQueriesData<Array<Record<string, unknown>> | undefined>(
+        { queryKey: ["community", "members"] },
+        (curr) => {
+          if (!Array.isArray(curr)) return curr;
+          return curr.map((m) => {
+            const memberId = String((m as { id?: unknown }).id ?? "");
+            if (memberId !== target) return m;
+            const wasFollowing = !!(m as { isFollowing?: boolean }).isFollowing;
+            const currentFollowers = Number((m as { followersCount?: number }).followersCount ?? 0);
+            return {
+              ...m,
+              isFollowing: !wasFollowing,
+              followersCount: Math.max(0, currentFollowers + (wasFollowing ? -1 : 1)),
+            };
+          });
+        },
+      );
+
+      // Follow counts for the current viewer: ['profile', 'follow-counts', viewerId]
+      if (userId) {
+        qc.setQueryData<{ followers: number; following: number } | undefined>(
+          ["profile", "follow-counts", userId],
+          (curr) => {
+            if (!curr) return curr;
+            // We don't know the prior state here; rely on success refetch to reconcile.
+            return curr;
+          },
+        );
+      }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["profile"] });
+      // Refresh in the background so counts/state reconcile, but the optimistic
+      // flip above keeps Follow/Following buttons "pushed in" instantly.
+      qc.invalidateQueries({ queryKey: ["profile", "follow-counts"] });
+      qc.invalidateQueries({ queryKey: ["profile", "followers"] });
+      qc.invalidateQueries({ queryKey: ["profile", "following"] });
       qc.invalidateQueries({ queryKey: ["app", "profile"] });
-      qc.invalidateQueries({ queryKey: ["users"] });
       qc.invalidateQueries({ queryKey: ["posts"] });
       qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
     },
@@ -288,6 +322,7 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       console.log("[profile] follow rollback", err instanceof Error ? err.message : err, target);
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["community", "members"] });
     },
   });
 

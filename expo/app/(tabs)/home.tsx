@@ -18,13 +18,16 @@ import {
   Menu,
   MessageCircle,
   Plus,
+  Quote,
   Repeat2,
   Rocket,
   Search,
+  Send,
   Share2,
   Award,
   Skull,
   Sparkles,
+  X,
   TrendingDown,
   TrendingUp,
   Waves,
@@ -32,13 +35,18 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  Alert,
   FlatList,
+  KeyboardAvoidingView,
   ListRenderItem,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -68,6 +76,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchToken } from "@/types/launchpad";
 import { UserPost, useApp } from "@/providers/app-provider";
+import { useSocial } from "@/providers/social-provider";
 
 const FILTERS = ["For You", "Following", "Trending", "New Pairs", "Whales", "OG Tokens"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -169,6 +178,13 @@ export default function HomeFeedScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const { posts: userPosts, togglePostLike, togglePostRepost, deletePost, profile } = useApp();
+  const { addPostReply, quotePost } = useSocial();
+  const [interaction, setInteraction] = useState<{
+    mode: "reply" | "quote";
+    post: UserPost;
+  } | null>(null);
+  const [interactionText, setInteractionText] = useState<string>("");
+  const [submittingInteraction, setSubmittingInteraction] = useState<boolean>(false);
   const { listings } = useLaunchpad();
   const { data: trendingTokens } = useTrendingTokens(40);
   const { data: newPairsData } = useNewSolanaPairs(40);
@@ -346,6 +362,121 @@ export default function HomeFeedScreen() {
     },
     [patchTimelinePost, togglePostRepost],
   );
+
+  const onTimelineShare = useCallback(async (post: UserPost) => {
+    Haptics.selectionAsync().catch(() => {});
+    const ticker = post.ticker ? `\n\n${post.ticker.replace("$", "")}` : "";
+    const author = post.authorUsername
+      ? `@${post.authorUsername}`
+      : post.authorDisplayName ?? "a trader";
+    try {
+      await Share.share({
+        message: `${post.text || "$OGS token post"}${ticker}\n\n— ${author}`,
+      });
+    } catch (e) {
+      console.log("[home] share failed", e);
+    }
+  }, []);
+
+  const openReply = useCallback(
+    (post: UserPost) => {
+      if (!isAuthenticated) {
+        Alert.alert("Sign in", "Sign in to reply to posts.");
+        return;
+      }
+      Haptics.selectionAsync().catch(() => {});
+      setInteraction({ mode: "reply", post });
+      setInteractionText("");
+    },
+    [isAuthenticated],
+  );
+
+  const openQuote = useCallback(
+    (post: UserPost) => {
+      if (!isAuthenticated) {
+        Alert.alert("Sign in", "Sign in to quote posts.");
+        return;
+      }
+      Haptics.selectionAsync().catch(() => {});
+      setInteraction({ mode: "quote", post });
+      setInteractionText("");
+    },
+    [isAuthenticated],
+  );
+
+  const closeInteraction = useCallback(() => {
+    setInteraction(null);
+    setInteractionText("");
+  }, []);
+
+  const submitInteraction = useCallback(async () => {
+    if (!interaction) return;
+    const text = interactionText.trim();
+    if (text.length === 0) return;
+    const { mode, post } = interaction;
+    setSubmittingInteraction(true);
+    try {
+      const viewer = {
+        authorHandle: profile.handle || "@you",
+        authorName: profile.displayName || "You",
+        authorColor: profile.avatarColor,
+      };
+      const targetPost = {
+        id: post.id,
+        communityId: "",
+        authorUserId: post.authorId ?? null,
+        authorHandle: post.authorUsername ? `@${post.authorUsername}` : "",
+        authorName: post.authorDisplayName ?? post.authorUsername ?? "Trader",
+        authorColor: post.authorAvatarColor ?? Colors.mint,
+        content: post.text,
+        imageUrl: post.images?.[0] ?? null,
+        ticker: post.ticker,
+        changePct: post.changePct,
+        createdAt: post.createdAt,
+        likes: post.likes,
+        comments: post.comments,
+        reposts: post.reposts,
+        liked: !!post.liked,
+        reposted: !!post.reposted,
+        bookmarked: false,
+        token: null,
+      };
+      if (mode === "reply") {
+        await addPostReply({ post: targetPost, content: text, ...viewer });
+        patchTimelinePost(post.id, (p) => ({ ...p, comments: p.comments + 1 }));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      } else {
+        await quotePost({ post: targetPost, content: text, ...viewer });
+        patchTimelinePost(post.id, (p) => ({
+          ...p,
+          reposts: p.reposts + 1,
+          reposted: true,
+        }));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+      qc.invalidateQueries({ queryKey: ["home", "live-feed", userId ?? "guest"] });
+      closeInteraction();
+    } catch (e) {
+      Alert.alert(
+        mode === "reply" ? "Reply failed" : "Quote failed",
+        e instanceof Error ? e.message : "Try again.",
+      );
+    } finally {
+      setSubmittingInteraction(false);
+    }
+  }, [
+    interaction,
+    interactionText,
+    profile.handle,
+    profile.displayName,
+    profile.avatarColor,
+    addPostReply,
+    quotePost,
+    patchTimelinePost,
+    qc,
+    userId,
+    closeInteraction,
+  ]);
 
   const combined = useMemo<FeedItem[]>(() => {
     if (filter === "Following") {
@@ -530,13 +661,26 @@ export default function HomeFeedScreen() {
             canDelete={!item.data.authorId || item.data.authorId === userId}
             onLike={() => onTimelineLike(item.data)}
             onRepost={() => onTimelineRepost(item.data)}
+            onQuote={() => openQuote(item.data)}
+            onComment={() => openReply(item.data)}
+            onShare={() => void onTimelineShare(item.data)}
             onDelete={() => deletePost(item.data.id)}
           />
         );
       }
       return null;
     },
-    [profile, onTimelineLike, onTimelineRepost, deletePost, router, userId],
+    [
+      profile,
+      onTimelineLike,
+      onTimelineRepost,
+      onTimelineShare,
+      openReply,
+      openQuote,
+      deletePost,
+      router,
+      userId,
+    ],
   );
 
   return (
@@ -643,6 +787,17 @@ export default function HomeFeedScreen() {
         />
 
         <QuickAccessMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
+
+        <PostInteractionModal
+          interaction={interaction}
+          text={interactionText}
+          onChangeText={setInteractionText}
+          onClose={closeInteraction}
+          onSubmit={submitInteraction}
+          submitting={submittingInteraction}
+          viewerName={profile.displayName}
+          viewerAvatarColor={profile.avatarColor}
+        />
 
         <Pressable style={styles.fab} onPress={openCompose} testID="compose-fab">
           <LinearGradient
@@ -1560,6 +1715,9 @@ function UserPostCard({
   verified,
   onLike,
   onRepost,
+  onQuote,
+  onComment,
+  onShare,
   onDelete,
   canDelete,
 }: {
@@ -1571,6 +1729,9 @@ function UserPostCard({
   verified: boolean;
   onLike: () => void;
   onRepost: () => void;
+  onQuote: () => void;
+  onComment: () => void;
+  onShare: () => void;
   onDelete: () => void;
   canDelete: boolean;
 }) {
@@ -1620,10 +1781,15 @@ function UserPostCard({
         ) : null}
         <ReactionBar postId={post.id} />
         <View style={styles.actionsRow}>
-          <ActionItem
-            icon={<MessageCircle color={Colors.muted} size={16} strokeWidth={2.2} />}
-            label={formatCount(post.comments)}
-          />
+          <Pressable
+            style={styles.actionBtn}
+            onPress={onComment}
+            hitSlop={6}
+            testID={`comment-user-${post.id}`}
+          >
+            <MessageCircle color={Colors.muted} size={16} strokeWidth={2.2} />
+            <Text style={styles.actionLabel}>{formatCount(post.comments)}</Text>
+          </Pressable>
           <Pressable
             style={styles.actionBtn}
             onPress={onRepost}
@@ -1641,6 +1807,14 @@ function UserPostCard({
           </Pressable>
           <Pressable
             style={styles.actionBtn}
+            onPress={onQuote}
+            hitSlop={6}
+            testID={`quote-user-${post.id}`}
+          >
+            <Quote color={Colors.muted} size={15} strokeWidth={2.2} />
+          </Pressable>
+          <Pressable
+            style={styles.actionBtn}
             onPress={onLike}
             hitSlop={6}
             testID={`like-user-${post.id}`}
@@ -1655,8 +1829,14 @@ function UserPostCard({
               {formatCount(post.likes)}
             </Text>
           </Pressable>
-          <ActionItem icon={<Bookmark color={Colors.muted} size={15} strokeWidth={2.2} />} label="" />
-          <ActionItem icon={<Share2 color={Colors.muted} size={15} strokeWidth={2.2} />} label="" />
+          <Pressable
+            style={styles.actionBtn}
+            onPress={onShare}
+            hitSlop={6}
+            testID={`share-user-${post.id}`}
+          >
+            <Share2 color={Colors.muted} size={15} strokeWidth={2.2} />
+          </Pressable>
         </View>
       </View>
     </View>
@@ -1896,6 +2076,102 @@ function ActionItem({ icon, label }: { icon: React.ReactNode; label: string }) {
 function formatCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return `${n}`;
+}
+
+function PostInteractionModal({
+  interaction,
+  text,
+  onChangeText,
+  onClose,
+  onSubmit,
+  submitting,
+  viewerName,
+  viewerAvatarColor,
+}: {
+  interaction: { mode: "reply" | "quote"; post: UserPost } | null;
+  text: string;
+  onChangeText: (next: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  viewerName: string;
+  viewerAvatarColor: string;
+}) {
+  const visible = !!interaction;
+  const mode = interaction?.mode ?? "reply";
+  const post = interaction?.post;
+  const authorName = post?.authorDisplayName ?? post?.authorUsername ?? "Trader";
+  const authorHandle = post?.authorUsername ? `@${post.authorUsername}` : "";
+  const canSend = text.trim().length > 0 && !submitting;
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.interactionBackdrop}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.interactionSheetWrap}
+        >
+          <SafeAreaView edges={["bottom"]} style={styles.interactionSheet}>
+            <View style={styles.interactionHeader}>
+              <Text style={styles.interactionTitle}>
+                {mode === "reply" ? "Reply" : "Quote post"}
+              </Text>
+              <Pressable onPress={onClose} hitSlop={8} testID="interaction-close">
+                <X color={Colors.text} size={18} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+            {post ? (
+              <View style={styles.interactionQuote}>
+                <Text style={styles.interactionQuoteAuthor} numberOfLines={1}>
+                  {authorName} {authorHandle ? <Text style={styles.interactionQuoteHandle}>{authorHandle}</Text> : null}
+                </Text>
+                {post.text ? (
+                  <Text style={styles.interactionQuoteBody} numberOfLines={4}>
+                    {post.text}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            <View style={styles.interactionComposer}>
+              <View
+                style={[styles.interactionAvatar, { backgroundColor: viewerAvatarColor }]}
+              >
+                <Text style={styles.interactionAvatarText}>
+                  {(viewerName || "Y").slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+              <TextInput
+                value={text}
+                onChangeText={onChangeText}
+                placeholder={
+                  mode === "reply"
+                    ? `Reply to ${authorName}…`
+                    : "Add your take…"
+                }
+                placeholderTextColor={Colors.muted}
+                style={styles.interactionInput}
+                multiline
+                autoFocus
+                testID="interaction-input"
+              />
+              <Pressable
+                onPress={onSubmit}
+                disabled={!canSend}
+                style={[styles.interactionSend, !canSend && { opacity: 0.42 }]}
+                testID="interaction-send"
+              >
+                <Send color={Colors.ink} size={15} strokeWidth={2.8} />
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -2878,5 +3154,100 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  interactionBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(3,7,8,0.78)",
+    justifyContent: "flex-end",
+  },
+  interactionSheetWrap: {
+    width: "100%",
+  },
+  interactionSheet: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingTop: 14,
+    paddingHorizontal: 18,
+    paddingBottom: 14,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+    gap: 14,
+  },
+  interactionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  interactionTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  interactionQuote: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    padding: 12,
+    gap: 6,
+  },
+  interactionQuoteAuthor: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  interactionQuoteHandle: {
+    color: Colors.muted,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  interactionQuoteBody: {
+    color: Colors.muted,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
+  },
+  interactionComposer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+    paddingBottom: 6,
+  },
+  interactionAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  interactionAvatarText: {
+    color: Colors.ink,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  interactionInput: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 140,
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "500",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  interactionSend: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.mint,
   },
 });

@@ -505,14 +505,17 @@ export default function CommunityDetailScreen() {
   const onFollowMember = useCallback(async (member: CommunityMember) => {
     if (!ensureSignedIn("Sign in to follow community members.")) return;
     if (member.id === userId) return;
+    // Optimistic flip happens inside toggleFollow's onMutate so the button stays
+    // "pushed in" the moment it's tapped. Avoid eager invalidation here — it
+    // forces a refetch that races with the optimistic update and visually
+    // "unactivates" the Follow button.
     try {
       await toggleFollow(member.id);
-      featureQueryClient.invalidateQueries({ queryKey: ["community", "members", community?.id ?? ""] });
       showToast(`${member.isFollowing ? "Unfollowed" : "Following"} ${member.handle || member.name}`);
     } catch (e) {
       Alert.alert("Follow failed", e instanceof Error ? e.message : "Try again.");
     }
-  }, [community?.id, ensureSignedIn, featureQueryClient, showToast, toggleFollow, userId]);
+  }, [ensureSignedIn, showToast, toggleFollow, userId]);
 
   const onToggleNotify = useCallback(() => {
     const next = !notifyOn;
