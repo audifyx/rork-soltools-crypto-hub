@@ -72,7 +72,7 @@ export default function PublicProfileScreen() {
   const profileQ = usePublicProfile(handle);
   const profile = profileQ.data;
   const isSelf = !!profile && profile.id === userId;
-  const [tipOpen, setTipOpen] = useState<boolean>(false);
+  const [tipCopied, setTipCopied] = useState<boolean>(false);
   const [feedTab, setFeedTab] = useState<"posts" | "reels">("posts");
   const [followKind, setFollowKind] = useState<"followers" | "following" | null>(null);
 
@@ -135,6 +135,27 @@ export default function PublicProfileScreen() {
   const onComingSoonWallet = useCallback(() => {
     Alert.alert("Coming soon", SOLTOOLS_TRADING_DISABLED_MESSAGE);
   }, []);
+
+  const onTipCopy = useCallback(async () => {
+    const wallet = profile?.wallet_address ?? "";
+    if (!wallet) {
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      }
+      Alert.alert("No wallet added", "This user hasn't linked a wallet yet.");
+      return;
+    }
+    try {
+      await Clipboard.setStringAsync(wallet);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+      setTipCopied(true);
+      setTimeout(() => setTipCopied(false), 1600);
+    } catch {
+      Alert.alert("Couldn't copy", "Try again in a moment.");
+    }
+  }, [profile?.wallet_address]);
 
   const onOpenLink = useCallback((url: string) => {
     if (!url) return;
@@ -223,21 +244,20 @@ export default function PublicProfileScreen() {
                   <MessageCircle color={Colors.ink} size={13} strokeWidth={2.8} />
                   <Text style={styles.messageBtnText}>Message</Text>
                 </Pressable>
-                {profile.wallet_address ? (
-                  <Pressable
-                    onPress={() => {
-                      if (Platform.OS !== "web") {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                      }
-                      onComingSoonWallet();
-                    }}
-                    style={styles.tipBtn}
-                    testID="open-tip"
-                  >
+                <Pressable
+                  onPress={onTipCopy}
+                  style={styles.tipBtn}
+                  testID="open-tip"
+                >
+                  {tipCopied ? (
+                    <Check color={Colors.mint} size={13} strokeWidth={3} />
+                  ) : (
                     <Coins color={Colors.orange} size={13} strokeWidth={2.8} />
-                    <Text style={styles.tipBtnText}>Tip</Text>
-                  </Pressable>
-                ) : null}
+                  )}
+                  <Text style={styles.tipBtnText}>
+                    {tipCopied ? "Copied" : "Tip"}
+                  </Text>
+                </Pressable>
                 <Pressable
                   onPress={onToggleFollow}
                   disabled={isToggling}
@@ -420,13 +440,6 @@ export default function PublicProfileScreen() {
           setFollowKind(null);
           router.push({ pathname: "/u/[handle]", params: { handle: username } });
         }}
-      />
-      <TipModal
-        visible={tipOpen}
-        onClose={() => setTipOpen(false)}
-        recipientName={display}
-        recipientHandle={profile.username ?? "trader"}
-        walletAddress={profile.wallet_address ?? ""}
       />
     </View>
   );
