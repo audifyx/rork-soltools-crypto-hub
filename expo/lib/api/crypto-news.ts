@@ -143,16 +143,14 @@ const RSS_SOURCES: RssSource[] = [
   { name: "r/SolanaNFT", url: "https://www.reddit.com/r/SolanaNFT/.rss", categoryHint: "nft" },
   // Aggregators
   { name: "CryptoPanic Hot", url: "https://cryptopanic.com/news/rss/", categoryHint: "trending" },
-  // Official OG SCAN ($OGS) — X / Twitter via Nitter mirrors (first one that responds wins via dedupe)
-  { name: "@ogscanfun on X", url: "https://nitter.net/ogscanfun/rss", categoryHint: "viral" },
-  { name: "@ogscanfun on X", url: "https://nitter.poast.org/ogscanfun/rss", categoryHint: "viral" },
-  { name: "@ogscanfun on X", url: "https://nitter.privacydev.net/ogscanfun/rss", categoryHint: "viral" },
-  { name: "@ogscanfun on X", url: "https://nitter.tiekoetter.com/ogscanfun/rss", categoryHint: "viral" },
-  // Official OG SCAN Telegram updates channel (t.me/ogupdates) via RSSHub mirrors
-  { name: "OG Updates (Telegram)", url: "https://rsshub.app/telegram/channel/ogupdates", categoryHint: "viral" },
-  { name: "OG Updates (Telegram)", url: "https://rss.rssforever.com/telegram/channel/ogupdates", categoryHint: "viral" },
-  { name: "OG Updates (Telegram)", url: "https://rsshub.pseudoyu.com/telegram/channel/ogupdates", categoryHint: "viral" },
 ];
+
+// Official OG SCAN ($OGS) social handles. These don't go through the RSS pipeline
+// above because Nitter/RSSHub public instances are unreliable. Instead we use
+// dedicated direct scrapers (Telegram public web preview + Twitter via rss2json
+// proxy hitting multiple Nitter mirrors).
+const OG_X_HANDLE = "ogscanfun" as const;
+const OG_TELEGRAM_CHANNEL = "ogupdates" as const;
 
 const RSS_FETCH_TIMEOUT_MS = 6_500;
 const RSS_BATCH_SIZE = 6;
@@ -201,8 +199,8 @@ function sortByDateDesc(items: CryptoNewsItem[]): CryptoNewsItem[] {
   );
 }
 
-const NEWS_CACHE_KEY = "soltools.cryptoNews.cache.v2";
-const NEWS_CACHE_TTL_MS = 1000 * 60 * 8;
+const NEWS_CACHE_KEY = "soltools.cryptoNews.cache.v3";
+const NEWS_CACHE_TTL_MS = 1000 * 60 * 5;
 
 function decodeEntities(input: string): string {
   return input
@@ -332,6 +330,116 @@ async function writeCache(items: CryptoNewsItem[]): Promise<void> {
   }
 }
 
+async function fetchTelegramChannelPosts(channel: string): Promise<CryptoNewsItem[]> {
+  // Telegram exposes a public web preview at https://t.me/s/<channel> that
+  // works without any auth or API token. We parse the embedded message HTML
+  // directly — far more reliable than RSSHub public mirrors.
+  const url = `https://t.me/s/${channel}`;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), RSS_FETCH_TIMEOUT_MS);
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { Accept: "text/html,application/xhtml+xml" },
+    }).finally(() => clearTimeout(timer));
+    if (!res.ok) return [];
+    const html = await res.text();
+    const blocks = html.match(/<div class="tgme_widget_message_wrap[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/g) ?? [];
+    const items: CryptoNewsItem[] = [];
+    for (const block of blocks) {
+      const textMatch = block.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+      const rawText = textMatch?.[1] ?? "";
+      const text = stripHtml(rawText);
+      if (!text) continue;
+      const linkMatch = block.match(/<a class="tgme_widget_message_date"[^>]*href="([^"]+)"/);
+      const link = linkMatch?.[1] ?? `https://t.me/${channel}`;
+      const timeMatch = block.match(/<time[^>]*datetime="([^"]+)"/);
+      const published_at = timeMatch?.[1] ? new Date(timeMatch[1]).toISOString() : new Date().toISOString();
+      const photoMatch = block.match(/tgme_widget_message_photo_wrap[^>]*background-image:url\('([^']+)'\)/);
+      const image_url = photoMatch?.[1] ?? null;
+      const title = text.length > 140 ? `${text.slice(0, 137)}\u2026` : text;
+      const id = hashId(`telegram:${link}:${published_at}`);
+      items.push({
+        id,
+        source: "OG Updates (Telegram)",
+        source_url: link,
+        title,
+        description: text.slice(0, 280),
+        image_url,
+        category: "viral",
+        sentiment: detectSentiment(text),
+        coin_mentions: extractMentions(text),
+        engagement: { likes: 120, shares: 30, comments: 18 },
+        published_at,
+      });
+    }
+    return items.reverse(); // Telegram lists oldest first; we want newest first.
+  } catch (e) {
+    console.log("[news] telegram scrape failed", e);
+    return [];
+  }
+}
+
+async function fetchTwitterViaRss2Json(handle: string): Promise<CryptoNewsItem[]> {
+  // rss2json acts as a CORS/JSON proxy in front of multiple Nitter mirrors so we
+  // don't get blocked by one going down. First success wins.
+  const mirrors = [
+    `https://nitter.net/${handle}/rss`,
+    `https://nitter.privacydev.net/${handle}/rss`,
+    `https://nitter.poast.org/${handle}/rss`,
+    `https://nitter.tiekoetter.com/${handle}/rss`,
+    `https://rsshub.app/twitter/user/${handle}`,
+  ];
+  for (const mirror of mirrors) {
+    try {
+      const url = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(mirror)}`;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), RSS_FETCH_TIMEOUT_MS);
+      const res = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+      if (!res.ok) continue;
+      const json = (await res.json()) as {
+        status?: string;
+        items?: { title?: string; link?: string; pubDate?: string; description?: string; thumbnail?: string; enclosure?: { link?: string } }[];
+      };
+      if (json.status !== "ok" || !json.items?.length) continue;
+      const items: CryptoNewsItem[] = [];
+      for (const it of json.items) {
+        const text = stripHtml(it.description ?? it.title ?? "");
+        if (!text) continue;
+        const published_at = it.pubDate ? new Date(it.pubDate).toISOString() : new Date().toISOString();
+        const link = it.link ?? `https://x.com/${handle}`;
+        const image_url = it.thumbnail || it.enclosure?.link || null;
+        const title = text.length > 140 ? `${text.slice(0, 137)}\u2026` : text;
+        items.push({
+          id: hashId(`twitter:${link}:${published_at}`),
+          source: `@${handle} on X`,
+          source_url: link,
+          title,
+          description: text.slice(0, 280),
+          image_url,
+          category: "viral",
+          sentiment: detectSentiment(text),
+          coin_mentions: extractMentions(text),
+          engagement: { likes: 150, shares: 40, comments: 22 },
+          published_at,
+        });
+      }
+      if (items.length) return items;
+    } catch (e) {
+      console.log("[news] twitter mirror failed", mirror, e);
+    }
+  }
+  return [];
+}
+
+async function fetchOfficialSocialPosts(): Promise<CryptoNewsItem[]> {
+  const [telegram, twitter] = await Promise.all([
+    fetchTelegramChannelPosts(OG_TELEGRAM_CHANNEL),
+    fetchTwitterViaRss2Json(OG_X_HANDLE),
+  ]);
+  return [...telegram, ...twitter];
+}
+
 export async function fetchCryptoNewsFeed(params: NewsFeedParams = {}): Promise<CryptoNewsItem[]> {
   const limit = params.limit ?? 80;
   const cached = await readCache();
@@ -340,6 +448,9 @@ export async function fetchCryptoNewsFeed(params: NewsFeedParams = {}): Promise<
   if (!fresh) {
     const merged: CryptoNewsItem[] = [];
     const seen = new Set<string>();
+    // Always kick off the official OG SCAN socials in parallel with the RSS
+    // batches so they show up even when 3rd-party feeds time out.
+    const socialsPromise = fetchOfficialSocialPosts();
     // Process in small batches so we don't open 25+ sockets at once on mobile.
     for (let i = 0; i < RSS_SOURCES.length; i += RSS_BATCH_SIZE) {
       const batch = RSS_SOURCES.slice(i, i + RSS_BATCH_SIZE);
@@ -360,6 +471,13 @@ export async function fetchCryptoNewsFeed(params: NewsFeedParams = {}): Promise<
           merged.push(it);
         }
       }
+    }
+    const socials = await socialsPromise;
+    for (const it of socials) {
+      const key = `${it.source}|${(it.title ?? "").toLowerCase().slice(0, 80)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(it);
     }
     if (merged.length) {
       // Cache the union sorted by date — ranking is applied per-request based on range.
