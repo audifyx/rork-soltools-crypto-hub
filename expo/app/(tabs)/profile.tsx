@@ -722,11 +722,6 @@ export default function ProfileScreen() {
                 <View style={styles.avatarEditDot}>
                   <Camera color={Colors.ink} size={11} strokeWidth={3} />
                 </View>
-                {profile.verified ? (
-                  <View style={styles.verifiedDot}>
-                    <ShieldCheck color={Colors.ink} size={11} strokeWidth={3} />
-                  </View>
-                ) : null}
               </Pressable>
 
               <View style={styles.heroActions}>
