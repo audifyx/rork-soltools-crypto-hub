@@ -118,6 +118,7 @@ function RootLayoutNav() {
       <Stack.Screen name="crypto-news" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="kol-scan" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="kol/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="faq-bot" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
