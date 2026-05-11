@@ -93,14 +93,11 @@ export default function PostsFeedScreen() {
     reposts_count: number | null;
     comments_count: number | null;
     created_at: string;
-  };
-  type ProfileRow = {
-    id: string;
-    username: string | null;
-    display_name: string | null;
-    avatar_url: string | null;
-    avatar_color: string | null;
-    verified: boolean | null;
+    author_username?: string | null;
+    author_display_name?: string | null;
+    author_avatar_url?: string | null;
+    author_avatar_color?: string | null;
+    author_verified?: boolean | null;
   };
 
   const feedQ = useQuery<FeedPost[]>({
@@ -109,28 +106,23 @@ export default function PostsFeedScreen() {
     refetchInterval: 60_000,
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from("community_posts")
-          .select(
-            "id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at",
-          )
-          .is("community_id", null)
-          .is("parent_post_id", null)
-          .order("created_at", { ascending: false })
-          .limit(300);
-        if (error) throw error;
-        const rows = (data ?? []) as Row[];
-        if (rows.length === 0) return [];
-
-        const ids = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean)));
-        let profMap = new Map<string, ProfileRow>();
-        if (ids.length > 0) {
-          const { data: profs } = await supabase
-            .from("profiles")
-            .select("id,username,display_name,avatar_url,avatar_color,verified")
-            .in("id", ids);
-          profMap = new Map((profs ?? []).map((p) => [p.id as string, p as ProfileRow]));
+        const { data, error } = await supabase.rpc("get_public_feed", { max_rows: 200 });
+        let rows = (data ?? []) as Row[];
+        if (error) {
+          console.log("[posts] public feed rpc fallback", error.message);
+          const fallback = await supabase
+            .from("community_posts")
+            .select(
+              "id,user_id,content,image_url,ticker,change_pct,likes_count,reposts_count,comments_count,created_at",
+            )
+            .is("community_id", null)
+            .is("parent_post_id", null)
+            .order("created_at", { ascending: false })
+            .limit(300);
+          if (fallback.error) throw fallback.error;
+          rows = (fallback.data ?? []) as Row[];
         }
+        if (rows.length === 0) return [];
 
         let likedSet = new Set<string>();
         let followingSet = new Set<string>();
@@ -151,15 +143,14 @@ export default function PostsFeedScreen() {
         }
 
         return rows.map((r): FeedPost => {
-          const p = profMap.get(r.user_id);
           return {
             id: r.id,
             userId: r.user_id,
-            authorName: p?.display_name || p?.username || "Trader",
-            authorHandle: p?.username ? `@${p.username}` : "",
-            authorAvatarUrl: p?.avatar_url ?? undefined,
-            authorAvatarColor: p?.avatar_color ?? Colors.mint,
-            authorVerified: !!p?.verified,
+            authorName: r.author_display_name || r.author_username || "Trader",
+            authorHandle: r.author_username ? `@${r.author_username}` : "",
+            authorAvatarUrl: r.author_avatar_url ?? undefined,
+            authorAvatarColor: r.author_avatar_color ?? Colors.mint,
+            authorVerified: !!r.author_verified,
             text: r.content ?? "",
             imageUrl: r.image_url ?? undefined,
             ticker: r.ticker ?? undefined,
