@@ -257,8 +257,30 @@ export default function SpaceDetailScreen() {
 
   const onMute = useCallback(async () => {
     if (!space || !requireAuth()) return;
-    if (!canSpeak && muted) {
-      Alert.alert("Speaker access needed", "Raise your hand and wait for a host to bring you on stage.");
+    if (!canSpeak) {
+      // Listeners cannot unmute. Force-silence the publisher and prompt to raise hand.
+      try { voiceRef.current?.setMicEnabled(false); } catch {}
+      setMuted(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      Alert.alert(
+        "Listeners can't speak",
+        "Raise your hand and wait for a host to bring you on stage.",
+        [
+          { text: "OK", style: "cancel" },
+          {
+            text: hand ? "Lower hand" : "Raise hand",
+            onPress: () => {
+              const next = !hand;
+              setHand(next);
+              Haptics.selectionAsync().catch(() => {});
+              setSpaceHand(space.id, next).catch((e) => {
+                setHand(!next);
+                Alert.alert("Hand failed", e instanceof Error ? e.message : "Try again.");
+              });
+            },
+          },
+        ],
+      );
       return;
     }
     const next = !muted;
@@ -272,7 +294,7 @@ export default function SpaceDetailScreen() {
       try { voiceRef.current?.setMicEnabled(false); } catch {}
       Alert.alert("Mic locked", e instanceof Error ? e.message : "Raise your hand to request speaker access.");
     }
-  }, [space, requireAuth, canSpeak, muted, setSpaceMute]);
+  }, [space, requireAuth, canSpeak, muted, setSpaceMute, hand, setSpaceHand]);
 
   const onHand = useCallback(async () => {
     if (!space || !requireAuth()) return;
@@ -560,11 +582,20 @@ export default function SpaceDetailScreen() {
 
   // Listen for moderator mute decisions on my row: when DB says I am muted,
   // silence the WebRTC publisher immediately so the host's force-mute sticks
-  // even if the data channel packet was missed.
+  // even if the data channel packet was missed. Also enforce: if my role is
+  // listener (no stage), the mic must be off and the canPublish flag must be
+  // off on the LiveKit bridge.
   useEffect(() => {
     if (!me) return;
+    if (!canSpeak) {
+      if (!muted) setMuted(true);
+      try { voiceRef.current?.setCanPublish(false); } catch {}
+      try { voiceRef.current?.setMicEnabled(false); } catch {}
+      return;
+    }
     if (me.muted && !muted) setMuted(true);
-    try { voiceRef.current?.setMicEnabled(!me.muted && canSpeak && !muted); } catch {}
+    try { voiceRef.current?.setCanPublish(true); } catch {}
+    try { voiceRef.current?.setMicEnabled(!me.muted && !muted); } catch {}
   }, [me, muted, canSpeak]);
 
   if (!space) {
