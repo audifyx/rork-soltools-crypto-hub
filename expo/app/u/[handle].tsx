@@ -348,11 +348,6 @@ export default function PublicProfileScreen() {
               <Text style={styles.followNum}>{followersCount}</Text>
               <Text style={styles.followKey}>Followers</Text>
             </Pressable>
-            <View style={styles.followDivider} />
-            <View style={styles.followCell}>
-              <Text style={[styles.followNum, { color: Colors.mint }]}>{profile.xp}</Text>
-              <Text style={styles.followKey}>XP</Text>
-            </View>
           </View>
 
           <View style={styles.statsGrid}>

@@ -235,12 +235,6 @@ export default function PortfolioCard() {
           Icon={Wallet}
           color={Colors.orange}
         />
-        <StatCell
-          label="XP"
-          value={`${profile.xp}`}
-          Icon={Sparkles}
-          color={Colors.violet}
-        />
       </View>
     </View>
   );

@@ -815,11 +815,6 @@ export default function ProfileScreen() {
                 </Pressable>
                 <View style={styles.followDivider} />
                 <View style={styles.followItem}>
-                  <Text style={[styles.followNum, { color: Colors.mint }]}>{computedXp}</Text>
-                  <Text style={styles.followKey}>XP</Text>
-                </View>
-                <View style={styles.followDivider} />
-                <View style={styles.followItem}>
                   <Text style={styles.followNum}>{stats.posts}</Text>
                   <Text style={styles.followKey}>Posts</Text>
                 </View>

@@ -622,7 +622,7 @@ function moduleAccentForCategory(category: ToolCategory): string {
 function moduleToTool(module: SolToolsModuleSpec): Tool {
   const category = moduleCategoryToToolCategory(module.category);
   const accent = moduleAccentForCategory(category);
-  const creditTag = module.creditCost != null ? `${module.creditCost} credits` : module.status;
+  const creditTag = module.status;
   const route = module.category === "launchpad"
     ? "/(tabs)/discover"
     : module.route ?? `/tool/${module.id}`;

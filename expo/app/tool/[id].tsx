@@ -2445,15 +2445,6 @@ function GenericInputTool({
     setPortfolio(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
-      if (isAuthenticated) {
-        await consumeCredits({
-          action: creditAction,
-          toolId: meta.id,
-          target: v,
-          metadata: { kind },
-        });
-        await qc.invalidateQueries({ queryKey: ["credits", "balance"] });
-      }
       if (kind === "contract") {
         const [ov, sec] = await Promise.all([
           getTokenOverview(v).catch((e) => {
@@ -2550,20 +2541,6 @@ function GenericInputTool({
           </Pressable>
         </View>
       ) : null}
-
-      <View style={styles.creditMeter}>
-        <View>
-          <Text style={styles.creditLabel}>CREDITS</Text>
-          <Text style={styles.creditValue}>
-            {isAuthenticated && credits.data ? credits.data.balance.toLocaleString() : "10,000"}
-            <Text style={styles.creditMax}> / mo</Text>
-          </Text>
-        </View>
-        <View style={[styles.creditCostPill, { borderColor: `${accent}55` }]}>
-          <Zap color={accent} size={12} strokeWidth={2.8} />
-          <Text style={[styles.creditCostText, { color: accent }]}>{creditCost} credits/run</Text>
-        </View>
-      </View>
 
       <View style={styles.statRow}>
         {tiles.map((t) => (
