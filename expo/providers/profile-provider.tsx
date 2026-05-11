@@ -420,6 +420,44 @@ export function usePublicProfile(handle: string | null | undefined) {
   });
 }
 
+async function getProfileIdentityIds(userId: string): Promise<string[]> {
+  const { data: targetProfiles } = await supabase
+    .from("profiles")
+    .select("id,user_id")
+    .or(`id.eq.${userId},user_id.eq.${userId}`)
+    .limit(2);
+
+  return Array.from(
+    new Set([
+      userId,
+      ...((targetProfiles ?? []) as Record<string, unknown>[]).flatMap((row) => [String(row.id ?? ""), String(row.user_id ?? "")]),
+    ].filter((id) => id.length > 0 && id !== "null" && id !== "undefined")),
+  );
+}
+
+export function useFollowCounts(userId: string | null | undefined) {
+  return useQuery<{ followers: number; following: number }>({
+    queryKey: ["profile", "follow-counts", userId ?? "guest"],
+    enabled: !!userId,
+    queryFn: async () => {
+      if (!userId) return { followers: 0, following: 0 };
+      const targetIds = await getProfileIdentityIds(userId);
+      const [followersRes, followingRes] = await Promise.all([
+        supabase.from("followers").select("follower_id", { count: "exact", head: true }).in("followee_id", targetIds),
+        supabase.from("followers").select("followee_id", { count: "exact", head: true }).in("follower_id", targetIds),
+      ]);
+      if (followersRes.error) throw followersRes.error;
+      if (followingRes.error) throw followingRes.error;
+      return {
+        followers: followersRes.count ?? 0,
+        following: followingRes.count ?? 0,
+      };
+    },
+    staleTime: 5_000,
+    refetchOnMount: "always",
+  });
+}
+
 export function useFollowList(userId: string | null | undefined, kind: "followers" | "following") {
   return useQuery<ProfileSummary[]>({
     queryKey: ["profile", kind, userId ?? "guest"],
@@ -436,17 +474,7 @@ export function useFollowList(userId: string | null | undefined, kind: "follower
         ? data.map((r): ProfileSummary => profileSummaryFromRow(r as Record<string, unknown>))
         : [];
 
-      const { data: targetProfiles } = await supabase
-        .from("profiles")
-        .select("id,user_id")
-        .or(`id.eq.${userId},user_id.eq.${userId}`)
-        .limit(2);
-      const targetIds = Array.from(
-        new Set([
-          userId,
-          ...((targetProfiles ?? []) as Record<string, unknown>[]).flatMap((row) => [String(row.id ?? ""), String(row.user_id ?? "")]),
-        ].filter((id) => id.length > 0 && id !== "null" && id !== "undefined")),
-      );
+      const targetIds = await getProfileIdentityIds(userId);
 
       const linkColumn = kind === "followers" ? "followee_id" : "follower_id";
       const userColumn = kind === "followers" ? "follower_id" : "followee_id";

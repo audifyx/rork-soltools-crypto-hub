@@ -51,6 +51,7 @@ import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
 import { useAuth } from "@/providers/auth-provider";
 import { useMessages } from "@/providers/messages-provider";
 import {
+  useFollowCounts,
   useFollowList,
   useProfileProvider,
   usePublicProfile,
@@ -90,10 +91,11 @@ export default function PublicProfileScreen() {
   });
   const followersQ = useFollowList(targetUserId, "followers");
   const followingQ = useFollowList(targetUserId, "following");
+  const followCountsQ = useFollowCounts(targetUserId);
   const userPosts = postsQ.data ?? [];
   const userReels = reelsQ.data ?? [];
-  const followersCount = Math.max(profile?.followers_count ?? 0, followersQ.data?.length ?? 0);
-  const followingCount = Math.max(profile?.following_count ?? 0, followingQ.data?.length ?? 0);
+  const followersCount = Math.max(profile?.followers_count ?? 0, followersQ.data?.length ?? 0, followCountsQ.data?.followers ?? 0);
+  const followingCount = Math.max(profile?.following_count ?? 0, followingQ.data?.length ?? 0, followCountsQ.data?.following ?? 0);
 
   const onToggleFollow = useCallback(async () => {
     if (!isAuthenticated) {

@@ -83,6 +83,7 @@ import { useApp, type Currency, type Language, type ThemeMode, type UserPrefs } 
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import {
+  useFollowCounts,
   useFollowList,
   useProfileProvider,
   useSearchProfiles,
@@ -376,8 +377,9 @@ export default function ProfileScreen() {
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const followersQ = useFollowList(userId, "followers");
   const followingQ = useFollowList(userId, "following");
-  const followersCount = Math.max(profile.followers, followersQ.data?.length ?? 0);
-  const followingCount = Math.max(profile.following, followingQ.data?.length ?? 0);
+  const followCountsQ = useFollowCounts(userId);
+  const followersCount = Math.max(profile.followers, followersQ.data?.length ?? 0, followCountsQ.data?.followers ?? 0);
+  const followingCount = Math.max(profile.following, followingQ.data?.length ?? 0, followCountsQ.data?.following ?? 0);
 
   const creditBalance = useQuery({
     queryKey: ["credits", "balance"] as const,
