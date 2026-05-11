@@ -74,13 +74,18 @@ import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
 import { useAdmin } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
+import { useProfileProvider } from "@/providers/profile-provider";
 import { CommunityPost, useSocial } from "@/providers/social-provider";
 
 interface CommunityMember {
   id: string;
   handle: string;
+  username: string | null;
   name: string;
   color: string;
+  avatarUrl?: string | null;
+  verified?: boolean;
+  followersCount?: number;
 }
 
 const MEMBER_COLORS = [Colors.mint, Colors.violet, Colors.cyan, Colors.rose, Colors.orange];
@@ -160,6 +165,7 @@ export default function CommunityDetailScreen() {
   const { role } = useAdmin();
   const canModeratePosts = role === "superadmin" || role === "admin" || role === "moderator";
   const { isAuthenticated, userId } = useAuth();
+  const { toggleFollow, isToggling } = useProfileProvider();
   const [tab, setTab] = useState<Tab>("recent");
   const [composer, setComposer] = useState<string>("");
   const [composerImage, setComposerImage] = useState<ComposerImage | null>(null);
@@ -167,6 +173,7 @@ export default function CommunityDetailScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [notifyOn, setNotifyOn] = useState<boolean>(true);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
+  const [membersOpen, setMembersOpen] = useState<boolean>(false);
   const [toast, setToast] = useState<string | null>(null);
   const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
   const [activePost, setActivePost] = useState<CommunityPost | null>(null);
@@ -320,7 +327,7 @@ export default function CommunityDetailScreen() {
         if (userIds.length === 0) return [];
         const { data: profs } = await supabase
           .from("profiles")
-          .select("id,user_id,username,display_name,avatar_color")
+          .select("id,user_id,username,display_name,avatar_url,avatar_color,verified,followers_count")
           .or(`id.in.(${userIds.join(",")}),user_id.in.(${userIds.join(",")})`);
         return (profs ?? []).map((p): CommunityMember => {
           const username = (p.username as string | null) ?? "";
@@ -328,8 +335,12 @@ export default function CommunityDetailScreen() {
           return {
             id: ((p.user_id as string | null) ?? (p.id as string)) || username,
             handle: username ? `@${username}` : "",
+            username: username || null,
             name: display || "User",
             color: (p.avatar_color as string | null) ?? memberColorFor(((p.user_id as string | null) ?? (p.id as string)) || username),
+            avatarUrl: (p.avatar_url as string | null) ?? null,
+            verified: !!p.verified,
+            followersCount: Number(p.followers_count ?? 0),
           };
         });
       } catch (e) {
@@ -459,6 +470,25 @@ export default function CommunityDetailScreen() {
       console.log("[community] invite failed", e);
     }
   }, [community, shareLink]);
+
+  const openMemberProfile = useCallback((member: CommunityMember) => {
+    const username = (member.username ?? member.handle).replace(/^@/, "").trim();
+    if (!username) return;
+    setMembersOpen(false);
+    Haptics.selectionAsync().catch(() => {});
+    router.push({ pathname: "/u/[handle]", params: { handle: username } });
+  }, [router]);
+
+  const onFollowMember = useCallback(async (member: CommunityMember) => {
+    if (!ensureSignedIn("Sign in to follow community members.")) return;
+    if (member.id === userId) return;
+    try {
+      await toggleFollow(member.id);
+      showToast(`Updated follow for ${member.handle || member.name}`);
+    } catch (e) {
+      Alert.alert("Follow failed", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [ensureSignedIn, showToast, toggleFollow, userId]);
 
   const onToggleNotify = useCallback(() => {
     const next = !notifyOn;
@@ -962,8 +992,7 @@ export default function CommunityDetailScreen() {
                   style={styles.memberStack}
                   onPress={() => {
                     Haptics.selectionAsync().catch(() => {});
-                    setTab("about");
-                    showToast(`${fmtCount(community.members)} community members`);
+                    setMembersOpen(true);
                   }}
                   testID="community-members"
                 >
@@ -1370,6 +1399,56 @@ export default function CommunityDetailScreen() {
       </Modal>
 
       <Modal
+        visible={membersOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMembersOpen(false)}
+      >
+        <Pressable style={styles.membersBackdrop} onPress={() => setMembersOpen(false)}>
+          <Pressable style={styles.membersSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.membersHandle} />
+            <View style={styles.membersHeader}>
+              <View>
+                <Text style={styles.membersTitle}>Community members</Text>
+                <Text style={styles.membersSub}>{community.name} · {fmtCount(community.members)} members</Text>
+              </View>
+              <Pressable onPress={() => setMembersOpen(false)} style={styles.threadClose} hitSlop={8}>
+                <X color={Colors.text} size={18} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+            {membersQ.isLoading ? (
+              <View style={styles.membersLoading}>
+                <ActivityIndicator color={Colors.mint} />
+              </View>
+            ) : members.length === 0 ? (
+              <View style={styles.membersEmpty}>
+                <Users color={Colors.muted} size={24} strokeWidth={2.4} />
+                <Text style={styles.membersEmptyTitle}>No members loaded yet</Text>
+                <Text style={styles.membersEmptyBody}>Join activity will appear here as people enter this community.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={members}
+                keyExtractor={(m) => m.id}
+                renderItem={({ item }) => (
+                  <CommunityMemberRow
+                    member={item}
+                    isSelf={item.id === userId}
+                    isToggling={isToggling}
+                    onOpen={() => openMemberProfile(item)}
+                    onFollow={() => void onFollowMember(item)}
+                  />
+                )}
+                ItemSeparatorComponent={() => <View style={styles.memberDivider} />}
+                contentContainerStyle={styles.membersList}
+                showsVerticalScrollIndicator={false}
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={!!activePost}
         transparent
         animationType="slide"
@@ -1551,10 +1630,53 @@ export default function CommunityDetailScreen() {
 
 function placeholderMembers(): CommunityMember[] {
   return [
-    { id: "p1", handle: "", name: "A", color: Colors.violet },
-    { id: "p2", handle: "", name: "B", color: Colors.cyan },
-    { id: "p3", handle: "", name: "C", color: Colors.mint },
+    { id: "p1", handle: "", username: null, name: "A", color: Colors.violet },
+    { id: "p2", handle: "", username: null, name: "B", color: Colors.cyan },
+    { id: "p3", handle: "", username: null, name: "C", color: Colors.mint },
   ];
+}
+
+function CommunityMemberRow({
+  member,
+  isSelf,
+  isToggling,
+  onOpen,
+  onFollow,
+}: {
+  member: CommunityMember;
+  isSelf: boolean;
+  isToggling: boolean;
+  onOpen: () => void;
+  onFollow: () => void;
+}) {
+  return (
+    <Pressable onPress={onOpen} style={styles.memberSheetRow} testID={`community-member-${member.id}`}>
+      {member.avatarUrl ? (
+        <Image source={{ uri: member.avatarUrl }} style={styles.memberSheetAvatar} contentFit="cover" />
+      ) : (
+        <View style={[styles.memberSheetAvatar, { backgroundColor: member.color }]}> 
+          <Text style={styles.memberSheetInit}>{member.name.slice(0, 1).toUpperCase()}</Text>
+        </View>
+      )}
+      <View style={styles.memberSheetCopy}>
+        <View style={styles.memberSheetNameRow}>
+          <Text style={styles.memberSheetName} numberOfLines={1}>{member.name}</Text>
+          {member.verified ? <BadgeCheck color={Colors.cyan} size={13} strokeWidth={2.8} /> : null}
+        </View>
+        <Text style={styles.memberSheetHandle} numberOfLines={1}>
+          {member.handle || "@user"} · {fmtCount(member.followersCount ?? 0)} followers
+        </Text>
+      </View>
+      {!isSelf ? (
+        <Pressable onPress={onFollow} disabled={isToggling} style={styles.memberFollowBtn} testID={`community-member-follow-${member.id}`}>
+          <UserPlus color={Colors.ink} size={13} strokeWidth={3} />
+          <Text style={styles.memberFollowText}>Follow</Text>
+        </Pressable>
+      ) : (
+        <Text style={styles.memberSelfText}>You</Text>
+      )}
+    </Pressable>
+  );
 }
 
 function TabBtn({
@@ -2391,6 +2513,55 @@ const styles = StyleSheet.create({
   tokenMetricLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", textTransform: "uppercase" },
   tokenMetricValue: { color: Colors.text, fontSize: 12, fontWeight: "900", marginTop: 3 },
   tokenAddress: { color: Colors.muted, fontSize: 10, fontWeight: "800", marginTop: 10 },
+
+  membersBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.58)",
+  },
+  membersSheet: {
+    maxHeight: "78%",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: Colors.ink,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    paddingTop: 10,
+    overflow: "hidden",
+  },
+  membersHandle: {
+    alignSelf: "center",
+    width: 42,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    marginBottom: 14,
+  },
+  membersHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingBottom: 14,
+  },
+  membersTitle: { color: Colors.text, fontSize: 19, fontWeight: "900", letterSpacing: -0.4 },
+  membersSub: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 3 },
+  membersLoading: { paddingVertical: 44, alignItems: "center" },
+  membersEmpty: { paddingHorizontal: 28, paddingVertical: 42, alignItems: "center", gap: 10 },
+  membersEmptyTitle: { color: Colors.text, fontSize: 15, fontWeight: "900" },
+  membersEmptyBody: { color: Colors.muted, fontSize: 12, fontWeight: "700", textAlign: "center", lineHeight: 17 },
+  membersList: { paddingHorizontal: 18, paddingBottom: 28 },
+  memberSheetRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13 },
+  memberSheetAvatar: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  memberSheetInit: { color: Colors.ink, fontSize: 16, fontWeight: "900" },
+  memberSheetCopy: { flex: 1, minWidth: 0 },
+  memberSheetNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  memberSheetName: { color: Colors.text, fontSize: 14, fontWeight: "900", maxWidth: "88%" },
+  memberSheetHandle: { color: Colors.muted, fontSize: 11, fontWeight: "800", marginTop: 3 },
+  memberFollowBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999, backgroundColor: Colors.mint },
+  memberFollowText: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
+  memberSelfText: { color: Colors.muted, fontSize: 12, fontWeight: "900" },
+  memberDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.06)" },
 
   sep: { height: 1, marginHorizontal: 18, backgroundColor: "rgba(255,255,255,0.04)" },
   post: { paddingHorizontal: 18, paddingVertical: 14 },

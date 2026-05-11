@@ -183,32 +183,13 @@ export default function HomeFeedScreen() {
     queryKey: ["home", "live-feed", userId ?? "guest"],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase.rpc("get_public_feed", { max_rows: 100 });
-        if (error) {
-          console.log("[home] public feed rpc fallback", error.message);
-          const fallback = await supabase
-            .from("community_posts")
-            .select("id,user_id,content,image_url,ticker,token_address,change_pct,likes_count,reposts_count,comments_count,created_at")
-            .is("community_id", null)
-            .is("parent_post_id", null)
-            .order("created_at", { ascending: false })
-            .limit(100);
-          if (fallback.error) throw fallback.error;
-          return userId ? hydrateLikedPosts((fallback.data ?? []) as FeedPostRow[], userId) : ((fallback.data ?? []) as FeedPostRow[]).map((row): UserPost => ({
-            id: row.id,
-            text: row.content ?? "",
-            ticker: row.ticker ?? undefined,
-            contract: row.token_address ?? undefined,
-            changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
-            images: row.image_url ? [row.image_url] : undefined,
-            createdAt: new Date(row.created_at).getTime(),
-            likes: row.likes_count ?? 0,
-            reposts: row.reposts_count ?? 0,
-            comments: row.comments_count ?? 0,
-            liked: false,
-            authorId: row.user_id,
-          }));
-        }
+        const { data, error } = await supabase
+          .from("community_posts")
+          .select("id,user_id,content,image_url,ticker,token_address,change_pct,likes_count,reposts_count,comments_count,created_at")
+          .is("parent_post_id", null)
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (error) throw error;
         return userId ? hydrateLikedPosts((data ?? []) as FeedPostRow[], userId) : ((data ?? []) as FeedPostRow[]).map((row): UserPost => ({
           id: row.id,
           text: row.content ?? "",
@@ -254,7 +235,6 @@ export default function HomeFeedScreen() {
             .from("community_posts")
             .select("id,user_id,content,image_url,ticker,token_address,change_pct,likes_count,reposts_count,comments_count,created_at")
             .in("user_id", followeeIds)
-            .is("community_id", null)
             .is("parent_post_id", null)
             .order("created_at", { ascending: false })
             .limit(50);
