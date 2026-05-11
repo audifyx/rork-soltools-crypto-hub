@@ -1,28 +1,35 @@
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   ArrowLeft,
+  BarChart3,
   Bell,
   Captions,
+  Check,
+  Copy,
   Crown,
-  Flame,
   Hand,
   Heart,
+  Link as LinkIcon,
   MessageCircle,
   Mic,
   MicOff,
+  Pin,
   PhoneOff,
+  Plus,
   Radio,
   Send,
   Share2,
   ShieldCheck,
   Sparkles,
-  UserMinus,
+  TrendingUp,
   UserPlus,
   Users as UsersIcon,
   Volume2,
+  X,
   Zap,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -31,9 +38,11 @@ import {
   Animated,
   Easing,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -112,6 +121,16 @@ export default function SpaceDetailScreen() {
   const [message, setMessage] = useState<string>("");
   const [reactionCount, setReactionCount] = useState<number>(0);
   const [livekitRoom, setLivekitRoom] = useState<string>("");
+  const [floaters, setFloaters] = useState<{ id: string; emoji: string; x: number }[]>([]);
+  const [reactionPickerOpen, setReactionPickerOpen] = useState<boolean>(false);
+  const [pinnedNote, setPinnedNote] = useState<string | null>(null);
+  const [pinModalOpen, setPinModalOpen] = useState<boolean>(false);
+  const [pinDraft, setPinDraft] = useState<string>("");
+  const [poll, setPoll] = useState<{ q: string; options: { label: string; votes: number }[]; voted: number | null } | null>(null);
+  const [pollModalOpen, setPollModalOpen] = useState<boolean>(false);
+  const [pollQ, setPollQ] = useState<string>("");
+  const [pollOpts, setPollOpts] = useState<string[]>(["", ""]);
+  const [peakListeners, setPeakListeners] = useState<number>(0);
 
   const me = useMemo(
     () => participants.find((p) => p.userId === userId || p.identity === userId),
@@ -137,6 +156,10 @@ export default function SpaceDetailScreen() {
   useEffect(() => {
     requestAnimationFrame(() => chatRef.current?.scrollToEnd({ animated: true }));
   }, [messages.length]);
+
+  useEffect(() => {
+    if (space && space.listeners > peakListeners) setPeakListeners(space.listeners);
+  }, [space, peakListeners]);
 
   useEffect(() => {
     if (!connected || !space) return;
@@ -244,16 +267,106 @@ export default function SpaceDetailScreen() {
     }
   }, [space, message, requireAuth, sendSpaceMessage]);
 
-  const onReact = useCallback(async () => {
-    if (!space || !requireAuth()) return;
-    setReactionCount((v) => v + 1);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  const spawnFloater = useCallback((emoji: string) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const x = Math.random() * 0.6 + 0.2;
+    setFloaters((prev) => [...prev.slice(-12), { id, emoji, x }]);
+    setTimeout(() => setFloaters((prev) => prev.filter((f) => f.id !== id)), 2200);
+  }, []);
+
+  const onReact = useCallback(
+    async (emoji: string = "🔥") => {
+      if (!space || !requireAuth()) return;
+      setReactionCount((v) => v + 1);
+      spawnFloater(emoji);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      try {
+        await addSpaceReaction(space.id, emoji);
+      } catch (e) {
+        console.log("[space] reaction failed", e);
+      }
+    },
+    [space, requireAuth, addSpaceReaction, spawnFloater],
+  );
+
+  const onShare = useCallback(async () => {
+    if (!space) return;
+    Haptics.selectionAsync().catch(() => {});
+    const url = `https://soltools.app/space/${space.id}`;
     try {
-      await addSpaceReaction(space.id, "🔥");
+      await Share.share({ message: `🎧 ${space.title} on SolTools Spaces\n${url}`, url });
     } catch (e) {
-      console.log("[space] reaction failed", e);
+      console.log("[space] share failed", e);
     }
-  }, [space, requireAuth, addSpaceReaction]);
+  }, [space]);
+
+  const onCopyLink = useCallback(async () => {
+    if (!space) return;
+    const url = `https://soltools.app/space/${space.id}`;
+    await Clipboard.setStringAsync(url).catch(() => {});
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    Alert.alert("Copied", "Space link copied to clipboard.");
+  }, [space]);
+
+  const openPinModal = useCallback(() => {
+    if (!isHost) {
+      Alert.alert("Host only", "Only the host can pin a note for the Space.");
+      return;
+    }
+    setPinDraft(pinnedNote ?? "");
+    setPinModalOpen(true);
+  }, [isHost, pinnedNote]);
+
+  const savePinnedNote = useCallback(() => {
+    const t = pinDraft.trim();
+    setPinnedNote(t.length > 0 ? t : null);
+    setPinModalOpen(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }, [pinDraft]);
+
+  const openPollModal = useCallback(() => {
+    if (!isHost) {
+      Alert.alert("Host only", "Only the host can launch a poll.");
+      return;
+    }
+    setPollQ("");
+    setPollOpts(["", ""]);
+    setPollModalOpen(true);
+  }, [isHost]);
+
+  const launchPoll = useCallback(() => {
+    const q = pollQ.trim();
+    const opts = pollOpts.map((o) => o.trim()).filter((o) => o.length > 0);
+    if (!q || opts.length < 2) {
+      Alert.alert("Add a question", "Polls need a question and at least 2 options.");
+      return;
+    }
+    setPoll({ q, options: opts.map((label) => ({ label, votes: 0 })), voted: null });
+    setPollModalOpen(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }, [pollQ, pollOpts]);
+
+  const votePoll = useCallback(
+    (idx: number) => {
+      if (!poll || poll.voted !== null) return;
+      if (!requireAuth()) return;
+      Haptics.selectionAsync().catch(() => {});
+      setPoll((p) => {
+        if (!p) return p;
+        return {
+          ...p,
+          voted: idx,
+          options: p.options.map((o, i) => (i === idx ? { ...o, votes: o.votes + 1 } : o)),
+        };
+      });
+    },
+    [poll, requireAuth],
+  );
+
+  const closePoll = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setPoll(null);
+  }, []);
 
   const manageParticipant = useCallback(
     (participant: SpaceParticipant) => {
@@ -323,7 +436,10 @@ export default function SpaceDetailScreen() {
             </View>
             <Text style={styles.roomTag}>{space.topic}</Text>
           </View>
-          <Pressable onPress={() => Haptics.selectionAsync().catch(() => {})} style={styles.iconBtn}>
+          <Pressable onPress={onCopyLink} style={styles.iconBtn} testID="space-copy">
+            <Copy color={Colors.text} size={15} strokeWidth={2.4} />
+          </Pressable>
+          <Pressable onPress={onShare} style={styles.iconBtn} testID="space-share">
             <Share2 color={Colors.text} size={16} strokeWidth={2.4} />
           </Pressable>
         </View>
@@ -358,6 +474,7 @@ export default function SpaceDetailScreen() {
                 <MetaPill Icon={UsersIcon} text={`${space.listeners} listening`} />
                 <MetaPill Icon={Mic} text={`${space.speakers} speakers`} color={space.accent[0]} />
                 <MetaPill Icon={Hand} text={`${space.raisedHands} hands`} color={Colors.goldBright} />
+                {peakListeners > space.listeners ? <MetaPill Icon={TrendingUp} text={`peak ${peakListeners}`} color={Colors.mint} /> : null}
                 {space.recording ? <MetaPill Icon={ShieldCheck} text="recording" color={Colors.rose} /> : null}
               </View>
 
@@ -378,6 +495,32 @@ export default function SpaceDetailScreen() {
                 ) : null}
               </View>
             </View>
+
+            {pinnedNote ? (
+              <Pressable onPress={isHost ? openPinModal : undefined} style={[styles.pinnedCard, { borderColor: `${space.accent[0]}44` }]}> 
+                <View style={[styles.pinnedIcon, { backgroundColor: `${space.accent[0]}22` }]}><Pin color={space.accent[0]} size={13} strokeWidth={3} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pinnedKicker}>PINNED BY HOST</Text>
+                  <Text style={styles.pinnedText}>{pinnedNote}</Text>
+                </View>
+                {isHost ? <Text style={styles.pinnedEdit}>edit</Text> : null}
+              </Pressable>
+            ) : isHost ? (
+              <Pressable onPress={openPinModal} style={styles.pinnedAdd}>
+                <Pin color={Colors.muted} size={13} strokeWidth={2.6} />
+                <Text style={styles.pinnedAddText}>Pin a topic, contract, or call to action</Text>
+              </Pressable>
+            ) : null}
+
+            {poll ? (
+              <PollCard poll={poll} accent={space.accent[0]} onVote={votePoll} onClose={isHost ? closePoll : undefined} />
+            ) : isHost ? (
+              <Pressable onPress={openPollModal} style={styles.pollAdd}>
+                <BarChart3 color={Colors.goldBright} size={14} strokeWidth={2.8} />
+                <Text style={styles.pollAddText}>Launch a quick poll</Text>
+                <Plus color={Colors.goldBright} size={14} strokeWidth={3} />
+              </Pressable>
+            ) : null}
 
             <View style={styles.sectionHead}>
               <View>
@@ -490,7 +633,7 @@ export default function SpaceDetailScreen() {
               <ControlButton active={hand} onPress={onHand} warn testID="space-hand">
                 <Hand color={hand ? Colors.ink : Colors.text} size={18} strokeWidth={2.6} />
               </ControlButton>
-              <ControlButton onPress={onReact} testID="space-react">
+              <ControlButton onPress={() => onReact("🔥")} onLongPress={() => setReactionPickerOpen((v) => !v)} testID="space-react">
                 <Heart color={Colors.rose} size={18} strokeWidth={2.6} fill={reactionCount > 0 ? Colors.rose : "transparent"} />
                 {reactionCount > 0 ? <View style={styles.reactCount}><Text style={styles.reactCountText}>{reactionCount}</Text></View> : null}
               </ControlButton>
@@ -504,6 +647,168 @@ export default function SpaceDetailScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <FloatingEmojis floaters={floaters} />
+
+      {reactionPickerOpen ? (
+        <View pointerEvents="box-none" style={styles.reactionPickerWrap}>
+          <View style={styles.reactionPicker}>
+            {["🔥", "🚀", "💎", "👏", "❤️", "🤯"].map((e) => (
+              <Pressable
+                key={e}
+                onPress={() => {
+                  setReactionPickerOpen(false);
+                  onReact(e);
+                }}
+                style={styles.reactionEmojiBtn}
+              >
+                <Text style={styles.reactionEmojiText}>{e}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      <Modal visible={pinModalOpen} animationType="fade" transparent onRequestClose={() => setPinModalOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Pin a note</Text>
+              <Pressable onPress={() => setPinModalOpen(false)} style={styles.modalClose}><X color={Colors.text} size={16} strokeWidth={2.6} /></Pressable>
+            </View>
+            <TextInput
+              value={pinDraft}
+              onChangeText={setPinDraft}
+              placeholder="Topic, contract address, or call to action"
+              placeholderTextColor={Colors.muted2}
+              style={styles.modalInput}
+              multiline
+              maxLength={180}
+            />
+            <View style={styles.modalRow}>
+              {pinnedNote ? (
+                <Pressable onPress={() => { setPinnedNote(null); setPinModalOpen(false); }} style={styles.modalGhost}>
+                  <Text style={styles.modalGhostText}>Remove</Text>
+                </Pressable>
+              ) : null}
+              <Pressable onPress={savePinnedNote} style={styles.modalPrimary}>
+                <Pin color={Colors.ink} size={13} strokeWidth={3} />
+                <Text style={styles.modalPrimaryText}>Pin</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={pollModalOpen} animationType="fade" transparent onRequestClose={() => setPollModalOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Launch a poll</Text>
+              <Pressable onPress={() => setPollModalOpen(false)} style={styles.modalClose}><X color={Colors.text} size={16} strokeWidth={2.6} /></Pressable>
+            </View>
+            <TextInput
+              value={pollQ}
+              onChangeText={setPollQ}
+              placeholder="Your question"
+              placeholderTextColor={Colors.muted2}
+              style={styles.modalInput}
+              maxLength={120}
+            />
+            {pollOpts.map((opt, i) => (
+              <View key={`opt-${i}`} style={styles.pollOptRow}>
+                <TextInput
+                  value={opt}
+                  onChangeText={(v) => setPollOpts((prev) => prev.map((p, idx) => (idx === i ? v : p)))}
+                  placeholder={`Option ${i + 1}`}
+                  placeholderTextColor={Colors.muted2}
+                  style={[styles.modalInput, { flex: 1 }]}
+                  maxLength={60}
+                />
+                {pollOpts.length > 2 ? (
+                  <Pressable onPress={() => setPollOpts((prev) => prev.filter((_, idx) => idx !== i))} style={styles.modalClose}>
+                    <X color={Colors.muted} size={14} strokeWidth={2.6} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+            {pollOpts.length < 4 ? (
+              <Pressable onPress={() => setPollOpts((p) => [...p, ""])} style={styles.pollAddOpt}>
+                <Plus color={Colors.goldBright} size={13} strokeWidth={3} />
+                <Text style={styles.pollAddOptText}>Add option</Text>
+              </Pressable>
+            ) : null}
+            <Pressable onPress={launchPoll} style={[styles.modalPrimary, { alignSelf: "stretch", justifyContent: "center" }]}>
+              <BarChart3 color={Colors.ink} size={14} strokeWidth={3} />
+              <Text style={styles.modalPrimaryText}>Go live</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function FloatingEmojis({ floaters }: { floaters: { id: string; emoji: string; x: number }[] }) {
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {floaters.map((f) => (
+        <Floater key={f.id} emoji={f.emoji} x={f.x} />
+      ))}
+    </View>
+  );
+}
+
+function Floater({ emoji, x }: { emoji: string; x: number }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(anim, { toValue: 1, duration: 2100, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [anim]);
+  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -360] });
+  const translateX = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 14, -10] });
+  const opacity = anim.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] });
+  const scale = anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.6, 1.15, 1.4] });
+  return (
+    <Animated.View style={[styles.floater, { left: `${x * 100}%`, opacity, transform: [{ translateY }, { translateX }, { scale }] }]}>
+      <Text style={styles.floaterText}>{emoji}</Text>
+    </Animated.View>
+  );
+}
+
+function PollCard({ poll, accent, onVote, onClose }: { poll: { q: string; options: { label: string; votes: number }[]; voted: number | null }; accent: string; onVote: (i: number) => void; onClose?: () => void }) {
+  const total = poll.options.reduce((s, o) => s + o.votes, 0) || 1;
+  const showResults = poll.voted !== null;
+  return (
+    <View style={[styles.pollCard, { borderColor: `${accent}44` }]}> 
+      <View style={styles.pollHead}>
+        <View style={[styles.pollIcon, { backgroundColor: `${accent}22` }]}><BarChart3 color={accent} size={13} strokeWidth={3} /></View>
+        <Text style={styles.pollKicker}>LIVE POLL</Text>
+        {onClose ? (
+          <Pressable onPress={onClose} hitSlop={10}><X color={Colors.muted} size={14} strokeWidth={2.6} /></Pressable>
+        ) : null}
+      </View>
+      <Text style={styles.pollQ}>{poll.q}</Text>
+      <View style={{ gap: 8, marginTop: 10 }}>
+        {poll.options.map((opt, i) => {
+          const pct = Math.round((opt.votes / total) * 100);
+          const isMine = poll.voted === i;
+          return (
+            <Pressable key={`pollopt-${i}`} onPress={() => onVote(i)} disabled={showResults} style={styles.pollOpt}>
+              {showResults ? <View style={[styles.pollBar, { width: `${pct}%`, backgroundColor: isMine ? accent : "rgba(255,255,255,0.12)" }]} /> : null}
+              <View style={styles.pollOptInner}>
+                <Text style={[styles.pollOptText, isMine && { color: Colors.text }]} numberOfLines={1}>{opt.label}</Text>
+                {showResults ? (
+                  <View style={styles.pollResRow}>
+                    {isMine ? <Check color={accent} size={11} strokeWidth={3} /> : null}
+                    <Text style={[styles.pollPct, isMine && { color: accent }]}>{pct}%</Text>
+                  </View>
+                ) : null}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={styles.pollFoot}>{showResults ? `${total} vote${total === 1 ? "" : "s"} · tap closes when host ends` : "Tap to vote"}</Text>
     </View>
   );
 }
@@ -604,9 +909,9 @@ function ChatBubble({ message }: { message: SpaceMessage }) {
   );
 }
 
-function ControlButton({ children, active, warn, onPress, testID }: { children: React.ReactNode; active?: boolean; warn?: boolean; onPress: () => void; testID?: string }) {
+function ControlButton({ children, active, warn, onPress, onLongPress, testID }: { children: React.ReactNode; active?: boolean; warn?: boolean; onPress: () => void; onLongPress?: () => void; testID?: string }) {
   return (
-    <Pressable onPress={onPress} style={[styles.controlBtn, active && { backgroundColor: warn ? Colors.goldBright : Colors.mint, borderColor: warn ? Colors.goldBright : Colors.mint }]} testID={testID}>
+    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={220} style={[styles.controlBtn, active && { backgroundColor: warn ? Colors.goldBright : Colors.mint, borderColor: warn ? Colors.goldBright : Colors.mint }]} testID={testID}>
       {children}
     </Pressable>
   );
@@ -707,4 +1012,45 @@ const styles = StyleSheet.create({
   notFoundTitle: { color: Colors.text, fontSize: 18, fontWeight: "900" },
   notFoundBtn: { marginTop: 14, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: Colors.goldBright, borderRadius: 12 },
   notFoundBtnText: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
+  pinnedCard: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, marginTop: 16 },
+  pinnedIcon: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  pinnedKicker: { color: Colors.muted2, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
+  pinnedText: { color: Colors.text, fontSize: 13, fontWeight: "800", lineHeight: 17, marginTop: 2 },
+  pinnedEdit: { color: Colors.goldBright, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
+  pinnedAdd: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 18, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(255,255,255,0.10)", marginTop: 16 },
+  pinnedAddText: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  pollAdd: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 18, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(244,198,91,0.30)", marginTop: 10, backgroundColor: "rgba(244,198,91,0.05)" },
+  pollAddText: { flex: 1, color: Colors.goldBright, fontSize: 12, fontWeight: "900" },
+  pollCard: { padding: 14, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, marginTop: 12 },
+  pollHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  pollIcon: { width: 24, height: 24, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  pollKicker: { flex: 1, color: Colors.muted2, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  pollQ: { color: Colors.text, fontSize: 15, fontWeight: "900", marginTop: 8, letterSpacing: -0.2 },
+  pollOpt: { borderRadius: 14, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.07)" },
+  pollBar: { position: "absolute", left: 0, top: 0, bottom: 0, opacity: 0.35 },
+  pollOptInner: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 11, gap: 8 },
+  pollOptText: { flex: 1, color: Colors.text, fontSize: 12, fontWeight: "800" },
+  pollResRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  pollPct: { color: Colors.muted, fontSize: 11, fontWeight: "900" },
+  pollFoot: { color: Colors.muted2, fontSize: 10, fontWeight: "800", marginTop: 9, letterSpacing: 0.5 },
+  floater: { position: "absolute", bottom: 130 },
+  floaterText: { fontSize: 30 },
+  reactionPickerWrap: { position: "absolute", left: 0, right: 0, bottom: 130, alignItems: "center" },
+  reactionPicker: { flexDirection: "row", gap: 4, padding: 8, borderRadius: 24, backgroundColor: "rgba(8,7,5,0.97)", borderWidth: 1, borderColor: "rgba(244,198,91,0.30)" },
+  reactionEmojiBtn: { width: 42, height: 42, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.05)" },
+  reactionEmojiText: { fontSize: 22 },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", justifyContent: "center", padding: 20 },
+  modalCard: { borderRadius: 24, padding: 18, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", gap: 12 },
+  modalHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  modalTitle: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
+  modalClose: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.06)" },
+  modalInput: { color: Colors.text, fontSize: 13, fontWeight: "700", paddingHorizontal: 12, paddingVertical: 11, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", minHeight: 44 },
+  modalRow: { flexDirection: "row", gap: 10, justifyContent: "flex-end" },
+  modalPrimary: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, backgroundColor: Colors.goldBright },
+  modalPrimaryText: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
+  modalGhost: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.06)" },
+  modalGhostText: { color: Colors.text, fontSize: 12, fontWeight: "900" },
+  pollOptRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  pollAddOpt: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: "rgba(244,198,91,0.08)", borderWidth: 1, borderColor: "rgba(244,198,91,0.25)" },
+  pollAddOptText: { color: Colors.goldBright, fontSize: 11, fontWeight: "900" },
 });
