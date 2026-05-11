@@ -18,7 +18,9 @@ export type NewsCategory =
   | "market"
   | "trending"
   | "viral"
-  | "kol";
+  | "kol"
+  | "x"
+  | "telegram";
 export type NewsSentiment = "bullish" | "bearish" | "neutral";
 export type NewsTimeRange = "24h" | "7d" | "all";
 export type Blockchain = "solana" | "ethereum" | "base" | "bitcoin";
@@ -395,6 +397,8 @@ function dedupeByTitle(items: CryptoNewsItem[]): CryptoNewsItem[] {
 
 function filterByCategory(items: CryptoNewsItem[], category?: NewsCategory): CryptoNewsItem[] {
   if (!category || category === "all") return items;
+  if (category === "x") return items.filter((i) => /on X$/i.test(i.source) || /ogscanfun/i.test(i.source));
+  if (category === "telegram") return items.filter((i) => /telegram/i.test(i.source) || /OG Updates/i.test(i.source));
   return items.filter((i) => i.category === category);
 }
 

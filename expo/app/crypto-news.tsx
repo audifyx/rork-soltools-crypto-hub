@@ -12,8 +12,10 @@ import {
   LineChart,
   Newspaper,
   RefreshCw,
+  Send,
   Sparkles,
   TrendingUp,
+  Twitter,
   Users,
   Zap,
 } from "lucide-react-native";
@@ -62,6 +64,8 @@ interface CategoryTab {
 
 const CATEGORIES: CategoryTab[] = [
   { key: "all", label: "All", Icon: Compass, color: Colors.text },
+  { key: "x", label: "@ogscanfun", Icon: Twitter, color: "#1DA1F2" },
+  { key: "telegram", label: "OG Updates", Icon: Send, color: "#229ED9" },
   { key: "trending", label: "Trending", Icon: Flame, color: Colors.mint },
   { key: "solana", label: "Solana", Icon: Zap, color: "#14F195" },
   { key: "bitcoin", label: "Bitcoin", Icon: Bitcoin, color: "#F7931A" },
