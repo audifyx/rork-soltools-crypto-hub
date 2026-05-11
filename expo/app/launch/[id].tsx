@@ -86,7 +86,6 @@ const TIMEFRAMES: { key: "5m" | "1h" | "6h" | "24h"; label: string }[] = [
   { key: "24h", label: "24H" },
 ];
 
-const QUICK_BUYS = [0.1, 0.5, 1, 5];
 const ATH_STORE_KEY = "soltools.tokenAth.v1";
 
 type TokenAthRecord = {
@@ -376,8 +375,8 @@ export default function LaunchDetailScreen() {
   const showTradingComingSoon = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
     Alert.alert(
-      "Coming soon",
-      "Wallet connection, Phantom, Jupiter swaps, buying, and selling are paused until the App Store launch. You can still research, track, and discuss tokens here.",
+      "Coming later",
+      "Trading features aren't available yet. You can still research, track, and discuss tokens here.",
     );
   }, []);
 
@@ -794,33 +793,13 @@ export default function LaunchDetailScreen() {
           </View>
         </ScrollView>
 
-        {/* Sticky buy/sell bar */}
+        {/* Sticky action bar — trading coming later */}
         <View style={styles.stickyBar} pointerEvents="box-none">
           <LinearGradient
             colors={["rgba(3,7,8,0)", "rgba(3,7,8,0.85)", Colors.ink]}
             style={styles.stickyFade}
             pointerEvents="none"
           />
-          <View style={styles.quickRow}>
-            {QUICK_BUYS.map((amt) => (
-              <Pressable
-                key={amt}
-                onPress={showTradingComingSoon}
-                style={styles.quickBtn}
-                testID={`quick-buy-${amt}`}
-              >
-                <Text style={styles.quickAmt}>{amt}</Text>
-                <Text style={styles.quickSol}>SOL</Text>
-              </Pressable>
-            ))}
-            <Pressable
-              onPress={showTradingComingSoon}
-              style={[styles.quickBtn, styles.quickCustom]}
-              testID="quick-buy-custom"
-            >
-              <Text style={styles.quickCustomText}>Custom</Text>
-            </Pressable>
-          </View>
           <View style={styles.stickyInner}>
             <Pressable
               onPress={() => setWatching((v) => !v)}
@@ -836,28 +815,6 @@ export default function LaunchDetailScreen() {
             </Pressable>
             <Pressable style={styles.stickyAlert} testID="sticky-alert">
               <Bell color={Colors.cyan} size={15} strokeWidth={2.8} />
-            </Pressable>
-            <Pressable
-              onPress={showTradingComingSoon}
-              style={[styles.stickyAction, styles.stickyBuy]}
-              testID="sticky-buy"
-            >
-              <LinearGradient
-                colors={[Colors.mint, Colors.cyan]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              <TrendingUp color={Colors.ink} size={15} strokeWidth={3} />
-              <Text style={styles.stickyBuyText}>Soon</Text>
-            </Pressable>
-            <Pressable
-              onPress={showTradingComingSoon}
-              style={[styles.stickyAction, styles.stickySell]}
-              testID="sticky-sell"
-            >
-              <TrendingDown color={Colors.rose} size={15} strokeWidth={3} />
-              <Text style={styles.stickySellText}>Soon</Text>
             </Pressable>
           </View>
         </View>

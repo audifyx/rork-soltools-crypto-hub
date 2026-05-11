@@ -189,8 +189,8 @@ export default function TokenLookupScreen() {
   const showTradingComingSoon = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
     Alert.alert(
-      "Coming soon",
-      "Wallet connection, Phantom, Jupiter swaps, buying, and selling are paused until the App Store launch. Token research and charts still work here.",
+      "Coming later",
+      "Trading features aren't available yet. Token research and charts still work here.",
     );
   }, []);
 

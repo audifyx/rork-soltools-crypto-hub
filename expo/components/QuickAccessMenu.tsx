@@ -129,7 +129,7 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
     {
       key: "kol",
       label: "KOL Scan",
-      description: "Track smart money: live KOL buys, sells & swaps",
+      description: "Track smart money: live KOL on-chain activity",
       Icon: Radio,
       color: Colors.magenta,
       onPress: () => navigate("/kol-scan"),

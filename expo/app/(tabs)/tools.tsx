@@ -154,7 +154,7 @@ const TOOLS: Tool[] = [
     id: "trade-vault",
     route: "/wallet",
     name: "Trade Vault",
-    tagline: "Wallets + swaps gated until App Store launch",
+    tagline: "Trading features coming in a future release",
     description: SOLTOOLS_TRADING_DISABLED_MESSAGE,
     Icon: Wallet,
     accent: Colors.mint,
@@ -296,8 +296,8 @@ const TOOLS: Tool[] = [
     id: "jupiter-routes",
     route: "/tool/jupiter-routes",
     name: "Jupiter Routes",
-    tagline: "Track swap routes and slippage",
-    description: "Inspect Jupiter quote routes, hops, price impact and per-DEX split for any swap pair before you trade.",
+    tagline: "Inspect routing between Solana DEXs",
+    description: "Research-only view of Jupiter route hops, price impact and per-DEX splits. Execution is not available yet.",
     Icon: Route, accent: Colors.orange, glow: "rgba(201,206,216,0.14)",
     gradient: [Colors.orange, Colors.rose], tags: ["Jupiter", "Routes", "Slippage"], status: "LIVE", category: "trading",
   },
@@ -700,7 +700,6 @@ const OG_WEB_TOOLS: OGWebTool[] = [
   { slug: "trending", title: "Trending", path: "/trending", page: "10", description: "Moving Solana coins by 5m, 1h, 6h, and 24h.", Icon: TrendingUp, accent: "#B8FF3C" },
   { slug: "whales", title: "Whales", path: "/whales", page: "11", description: "Largest holders, concentration, and whale warnings.", Icon: Waves, accent: Colors.cyan },
   { slug: "tx-feed", title: "Tx Feed", path: "/tx-feed", page: "12", description: "Live parsed transaction tape for the selected mint.", Icon: ClipboardIcon, accent: Colors.orange },
-  { slug: "swap", title: "Swap", path: "/swap", page: "13", description: "Jupiter quotes and routes with scanner context.", Icon: Repeat, accent: "#B8FF3C" },
   { slug: "tech", title: "Tech", path: "/tech", page: "14", description: "Jupiter, Helius, Birdeye, QuickNode, Alchemy stack.", Icon: Network, accent: Colors.cyan },
 ];
 
@@ -716,7 +715,7 @@ const OG_WEB_TOOLS_AS_TOOLS: Tool[] = OG_WEB_TOOLS.map((tool) => ({
   gradient: [tool.accent, Colors.cyan],
   tags: ["OGScan", "Live", `Page ${tool.page}`],
   status: "LIVE",
-  category: tool.slug === "swap" ? "trading" : tool.slug === "our-coin" || tool.slug === "tech" || tool.slug === "roadmap" || tool.slug === "command" ? "platform" : "analysis",
+  category: tool.slug === "our-coin" || tool.slug === "tech" || tool.slug === "roadmap" || tool.slug === "command" ? "platform" : "analysis",
 }));
 
 const PLATFORM_MODULE_TOOLS: Tool[] = SOLTOOLS_PLATFORM_MODULES.map(moduleToTool);
@@ -1231,7 +1230,7 @@ const OG_FEATURES = {
     { title: "Snipe Feed", body: "Fresh boosts, hot launches, risky pools and score-ranked runners.", route: "/tool/snipe-feed", Icon: Radar, accent: Colors.mint },
     { title: "Trending", body: "5m, 1h, 6h and 24h rankings by txns, volume, boosts and buy ratio.", route: "/tool/trending", Icon: TrendingUp, accent: Colors.cyan },
     { title: "New Pair Radar", body: "DexScreener launches, migrations and liquidity movement.", route: "/tool/new-pairs", Icon: Route, accent: Colors.goldBright },
-    { title: "Transaction Tape", body: "Buys, sells, transfers, swaps and signatures with live polling.", route: "/tool/transaction-tape", Icon: Repeat, accent: Colors.violet },
+    { title: "Transaction Tape", body: "Live on-chain transactions, transfers and signatures with live polling.", route: "/tool/transaction-tape", Icon: Repeat, accent: Colors.violet },
   ],
   watch: [
     { title: "Watchlist", body: "Watched tokens, devs, alerts and hot activity in one saved state.", route: "/tool/watchlist", Icon: Eye, accent: Colors.mint },
@@ -1241,7 +1240,7 @@ const OG_FEATURES = {
   ],
   more: [
     { title: "Our Coin", body: "Official OGScan CA, dev wallet and community links.", route: "/tool/token-lookup", Icon: Coins, accent: Colors.mint },
-    { title: "Swap Quote", body: "Jupiter quote surface for selected mint with safety-mode routing.", route: "/wallet", Icon: Scale, accent: Colors.cyan },
+
     { title: "$OGS Roadmap", body: "Community, tools, launch intelligence and multi-chain expansion.", route: "/communities", Icon: Route, accent: Colors.goldBright },
     { title: "API Status", body: "Jupiter, DexScreener, Helius, Birdeye and Supabase surfaces.", route: "/tool/api-status", Icon: Activity, accent: Colors.violet },
   ],
@@ -1306,7 +1305,7 @@ function OGScanMobileCommandCenter({
         <Text style={styles.mobileChain}>SOLANA · SAVED STATE</Text>
       </View>
       <Text style={styles.mobileTitle}>Native command center, not a tools list.</Text>
-      <Text style={styles.mobileCopy}>Bottom-tab product map for token scans, live launch radar, wallet/dev watch, whales, swap quotes and OGScan community systems.</Text>
+      <Text style={styles.mobileCopy}>Bottom-tab product map for token scans, live launch radar, wallet/dev watch, whales and OGScan community systems.</Text>
 
       <View style={styles.mintPanel}>
         <View style={{ flex: 1 }}>
@@ -1344,7 +1343,7 @@ function OGScanMobileCommandCenter({
 
       {activeSection === "watch" ? <Pressable onPress={() => onSelectDev(OGSCAN_DEV_WALLET)} style={styles.devIntel}><Network color={Colors.rose} size={18} /><View style={{ flex: 1 }}><Text style={styles.devIntelTitle}>Official dev wallet ready</Text><Text style={styles.devIntelBody}>{`${OGSCAN_DEV_WALLET.slice(0, 6)}…${OGSCAN_DEV_WALLET.slice(-6)}`} · tap to watch/unwatch and open dev intel.</Text></View></Pressable> : null}
 
-      {activeSection === "more" ? <View style={styles.apiRail}><Text style={styles.savedTitle}>Jupiter swap quote</Text><Text style={styles.savedBody}>{quoteText}</Text></View> : null}
+      {activeSection === "more" ? <View style={styles.apiRail}><Text style={styles.savedTitle}>Jupiter route preview</Text><Text style={styles.savedBody}>{quoteText}</Text></View> : null}
 
       {livePairs.isError || selectedToken.isError ? <View style={styles.apiRail}><Text style={styles.apiError}>One source is rate-limited. Showing cached/fallback data and retrying automatically.</Text></View> : null}
 

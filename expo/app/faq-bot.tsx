@@ -73,15 +73,9 @@ const RULES: Rule[] = [
   },
   {
     id: "swap",
-    keywords: [["swap"], ["buy", "token"], ["sell", "token"], ["trade"], ["jupiter"]],
+    keywords: [["swap"], ["buy", "token"], ["sell", "token"], ["trade"], ["jupiter"], ["trading"]],
     answer:
-      "Use the Swap tool from the Tools tab. It routes through Jupiter with your saved slippage and priority fee from Settings > Trading defaults. MEV protection is optional in the same panel.",
-  },
-  {
-    id: "slippage",
-    keywords: [["slippage"], ["priority", "fee"], ["gas"]],
-    answer:
-      "Adjust Slippage tolerance and Priority fee in Settings > Trading defaults. Defaults apply to every swap and snipe across the app.",
+      "Trading isn't available in the app yet. Buying, selling, and swapping (including Jupiter routing and wallet connection) are planned for a future release. For now you can research tokens, track wallets, and follow KOL activity.",
   },
   {
     id: "kol",
@@ -183,8 +177,8 @@ const RULES: Rule[] = [
     id: "greet",
     keywords: [["hi"], ["hello"], ["hey"], ["yo"], ["sup"]],
     answer:
-      "Hey, I'm the FAQ bot. Ask me about Spaces, swaps, wallets, KOL scan, alerts, communities, reels, or any setting and I'll point you to it.",
-    followups: ["How do Spaces work?", "How do I swap?", "How do alerts work?"],
+      "Hey, I'm the FAQ bot. Ask me about Spaces, wallets, KOL scan, alerts, communities, reels, or any setting and I'll point you to it.",
+    followups: ["How do Spaces work?", "How do alerts work?", "How do I create a community?"],
   },
   {
     id: "thanks",
@@ -196,9 +190,7 @@ const RULES: Rule[] = [
 const TOPIC_SUGGESTIONS: string[] = [
   "How do Spaces work?",
   "How do I connect my wallet?",
-  "How do I swap a token?",
   "How do KOL alerts work?",
-  "How do I change slippage?",
   "How do I create a community?",
   "How do I delete my account?",
 ];
@@ -261,7 +253,7 @@ export default function FaqBotScreen() {
           id: `b-${Date.now() + 1}`,
           role: "bot",
           text:
-            "I couldn't match that to a known topic. Try keywords like Spaces, wallet, swap, slippage, KOL, scanner, alerts, reels, communities, privacy, or delete account.",
+            "I couldn't match that to a known topic. Try keywords like Spaces, wallet, KOL, scanner, alerts, reels, communities, privacy, or delete account.",
           suggestions: TOPIC_SUGGESTIONS.slice(0, 4),
           at: Date.now() + 1,
         };
@@ -321,7 +313,7 @@ export default function FaqBotScreen() {
             <TextInput
               value={input}
               onChangeText={setInput}
-              placeholder="Ask about Spaces, swap, wallets..."
+              placeholder="Ask about Spaces, wallets, KOL..."
               placeholderTextColor={Colors.muted2}
               style={styles.input}
               returnKeyType="send"
