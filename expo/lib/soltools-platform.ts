@@ -34,7 +34,7 @@ export const SOLTOOLS_OFFICIAL_TOKEN_TICKER = "$OGS";
 export const SOLTOOLS_OFFICIAL_TOKEN_NAME = "OG Scan";
 
 export const SOLTOOLS_TRADING_DISABLED_MESSAGE =
-  "Wallet connection, wallet creation/import/export, Phantom, Jupiter swaps, buying, and selling are paused until the App Store launch. Social Alpha Cockpit is currently live for social, discovery, charts, alerts, communities, and wallet/token research.";
+  "Wallet connection, wallet creation/import/export, Phantom, Jupiter swaps, buying, and selling are paused until the App Store launch. Crypto Community App is currently live for social, discovery, charts, alerts, communities, and wallet/token research.";
 
 export const SOLTOOLS_EDGE_FUNCTIONS = [
   "solana-tracker",

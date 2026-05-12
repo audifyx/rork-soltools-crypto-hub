@@ -416,7 +416,7 @@ export default function HomeFeedScreen() {
       : post.authorDisplayName ?? "a trader";
     try {
       await Share.share({
-        message: `${post.text || "Social Alpha Cockpit post"}${ticker}\n\n— ${author}`,
+        message: `${post.text || "Crypto Community App post"}${ticker}\n\n— ${author}`,
       });
     } catch (e) {
       console.log("[home] share failed", e);
@@ -753,8 +753,8 @@ export default function HomeFeedScreen() {
             )}
           </Pressable>
           <View style={styles.homeTitleWrap}>
-            <Text style={styles.homeTitle}>Social Alpha Cockpit</Text>
-            <Text style={styles.homeSubtitle}>social alpha cockpit</Text>
+            <Text style={styles.homeTitle}>Crypto Community App</Text>
+            <Text style={styles.homeSubtitle}>crypto community app</Text>
           </View>
           <View style={styles.topActions}>
             <Pressable

@@ -528,7 +528,7 @@ export default function ProfileScreen() {
   const onShareProfile = useCallback(async () => {
     try {
       await Share.share({
-        message: `Follow ${profile.displayName} (${profile.handle}) on Social Alpha Cockpit — pro Solana trading suite.`,
+        message: `Follow ${profile.displayName} (${profile.handle}) on Crypto Community App — pro Solana trading suite.`,
       });
     } catch (e) {
       console.log("[profile] share failed", e);
@@ -2027,7 +2027,7 @@ function SettingsModal({
     }
     Alert.alert(
       "Delete account?",
-      "This permanently deletes your Social Alpha Cockpit account, profile, posts, and synced data. This action cannot be undone.",
+      "This permanently deletes your Crypto Community App account, profile, posts, and synced data. This action cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -2196,7 +2196,7 @@ function SettingsModal({
                 />
                 <MenuRow
                   Icon={ExternalLink}
-                  label="About Social Alpha Cockpit"
+                  label="About Crypto Community App"
                   sub="Version, terms, privacy"
                   onPress={() => setSection("about")}
                 />
@@ -2345,7 +2345,7 @@ function SettingsModal({
                   <View style={styles.aboutLogo}>
                     <Sparkles color={Colors.ink} size={22} strokeWidth={3} />
                   </View>
-                  <Text style={styles.aboutTitle}>Social Alpha Cockpit</Text>
+                  <Text style={styles.aboutTitle}>Crypto Community App</Text>
                   <Text style={styles.aboutSub}>Pro Trading Suite · v5.0.0</Text>
                 </View>
                 <MenuRow

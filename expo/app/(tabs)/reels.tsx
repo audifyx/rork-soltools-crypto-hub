@@ -112,7 +112,7 @@ export default function ReelsScreen() {
 
   const requireAuth = useCallback((action: string): boolean => {
     if (isAuthenticated && userId) return true;
-    Alert.alert("Sign in", `Sign in to ${action} reels on Social Alpha Cockpit.`, [
+    Alert.alert("Sign in", `Sign in to ${action} reels on Crypto Community App.`, [
       { text: "Cancel", style: "cancel" },
       { text: "Sign in", onPress: () => router.push("/auth") },
     ]);
@@ -153,9 +153,9 @@ export default function ReelsScreen() {
     try {
       const url = typeof reel.videoUrl === "string" ? reel.videoUrl : "";
       await Share.share({
-        message: `${reel.caption || "Social Alpha Cockpit reel"}${url ? `\n${url}` : ""}`,
+        message: `${reel.caption || "Crypto Community App reel"}${url ? `\n${url}` : ""}`,
         url,
-        title: "Social Alpha Cockpit Reel",
+        title: "Crypto Community App Reel",
       });
       patchReel(reel.id, (current) => ({ ...current, sharesCount: current.sharesCount + 1 }));
       await shareReel(reel.id, userId, Platform.OS);

@@ -306,7 +306,7 @@ export default function PublicProfileScreen() {
       <SafeAreaView style={styles.center} edges={["top"]}>
         <Stack.Screen options={{ headerShown: false }} />
         <Text style={styles.notFoundTitle}>Trader not found</Text>
-        <Text style={styles.notFoundBody}>@{handle.replace("@", "")} doesn&apos;t exist on Social Alpha Cockpit.</Text>
+        <Text style={styles.notFoundBody}>@{handle.replace("@", "")} doesn&apos;t exist on Crypto Community App.</Text>
         <Pressable onPress={() => navigateBack(router, "/(tabs)/users")} style={styles.backCta}>
           <Text style={styles.backCtaText}>Go back</Text>
         </Pressable>
@@ -755,7 +755,7 @@ function TipModal({
             </LinearGradient>
           </Pressable>
           <Text style={tipStyles.foot}>
-            Wallet transfers are coming soon. Social Alpha Cockpit never holds funds.
+            Wallet transfers are coming soon. Crypto Community App never holds funds.
           </Text>
         </Pressable>
       </Pressable>
