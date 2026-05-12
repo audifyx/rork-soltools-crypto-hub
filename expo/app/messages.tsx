@@ -4,20 +4,25 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
+  Archive,
   ArrowLeft,
   BadgeCheck,
   BellOff,
+  CheckCheck,
   ChevronRight,
   Coins,
   Inbox,
   Pencil,
   Pin,
+  PinOff,
   Search,
+  ShieldAlert,
+  ShieldCheck,
   Sparkles,
   UserPlus,
   X,
 } from "lucide-react-native";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -25,6 +30,7 @@ import {
   FlatList,
   ListRenderItem,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -41,11 +47,26 @@ import { navigateBack } from "@/lib/navigation";
 import { Conversation, DMUser, useMessageableUsersSearch, useMessages } from "@/providers/messages-provider";
 
 type Tab = "inbox" | "requests";
+type SmartFilter = "all" | "unread" | "verified" | "pinned";
 
 const ACCENT = Colors.mint;
 const ACCENT_SOFT = "rgba(63,169,255,0.14)";
 const CARD_BORDER = "rgba(255,255,255,0.08)";
 const CARD_FILL = "rgba(11,15,26,0.86)";
+
+const SCAM_PATTERNS: RegExp[] = [
+  /\b(airdrop|claim|free\s*mint|wallet\s*connect|verify\s*wallet|seed\s*phrase|private\s*key)\b/i,
+  /\b(2x|3x|10x|guaranteed)\b.*\b(profit|return|gains)\b/i,
+  /\bt\.me\/[A-Za-z0-9_]+/i,
+  /\b(bit\.ly|tinyurl|cutt\.ly|t\.co)\b/i,
+  /\b(drain|drainer|metamask\s*support|trustwallet\s*support)\b/i,
+];
+
+function isLikelyScam(conv: Conversation): boolean {
+  const text = `${conv.lastMessage} ${conv.user.bio ?? ""}`;
+  if (!text.trim()) return false;
+  return SCAM_PATTERNS.some((re) => re.test(text));
+}
 
 function timeAgo(t: number): string {
   const s = Math.max(1, Math.floor((Date.now() - t) / 1000));
@@ -83,8 +104,12 @@ export default function MessagesScreen() {
     ensureConversationWith,
     deleteConversation,
     deleteConversationForEveryone,
+    togglePin,
+    toggleMute,
+    markRead,
   } = useMessages();
   const [tab, setTab] = useState<Tab>("inbox");
+  const [smart, setSmart] = useState<SmartFilter>("all");
   const [query, setQuery] = useState<string>("");
   const [composeOpen, setComposeOpen] = useState<boolean>(false);
 
@@ -92,19 +117,37 @@ export default function MessagesScreen() {
 
   const filtered = useMemo<Conversation[]>(() => {
     const q = query.trim().toLowerCase();
-    if (q.length === 0) return dataSource;
-    return dataSource.filter(
+    let list = dataSource;
+    if (tab === "inbox") {
+      if (smart === "unread") list = list.filter((c) => c.unread > 0);
+      else if (smart === "verified") list = list.filter((c) => c.user.verified);
+      else if (smart === "pinned") list = list.filter((c) => c.pinned);
+    }
+    if (q.length === 0) return list;
+    return list.filter(
       (c) =>
         c.user.handle.toLowerCase().includes(q) ||
         c.user.name.toLowerCase().includes(q) ||
         c.lastMessage.toLowerCase().includes(q),
     );
-  }, [dataSource, query]);
+  }, [dataSource, query, smart, tab]);
+
+  const unreadCount = useMemo<number>(() => inbox.filter((c) => c.unread > 0).length, [inbox]);
+  const verifiedCount = useMemo<number>(() => inbox.filter((c) => c.user.verified).length, [inbox]);
+  const pinnedCount = useMemo<number>(() => inbox.filter((c) => c.pinned).length, [inbox]);
+  const flaggedCount = useMemo<number>(() => requests.filter(isLikelyScam).length, [requests]);
 
   const openConvo = async (id: string) => {
     Haptics.selectionAsync().catch(() => {});
     router.push({ pathname: "/dm/[id]", params: { id } });
   };
+
+  const onMarkAllRead = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const targets = inbox.filter((c) => c.unread > 0);
+    if (targets.length === 0) return;
+    await Promise.all(targets.map((c) => markRead(c.id).catch(() => {})));
+  }, [inbox, markRead]);
 
   const onLongPressConvo = (conv: Conversation) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -150,9 +193,60 @@ export default function MessagesScreen() {
     }
   };
 
-  const renderItem: ListRenderItem<Conversation> = ({ item }) => (
-    <ConversationRow conv={item} onPress={() => openConvo(item.id)} onLongPress={() => onLongPressConvo(item)} />
+  const onSwipePin = useCallback(
+    async (conv: Conversation) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      try {
+        await togglePin(conv.id);
+      } catch (e) {
+        Alert.alert("Pin failed", e instanceof Error ? e.message : "Try again.");
+      }
+    },
+    [togglePin],
   );
+
+  const onSwipeMute = useCallback(
+    async (conv: Conversation) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      try {
+        await toggleMute(conv.id);
+      } catch (e) {
+        Alert.alert("Mute failed", e instanceof Error ? e.message : "Try again.");
+      }
+    },
+    [toggleMute],
+  );
+
+  const onSwipeArchive = useCallback(
+    async (conv: Conversation) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+      try {
+        await deleteConversation(conv.id);
+      } catch (e) {
+        Alert.alert("Archive failed", e instanceof Error ? e.message : "Try again.");
+      }
+    },
+    [deleteConversation],
+  );
+
+  const renderItem: ListRenderItem<Conversation> = ({ item }) => (
+    <SwipeableRow
+      conv={item}
+      scam={tab === "requests" && isLikelyScam(item)}
+      onPress={() => openConvo(item.id)}
+      onLongPress={() => onLongPressConvo(item)}
+      onPin={() => onSwipePin(item)}
+      onMute={() => onSwipeMute(item)}
+      onArchive={() => onSwipeArchive(item)}
+    />
+  );
+
+  const smartChips: { id: SmartFilter; label: string; count: number }[] = [
+    { id: "all", label: "All", count: inbox.length },
+    { id: "unread", label: "Unread", count: unreadCount },
+    { id: "verified", label: "Verified", count: verifiedCount },
+    { id: "pinned", label: "Pinned", count: pinnedCount },
+  ];
 
   return (
     <View style={styles.root} testID="messages-screen">
@@ -170,16 +264,28 @@ export default function MessagesScreen() {
             <ArrowLeft color={Colors.text} size={18} strokeWidth={2.4} />
             <Text style={styles.navText}>Home</Text>
           </Pressable>
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
-              setComposeOpen(true);
-            }}
-            style={styles.circleCompose}
-            testID="compose-dm"
-          >
-            <Pencil color={Colors.ink} size={18} strokeWidth={2.7} />
-          </Pressable>
+          <View style={styles.navRight}>
+            {tab === "inbox" && unreadCount > 0 ? (
+              <Pressable
+                onPress={onMarkAllRead}
+                style={styles.markAllBtn}
+                testID="mark-all-read"
+              >
+                <CheckCheck color={ACCENT} size={14} strokeWidth={2.6} />
+                <Text style={styles.markAllText}>Mark all read</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setComposeOpen(true);
+              }}
+              style={styles.circleCompose}
+              testID="compose-dm"
+            >
+              <Pencil color={Colors.ink} size={18} strokeWidth={2.7} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.titleRow}>
@@ -231,10 +337,52 @@ export default function MessagesScreen() {
                     <Text style={[styles.filterCountText, active && styles.filterCountTextActive]}>{count}</Text>
                   </View>
                 ) : null}
+                {t === "requests" && flaggedCount > 0 ? (
+                  <View style={styles.flagDot}>
+                    <ShieldAlert color={Colors.text} size={9} strokeWidth={2.8} />
+                  </View>
+                ) : null}
               </Pressable>
             );
           })}
         </View>
+
+        {tab === "inbox" ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.smartRow}
+          >
+            {smartChips.map((s) => {
+              const active = smart === s.id;
+              return (
+                <Pressable
+                  key={s.id}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setSmart(s.id);
+                  }}
+                  style={[styles.smartChip, active && styles.smartChipActive]}
+                  testID={`smart-${s.id}`}
+                >
+                  <Text style={[styles.smartText, active && styles.smartTextActive]}>{s.label}</Text>
+                  {s.count > 0 ? (
+                    <Text style={[styles.smartCount, active && styles.smartCountActive]}>{s.count}</Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
+        {tab === "requests" && flaggedCount > 0 ? (
+          <View style={styles.scamBanner}>
+            <ShieldAlert color={Colors.orange} size={13} strokeWidth={2.6} />
+            <Text style={styles.scamBannerText}>
+              {flaggedCount} request{flaggedCount === 1 ? "" : "s"} flagged as likely scam
+            </Text>
+          </View>
+        ) : null}
 
         <FlatList
           data={filtered}
@@ -244,7 +392,7 @@ export default function MessagesScreen() {
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           ListHeaderComponent={
-            tab === "inbox" && suggestedUsers.length > 0 ? (
+            tab === "inbox" && smart === "all" && suggestedUsers.length > 0 ? (
               <View style={styles.suggestionsWrap}>
                 <View style={styles.suggestionsHead}>
                   <Sparkles color={ACCENT} size={13} strokeWidth={2.6} />
@@ -285,7 +433,7 @@ export default function MessagesScreen() {
             ) : null
           }
           ListEmptyComponent={
-              <View style={styles.empty}>
+            <View style={styles.empty}>
               <View style={styles.emptyIcon}>
                 {tab === "inbox" ? (
                   <Inbox color={ACCENT} size={28} strokeWidth={2.4} />
@@ -294,7 +442,11 @@ export default function MessagesScreen() {
                 )}
               </View>
               <Text style={styles.emptyTitle}>
-                {tab === "inbox" ? "No messages yet" : "No pending requests"}
+                {tab === "inbox"
+                  ? smart === "all"
+                    ? "No messages yet"
+                    : `No ${smart} messages`
+                  : "No pending requests"}
               </Text>
               <Text style={styles.emptyBody}>
                 {tab === "inbox"
@@ -315,7 +467,133 @@ export default function MessagesScreen() {
   );
 }
 
-function ConversationRow({ conv, onPress, onLongPress }: { conv: Conversation; onPress: () => void; onLongPress?: () => void }) {
+interface SwipeableRowProps {
+  conv: Conversation;
+  scam: boolean;
+  onPress: () => void;
+  onLongPress: () => void;
+  onPin: () => void;
+  onMute: () => void;
+  onArchive: () => void;
+}
+
+const SWIPE_ACTION_W = 78;
+
+function SwipeableRow({ conv, scam, onPress, onLongPress, onPin, onMute, onArchive }: SwipeableRowProps) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const offset = useRef<number>(0);
+
+  const reset = useCallback(() => {
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: true,
+      bounciness: 4,
+    }).start(() => {
+      offset.current = 0;
+    });
+  }, [translateX]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.4,
+        onPanResponderMove: (_, g) => {
+          let dx = g.dx + offset.current;
+          if (dx > SWIPE_ACTION_W * 1.4) dx = SWIPE_ACTION_W * 1.4;
+          if (dx < -SWIPE_ACTION_W * 2.4) dx = -SWIPE_ACTION_W * 2.4;
+          translateX.setValue(dx);
+        },
+        onPanResponderRelease: (_, g) => {
+          const dx = g.dx + offset.current;
+          if (dx <= -SWIPE_ACTION_W * 2 * 0.7) {
+            // Reveal both actions left
+            Animated.spring(translateX, {
+              toValue: -SWIPE_ACTION_W * 2,
+              useNativeDriver: true,
+              bounciness: 4,
+            }).start(() => {
+              offset.current = -SWIPE_ACTION_W * 2;
+            });
+          } else if (dx >= SWIPE_ACTION_W * 0.7) {
+            // Reveal pin action right
+            Animated.spring(translateX, {
+              toValue: SWIPE_ACTION_W,
+              useNativeDriver: true,
+              bounciness: 4,
+            }).start(() => {
+              offset.current = SWIPE_ACTION_W;
+            });
+          } else {
+            reset();
+          }
+        },
+        onPanResponderTerminate: reset,
+      }),
+    [reset, translateX],
+  );
+
+  const handleArchive = useCallback(() => {
+    reset();
+    onArchive();
+  }, [onArchive, reset]);
+
+  const handleMute = useCallback(() => {
+    reset();
+    onMute();
+  }, [onMute, reset]);
+
+  const handlePin = useCallback(() => {
+    reset();
+    onPin();
+  }, [onPin, reset]);
+
+  return (
+    <View style={styles.swipeWrap}>
+      {/* Left side: Pin action */}
+      <View style={[styles.actionLeft, { width: SWIPE_ACTION_W }]}>
+        <Pressable onPress={handlePin} style={styles.actionInnerPin} testID={`swipe-pin-${conv.id}`}>
+          {conv.pinned ? (
+            <PinOff color={Colors.ink} size={18} strokeWidth={2.6} />
+          ) : (
+            <Pin color={Colors.ink} size={18} strokeWidth={2.6} />
+          )}
+          <Text style={styles.actionLabel}>{conv.pinned ? "Unpin" : "Pin"}</Text>
+        </Pressable>
+      </View>
+
+      {/* Right side: Mute + Archive */}
+      <View style={[styles.actionRight, { width: SWIPE_ACTION_W * 2 }]}>
+        <Pressable onPress={handleMute} style={styles.actionInnerMute} testID={`swipe-mute-${conv.id}`}>
+          <BellOff color={Colors.ink} size={18} strokeWidth={2.6} />
+          <Text style={styles.actionLabel}>{conv.muted ? "Unmute" : "Mute"}</Text>
+        </Pressable>
+        <Pressable onPress={handleArchive} style={styles.actionInnerArchive} testID={`swipe-archive-${conv.id}`}>
+          <Archive color={Colors.text} size={18} strokeWidth={2.6} />
+          <Text style={[styles.actionLabel, { color: Colors.text }]}>Archive</Text>
+        </Pressable>
+      </View>
+
+      <Animated.View
+        style={{ transform: [{ translateX }] }}
+        {...panResponder.panHandlers}
+      >
+        <ConversationRow conv={conv} scam={scam} onPress={onPress} onLongPress={onLongPress} />
+      </Animated.View>
+    </View>
+  );
+}
+
+function ConversationRow({
+  conv,
+  scam,
+  onPress,
+  onLongPress,
+}: {
+  conv: Conversation;
+  scam?: boolean;
+  onPress: () => void;
+  onLongPress?: () => void;
+}) {
   const presence = presenceLabel(conv.user.online, conv.user.lastSeenAt);
   return (
     <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={320} style={styles.row} testID={`convo-${conv.id}`}>
@@ -330,6 +608,11 @@ function ConversationRow({ conv, onPress, onLongPress }: { conv: Conversation; o
           )}
         </View>
         {conv.user.online ? <View style={styles.onlineDot} /> : null}
+        {conv.user.verified ? (
+          <View style={styles.walletBadge}>
+            <ShieldCheck color={ACCENT} size={10} strokeWidth={3} />
+          </View>
+        ) : null}
       </View>
       <View style={styles.rowMid}>
         <View style={styles.rowTop}>
@@ -343,15 +626,24 @@ function ConversationRow({ conv, onPress, onLongPress }: { conv: Conversation; o
             {conv.user.handle}
           </Text>
         </View>
-        <Text
-          style={[
-            styles.rowLast,
-            conv.unread > 0 && styles.rowLastUnread,
-          ]}
-          numberOfLines={1}
-        >
-          {conv.lastMessage || "iMessage"}
-        </Text>
+        <View style={styles.rowLastWrap}>
+          {scam ? (
+            <View style={styles.scamPill}>
+              <ShieldAlert color={Colors.orange} size={9} strokeWidth={2.8} />
+              <Text style={styles.scamPillText}>SCAM</Text>
+            </View>
+          ) : null}
+          <Text
+            style={[
+              styles.rowLast,
+              conv.unread > 0 && styles.rowLastUnread,
+              scam && styles.rowLastScam,
+            ]}
+            numberOfLines={1}
+          >
+            {conv.lastMessage || "iMessage"}
+          </Text>
+        </View>
         {presence ? (
           <View style={styles.presenceRow}>
             {conv.user.online ? <View style={styles.presenceDot} /> : null}
@@ -362,22 +654,21 @@ function ConversationRow({ conv, onPress, onLongPress }: { conv: Conversation; o
         ) : null}
       </View>
       <View style={styles.rowEnd}>
-        {conv.pinned ? (
-          <Pin color={Colors.orange} size={11} strokeWidth={2.8} />
-        ) : null}
-        {conv.muted ? (
-          <BellOff color={Colors.muted} size={11} strokeWidth={2.4} />
-        ) : null}
         <Text style={[styles.rowTimeEnd, conv.unread > 0 && styles.rowTimeUnread]}>{timeAgo(conv.lastAt)}</Text>
         <View style={styles.endMetaRow}>
           {conv.pinned ? (
-            <Pin color={Colors.muted} size={11} strokeWidth={2.4} />
+            <Pin color={Colors.orange} size={11} strokeWidth={2.8} />
           ) : null}
           {conv.muted ? (
             <BellOff color={Colors.muted} size={11} strokeWidth={2.2} />
           ) : null}
-          {conv.unread > 0 ? <View style={styles.unreadDot} /> : null}
-          <ChevronRight color="#C7C7CC" size={16} strokeWidth={2.1} />
+          {conv.unread > 0 ? (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{conv.unread > 99 ? "99+" : conv.unread}</Text>
+            </View>
+          ) : (
+            <ChevronRight color="#C7C7CC" size={16} strokeWidth={2.1} />
+          )}
         </View>
       </View>
     </Pressable>
@@ -410,7 +701,6 @@ function ComposeModal({
   const filtered = useMemo<DMUser[]>(() => {
     const term = q.trim().toLowerCase();
     const remote = search.data ?? [];
-    // Merge remote + locally known users, dedup by userId/handle.
     const merged: DMUser[] = [...remote, ...knownUsers];
     const seen = new Set<string>();
     const out: DMUser[] = [];
@@ -534,6 +824,19 @@ const styles = StyleSheet.create({
   },
   navTextButton: { height: 40, paddingHorizontal: 12, borderRadius: 14, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.055)", borderWidth: 1, borderColor: CARD_BORDER },
   navText: { color: Colors.text, fontSize: 14, fontWeight: "800" },
+  navRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  markAllBtn: {
+    height: 36,
+    paddingHorizontal: 11,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: ACCENT_SOFT,
+    borderWidth: 1,
+    borderColor: "rgba(63,169,255,0.35)",
+  },
+  markAllText: { color: ACCENT, fontSize: 12, fontWeight: "900", letterSpacing: 0.2 },
   circleCompose: {
     width: 40,
     height: 40,
@@ -546,35 +849,7 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
   },
-  titleRow: {
-    paddingHorizontal: 18,
-    marginTop: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headTitleWrap: { flex: 1 },
-  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  eyebrow: { color: Colors.cyan, fontSize: 10, fontWeight: "900", letterSpacing: 1.6 },
-  unreadPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 999,
-    backgroundColor: Colors.rose,
-    minWidth: 18,
-    alignItems: "center",
-  },
-  unreadPillText: { color: Colors.text, fontSize: 9, fontWeight: "900" },
+  titleRow: { paddingHorizontal: 18, marginTop: 4, flexDirection: "row", alignItems: "center", gap: 10 },
   title: { color: Colors.text, fontSize: 34, fontWeight: "900", letterSpacing: -1.2 },
   titleBadge: {
     minWidth: 25,
@@ -587,16 +862,6 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   titleBadgeText: { color: Colors.ink, fontSize: 14, fontWeight: "900" },
-  composeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 12,
-    backgroundColor: Colors.cyan,
-  },
-  composeText: { color: Colors.ink, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
 
   searchWrap: {
     marginHorizontal: 18,
@@ -619,18 +884,54 @@ const styles = StyleSheet.create({
   filterChipActive: { backgroundColor: ACCENT },
   filterText: { color: Colors.muted, fontSize: 13, fontWeight: "900" },
   filterTextActive: { color: Colors.ink },
-  filterCount: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 5,
-  },
+  filterCount: { minWidth: 18, height: 18, borderRadius: 9, backgroundColor: "rgba(255,255,255,0.10)", alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
   filterCountActive: { backgroundColor: "rgba(0,0,0,0.18)" },
   filterCountText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
   filterCountTextActive: { color: Colors.ink },
+  flagDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.orange,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  smartRow: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 4, gap: 8 },
+  smartChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+  },
+  smartChipActive: {
+    backgroundColor: ACCENT_SOFT,
+    borderColor: "rgba(63,169,255,0.45)",
+  },
+  smartText: { color: Colors.muted, fontSize: 12, fontWeight: "800", letterSpacing: 0.2 },
+  smartTextActive: { color: ACCENT },
+  smartCount: { color: Colors.muted2, fontSize: 11, fontWeight: "900" },
+  smartCountActive: { color: ACCENT },
+
+  scamBanner: {
+    marginTop: 10,
+    marginHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(30,136,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(30,136,255,0.35)",
+  },
+  scamBannerText: { color: Colors.orange, fontSize: 12, fontWeight: "800" },
 
   listContent: { paddingTop: 12, paddingBottom: 140, flexGrow: 1 },
   sep: { height: 8 },
@@ -640,147 +941,119 @@ const styles = StyleSheet.create({
   suggestionsTitle: { color: Colors.muted, fontSize: 12, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase" },
   suggestionsRow: { paddingHorizontal: 18, gap: 12 },
   suggestCard: { width: 82, paddingVertical: 10, paddingHorizontal: 6, alignItems: "center", borderRadius: 20, backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, borderColor: CARD_BORDER },
-  suggestAvatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
+  suggestAvatar: { width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   suggestAvatarImg: { width: "100%", height: "100%" },
   suggestInit: { color: "#FFFFFF", fontSize: 22, fontWeight: "700" },
-  onlineRing: {
-    position: "absolute",
-    bottom: -2,
-    right: -2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Colors.mint,
-    borderWidth: 2,
-    borderColor: Colors.ink,
-  },
+  onlineRing: { position: "absolute", bottom: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.mint, borderWidth: 2, borderColor: Colors.ink },
   suggestName: { color: Colors.text, fontSize: 12, fontWeight: "800", marginTop: 7, maxWidth: 70 },
   suggestHandle: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 1, maxWidth: 70 },
 
-  row: { flexDirection: "row", alignItems: "center", gap: 12, marginHorizontal: 14, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 22, backgroundColor: CARD_FILL, borderWidth: 1, borderColor: CARD_BORDER },
-  avatarWrap: { position: "relative" },
-  avatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
+  swipeWrap: { marginHorizontal: 14, position: "relative" },
+  actionLeft: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: Colors.orange,
+    borderTopLeftRadius: 22,
+    borderBottomLeftRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+  },
+  actionRight: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    right: 0,
+    flexDirection: "row",
+    borderTopRightRadius: 22,
+    borderBottomRightRadius: 22,
     overflow: "hidden",
   },
+  actionInnerPin: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
+  actionInnerMute: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: "#5B8DEF" },
+  actionInnerArchive: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: "#E63946" },
+  actionLabel: { color: Colors.ink, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
+
+  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 22, backgroundColor: CARD_FILL, borderWidth: 1, borderColor: CARD_BORDER },
+  avatarWrap: { position: "relative" },
+  avatar: { width: 54, height: 54, borderRadius: 18, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   avatarImg: { width: "100%", height: "100%" },
   avatarInit: { color: "#FFFFFF", fontSize: 21, fontWeight: "900" },
-  onlineDot: {
+  onlineDot: { position: "absolute", bottom: -1, right: -1, width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.mint, borderWidth: 2, borderColor: Colors.card },
+  walletBadge: {
     position: "absolute",
-    bottom: -1,
-    right: -1,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Colors.mint,
-    borderWidth: 2,
-    borderColor: Colors.card,
+    top: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.ink,
+    borderWidth: 1.5,
+    borderColor: ACCENT,
+    alignItems: "center",
+    justifyContent: "center",
   },
   rowMid: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: "row", alignItems: "center", gap: 5 },
   rowName: { color: Colors.text, fontSize: 16, fontWeight: "900", letterSpacing: -0.2, flexShrink: 1 },
   rowHandle: { color: Colors.muted, fontSize: 12, fontWeight: "700", maxWidth: 82 },
-  rowDot: { color: Colors.muted, fontSize: 13, fontWeight: "400" },
-  rowTime: { color: Colors.muted, fontSize: 13, fontWeight: "400" },
-  rowLast: { color: Colors.muted, fontSize: 14, fontWeight: "600", marginTop: 4 },
+  rowLastWrap: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
+  rowLast: { color: Colors.muted, fontSize: 14, fontWeight: "600", flex: 1 },
   rowLastUnread: { color: Colors.text, fontWeight: "800" },
+  rowLastScam: { color: Colors.orange },
+  scamPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "rgba(30,136,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(30,136,255,0.45)",
+  },
+  scamPillText: { color: Colors.orange, fontSize: 8, fontWeight: "900", letterSpacing: 0.6 },
   rowEnd: { alignItems: "flex-end", justifyContent: "center", gap: 6, minWidth: 44 },
   rowTimeEnd: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
   rowTimeUnread: { color: ACCENT, fontWeight: "900" },
   endMetaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: ACCENT },
+  unreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: ACCENT,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  unreadBadgeText: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
   presenceRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 3 },
   presenceDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.mint },
   presenceText: { color: Colors.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.1 },
   presenceTextOnline: { color: Colors.mint },
 
   empty: { marginHorizontal: 18, marginTop: 28, paddingHorizontal: 28, paddingVertical: 44, alignItems: "center", borderRadius: 28, backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, borderColor: CARD_BORDER },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    backgroundColor: ACCENT_SOFT,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 14,
-  },
+  emptyIcon: { width: 64, height: 64, borderRadius: 18, backgroundColor: ACCENT_SOFT, alignItems: "center", justifyContent: "center", marginBottom: 14 },
   emptyTitle: { color: Colors.text, fontSize: 18, fontWeight: "900" },
-  emptyBody: {
-    color: Colors.muted,
-    fontSize: 14,
-    fontWeight: "600",
-    textAlign: "center",
-    marginTop: 6,
-    lineHeight: 17,
-  },
+  emptyBody: { color: Colors.muted, fontSize: 14, fontWeight: "600", textAlign: "center", marginTop: 6, lineHeight: 17 },
 
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.66)", justifyContent: "flex-end" },
   modalSheet: { height: "82%", backgroundColor: Colors.panel, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingTop: 10, borderWidth: 1, borderColor: CARD_BORDER },
-  modalHandle: {
-    alignSelf: "center",
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.22)",
-    marginBottom: 14,
-  },
-  modalHead: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
+  modalHandle: { alignSelf: "center", width: 38, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.22)", marginBottom: 14 },
+  modalHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   modalTitle: { color: Colors.text, fontSize: 22, fontWeight: "900", letterSpacing: -0.4 },
-  iconBtnSmall: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  iconBtnSmall: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
   modalSearch: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: Platform.OS === "ios" ? 10 : 8, borderRadius: 17, backgroundColor: CARD_FILL, borderWidth: 1, borderColor: CARD_BORDER, marginBottom: 12 },
-  modalSearchInput: {
-    flex: 1,
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: "700",
-    padding: 0,
-  },
+  modalSearchInput: { flex: 1, color: Colors.text, fontSize: 15, fontWeight: "700", padding: 0 },
   modalRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 4 },
-  modalAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
+  modalAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   modalAvatarImg: { width: "100%", height: "100%" },
   modalAvatarInit: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
   modalNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   modalName: { color: Colors.text, fontSize: 16, fontWeight: "900" },
   modalSub: { color: Colors.muted, fontSize: 13, fontWeight: "600", marginTop: 2 },
   modalSep: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(255,255,255,0.06)", marginLeft: 60 },
-  existingPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(85,245,178,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.4)",
-  },
+  existingPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(85,245,178,0.16)", borderWidth: 1, borderColor: "rgba(85,245,178,0.4)" },
   existingText: { color: Colors.mint, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
 });
-
