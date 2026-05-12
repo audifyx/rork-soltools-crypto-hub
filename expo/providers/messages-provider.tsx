@@ -647,12 +647,40 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
   const updateParticipantFlag = useCallback(
     async (id: string, patch: { pinned?: boolean; muted?: boolean; request?: boolean; hidden_at?: string | null }) => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to update messages.");
-      const { error } = await supabase
-        .from("dm_participants")
-        .update(patch)
-        .eq("conversation_id", id)
-        .eq("user_id", userId);
-      if (error) throw error;
+      // Optimistic update so the row reflects the change immediately even if the RPC is slow.
+      queryClient.setQueryData<Conversation[]>(["messages", "conversations", userId], (prev) =>
+        (prev ?? []).map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                pinned: patch.pinned ?? c.pinned,
+                muted: patch.muted ?? c.muted,
+                request: patch.request ?? c.request,
+              }
+            : c,
+        ),
+      );
+      const rpcParams: Record<string, unknown> = {
+        p_conversation_id: id,
+        p_pinned: patch.pinned ?? null,
+        p_muted: patch.muted ?? null,
+        p_request: patch.request ?? null,
+        p_hidden_at: patch.hidden_at === undefined ? null : patch.hidden_at,
+        p_clear_hidden: patch.hidden_at === null,
+      };
+      const { error: rpcError } = await supabase.rpc("set_dm_participant_flag", rpcParams);
+      if (rpcError) {
+        // Fallback to direct table update for older databases without the RPC deployed yet.
+        const { error } = await supabase
+          .from("dm_participants")
+          .update(patch)
+          .eq("conversation_id", id)
+          .eq("user_id", userId);
+        if (error) {
+          await queryClient.invalidateQueries({ queryKey: ["messages"] });
+          throw error;
+        }
+      }
       await queryClient.invalidateQueries({ queryKey: ["messages"] });
     },
     [isAuthenticated, queryClient, userId],

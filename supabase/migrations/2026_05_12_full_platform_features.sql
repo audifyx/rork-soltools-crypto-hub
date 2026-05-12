@@ -66,10 +66,72 @@ alter table if exists public.dm_participants
   add column if not exists read_receipts_enabled boolean not null default true,
   add column if not exists folder text,                -- friends/creators/communities/spam/custom
   add column if not exists role text not null default 'member', -- 'owner'|'admin'|'member'
-  add column if not exists nickname text;
+  add column if not exists nickname text,
+  add column if not exists pinned boolean not null default false,
+  add column if not exists muted boolean not null default false,
+  add column if not exists request boolean not null default false,
+  add column if not exists hidden_at timestamptz;
 
 create index if not exists dm_participants_folder_idx
   on public.dm_participants (user_id, folder);
+create index if not exists dm_participants_pinned_idx
+  on public.dm_participants (user_id) where pinned = true;
+
+-- 1.3a Safe upsert for participant flag toggles (pin/mute/archive/accept) -
+create or replace function public.set_dm_participant_flag(
+  p_conversation_id uuid,
+  p_pinned boolean default null,
+  p_muted boolean default null,
+  p_request boolean default null,
+  p_hidden_at timestamptz default null,
+  p_clear_hidden boolean default false
+) returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  uid uuid := auth.uid();
+  is_member boolean;
+begin
+  if uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  -- Confirm the caller is a participant of the conversation (or insert if missing).
+  select exists (
+    select 1 from public.dm_participants
+     where conversation_id = p_conversation_id and user_id = uid
+  ) into is_member;
+
+  if not is_member then
+    -- only allow self-insert if the conversation actually involves the user via dm_messages
+    if not exists (
+      select 1 from public.dm_conversations c
+       where c.id = p_conversation_id
+         and (c.user_a = uid or c.user_b = uid)
+    ) then
+      raise exception 'not a participant';
+    end if;
+    insert into public.dm_participants(conversation_id, user_id, role)
+    values (p_conversation_id, uid, 'member')
+    on conflict do nothing;
+  end if;
+
+  update public.dm_participants
+     set pinned    = coalesce(p_pinned, pinned),
+         muted     = coalesce(p_muted, muted),
+         request   = coalesce(p_request, request),
+         hidden_at = case when p_clear_hidden then null
+                          else coalesce(p_hidden_at, hidden_at) end
+   where conversation_id = p_conversation_id
+     and user_id = uid;
+
+  return true;
+end;
+$;
+
+grant execute on function public.set_dm_participant_flag(uuid, boolean, boolean, boolean, timestamptz, boolean) to authenticated;
 
 -- 1.4 Reactions (already partially exists – ensure shape) -----------------
 create table if not exists public.dm_message_reactions (
