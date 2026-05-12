@@ -58,12 +58,18 @@ The SQL foundation for all 41 features lives in
 
 ---
 
-## Next UI passes (suggested order)
+## UI passes shipped
 
-1. **Messages UI wiring** — pinned messages in chat, in-chat search modal,
-   folders tabs, disappearing-timer sheet, notes-to-self pin.
-2. **Stories rail** on home tab + viewer.
-3. **Reels feed** as new tab.
-4. **Communities directory + Events** screen.
-5. **Streaks/achievements/recap** in profile.
-6. **For-you tab** + onboarding interest quiz.
+1. [x] **Messages UI wiring** — `ChatToolsSheet` (in-chat search, pinned list,
+   disappearing-timer) wired into the DM header. Notes-to-self pin on the
+   messages inbox via `get_self_chat()`.
+2. [x] **Stories rail** — `components/home/StoriesRail.tsx` on home tab,
+   `app/story/[id].tsx` viewer with progress bars + `view_story()` tracking,
+   `app/story/create.tsx` for posting.
+3. [x] **Reels feed** — already shipped as `(tabs)/reels.tsx`.
+4. [x] **Communities directory + Events** — `app/events.tsx` listing with
+   filters and RSVP via `rsvp_event()`. Communities directory already wired.
+5. [x] **Streaks/achievements/recap** — `StreakCard`, `AchievementsRow`,
+   `RecapCard` rendered on the profile tab.
+6. [x] **For-you tab** — new `(tabs)/fyp.tsx` reading from `fyp_cache` +
+   `app/interest-quiz.tsx` onboarding writing to `user_interests`.

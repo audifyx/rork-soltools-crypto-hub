@@ -51,6 +51,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ChatToolsSheet from "@/components/social/ChatToolsSheet";
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import { uploadDMImage } from "@/lib/upload";
@@ -168,6 +169,7 @@ export default function DMThreadScreen() {
   const [text, setText] = useState<string>("");
   const [picker, setPicker] = useState<boolean>(false);
   const [menu, setMenu] = useState<boolean>(false);
+  const [toolsOpen, setToolsOpen] = useState<boolean>(false);
   const [actionMsg, setActionMsg] = useState<DMMessage | null>(null);
   const [replyTo, setReplyTo] = useState<DMReplyContext | null>(null);
   const [editing, setEditing] = useState<DMMessage | null>(null);
@@ -518,6 +520,16 @@ export default function DMThreadScreen() {
           <Pressable
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
+              setToolsOpen(true);
+            }}
+            style={styles.iconBtn}
+            testID="dm-tools"
+          >
+            <Sparkles color={IOS_BLUE} size={18} strokeWidth={2.4} />
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
               setMenu(true);
             }}
             style={styles.iconBtn}
@@ -782,6 +794,12 @@ export default function DMThreadScreen() {
             ],
           );
         }}
+      />
+
+      <ChatToolsSheet
+        open={toolsOpen}
+        conversationId={conv.id}
+        onClose={() => setToolsOpen(false)}
       />
     </View>
   );

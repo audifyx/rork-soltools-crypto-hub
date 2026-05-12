@@ -73,6 +73,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
 import PortfolioCard from "@/components/profile/PortfolioCard";
+import StreakCard from "@/components/profile/StreakCard";
+import AchievementsRow from "@/components/profile/AchievementsRow";
+import RecapCard from "@/components/profile/RecapCard";
 import BadgeRow from "@/components/social/BadgeRow";
 import { DEFAULT_BADGES, getHolderBadge, sortBadges, type UserBadge } from "@/lib/badge-system";
 import { useAdmin } from "@/providers/admin-provider";
@@ -840,6 +843,12 @@ export default function ProfileScreen() {
           </ScrollView>
 
           <PortfolioCard />
+
+          <View style={profileBlockStyles.gap}>
+            <StreakCard userId={userId ?? null} />
+            <RecapCard userId={userId ?? null} />
+            <AchievementsRow userId={userId ?? null} />
+          </View>
 
           <View style={styles.statsGrid}>
             <StatCard label="WATCHING" value={stats.watching} accent={Colors.mint} Icon={Eye} />
@@ -2422,6 +2431,10 @@ function SettingRow({
     </View>
   );
 }
+
+const profileBlockStyles = StyleSheet.create({
+  gap: { gap: 12, marginTop: 14, marginHorizontal: 14 },
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },

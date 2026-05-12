@@ -44,6 +44,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
+import { getSelfChat } from "@/lib/api/platform";
 import { navigateBack } from "@/lib/navigation";
 import { Conversation, DMUser, useMessageableUsersSearch, useMessages } from "@/providers/messages-provider";
 
@@ -142,6 +143,17 @@ export default function MessagesScreen() {
     Haptics.selectionAsync().catch(() => {});
     router.push({ pathname: "/dm/[id]", params: { id } });
   };
+
+  const openSelfChat = useCallback(async () => {
+    Haptics.selectionAsync().catch(() => {});
+    try {
+      const id = await getSelfChat();
+      if (id) router.push({ pathname: "/dm/[id]", params: { id } });
+      else Alert.alert("Notes-to-self", "Sign in to keep private notes.");
+    } catch (e) {
+      Alert.alert("Could not open", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [router]);
 
   const onMarkAllRead = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -368,6 +380,25 @@ export default function MessagesScreen() {
               );
             })}
           </ScrollView>
+        ) : null}
+
+        {tab === "inbox" ? (
+          <Pressable onPress={openSelfChat} style={styles.selfChatPin} testID="open-self-chat">
+            <LinearGradient
+              colors={["rgba(63,169,255,0.16)", "rgba(91,141,239,0.08)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.selfChatIcon}>
+              <Sparkles color={ACCENT} size={14} strokeWidth={2.6} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.selfChatTitle}>Notes to self</Text>
+              <Text style={styles.selfChatBody}>Private space for alpha, links, screenshots.</Text>
+            </View>
+            <ChevronRight color={Colors.muted} size={15} strokeWidth={2.4} />
+          </Pressable>
         ) : null}
 
         {tab === "inbox" && !hintDismissed && filtered.length > 0 ? (
@@ -1094,6 +1125,27 @@ const styles = StyleSheet.create({
   suggestHandle: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 1, maxWidth: 70 },
 
   rowOuter: { marginHorizontal: 14 },
+  selfChatPin: {
+    marginHorizontal: 18,
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(63,169,255,0.34)",
+    backgroundColor: Colors.card,
+  },
+  selfChatIcon: {
+    width: 36, height: 36, borderRadius: 12,
+    backgroundColor: "rgba(63,169,255,0.16)", borderWidth: 1, borderColor: "rgba(63,169,255,0.42)",
+    alignItems: "center", justifyContent: "center",
+  },
+  selfChatTitle: { color: Colors.text, fontSize: 13, fontWeight: "900" },
+  selfChatBody: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
 
   actionSheet: {
     backgroundColor: Colors.panel,

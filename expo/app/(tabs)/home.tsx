@@ -56,6 +56,7 @@ import QuickAccessMenu from "@/components/QuickAccessMenu";
 import TokenAvatar from "@/components/TokenAvatar";
 import LiveTicker from "@/components/ui/LiveTicker";
 import CommunitiesRail from "@/components/home/CommunitiesRail";
+import StoriesRail from "@/components/home/StoriesRail";
 import OurTokenBadge from "@/components/home/OurTokenBadge";
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
@@ -877,6 +878,7 @@ function FeedHeader({
       {filter === "For You" ? (
         <>
           <HomeCommandHero />
+          <StoriesRail />
           <View style={styles.tickerWrap}>
             <LiveTicker />
           </View>
