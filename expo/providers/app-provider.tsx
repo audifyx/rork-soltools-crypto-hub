@@ -249,7 +249,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
             reposted: false,
             authorId: row.user_id as string,
           }));
-          return mergePosts(localPosts, remotePosts);
+          // Only show posts authored by the current user. Drop stray local posts
+          // (e.g. created while signed out or under a different account) so the
+          // profile feed never surfaces other people's posts.
+          const merged = mergePosts(localPosts, remotePosts);
+          return merged.filter((p) => !p.authorId || p.authorId === userId);
         } catch (e) {
           console.log("[app] posts fetch fallback", e);
         }
@@ -668,8 +672,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
             .eq("user_id", userId)
             .select("id");
           if (error) throw error;
+          // No remote row matched (e.g. legacy local-only post). Treat as a
+          // successful local delete instead of rolling back so the user can
+          // always clear orphaned posts from their profile.
           if (!data || data.length === 0) {
-            throw new Error("Post not found or you do not have permission to delete it.");
+            await saveJson(POSTS_KEY, next);
           }
           qc.invalidateQueries({ queryKey: ["home", "live-feed"] });
           qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
