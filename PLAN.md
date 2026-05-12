@@ -1,58 +1,69 @@
-# 50 new feature ideas — messages, growth, monetization & app-wide (no trading)
+# 41 platform features — implementation plan
 
-Here are 50 feature ideas tailored to a social/community app with a crypto-flavored audience — strictly **no trading, no swaps, no charts, no portfolio P&L**. Grouped by your four focus areas.
+Status legend: `[x]` SQL/data layer done · `[~]` UI in progress · `[ ]` not started.
+The SQL foundation for all 41 features lives in
+`supabase/migrations/2026_05_12_full_platform_features.sql`.
 
 ---
 
 ### 💬 Messages tab (1–15)
 
-1. **Voice notes** — hold-to-record audio messages with waveform playback.
-2. **Disappearing messages** — per-chat timer (1h, 24h, 7d).
-3. **Message reactions** — long-press to add emoji reactions inline.
-4. **Reply threads** — quote and reply to a specific message.
-5. **Read receipts toggle** — privacy control per conversation.
-6. **Typing indicators** with animated dots.
-7. **Message search** inside a conversation (by keyword, sender, date).
-8. **Pinned messages inside a chat** (not just pinned chats).
-9. **Smart replies** — AI-suggested quick responses.
-10. **Auto-translate** incoming messages to your language.
-11. **Folders / labels** — Friends, Creators, Communities, Spam.
-12. **Group DMs** with admin controls and group avatars.
-13. **Scheduled messages** — send later at a chosen time.
-14. **Saved messages / Notes-to-self** — a personal locker chat.
-15. **Vanish mode + screenshot alert** — notify if someone screenshots.
+- [x] 1. Voice notes — `dm_messages.audio_url/duration/waveform` (UI: recorder pending)
+- [x] 2. Disappearing messages — `dm_conversation_settings.disappearing_seconds` + `expire_dm_messages()`
+- [x] 3. Message reactions — `dm_message_reactions` (UI already shipped)
+- [x] 4. Reply threads — `dm_messages.reply_to` (UI already shipped)
+- [x] 5. Read receipts toggle — `dm_participants.read_receipts_enabled` + `set_dm_read_receipts()`
+- [x] 6. Typing indicators (already shipped)
+- [x] 7. Message search inside a chat — `search_dm_messages()` + trigram index
+- [x] 8. Pinned messages inside a chat — `pinned_in_chat` + `toggle_pin_in_chat()` / `list_pinned_messages()`
+- [x] 9. Smart replies — `dm_smart_reply_cache` (UI: generate via toolkit)
+- [x] 10. Auto-translate — `dm_messages.translated_cache`
+- [x] 11. Folders / labels — `dm_participants.folder` + `set_dm_folder()`
+- [x] 12. Group DMs — `dm_conversation_settings.is_group/group_name/group_avatar_url` + roles
+- [x] 13. Scheduled messages — `schedule_dm()` + `release_scheduled_dms()`
+- [x] 14. Notes-to-self — `get_self_chat()` + `dm_conversations.is_self_chat`
+- [x] 15. Vanish mode + screenshot alert — `vanish_mode` + `dm_screenshot_events` + `report_screenshot()`
 
 ### 🌐 App-wide (16–30)
 
-1. **Stories / 24h status** with replies and view list.
-2. **Live audio rooms** (Twitter Spaces style) for communities.
-3. **Short video reels feed** with vertical swipe.
-4. **Polls & quizzes** in posts and DMs.
-5. **Communities directory** with discovery, categories, trending.
-6. **Events** — schedule, RSVP, in-app reminders.
-7. **Bookmarks & collections** — save posts into themed folders.
-8. **Profile themes** — custom color, banner motion, badges.
-9. **Verified-handle marketplace** — claim, gift, transfer unique @handles.
-10. **Anonymous posting mode** inside specific communities.
-11. **AI feed summary** — "What happened today in your network."
-12. **Global search 2.0** — people, posts, communities, media in one bar.
-13. **Inline rich previews** — Twitter/YouTube/news/Spotify unfurls.
-14. **Cross-poster** — draft once, post to your communities.
-15. **Read-later & catch-up timeline** — never miss while away.
+- [x] 16. Stories — `stories`, `story_views`, `story_replies`, `view_story()`
+- [x] 17. Live audio rooms — `audio_rooms`, `audio_room_participants`
+- [x] 18. Reels — `reels`, `reel_likes`, `reel_views`
+- [x] 19. Polls & quizzes — `polls`, `poll_options`, `poll_votes`, `cast_poll_vote()`
+- [x] 20. Communities directory — `communities.category/tags/trending_score` + `community_categories`
+- [x] 21. Events — `events`, `event_rsvps`, `rsvp_event()`
+- [x] 22. Bookmarks & collections — `bookmarks`, `bookmark_collections`, `toggle_bookmark()`
+- [x] 23. Profile themes — `profiles.theme_color/theme_gradient/banner_motion/pinned_badge_id`
+- [x] 24. Handle marketplace — `handles`, `handle_listings`, `handle_transfers`
+- [x] 25. Anonymous posting — `posts.is_anonymous/anon_alias`
+- [x] 26. AI feed summary — `ai_feed_summaries`
+- [x] 27. Global search 2.0 — `search_index` + `global_search()`
+- [x] 28. Link unfurls — `link_unfurls`
+- [x] 29. Cross-poster — `post_drafts`
+- [x] 30. Read-later & catch-up — `read_later`, `feed_position`
 
-### 🚀 Growth, engagement & retention (31–42)
+### 🚀 Growth, engagement & retention (31–41)
 
-1. **Daily streaks** with rewards for showing up.
-2. **Onboarding interest quiz** that personalizes the feed instantly.
-3. **Friend-of-friend suggestions** with mutual-connections explainer.
-4. **Invite system** — shareable referral links + leaderboard.
-5. **Push notification smart digest** — bundled, not spammy.
-6. **"For you" personalized feed** alongside Following.
-7. **Weekly recap card** users can share to other socials.
-8. **Achievement badges** — first post, 100 followers, top commenter
-9. **Trending hashtags & topics** rail.
-10. **Reactivation campaigns** — gentle nudges for dormant users.
-11. **Live counters** — "X people viewing this community now."
+- [x] 31. Daily streaks — `user_streaks` + `bump_streak()` + `streak_rewards_claimed`
+- [x] 32. Interest quiz — `interest_topics`, `user_interests` (seeded)
+- [x] 33. Friend-of-friend suggestions — `suggested_follows`
+- [x] 34. Invite system — `invite_codes`, `referrals`, `referral_leaderboard` view
+- [x] 35. Push smart digest — `notification_digest` + `profiles.digest_frequency/quiet_hours_*`
+- [x] 36. For-you feed — `feed_signals`, `fyp_cache`
+- [x] 37. Weekly recap — `weekly_recaps`
+- [x] 38. Achievement badges — `achievements` (seeded), `user_achievements`
+- [x] 39. Trending hashtags — `hashtags`, `post_hashtags`
+- [x] 40. Reactivation campaigns — `reactivation_campaigns`
+- [x] 41. Live presence counters — `live_presence` + `touch_presence()` + `count_viewers_now()`
 
+---
 
+## Next UI passes (suggested order)
 
+1. **Messages UI wiring** — pinned messages in chat, in-chat search modal,
+   folders tabs, disappearing-timer sheet, notes-to-self pin.
+2. **Stories rail** on home tab + viewer.
+3. **Reels feed** as new tab.
+4. **Communities directory + Events** screen.
+5. **Streaks/achievements/recap** in profile.
+6. **For-you tab** + onboarding interest quiz.
