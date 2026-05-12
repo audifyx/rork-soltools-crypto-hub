@@ -258,7 +258,7 @@ export default function SettingsScreen() {
             <Group title="SUPPORT & LEGAL">
               <MenuRow Icon={Bot} label="FAQ bot" sub="Instant answers · keyword engine, no AI" onPress={() => router.push("/faq-bot")} />
               <MenuRow Icon={HelpCircle} label="Help & support" sub="Telegram @ogscandev" onPress={() => Alert.alert("Support", "Message us on Telegram @ogscandev")} />
-              <MenuRow Icon={Shield} label="Privacy policy" sub="How $OGS token handles data" onPress={() => router.push("/legal/privacy")} />
+              <MenuRow Icon={Shield} label="Privacy policy" sub="How Social Alpha Cockpit handles data" onPress={() => router.push("/legal/privacy")} />
               <MenuRow Icon={Sparkles} label="Terms of service" sub="App rules and usage terms" onPress={() => router.push("/legal/terms")} />
               <MenuRow Icon={LinkIcon} label="Open-source licenses" sub="Third-party credits" onPress={() => router.push("/legal/licenses")} />
             </Group>

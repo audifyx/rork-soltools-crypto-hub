@@ -416,7 +416,7 @@ export default function HomeFeedScreen() {
       : post.authorDisplayName ?? "a trader";
     try {
       await Share.share({
-        message: `${post.text || "$OGS token post"}${ticker}\n\n— ${author}`,
+        message: `${post.text || "Social Alpha Cockpit post"}${ticker}\n\n— ${author}`,
       });
     } catch (e) {
       console.log("[home] share failed", e);
@@ -753,7 +753,7 @@ export default function HomeFeedScreen() {
             )}
           </Pressable>
           <View style={styles.homeTitleWrap}>
-            <Text style={styles.homeTitle}>$OGS token</Text>
+            <Text style={styles.homeTitle}>Social Alpha Cockpit</Text>
             <Text style={styles.homeSubtitle}>social alpha cockpit</Text>
           </View>
           <View style={styles.topActions}>

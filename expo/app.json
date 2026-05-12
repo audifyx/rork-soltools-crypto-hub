@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "$OGS token",
+    "name": "Social Alpha Cockpit",
     "slug": "soltools-agoq9mmx54xvahqna2fmv",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -17,7 +17,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "app.rork.ct333efmdotyxkemvlyk6",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "$OGS token needs the microphone to let you speak in live Spaces."
+        "NSMicrophoneUsageDescription": "Social Alpha Cockpit needs the microphone to let you speak in live Spaces."
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -50,13 +50,13 @@
         "expo-secure-store",
         {
           "configureAndroidBackup": true,
-          "faceIDPermission": "Allow $OGS token to protect your trading wallet keys with Face ID."
+          "faceIDPermission": "Allow Social Alpha Cockpit to protect your trading wallet keys with Face ID."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow $OGS token to access your photos and videos so you can upload profile media, posts, and reels."
+          "photosPermission": "Allow Social Alpha Cockpit to access your photos and videos so you can upload profile media, posts, and reels."
         }
       ],
       "expo-audio"

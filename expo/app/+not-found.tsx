@@ -21,7 +21,7 @@ export default function SolToolsNotFoundScreen() {
         </Text>
 
         <Text style={styles.body}>
-          Continue scanning wallets, whale activity, token movement, and social momentum inside $OGS token.
+          Continue scanning wallets, whale activity, token movement, and social momentum inside Social Alpha Cockpit.
         </Text>
 
         <Link href="/" style={styles.link} testID="soltools-not-found-home-link">

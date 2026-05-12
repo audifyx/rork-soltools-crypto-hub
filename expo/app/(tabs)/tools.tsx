@@ -631,7 +631,7 @@ function moduleToTool(module: SolToolsModuleSpec): Tool {
     route,
     name: module.name,
     tagline: module.status === "gated" ? "Paused until App Store launch" : `${module.surface} · ${module.status.toUpperCase()}`,
-    description: module.gatedReason ?? `${module.name} is wired into ${module.surface} using the existing $OGS token data layer and routes.`,
+    description: module.gatedReason ?? `${module.name} is wired into ${module.surface} using the existing Social Alpha Cockpit data layer and routes.`,
     Icon: moduleIconForCategory(module.category),
     accent,
     glow: `${accent}18`,
@@ -690,7 +690,7 @@ type OGWebTool = {
 const OG_WEB_TOOLS: OGWebTool[] = [
   { slug: "command", title: "Command", path: "/app", page: "1", description: "Main OGScan dashboard and tool launcher.", Icon: House, accent: "#B8FF3C" },
   { slug: "our-coin", title: "Our Coin", path: "/our-coin", page: "2", description: "Official CA, dev wallet, chart links, and copy actions.", Icon: Coins, accent: Colors.goldBright },
-  { slug: "roadmap", title: "Roadmap", path: "/roadmap", page: "3", description: "$OGS token mission, rollout plan, and community links.", Icon: Route, accent: Colors.cyan },
+  { slug: "roadmap", title: "Roadmap", path: "/roadmap", page: "3", description: "Social Alpha Cockpit mission, rollout plan, and community links.", Icon: Route, accent: Colors.cyan },
   { slug: "market-pulse", title: "Market Pulse", path: "/market-pulse", page: "4", description: "Live token stats, liquidity, holders, score, and flags.", Icon: Activity, accent: "#B8FF3C" },
   { slug: "snipe-feed", title: "Snipe Feed", path: "/snipe-feed", page: "5", description: "Fresh launches, repeat dev wallets, risk, and heat scoring.", Icon: Radar, accent: Colors.orange },
   { slug: "scanner", title: "Scanner", path: "/scanner", page: "6", description: "Paste mint or ticker and inspect token safety signals.", Icon: ScanLine, accent: Colors.cyan },

@@ -461,7 +461,7 @@ export default function CommunityDetailScreen() {
     if (!community) return;
     try {
       await Share.share({
-        message: `Join the ${community.name} community on $OGS token — ${shareLink}`,
+        message: `Join the ${community.name} community on Social Alpha Cockpit — ${shareLink}`,
         url: shareLink,
       });
     } catch (e) {
@@ -486,7 +486,7 @@ export default function CommunityDetailScreen() {
     Haptics.selectionAsync().catch(() => {});
     try {
       await Share.share({
-        message: `Join ${community.name} on $OGS token: ${shareLink}`,
+        message: `Join ${community.name} on Social Alpha Cockpit: ${shareLink}`,
         url: shareLink,
       });
     } catch (e) {
@@ -745,7 +745,7 @@ export default function CommunityDetailScreen() {
   const onSharePost = useCallback(async (post: CommunityPost) => {
     try {
       await Share.share({
-        message: `${post.authorName} in ${community?.name ?? "$OGS token"}: ${post.content}\n${shareLink}?post=${post.id}`,
+        message: `${post.authorName} in ${community?.name ?? "Social Alpha Cockpit"}: ${post.content}\n${shareLink}?post=${post.id}`,
         url: `${shareLink}?post=${post.id}`,
       });
     } catch (e) {
@@ -1085,7 +1085,7 @@ export default function CommunityDetailScreen() {
 
               <Text style={styles.desc} numberOfLines={3}>
                 {community.description ||
-                  `${community.name} is the official community for $OGS token.`}
+                  `${community.name} is the official community for Social Alpha Cockpit.`}
               </Text>
             </View>
 
