@@ -11,6 +11,7 @@ import {
   CheckCheck,
   ChevronRight,
   Coins,
+  Hand,
   Inbox,
   Mail,
   Pencil,
@@ -31,7 +32,6 @@ import {
   FlatList,
   ListRenderItem,
   Modal,
-  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -150,36 +150,12 @@ export default function MessagesScreen() {
     await Promise.all(targets.map((c) => markRead(c.id).catch(() => {})));
   }, [inbox, markRead]);
 
+  const [actionSheet, setActionSheet] = useState<Conversation | null>(null);
+  const [hintDismissed, setHintDismissed] = useState<boolean>(false);
+
   const onLongPressConvo = (conv: Conversation) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    Alert.alert(
-      "Delete conversation?",
-      `Choose how to remove your chat with ${conv.user.name}.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete for me",
-          onPress: async () => {
-            try {
-              await deleteConversation(conv.id);
-            } catch (e) {
-              Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
-            }
-          },
-        },
-        {
-          text: "Delete for everyone",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteConversationForEveryone(conv.id);
-            } catch (e) {
-              Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
-            }
-          },
-        },
-      ],
-    );
+    setActionSheet(conv);
   };
 
   const onStartWith = async (user: DMUser) => {
@@ -231,15 +207,14 @@ export default function MessagesScreen() {
   );
 
   const renderItem: ListRenderItem<Conversation> = ({ item }) => (
-    <SwipeableRow
-      conv={item}
-      scam={tab === "requests" && isLikelyScam(item)}
-      onPress={() => openConvo(item.id)}
-      onLongPress={() => onLongPressConvo(item)}
-      onPin={() => onSwipePin(item)}
-      onMute={() => onSwipeMute(item)}
-      onArchive={() => onSwipeArchive(item)}
-    />
+    <View style={styles.rowOuter}>
+      <ConversationRow
+        conv={item}
+        scam={tab === "requests" && isLikelyScam(item)}
+        onPress={() => openConvo(item.id)}
+        onLongPress={() => onLongPressConvo(item)}
+      />
+    </View>
   );
 
   const smartChips: { id: SmartFilter; label: string; count: number; Icon: typeof Inbox }[] = [
@@ -395,6 +370,25 @@ export default function MessagesScreen() {
           </ScrollView>
         ) : null}
 
+        {tab === "inbox" && !hintDismissed && filtered.length > 0 ? (
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setHintDismissed(true);
+            }}
+            style={styles.longPressHint}
+            testID="long-press-hint"
+          >
+            <View style={styles.longPressHintIcon}>
+              <Hand color={ACCENT} size={13} strokeWidth={2.6} />
+            </View>
+            <Text style={styles.longPressHintText}>
+              <Text style={styles.longPressHintBold}>Press & hold</Text> any chat for pin, mute, archive & delete
+            </Text>
+            <X color={Colors.muted} size={12} strokeWidth={2.6} />
+          </Pressable>
+        ) : null}
+
         {tab === "requests" && flaggedCount > 0 ? (
           <View style={styles.scamBanner}>
             <ShieldAlert color={Colors.orange} size={13} strokeWidth={2.6} />
@@ -483,123 +477,201 @@ export default function MessagesScreen() {
         onClose={() => setComposeOpen(false)}
         onPickUser={onStartWith}
       />
+
+      <ActionSheet
+        conv={actionSheet}
+        onClose={() => setActionSheet(null)}
+        onPin={async (c) => {
+          setActionSheet(null);
+          await onSwipePin(c);
+        }}
+        onMute={async (c) => {
+          setActionSheet(null);
+          await onSwipeMute(c);
+        }}
+        onArchive={async (c) => {
+          setActionSheet(null);
+          await onSwipeArchive(c);
+        }}
+        onMarkRead={async (c) => {
+          setActionSheet(null);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          try {
+            await markRead(c.id);
+          } catch {}
+        }}
+        onDelete={(c) => {
+          setActionSheet(null);
+          Alert.alert(
+            "Delete conversation?",
+            `Choose how to remove your chat with ${c.user.name}.`,
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Delete for me",
+                onPress: async () => {
+                  try {
+                    await deleteConversation(c.id);
+                  } catch (e) {
+                    Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+                  }
+                },
+              },
+              {
+                text: "Delete for everyone",
+                style: "destructive",
+                onPress: async () => {
+                  try {
+                    await deleteConversationForEveryone(c.id);
+                  } catch (e) {
+                    Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+                  }
+                },
+              },
+            ],
+          );
+        }}
+      />
     </View>
   );
 }
 
-interface SwipeableRowProps {
-  conv: Conversation;
-  scam: boolean;
-  onPress: () => void;
-  onLongPress: () => void;
-  onPin: () => void;
-  onMute: () => void;
-  onArchive: () => void;
+interface ActionSheetProps {
+  conv: Conversation | null;
+  onClose: () => void;
+  onPin: (c: Conversation) => void;
+  onMute: (c: Conversation) => void;
+  onArchive: (c: Conversation) => void;
+  onMarkRead: (c: Conversation) => void;
+  onDelete: (c: Conversation) => void;
 }
 
-const SWIPE_ACTION_W = 78;
+function ActionSheet({ conv, onClose, onPin, onMute, onArchive, onMarkRead, onDelete }: ActionSheetProps) {
+  const slide = useRef(new Animated.Value(0)).current;
+  const open = conv !== null;
 
-function SwipeableRow({ conv, scam, onPress, onLongPress, onPin, onMute, onArchive }: SwipeableRowProps) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const offset = useRef<number>(0);
-
-  const reset = useCallback(() => {
-    Animated.spring(translateX, {
-      toValue: 0,
+  React.useEffect(() => {
+    Animated.timing(slide, {
+      toValue: open ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
-      bounciness: 4,
-    }).start(() => {
-      offset.current = 0;
-    });
-  }, [translateX]);
+    }).start();
+  }, [open, slide]);
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.4,
-        onPanResponderMove: (_, g) => {
-          let dx = g.dx + offset.current;
-          if (dx > SWIPE_ACTION_W * 1.4) dx = SWIPE_ACTION_W * 1.4;
-          if (dx < -SWIPE_ACTION_W * 2.4) dx = -SWIPE_ACTION_W * 2.4;
-          translateX.setValue(dx);
-        },
-        onPanResponderRelease: (_, g) => {
-          const dx = g.dx + offset.current;
-          if (dx <= -SWIPE_ACTION_W * 2 * 0.7) {
-            // Reveal both actions left
-            Animated.spring(translateX, {
-              toValue: -SWIPE_ACTION_W * 2,
-              useNativeDriver: true,
-              bounciness: 4,
-            }).start(() => {
-              offset.current = -SWIPE_ACTION_W * 2;
-            });
-          } else if (dx >= SWIPE_ACTION_W * 0.7) {
-            // Reveal pin action right
-            Animated.spring(translateX, {
-              toValue: SWIPE_ACTION_W,
-              useNativeDriver: true,
-              bounciness: 4,
-            }).start(() => {
-              offset.current = SWIPE_ACTION_W;
-            });
-          } else {
-            reset();
-          }
-        },
-        onPanResponderTerminate: reset,
-      }),
-    [reset, translateX],
-  );
+  if (!conv) return null;
 
-  const handleArchive = useCallback(() => {
-    reset();
-    onArchive();
-  }, [onArchive, reset]);
-
-  const handleMute = useCallback(() => {
-    reset();
-    onMute();
-  }, [onMute, reset]);
-
-  const handlePin = useCallback(() => {
-    reset();
-    onPin();
-  }, [onPin, reset]);
+  const items: { id: string; label: string; Icon: typeof Pin; color?: string; destructive?: boolean; onPress: () => void }[] = [
+    {
+      id: "pin",
+      label: conv.pinned ? "Unpin conversation" : "Pin conversation",
+      Icon: conv.pinned ? PinOff : Pin,
+      color: Colors.orange,
+      onPress: () => onPin(conv),
+    },
+    {
+      id: "mute",
+      label: conv.muted ? "Unmute notifications" : "Mute notifications",
+      Icon: BellOff,
+      color: "#5B8DEF",
+      onPress: () => onMute(conv),
+    },
+    ...(conv.unread > 0
+      ? [
+          {
+            id: "read",
+            label: "Mark as read",
+            Icon: CheckCheck,
+            color: ACCENT,
+            onPress: () => onMarkRead(conv),
+          },
+        ]
+      : []),
+    {
+      id: "archive",
+      label: "Archive",
+      Icon: Archive,
+      color: "#9CA3AF",
+      onPress: () => onArchive(conv),
+    },
+    {
+      id: "delete",
+      label: "Delete conversation",
+      Icon: X,
+      color: "#E63946",
+      destructive: true,
+      onPress: () => onDelete(conv),
+    },
+  ];
 
   return (
-    <View style={styles.swipeWrap}>
-      {/* Left side: Pin action */}
-      <View style={[styles.actionLeft, { width: SWIPE_ACTION_W }]}>
-        <Pressable onPress={handlePin} style={styles.actionInnerPin} testID={`swipe-pin-${conv.id}`}>
-          {conv.pinned ? (
-            <PinOff color={Colors.ink} size={18} strokeWidth={2.6} />
-          ) : (
-            <Pin color={Colors.ink} size={18} strokeWidth={2.6} />
-          )}
-          <Text style={styles.actionLabel}>{conv.pinned ? "Unpin" : "Pin"}</Text>
-        </Pressable>
-      </View>
-
-      {/* Right side: Mute + Archive */}
-      <View style={[styles.actionRight, { width: SWIPE_ACTION_W * 2 }]}>
-        <Pressable onPress={handleMute} style={styles.actionInnerMute} testID={`swipe-mute-${conv.id}`}>
-          <BellOff color={Colors.ink} size={18} strokeWidth={2.6} />
-          <Text style={styles.actionLabel}>{conv.muted ? "Unmute" : "Mute"}</Text>
-        </Pressable>
-        <Pressable onPress={handleArchive} style={styles.actionInnerArchive} testID={`swipe-archive-${conv.id}`}>
-          <Archive color={Colors.text} size={18} strokeWidth={2.6} />
-          <Text style={[styles.actionLabel, { color: Colors.text }]}>Archive</Text>
-        </Pressable>
-      </View>
-
-      <Animated.View
-        style={{ transform: [{ translateX }] }}
-        {...panResponder.panHandlers}
-      >
-        <ConversationRow conv={conv} scam={scam} onPress={onPress} onLongPress={onLongPress} />
-      </Animated.View>
-    </View>
+    <Modal visible={open} transparent animationType="none" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Animated.View
+          style={[
+            styles.actionSheet,
+            {
+              transform: [
+                {
+                  translateY: slide.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [500, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Pressable onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <View style={styles.actionHead}>
+              <View style={[styles.actionAvatar, { backgroundColor: conv.user.color }]}>
+                {conv.user.avatarUrl ? (
+                  <ExpoImage source={{ uri: conv.user.avatarUrl }} style={styles.actionAvatarImg} contentFit="cover" />
+                ) : (
+                  <Text style={styles.actionAvatarInit}>{conv.user.name.slice(0, 1).toUpperCase()}</Text>
+                )}
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={styles.actionNameRow}>
+                  <Text style={styles.actionName} numberOfLines={1}>{conv.user.name}</Text>
+                  {conv.user.verified ? <BadgeCheck color={ACCENT} size={14} strokeWidth={2.8} /> : null}
+                </View>
+                <Text style={styles.actionHandle} numberOfLines={1}>{conv.user.handle}</Text>
+              </View>
+            </View>
+            <View style={styles.actionList}>
+              {items.map((it, idx) => {
+                const Icon = it.Icon;
+                return (
+                  <Pressable
+                    key={it.id}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      it.onPress();
+                    }}
+                    style={({ pressed }) => [
+                      styles.actionItem,
+                      idx !== items.length - 1 && styles.actionItemDivider,
+                      pressed && styles.actionItemPressed,
+                    ]}
+                    testID={`action-${it.id}`}
+                  >
+                    <View style={[styles.actionIconWrap, { backgroundColor: `${it.color}26`, borderColor: `${it.color}55` }]}>
+                      <Icon color={it.color} size={18} strokeWidth={2.6} />
+                    </View>
+                    <Text style={[styles.actionLabelText, it.destructive && styles.actionLabelDestructive]}>{it.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable onPress={onClose} style={styles.actionCancel} testID="action-cancel">
+              <Text style={styles.actionCancelText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Animated.View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -968,6 +1040,29 @@ const styles = StyleSheet.create({
   smartText: { color: Colors.text, fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
   smartTextActive: { color: ACCENT },
 
+  longPressHint: {
+    marginTop: 10,
+    marginHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 13,
+    backgroundColor: ACCENT_SOFT,
+    borderWidth: 1,
+    borderColor: "rgba(63,169,255,0.30)",
+  },
+  longPressHintIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(63,169,255,0.18)",
+  },
+  longPressHintText: { flex: 1, color: Colors.text, fontSize: 12, fontWeight: "700", letterSpacing: 0.1 },
+  longPressHintBold: { color: ACCENT, fontWeight: "900" },
   scamBanner: {
     marginTop: 10,
     marginHorizontal: 18,
@@ -998,32 +1093,65 @@ const styles = StyleSheet.create({
   suggestName: { color: Colors.text, fontSize: 12, fontWeight: "800", marginTop: 7, maxWidth: 70 },
   suggestHandle: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 1, maxWidth: 70 },
 
-  swipeWrap: { marginHorizontal: 14, position: "relative" },
-  actionLeft: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: Colors.orange,
-    borderTopLeftRadius: 22,
-    borderBottomLeftRadius: 22,
+  rowOuter: { marginHorizontal: 14 },
+
+  actionSheet: {
+    backgroundColor: Colors.panel,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+  },
+  actionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 4,
+    paddingBottom: 14,
+    marginBottom: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  actionAvatar: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  actionAvatarImg: { width: "100%", height: "100%" },
+  actionAvatarInit: { color: "#FFFFFF", fontSize: 18, fontWeight: "900" },
+  actionNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  actionName: { color: Colors.text, fontSize: 16, fontWeight: "900", letterSpacing: -0.2 },
+  actionHandle: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  actionList: { paddingTop: 6 },
+  actionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  actionItemDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(255,255,255,0.06)" },
+  actionItemPressed: { opacity: 0.6 },
+  actionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
   },
-  actionRight: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    right: 0,
-    flexDirection: "row",
-    borderTopRightRadius: 22,
-    borderBottomRightRadius: 22,
-    overflow: "hidden",
+  actionLabelText: { color: Colors.text, fontSize: 15, fontWeight: "800", letterSpacing: -0.1 },
+  actionLabelDestructive: { color: "#FF6B6B" },
+  actionCancel: {
+    marginTop: 12,
+    height: 50,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
   },
-  actionInnerPin: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
-  actionInnerMute: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: "#5B8DEF" },
-  actionInnerArchive: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: "#E63946" },
-  actionLabel: { color: Colors.ink, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
+  actionCancelText: { color: Colors.text, fontSize: 15, fontWeight: "900" },
 
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 22, backgroundColor: CARD_FILL, borderWidth: 1, borderColor: CARD_BORDER },
   avatarWrap: { position: "relative" },
