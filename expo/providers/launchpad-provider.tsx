@@ -40,7 +40,7 @@ function numberOrNull(value: unknown): number | null {
 
 function rowToToken(row: SubmissionRow): LaunchToken {
   const statusRaw = String(row.status ?? "approved").toLowerCase();
-  const validVenues: LaunchVenue[] = ["pumpfun", "pumpswap", "raydium", "meteora", "jupiter", "other"];
+  const validVenues: LaunchVenue[] = ["pumpfun", "pumpswap", "raydium", "meteora", "jupiter", "moonshot", "fomo", "other"];
   const rawTags = Array.isArray(row.tags) ? (row.tags as unknown[]).map(String) : [];
   const venueTag = rawTags.find((tag) => tag.toLowerCase().startsWith("venue:"));
   const venueRaw = (venueTag?.slice("venue:".length) ?? "other").toLowerCase();

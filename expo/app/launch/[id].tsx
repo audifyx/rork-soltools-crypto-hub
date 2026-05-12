@@ -163,7 +163,7 @@ export default function LaunchDetailScreen() {
         if (!data) return null;
         const r = data as Record<string, unknown>;
         const statusRaw = String(r.status ?? "approved").toLowerCase();
-        const validVenues: LaunchVenue[] = ["pumpfun", "pumpswap", "raydium", "meteora", "jupiter", "other"];
+        const validVenues: LaunchVenue[] = ["pumpfun", "pumpswap", "raydium", "meteora", "jupiter", "moonshot", "fomo", "other"];
         const rawTags = Array.isArray(r.tags) ? (r.tags as unknown[]).map(String) : [];
         const venueTag = rawTags.find((tag) => tag.toLowerCase().startsWith("venue:"));
         const venueRaw = (venueTag?.slice("venue:".length) || (validVenues.includes(statusRaw as LaunchVenue) ? statusRaw : "other")).toLowerCase();

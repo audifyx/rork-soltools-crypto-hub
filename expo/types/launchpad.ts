@@ -1,4 +1,4 @@
-export type LaunchVenue = "pumpfun" | "pumpswap" | "raydium" | "meteora" | "jupiter" | "other";
+export type LaunchVenue = "pumpfun" | "pumpswap" | "raydium" | "meteora" | "jupiter" | "moonshot" | "fomo" | "other";
 
 export type LaunchStatus = "live" | "presale" | "graduated" | "scheduled" | "pending" | "approved" | "rejected";
 

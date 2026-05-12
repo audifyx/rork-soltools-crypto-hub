@@ -92,6 +92,8 @@ function venueFromTags(tags: string[] | undefined): LaunchVenue {
   if (haystack.includes("raydium")) return "raydium";
   if (haystack.includes("meteora")) return "meteora";
   if (haystack.includes("jupiter")) return "jupiter";
+  if (haystack.includes("moonshot")) return "moonshot";
+  if (haystack.includes("fomo")) return "fomo";
   return "other";
 }
 

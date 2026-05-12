@@ -267,6 +267,69 @@ export async function searchSolanaPairs(query: string, limit: number = 20): Prom
     .slice(0, limit);
 }
 
+/**
+ * Fetches Solana pairs launched on a specific launchpad (e.g. Moonshot, Fomo).
+ * Uses DexScreener's search endpoint and filters by dexId / labels so we only
+ * keep pairs that originated from the requested launchpad.
+ */
+export async function fetchLaunchpadPairs(
+  launchpad: "moonshot" | "fomo",
+  limit: number = 60,
+): Promise<DexPair[]> {
+  const queries =
+    launchpad === "moonshot"
+      ? ["moonshot", "moonshot.cc"]
+      : ["fomo", "fomo.run", "fomo3d"];
+  const collected: DexPair[] = [];
+  await Promise.all(
+    queries.map(async (q) => {
+      try {
+        const res = await fetch(`${BASE}/search?q=${encodeURIComponent(q)}`);
+        if (!res.ok) return;
+        const json = (await res.json()) as { pairs?: DexPair[] | null };
+        const pairs = Array.isArray(json.pairs) ? json.pairs : [];
+        collected.push(...pairs);
+      } catch (e) {
+        console.log("[dexscreener] launchpad search failed", launchpad, q, e);
+      }
+    }),
+  );
+  const tag = launchpad.toLowerCase();
+  const filtered = collected.filter((p) => {
+    if (p.chainId !== "solana") return false;
+    const dexId = (p.dexId ?? "").toLowerCase();
+    const labels = (p.labels ?? []).map((l) => l.toLowerCase());
+    return dexId.includes(tag) || labels.some((l) => l.includes(tag));
+  });
+  const map = new Map<string, DexPair>();
+  for (const p of filtered) {
+    const key = p.baseToken?.address;
+    if (!key) continue;
+    const existing = map.get(key);
+    if (!existing || (p.liquidity?.usd ?? 0) > (existing.liquidity?.usd ?? 0)) {
+      map.set(key, p);
+    }
+  }
+  return Array.from(map.values())
+    .filter((p) =>
+      isSafeToken({
+        marketCapUsd: p.marketCap ?? p.fdv ?? null,
+        liquidityUsd: p.liquidity?.usd ?? null,
+        volume24hUsd: p.volume?.h24 ?? null,
+        priceUsd: p.priceUsd ? Number(p.priceUsd) : null,
+        priceChange24hPct: p.priceChange?.h24 ?? null,
+        labels: p.labels,
+        launchpad: p.dexId,
+      }),
+    )
+    .sort(
+      (a, b) =>
+        (b.pairCreatedAt ?? 0) - (a.pairCreatedAt ?? 0) ||
+        (b.volume?.h24 ?? 0) - (a.volume?.h24 ?? 0),
+    )
+    .slice(0, limit);
+}
+
 export async function getNewSolanaPairs(limit: number = 20): Promise<DexPair[]> {
   const addresses = new Set<string>();
   await Promise.all(

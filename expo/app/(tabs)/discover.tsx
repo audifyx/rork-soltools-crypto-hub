@@ -19,6 +19,7 @@ import {
   Flame,
   Hash,
   Heart,
+  Moon,
   Pickaxe,
   Plus,
   RefreshCcw,
@@ -83,7 +84,7 @@ import { LaunchToken } from "@/types/launchpad";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number; fill?: string }>;
 
-type Section = "all" | "featured" | "tokens" | "mine" | "hot" | "new" | "migrated" | "gainers" | "losers" | "volume" | "whales" | "og" | "ai";
+type Section = "all" | "featured" | "tokens" | "mine" | "hot" | "new" | "migrated" | "gainers" | "losers" | "volume" | "whales" | "og" | "ai" | "moonshot" | "fomo";
 
 const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "all", label: "All", Icon: Sparkles },
@@ -99,6 +100,8 @@ const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "whales", label: "Whales", Icon: Waves },
   { id: "og", label: "OG Tokens", Icon: Award },
   { id: "ai", label: "Daily Runners", Icon: Bot },
+  { id: "moonshot", label: "Moonshot", Icon: Moon },
+  { id: "fomo", label: "Fomo", Icon: Crosshair },
 ];
 
 type Category = {
@@ -362,6 +365,8 @@ export default function DiscoverScreen() {
     if (section === "mine") items = items.filter((t) => !!userId && t.ownerId === userId);
     if (section === "og") items = getOgMemeTokens(items, 80);
     if (section === "ai") items = getDailyAlphaRunners(items, 50);
+    if (section === "moonshot") items = items.filter((t) => t.venue === "moonshot" || t.tags.some((tag) => tag.toLowerCase().includes("moonshot")));
+    if (section === "fomo") items = items.filter((t) => t.venue === "fomo" || t.tags.some((tag) => tag.toLowerCase().includes("fomo")));
     if (activeCat) {
       const cat = CATEGORIES.find((c) => c.id === activeCat);
       if (cat) {
@@ -1066,6 +1071,8 @@ function StatTile({
 function RunnerSourceStrip() {
   const sources = [
     { label: "Pump.fun", sub: "migration scan", tone: Colors.orange },
+    { label: "Moonshot", sub: "auto-listed", tone: Colors.cyan },
+    { label: "Fomo", sub: "auto-listed", tone: Colors.magenta },
     { label: "Birdeye", sub: "volume proof", tone: Colors.cyan },
     { label: "DexScreener", sub: "liq + pair age", tone: Colors.rose },
     { label: "Jupiter", sub: "holder checks", tone: Colors.mint },

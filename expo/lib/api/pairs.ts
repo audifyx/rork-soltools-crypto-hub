@@ -1,5 +1,5 @@
 import { getTrending, type TokenOverview } from "@/lib/api/birdeye";
-import { getNewSolanaPairs, searchSolanaPairs, type DexPair } from "@/lib/api/dexscreener";
+import { fetchLaunchpadPairs, getNewSolanaPairs, searchSolanaPairs, type DexPair } from "@/lib/api/dexscreener";
 import { fetchPumpFunDiscoveryTokens, pumpFunVolume24h, type PumpFunToken } from "@/lib/api/pumpfun";
 import { OG_MEME_TOKEN_SEARCH_TERMS } from "@/lib/alpha-runners";
 import { isSafeToken } from "@/lib/safety";
@@ -54,6 +54,8 @@ function mapVenue(launchpad?: string): LaunchVenue {
   if (v.includes("raydium")) return "raydium";
   if (v.includes("meteora")) return "meteora";
   if (v.includes("jupiter")) return "jupiter";
+  if (v.includes("moonshot")) return "moonshot";
+  if (v.includes("fomo")) return "fomo";
   return "other";
 }
 
@@ -126,12 +128,15 @@ function pumpFunToLaunchToken(t: PumpFunToken): LaunchToken | null {
   };
 }
 
-function dexPairToLaunchToken(pair: DexPair): LaunchToken | null {
+function dexPairToLaunchToken(pair: DexPair, venueOverride?: LaunchVenue): LaunchToken | null {
   const address = pair.baseToken?.address;
   if (!address) return null;
   const volume = pair.volume?.h24 ?? null;
   const marketCap = pair.marketCap ?? pair.fdv ?? null;
-  const venue = mapVenue(pair.dexId);
+  const labelVenue = (pair.labels ?? [])
+    .map((l) => mapVenue(l))
+    .find((v) => v !== "other");
+  const venue = venueOverride ?? labelVenue ?? mapVenue(pair.dexId);
   return {
     id: address,
     name: pair.baseToken?.name ?? pair.baseToken?.symbol ?? "Unknown",
@@ -142,7 +147,7 @@ function dexPairToLaunchToken(pair: DexPair): LaunchToken | null {
     contract: address,
     venue,
     status: "live",
-    tags: [pair.dexId, ...(pair.labels ?? [])].filter(Boolean),
+    tags: [pair.dexId, ...(pair.labels ?? []), venue].filter(Boolean),
     featured: false,
     hot: (volume ?? 0) >= MIN_RETAIN_VOLUME_USD,
     verified: (pair.liquidity?.usd ?? 0) >= 100_000,
@@ -288,7 +293,7 @@ export async function fetchTopOrganic(): Promise<LaunchToken[]> {
  * Featured flag is intentionally never set here.
  */
 export async function fetchLivePairs(): Promise<LaunchToken[]> {
-  const [newp, top, organic, pumpFunDiscovery, birdeyeVolume, dexFresh, dexRunnerSearches] = await Promise.all([
+  const [newp, top, organic, pumpFunDiscovery, birdeyeVolume, dexFresh, dexRunnerSearches, moonshotPairs, fomoPairs] = await Promise.all([
     fetchNewPairs(),
     fetchTopTraded(),
     fetchTopOrganic(),
@@ -343,6 +348,22 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
       );
       return results.flat();
     })(),
+    (async () => {
+      try {
+        return await fetchLaunchpadPairs("moonshot", 80);
+      } catch (e) {
+        console.log("[pairs] moonshot launchpad feed failed", e);
+        return [] as DexPair[];
+      }
+    })(),
+    (async () => {
+      try {
+        return await fetchLaunchpadPairs("fomo", 80);
+      } catch (e) {
+        console.log("[pairs] fomo launchpad feed failed", e);
+        return [] as DexPair[];
+      }
+    })(),
   ]);
   const map = new Map<string, LaunchToken>();
   const birdTokens = birdeyeVolume
@@ -352,21 +373,28 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
     .map(pumpFunToLaunchToken)
     .filter((t): t is LaunchToken => t != null);
   const dexTokens = [...dexFresh, ...dexRunnerSearches]
-    .map(dexPairToLaunchToken)
+    .map((p) => dexPairToLaunchToken(p))
+    .filter((t): t is LaunchToken => t != null);
+  const moonshotTokens = moonshotPairs
+    .map((p) => dexPairToLaunchToken(p, "moonshot"))
+    .filter((t): t is LaunchToken => t != null);
+  const fomoTokens = fomoPairs
+    .map((p) => dexPairToLaunchToken(p, "fomo"))
     .filter((t): t is LaunchToken => t != null);
 
   // Retain daily runners from Jupiter + Birdeye + DexScreener, then layer in
   // the full Pump.fun discovery set. Pump.fun's feed is often missing liquidity
   // and holder fields for very fresh mints, so we only drop obvious dead/scam
   // rows there instead of applying the stricter cross-market safety gate.
-  const retained = [...top, ...organic, ...birdTokens, ...dexTokens, ...pumpTokens].filter(
+  const retained = [...top, ...organic, ...birdTokens, ...dexTokens, ...pumpTokens, ...moonshotTokens, ...fomoTokens].filter(
     (t) => (t.volume24hUsd ?? 0) >= MIN_RETAIN_VOLUME_USD,
   );
-  [...retained, ...newp, ...pumpTokens, ...dexTokens].forEach((t) => {
+  [...retained, ...newp, ...pumpTokens, ...dexTokens, ...moonshotTokens, ...fomoTokens].forEach((t) => {
     if (!t.contract) return;
     const isPumpSource = t.tags.includes("pump.fun");
-    const safe = isPumpSource
-      ? (t.marketCapUsd ?? 0) >= 1_000 && (t.change24hPct ?? 0) > -80
+    const isLaunchpadSource = t.venue === "moonshot" || t.venue === "fomo";
+    const safe = isPumpSource || isLaunchpadSource
+      ? (t.marketCapUsd ?? 0) >= 1_000 && (t.change24hPct ?? -100) > -80
       : isSafeToken({
           marketCapUsd: t.marketCapUsd,
           liquidityUsd: t.liquidityUsd,

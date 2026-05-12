@@ -46,6 +46,8 @@ const VENUES: { key: LaunchVenue; label: string }[] = [
   { key: "raydium", label: "raydium" },
   { key: "meteora", label: "meteora" },
   { key: "jupiter", label: "jupiter" },
+  { key: "moonshot", label: "moonshot" },
+  { key: "fomo", label: "fomo" },
   { key: "other", label: "other" },
 ];
 
