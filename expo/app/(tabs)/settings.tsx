@@ -6,7 +6,6 @@ import {
   Bell,
   Bot,
   ChevronRight,
-  DollarSign,
   Fingerprint,
   Gem,
   HelpCircle,
@@ -17,7 +16,6 @@ import {
   UserPlus,
   Palette,
   Shield,
-  ShieldCheck,
   Sparkles,
   Trash2,
   UserRound,
@@ -38,7 +36,7 @@ import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
-type Section = "overview" | "notifications" | "trading" | "privacy" | "appearance" | "account" | "support";
+type Section = "overview" | "notifications" | "privacy" | "appearance" | "account" | "support";
 
 const languages: { id: Language; label: string }[] = [
   { id: "en", label: "English" },
@@ -214,7 +212,6 @@ export default function SettingsScreen() {
 
               <Group title="SETTINGS">
                 <MenuRow Icon={Bell} label="Notifications" sub="Push, whales, haptics" onPress={() => openSection("notifications")} />
-                <MenuRow Icon={DollarSign} label="Trading defaults" sub={`Slippage ${prefs.slippage}% · Priority ${prefs.priorityFee} SOL`} onPress={() => openSection("trading")} />
                 <MenuRow Icon={Shield} label="Privacy" sub="Private profile and biometric unlock" onPress={() => openSection("privacy")} />
                 <MenuRow Icon={Palette} label="Appearance" sub={`${prefs.theme} · ${prefs.currency} · ${prefs.language.toUpperCase()}`} onPress={() => openSection("appearance")} />
                 <MenuRow Icon={UserRound} label="Account" sub="Connected accounts, auth, data controls" onPress={() => openSection("account")} />
@@ -229,14 +226,6 @@ export default function SettingsScreen() {
               <ToggleRow Icon={Gem} label="Whale alerts" sub="Large buys and sells above your threshold" value={prefs.whaleAlerts} onChange={(whaleAlerts) => setPrefs({ whaleAlerts })} />
               <ToggleRow Icon={Vibrate} label="Haptics" sub="Tactile feedback for actions" value={prefs.haptics} onChange={(haptics) => setPrefs({ haptics })} />
             </Group>
-          ) : null}
-
-          {section === "trading" ? (
-            <>
-              <Group title="SLIPPAGE TOLERANCE"><Chips values={[0.5, 1, 2, 5, 10]} active={prefs.slippage} format={(v) => `${v}%`} onPick={(slippage) => setPrefs({ slippage })} /></Group>
-              <Group title="PRIORITY FEE"><Chips values={[0.0001, 0.0005, 0.001, 0.005, 0.01]} active={prefs.priorityFee} format={(v) => `${v} SOL`} onPick={(priorityFee) => setPrefs({ priorityFee })} /></Group>
-              <Group title="PROTECTION"><ToggleRow Icon={ShieldCheck} label="MEV protection" sub="Prefer protected routing when swapping" value={prefs.mevProtection} onChange={(mevProtection) => setPrefs({ mevProtection })} /></Group>
-            </>
           ) : null}
 
           {section === "privacy" ? (

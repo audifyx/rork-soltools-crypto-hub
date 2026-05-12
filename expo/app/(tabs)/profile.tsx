@@ -17,7 +17,6 @@ import {
   ChevronRight,
   Copy,
   Crown,
-  DollarSign,
   Edit3,
   ExternalLink,
   Eye,
@@ -2019,7 +2018,7 @@ function SettingsModal({
   const { isAuthenticated, signOut, deleteAccount, isDeletingAccount } = useAuth();
   const { profile } = useApp();
   const accountLabel = profile.handle || profile.displayName || "Signed in";
-  const [section, setSection] = useState<"main" | "trading" | "privacy" | "appearance" | "about">("main");
+  const [section, setSection] = useState<"main" | "privacy" | "appearance" | "about">("main");
 
   const onConfirmDelete = useCallback(() => {
     if (!isAuthenticated) {
@@ -2161,13 +2160,6 @@ function SettingsModal({
 
                 <Text style={styles.settingsGroup}>PREFERENCES</Text>
                 <MenuRow
-                  Icon={DollarSign}
-                  label="Trading defaults"
-                  sub="Slippage, priority fee, MEV"
-                  onPress={() => setSection("trading")}
-                  rightLabel={`${prefs.slippage}%`}
-                />
-                <MenuRow
                   Icon={Lock}
                   label="Privacy"
                   sub="Private profile & biometric unlock"
@@ -2252,51 +2244,6 @@ function SettingsModal({
                       router.push("/auth");
                     }
                   }}
-                />
-                <View style={{ height: 24 }} />
-              </>
-            )}
-
-            {section === "trading" && (
-              <>
-                <Text style={styles.settingsGroup}>SLIPPAGE TOLERANCE</Text>
-                <View style={styles.chipsRow}>
-                  {[0.5, 1, 2, 5, 10].map((s) => {
-                    const active = prefs.slippage === s;
-                    return (
-                      <Pressable
-                        key={s}
-                        onPress={() => onUpdate({ slippage: s })}
-                        style={[styles.chip, active && styles.chipActive]}
-                      >
-                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{s}%</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <Text style={styles.settingsGroup}>PRIORITY FEE (SOL)</Text>
-                <View style={styles.chipsRow}>
-                  {[0.0001, 0.0005, 0.001, 0.005, 0.01].map((f) => {
-                    const active = prefs.priorityFee === f;
-                    return (
-                      <Pressable
-                        key={f}
-                        onPress={() => onUpdate({ priorityFee: f })}
-                        style={[styles.chip, active && styles.chipActive]}
-                      >
-                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{f}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <SettingRow
-                  label="MEV protection"
-                  sub="Route through protected RPC"
-                  Icon={Shield}
-                  value={prefs.mevProtection}
-                  onChange={(v) => onUpdate({ mevProtection: v })}
                 />
                 <View style={{ height: 24 }} />
               </>
