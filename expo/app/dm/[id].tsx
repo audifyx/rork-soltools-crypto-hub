@@ -33,6 +33,7 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Easing,
@@ -55,6 +56,7 @@ import { navigateBack } from "@/lib/navigation";
 import { uploadDMImage } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
 import { DMMessage, DMReaction, DMReplyContext, useDmPeerProfile, useDmThreadMessages, useDmTyping, useMessages } from "@/providers/messages-provider";
+import { useQueryClient } from "@tanstack/react-query";
 
 const QUICK_TICKERS = ["$SOL", "$BONK", "$WIF", "$JUP", "$AGNT", "$PYTH"];
 const QUICK_REACTIONS = ["❤️", "😂", "🔥", "🚀", "💯", "😮", "👀", "💎"] as const;
@@ -128,7 +130,9 @@ export default function DMThreadScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useAuth();
+  const queryClient = useQueryClient();
   const {
+    hydrated,
     getConversation,
     getMessages,
     sendMessage,
@@ -173,6 +177,14 @@ export default function DMThreadScreen() {
   useEffect(() => {
     if (id) markRead(id);
   }, [id, markRead]);
+
+  // If we landed here on a freshly-created conversation that the list query
+  // hasn't picked up yet, force a refetch so the screen can populate.
+  useEffect(() => {
+    if (!id || !userId) return;
+    if (conv) return;
+    queryClient.refetchQueries({ queryKey: ["messages", "conversations", userId] }).catch(() => {});
+  }, [conv, id, queryClient, userId]);
 
   // Clear typing state on unmount.
   useEffect(() => {
@@ -350,15 +362,26 @@ export default function DMThreadScreen() {
   }, [router]);
 
   if (!conv) {
+    const stillLoading = !hydrated || !!peerProfile.isLoading;
     return (
       <View style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar style="light" />
         <SafeAreaView style={styles.safe}>
           <View style={styles.notFound}>
-            <Text style={styles.notFoundTitle}>Conversation not found</Text>
-            <Pressable onPress={() => navigateBack(router, "/messages")} style={styles.notFoundBtn}>
-              <Text style={styles.notFoundBtnText}>Go back</Text>
-            </Pressable>
+            {stillLoading ? (
+              <>
+                <ActivityIndicator color={IOS_BLUE} />
+                <Text style={[styles.notFoundTitle, { marginTop: 12 }]}>Opening chat…</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.notFoundTitle}>Conversation not found</Text>
+                <Pressable onPress={() => navigateBack(router, "/messages")} style={styles.notFoundBtn}>
+                  <Text style={styles.notFoundBtnText}>Go back</Text>
+                </Pressable>
+              </>
+            )}
           </View>
         </SafeAreaView>
       </View>
