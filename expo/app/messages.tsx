@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Coins,
   Inbox,
+  Mail,
   Pencil,
   Pin,
   PinOff,
@@ -241,11 +242,11 @@ export default function MessagesScreen() {
     />
   );
 
-  const smartChips: { id: SmartFilter; label: string; count: number }[] = [
-    { id: "all", label: "All", count: inbox.length },
-    { id: "unread", label: "Unread", count: unreadCount },
-    { id: "verified", label: "Verified", count: verifiedCount },
-    { id: "pinned", label: "Pinned", count: pinnedCount },
+  const smartChips: { id: SmartFilter; label: string; count: number; Icon: typeof Inbox }[] = [
+    { id: "all", label: "All", count: inbox.length, Icon: Inbox },
+    { id: "unread", label: "Unread", count: unreadCount, Icon: Mail },
+    { id: "verified", label: "Verified", count: verifiedCount, Icon: BadgeCheck },
+    { id: "pinned", label: "Pinned", count: pinnedCount, Icon: Pin },
   ];
 
   return (
@@ -355,6 +356,7 @@ export default function MessagesScreen() {
           >
             {smartChips.map((s) => {
               const active = smart === s.id;
+              const Icon = s.Icon;
               return (
                 <Pressable
                   key={s.id}
@@ -362,13 +364,31 @@ export default function MessagesScreen() {
                     Haptics.selectionAsync().catch(() => {});
                     setSmart(s.id);
                   }}
-                  style={[styles.smartChip, active && styles.smartChipActive]}
+                  style={({ pressed }) => [
+                    styles.smartChip,
+                    active && styles.smartChipActive,
+                    pressed && styles.smartChipPressed,
+                  ]}
                   testID={`smart-${s.id}`}
                 >
-                  <Text style={[styles.smartText, active && styles.smartTextActive]}>{s.label}</Text>
-                  {s.count > 0 ? (
-                    <Text style={[styles.smartCount, active && styles.smartCountActive]}>{s.count}</Text>
-                  ) : null}
+                  <View style={[styles.smartIconWrap, active && styles.smartIconWrapActive]}>
+                    <Icon
+                      color={active ? ACCENT : Colors.text}
+                      size={16}
+                      strokeWidth={2.4}
+                      fill={active && s.id === "pinned" ? ACCENT : "transparent"}
+                    />
+                    {s.count > 0 ? (
+                      <View style={[styles.smartCountBadge, active && styles.smartCountBadgeActive]}>
+                        <Text style={[styles.smartCountText, active && styles.smartCountTextActive]}>
+                          {s.count > 99 ? "99+" : s.count}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={[styles.smartText, active && styles.smartTextActive]} numberOfLines={1}>
+                    {s.label}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -897,26 +917,56 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  smartRow: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 4, gap: 8 },
+  smartRow: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 6, gap: 10 },
   smartChip: {
-    flexDirection: "row",
+    width: 72,
+    height: 72,
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 6,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.035)",
     borderWidth: 1,
     borderColor: CARD_BORDER,
   },
   smartChipActive: {
     backgroundColor: ACCENT_SOFT,
-    borderColor: "rgba(63,169,255,0.45)",
+    borderColor: "rgba(63,169,255,0.55)",
   },
-  smartText: { color: Colors.muted, fontSize: 12, fontWeight: "800", letterSpacing: 0.2 },
+  smartChipPressed: {
+    transform: [{ scale: 0.96 }],
+    opacity: 0.92,
+  },
+  smartIconWrap: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  smartIconWrapActive: {},
+  smartCountBadge: {
+    position: "absolute",
+    top: -6,
+    right: -10,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: Colors.ink,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  smartCountBadgeActive: {
+    backgroundColor: ACCENT,
+    borderColor: ACCENT,
+  },
+  smartCountText: { color: Colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 0.2 },
+  smartCountTextActive: { color: Colors.ink },
+  smartText: { color: Colors.text, fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
   smartTextActive: { color: ACCENT },
-  smartCount: { color: Colors.muted2, fontSize: 11, fontWeight: "900" },
-  smartCountActive: { color: ACCENT },
 
   scamBanner: {
     marginTop: 10,
