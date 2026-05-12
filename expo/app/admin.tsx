@@ -645,7 +645,30 @@ function BadgesSection() {
               </View>
 
               <View style={styles.badgePreviewRow}>
-                {badges.length > 0 ? badges.map((badge) => <Pill key={badge.id} label={badge.label} color={badge.color ?? Colors.goldBright} />) : <Text style={styles.rowSub}>No badges assigned yet.</Text>}
+                {badges.length > 0 ? (
+                  badges.map((badge) => (
+                    <RemovableBadgePill
+                      key={badge.id}
+                      badge={badge}
+                      onRemove={() =>
+                        Alert.alert(
+                          "Remove badge?",
+                          `Remove "${badge.label}" from ${item.display_name ?? item.username ?? "this user"}?`,
+                          [
+                            { text: "Cancel", style: "cancel" },
+                            {
+                              text: "Remove",
+                              style: "destructive",
+                              onPress: () => updateBadgesMutation.mutate({ row: item, badge, remove: true }),
+                            },
+                          ],
+                        )
+                      }
+                    />
+                  ))
+                ) : (
+                  <Text style={styles.rowSub}>No badges assigned yet.</Text>
+                )}
               </View>
 
               <Text style={styles.inputLabel}>PRESET BADGES</Text>
@@ -687,7 +710,13 @@ function BadgeAdminPanel({ row, onToggle }: { row: ProfileRow; onToggle: (badge:
         <Text style={styles.badgePanelCount}>{badges.length} active</Text>
       </View>
       <View style={styles.badgePreviewRow}>
-        {badges.length > 0 ? badges.map((badge) => <Pill key={badge.id} label={badge.label} color={badge.color ?? Colors.goldBright} />) : <Text style={styles.rowSub}>No badges yet. Tap below to add one.</Text>}
+        {badges.length > 0 ? (
+          badges.map((badge) => (
+            <RemovableBadgePill key={badge.id} badge={badge} onRemove={() => onToggle(badge, true)} />
+          ))
+        ) : (
+          <Text style={styles.rowSub}>No badges yet. Tap below to add one.</Text>
+        )}
       </View>
       <View style={styles.actionGrid}>
         {BADGE_OPTIONS.slice(0, 6).map((badge) => {
@@ -1395,6 +1424,23 @@ function Avatar({ label, Icon }: { label: string; Icon?: IconComponent }) {
   );
 }
 
+function RemovableBadgePill({ badge, onRemove }: { badge: UserBadge; onRemove: () => void }) {
+  const color = badge.color ?? Colors.goldBright;
+  return (
+    <View style={[styles.pill, { borderColor: `${color}66`, backgroundColor: `${color}1A`, flexDirection: "row", alignItems: "center", gap: 6, paddingRight: 4 }]}>
+      <Text style={[styles.pillText, { color }]}>{badge.label}</Text>
+      <Pressable
+        onPress={onRemove}
+        hitSlop={8}
+        style={({ pressed }) => [styles.pillRemoveBtn, { backgroundColor: `${color}33` }, pressed && { opacity: 0.6 }]}
+        testID={`remove-badge-${badge.id}`}
+      >
+        <X color={color} size={11} strokeWidth={3} />
+      </Pressable>
+    </View>
+  );
+}
+
 function Pill({ label, color }: { label: string; color: string }) {
   return (
     <View style={[styles.pill, { borderColor: `${color}66`, backgroundColor: `${color}1A` }]}>
@@ -1627,6 +1673,7 @@ const styles = StyleSheet.create({
   avatar: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: Colors.glass, borderWidth: 1, borderColor: Colors.lineStrong },
   avatarText: { color: Colors.goldBright, fontSize: 15, fontWeight: "900" },
   pill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+  pillRemoveBtn: { width: 18, height: 18, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   pillText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
   metricsRow: { flexDirection: "row", gap: 9 },
   metric: { flex: 1, backgroundColor: Colors.cardSoft, borderRadius: 13, padding: 10, gap: 3 },

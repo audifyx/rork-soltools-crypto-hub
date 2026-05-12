@@ -738,6 +738,38 @@ export function useDmPeerProfile(userId: string | null | undefined) {
   });
 }
 
+/* ------------------------------- BLOCKING -------------------------------- */
+
+export interface BlockedUserRow {
+  blocked_id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  avatar_color: string | null;
+  verified: boolean | null;
+  bio: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
+/** Returns the list of users the caller has blocked. */
+export function useBlockedUsers() {
+  const { userId, isAuthenticated } = useAuth();
+  return useQuery<BlockedUserRow[]>({
+    queryKey: ["messages", "blocked", userId ?? "guest"],
+    enabled: isAuthenticated && !!userId,
+    staleTime: 15_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("list_blocked_users");
+      if (error) {
+        console.log("[messages] list_blocked_users failed", error.message);
+        return [];
+      }
+      return (data ?? []) as BlockedUserRow[];
+    },
+  });
+}
+
 /** Reads typing presence for a single conversation. Polls every 3s while focused. */
 export function useDmTyping(conversationId: string | undefined, enabled = true) {
   return useQuery({

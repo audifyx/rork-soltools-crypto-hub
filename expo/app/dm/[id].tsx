@@ -22,6 +22,7 @@ import {
   Trash2,
   TrendingUp,
   UserCheck,
+  UserX,
   Video,
   Wallet,
 } from "lucide-react-native";
@@ -131,6 +132,7 @@ export default function DMThreadScreen() {
     deleteConversation,
     deleteConversationForEveryone,
     deleteMessage,
+    blockUser,
     setTyping,
   } = useMessages();
   const [uploading, setUploading] = useState<boolean>(false);
@@ -574,6 +576,33 @@ export default function DMThreadScreen() {
             params: { handle: conv.user.handle.replace("@", "") },
           });
         }}
+        onBlock={() => {
+          setMenu(false);
+          const targetId = conv.user.userId;
+          if (!targetId) {
+            Alert.alert("Can't block", "Missing user info for this conversation.");
+            return;
+          }
+          Alert.alert(
+            `Block ${conv.user.name}?`,
+            "They won't be able to message you, follow you, or see your activity. Your chat history will be hidden for both sides.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Block",
+                style: "destructive",
+                onPress: async () => {
+                  try {
+                    await blockUser(targetId);
+                    navigateBack(router, "/messages");
+                  } catch (e) {
+                    Alert.alert("Block failed", e instanceof Error ? e.message : "Try again.");
+                  }
+                },
+              },
+            ],
+          );
+        }}
         onDelete={() => {
           setMenu(false);
           Alert.alert(
@@ -862,6 +891,7 @@ function ActionMenu({
   onPin,
   onMute,
   onProfile,
+  onBlock,
   onDelete,
 }: {
   open: boolean;
@@ -871,6 +901,7 @@ function ActionMenu({
   onPin: () => void;
   onMute: () => void;
   onProfile: () => void;
+  onBlock: () => void;
   onDelete: () => void;
 }) {
   const slide = useRef(new Animated.Value(0)).current;
@@ -919,6 +950,12 @@ function ActionMenu({
             onPress={onClose}
           />
           <View style={styles.menuSep} />
+          <MenuItem
+            icon={<UserX color={IOS_RED} size={16} strokeWidth={2.4} />}
+            label="Block user"
+            tone={IOS_RED}
+            onPress={onBlock}
+          />
           <MenuItem
             icon={<Trash2 color={IOS_RED} size={16} strokeWidth={2.4} />}
             label="Delete conversation"

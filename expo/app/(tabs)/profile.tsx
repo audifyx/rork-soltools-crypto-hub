@@ -2184,7 +2184,7 @@ function SettingsModal({
                   Icon={Users}
                   label="Blocked users"
                   sub="Manage blocked traders"
-                  onPress={() => Alert.alert("Blocked", "You haven't blocked anyone.")}
+                  onPress={() => router.push("/blocked-users")}
                 />
 
                 <Text style={styles.settingsGroup}>SUPPORT</Text>

@@ -15,6 +15,7 @@ import {
   MapPin,
   MessageCircle,
   MessageSquare,
+  MoreHorizontal,
   Play,
   Repeat2,
   ShieldCheck,
@@ -51,7 +52,8 @@ import { navigateBack } from "@/lib/navigation";
 import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
-import { useMessages } from "@/providers/messages-provider";
+import { useMessages, useBlockedUsers } from "@/providers/messages-provider";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useFollowCounts,
   useFollowList,
@@ -69,7 +71,9 @@ export default function PublicProfileScreen() {
   const params = useLocalSearchParams<{ handle: string }>();
   const handle = (params.handle ?? "").toString();
   const { userId, isAuthenticated } = useAuth();
-  const { ensureConversationWith } = useMessages();
+  const { ensureConversationWith, blockUser, unblockUser } = useMessages();
+  const blockedQ = useBlockedUsers();
+  const qc = useQueryClient();
   const { toggleFollow, isToggling, requestFollow, isRequesting, cancelFollowRequest, isCancellingRequest } = useProfileProvider();
 
   const profileQ = usePublicProfile(handle);
@@ -207,6 +211,82 @@ export default function PublicProfileScreen() {
     }
   }, [profile?.wallet_address]);
 
+  const isBlocked = useMemo(() => {
+    const id = profile?.user_id;
+    if (!id) return false;
+    return (blockedQ.data ?? []).some((b) => b.blocked_id === id);
+  }, [blockedQ.data, profile?.user_id]);
+
+  const invalidateBlockQueries = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["messages", "blocked"] }).catch(() => {});
+    qc.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
+  }, [qc]);
+
+  const onToggleBlock = useCallback(() => {
+    const targetId = profile?.user_id;
+    if (!targetId || isSelf) return;
+    const display = profile?.display_name ?? profile?.username ?? "this user";
+    if (isBlocked) {
+      Alert.alert(
+        "Unblock?",
+        `${display} will be able to follow, message, and see your activity again.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Unblock",
+            onPress: async () => {
+              try {
+                await unblockUser(targetId);
+                invalidateBlockQueries();
+              } catch (e) {
+                Alert.alert("Couldn't unblock", e instanceof Error ? e.message : "Try again.");
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+    Alert.alert(
+      `Block ${display}?`,
+      "They won't be able to message you, follow you, or see your activity. You'll stop seeing their content too.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await blockUser(targetId);
+              invalidateBlockQueries();
+            } catch (e) {
+              Alert.alert("Block failed", e instanceof Error ? e.message : "Try again.");
+            }
+          },
+        },
+      ],
+    );
+  }, [profile, isSelf, isBlocked, blockUser, unblockUser, invalidateBlockQueries]);
+
+  const onOpenMore = useCallback(() => {
+    if (!profile || isSelf) return;
+    if (Platform.OS !== "web") {
+      Haptics.selectionAsync().catch(() => {});
+    }
+    Alert.alert(
+      profile.display_name ?? profile.username ?? "User",
+      undefined,
+      [
+        {
+          text: isBlocked ? "Unblock user" : "Block user",
+          style: isBlocked ? "default" : "destructive",
+          onPress: onToggleBlock,
+        },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  }, [profile, isSelf, isBlocked, onToggleBlock]);
+
   const onOpenLink = useCallback((url: string) => {
     if (!url) return;
     const safe = url.startsWith("http") ? url : `https://${url}`;
@@ -264,6 +344,11 @@ export default function PublicProfileScreen() {
             <Pressable onPress={() => navigateBack(router, "/(tabs)/users")} style={styles.backBtn} testID="public-back">
               <ArrowLeft color={Colors.text} size={18} strokeWidth={2.4} />
             </Pressable>
+            {!isSelf ? (
+              <Pressable onPress={onOpenMore} style={styles.moreBtn} testID="public-more">
+                <MoreHorizontal color={Colors.text} size={20} strokeWidth={2.4} />
+              </Pressable>
+            ) : null}
           </SafeAreaView>
         </View>
 
@@ -1033,7 +1118,17 @@ const styles = StyleSheet.create({
   backCtaText: { color: Colors.ink, fontWeight: "900" },
   bannerWrap: { height: 180, position: "relative", overflow: "hidden" },
   bannerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.18)" },
-  bannerHeader: { paddingHorizontal: 16, paddingTop: 6 },
+  bannerHeader: { paddingHorizontal: 16, paddingTop: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  moreBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
   backBtn: {
     width: 36,
     height: 36,
