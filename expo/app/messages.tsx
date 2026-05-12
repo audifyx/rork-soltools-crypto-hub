@@ -345,11 +345,7 @@ export default function MessagesScreen() {
         </View>
 
         {tab === "inbox" ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.smartRow}
-          >
+          <View style={styles.smartRow}>
             {smartChips.map((s) => {
               const active = smart === s.id;
               const Icon = s.Icon;
@@ -388,7 +384,7 @@ export default function MessagesScreen() {
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </View>
         ) : null}
 
         {tab === "inbox" ? (
@@ -1029,9 +1025,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  smartRow: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 6, gap: 10 },
+  smartRow: { flexDirection: "row", paddingHorizontal: 18, paddingTop: 12, paddingBottom: 6, gap: 8 },
   smartChip: {
-    width: 72,
+    flex: 1,
     height: 72,
     alignItems: "center",
     justifyContent: "center",
