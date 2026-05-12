@@ -476,6 +476,24 @@ export default function DiscoverScreen() {
     [publicListings],
   );
 
+  const moonshotFresh = useMemo(
+    () =>
+      publicListings
+        .filter((t) => t.venue === "moonshot" || t.tags.some((tag) => tag.toLowerCase().includes("moonshot")))
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 10),
+    [publicListings],
+  );
+
+  const fomoFresh = useMemo(
+    () =>
+      publicListings
+        .filter((t) => t.venue === "fomo" || t.tags.some((tag) => tag.toLowerCase().includes("fomo")))
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 10),
+    [publicListings],
+  );
+
   const aiPicks = useMemo(
     () => getDailyAlphaRunners(publicListings, 5),
     [publicListings],
@@ -614,6 +632,8 @@ export default function DiscoverScreen() {
               newListings={newListings}
               migratedTokens={migratedTokens}
               dailyRunners={dailyRunners}
+              moonshotFresh={moonshotFresh}
+              fomoFresh={fomoFresh}
               aiPicks={aiPicks}
               trendingTags={trendingTags}
               recentSearches={recentSearches}
@@ -663,6 +683,8 @@ function DiscoverHeader({
   newListings,
   migratedTokens,
   dailyRunners,
+  moonshotFresh,
+  fomoFresh,
   aiPicks,
   trendingTags,
   recentSearches,
@@ -689,6 +711,8 @@ function DiscoverHeader({
   newListings: LaunchToken[];
   migratedTokens: LaunchToken[];
   dailyRunners: LaunchToken[];
+  moonshotFresh: LaunchToken[];
+  fomoFresh: LaunchToken[];
   aiPicks: LaunchToken[];
   trendingTags: { tag: string; count: number }[];
   recentSearches: string[];
@@ -854,6 +878,32 @@ function DiscoverHeader({
         tokens={dailyRunners}
         onOpen={onOpen}
         onSeeAll={() => setSection("gainers")}
+      />
+
+      <TokenOvalRail
+        title="Fresh from Moonshot"
+        subtitle="Auto-listed straight from Moonshot — newest first"
+        Icon={Moon}
+        tone={Colors.cyan}
+        badge="MOONSHOT"
+        tokens={moonshotFresh}
+        onOpen={onOpen}
+        onSeeAll={() => setSection("moonshot")}
+        isWatching={isWatching}
+        onWatch={onWatch}
+      />
+
+      <TokenOvalRail
+        title="Fresh from Fomo"
+        subtitle="Auto-listed straight from Fomo — newest first"
+        Icon={Crosshair}
+        tone={Colors.magenta}
+        badge="FOMO"
+        tokens={fomoFresh}
+        onOpen={onOpen}
+        onSeeAll={() => setSection("fomo")}
+        isWatching={isWatching}
+        onWatch={onWatch}
       />
 
       <View style={styles.categoriesWrap}>
