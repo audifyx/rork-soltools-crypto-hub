@@ -1,7 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+
+import { setHapticsEnabled } from "@/lib/haptics";
 
 import { normalizeMediaUrl } from "@/lib/media";
 import { fetchOwnProfileRow, saveOwnProfilePatch, type ProfilePatch } from "@/lib/profile-db";
@@ -465,6 +467,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const wallets = walletsQ.data ?? [];
   const profile = profileQ.data ?? DEFAULT_PROFILE;
   const prefs = prefsQ.data ?? DEFAULT_PREFS;
+
+  useEffect(() => {
+    setHapticsEnabled(prefs.haptics);
+  }, [prefs.haptics]);
 
   const addPost = useMutation({
     mutationFn: async (input: { text: string; ticker?: string; contract?: string; token?: PostTokenInput | null; changePct?: number; images?: string[]; video?: { uri: string; mimeType?: string | null; fileName?: string | null } }) => {

@@ -1,5 +1,6 @@
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
+import { hapticSelect } from "@/lib/haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Compass, House, MessageCircle, Play, User } from "lucide-react-native";
 import React, { memo } from "react";
@@ -32,6 +33,11 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      screenListeners={{
+        tabPress: () => {
+          hapticSelect();
+        },
+      }}
       screenOptions={{
         headerShown: false,
         lazy: true,
