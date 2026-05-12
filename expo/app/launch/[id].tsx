@@ -58,6 +58,7 @@ import AppBackground from "@/components/ui/AppBackground";
 import { useDexToken, type DexPair } from "@/lib/api/dexscreener";
 import { useTokenOverview } from "@/lib/api/market";
 import { getTokenSecurity } from "@/lib/api/birdeye";
+import { fetchTokenAth } from "@/lib/api/token-ath";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { supabase } from "@/lib/supabase";
@@ -259,6 +260,36 @@ export default function LaunchDetailScreen() {
     return synth;
   }, [resolved, lookupAddress, dex]);
 
+  // Fetch the real historical all-time-high from GeckoTerminal OHLCV so the
+  // tracker is accurate even if the user is opening this token for the first
+  // time. We merge this with the locally observed high so the value never
+  // regresses if upstream is briefly unavailable.
+  const athQuery = useQuery<{ priceUsd: number; recordedAt: number } | null>({
+    queryKey: ["token-ath", lookupAddress ?? ""],
+    enabled: !!lookupAddress,
+    queryFn: async () => {
+      try {
+        // Try every known pair so the tracker captures peaks on any pool.
+        const pairs = (dex?.pairs ?? []).map((p) => p.pairAddress).filter(Boolean);
+        const primary = dex?.pairAddress ?? null;
+        const candidates = Array.from(new Set([primary, ...pairs].filter(Boolean))) as string[];
+        if (candidates.length === 0) return null;
+        const results = await Promise.all(candidates.slice(0, 4).map((p) => fetchTokenAth(p)));
+        let best: { priceUsd: number; recordedAt: number } | null = null;
+        for (const r of results) {
+          if (!r) continue;
+          if (!best || r.priceUsd > best.priceUsd) best = { priceUsd: r.priceUsd, recordedAt: r.recordedAt };
+        }
+        return best;
+      } catch (e) {
+        console.log("[token-ath] query failed", e instanceof Error ? e.message : e);
+        return null;
+      }
+    },
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
   const livePrice = dex?.priceUsd ?? overview?.price ?? token?.price ?? null;
   const changeByTf: Record<string, number | null> = {
     "5m": dex?.priceChange5mPct ?? null,
@@ -303,6 +334,33 @@ export default function LaunchDetailScreen() {
       cancelled = true;
     };
   }, [lookupAddress]);
+
+  // Merge the historical ATH (from GeckoTerminal) into local state/storage as
+  // soon as it resolves. This is what fixes the "tracker not working" bug —
+  // previously the ATH only reflected prices observed while the screen was
+  // open, which usually meant the very first live price became the recorded
+  // peak.
+  useEffect(() => {
+    const key = lookupAddress?.trim();
+    const remote = athQuery.data;
+    if (!key || !remote || !remote.priceUsd || remote.priceUsd <= 0) return;
+    setAth((current) => {
+      if (current && current.priceUsd >= remote.priceUsd) return current;
+      const next: TokenAthRecord = {
+        priceUsd: remote.priceUsd,
+        marketCapUsd: null,
+        recordedAt: remote.recordedAt || Date.now(),
+      };
+      readAthStore()
+        .then(async (store) => {
+          const existing = store[key];
+          if (existing && existing.priceUsd >= remote.priceUsd) return;
+          await AsyncStorage.setItem(ATH_STORE_KEY, JSON.stringify({ ...store, [key]: next }));
+        })
+        .catch((e) => console.log("[token-ath] persist remote failed", e instanceof Error ? e.message : e));
+      return next;
+    });
+  }, [lookupAddress, athQuery.data]);
 
   useEffect(() => {
     const key = lookupAddress?.trim();
