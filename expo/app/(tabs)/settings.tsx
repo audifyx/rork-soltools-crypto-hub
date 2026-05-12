@@ -14,6 +14,7 @@ import {
   Link as LinkIcon,
   Lock,
   LogOut,
+  UserPlus,
   Palette,
   Shield,
   ShieldCheck,
@@ -241,6 +242,7 @@ export default function SettingsScreen() {
           {section === "privacy" ? (
             <Group title="PRIVACY">
               <ToggleRow Icon={Lock} label="Private profile" sub="Only followers can see your posts, reels and activity" value={prefs.privateProfile} onChange={(privateProfile) => setPrefs({ privateProfile })} />
+              <MenuRow Icon={UserPlus} label="Follow requests" sub="Approve or reject who can follow you" onPress={() => router.push("/follow-requests")} />
               <ToggleRow Icon={Fingerprint} label="Biometric unlock" sub="Use Face ID or fingerprint to open the app" value={prefs.biometric} onChange={onToggleBiometric} />
             </Group>
           ) : null}

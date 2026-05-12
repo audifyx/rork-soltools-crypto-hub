@@ -55,6 +55,7 @@ import { useMessages } from "@/providers/messages-provider";
 import {
   useFollowCounts,
   useFollowList,
+  useFollowRequestStatus,
   useProfileProvider,
   usePublicProfile,
   type CustomBadge,
@@ -69,7 +70,7 @@ export default function PublicProfileScreen() {
   const handle = (params.handle ?? "").toString();
   const { userId, isAuthenticated } = useAuth();
   const { ensureConversationWith } = useMessages();
-  const { toggleFollow, isToggling } = useProfileProvider();
+  const { toggleFollow, isToggling, requestFollow, isRequesting, cancelFollowRequest, isCancellingRequest } = useProfileProvider();
 
   const profileQ = usePublicProfile(handle);
   const profile = profileQ.data;
@@ -112,6 +113,9 @@ export default function PublicProfileScreen() {
     },
     staleTime: 30_000,
   });
+  const requestStatusQ = useFollowRequestStatus(targetUserId);
+  const requestStatus = requestStatusQ.data ?? "none";
+  const hasRequested = requestStatus === "requested" && !profile?.is_following;
   const isLockedByPrivacy = !!privacyQ.data?.isPrivate && !isSelf && !profile?.is_following;
   const userPosts = isLockedByPrivacy ? [] : (postsQ.data ?? []);
   const userReels = isLockedByPrivacy ? [] : (reelsQ.data ?? []);
@@ -124,12 +128,37 @@ export default function PublicProfileScreen() {
       return;
     }
     if (!profile || isSelf) return;
+    const isPrivate = !!privacyQ.data?.isPrivate;
     try {
+      if (profile.is_following) {
+        await toggleFollow(profile.id);
+        return;
+      }
+      if (hasRequested) {
+        await cancelFollowRequest(profile.id);
+        return;
+      }
+      if (isPrivate) {
+        const result = await requestFollow(profile.id);
+        if (result === "requested") {
+          Alert.alert("Request sent", `@${profile.username ?? "trader"} will be notified.`);
+        }
+        return;
+      }
       await toggleFollow(profile.id);
     } catch (e) {
       Alert.alert("Couldn't update", e instanceof Error ? e.message : "Try again");
     }
-  }, [isAuthenticated, profile, isSelf, toggleFollow]);
+  }, [
+    isAuthenticated,
+    profile,
+    isSelf,
+    toggleFollow,
+    privacyQ.data?.isPrivate,
+    hasRequested,
+    cancelFollowRequest,
+    requestFollow,
+  ]);
 
   const onMessageUser = useCallback(async () => {
     if (!isAuthenticated) {
@@ -281,26 +310,40 @@ export default function PublicProfileScreen() {
                 </Pressable>
                 <Pressable
                   onPress={onToggleFollow}
-                  disabled={isToggling}
+                  disabled={isToggling || isRequesting || isCancellingRequest}
                   style={[
                     styles.followBtn,
-                    profile.is_following ? styles.followingBtn : styles.notFollowingBtn,
-                    isToggling && { opacity: 0.55 },
+                    profile.is_following
+                      ? styles.followingBtn
+                      : hasRequested
+                        ? styles.requestedBtn
+                        : styles.notFollowingBtn,
+                    (isToggling || isRequesting || isCancellingRequest) && { opacity: 0.55 },
                   ]}
                   testID="toggle-follow"
                 >
                   {profile.is_following ? (
                     <UserCheck color={Colors.text} size={14} strokeWidth={2.6} />
+                  ) : hasRequested ? (
+                    <LockIcon color={Colors.text} size={14} strokeWidth={2.6} />
                   ) : (
                     <UserPlus color={Colors.ink} size={14} strokeWidth={2.6} />
                   )}
                   <Text
                     style={[
                       styles.followBtnText,
-                      profile.is_following ? { color: Colors.text } : { color: Colors.ink },
+                      profile.is_following || hasRequested
+                        ? { color: Colors.text }
+                        : { color: Colors.ink },
                     ]}
                   >
-                    {profile.is_following ? "Following" : "Follow"}
+                    {profile.is_following
+                      ? "Following"
+                      : hasRequested
+                        ? "Requested"
+                        : privacyQ.data?.isPrivate
+                          ? "Request"
+                          : "Follow"}
                   </Text>
                 </Pressable>
               </View>
@@ -436,7 +479,30 @@ export default function PublicProfileScreen() {
                 <LockIcon color={Colors.goldBright} size={26} strokeWidth={2.6} />
               </View>
               <Text style={styles.privateLockTitle}>This account is private</Text>
-              <Text style={styles.privateLockBody}>Follow @{profile.username ?? "trader"} to see their posts, reels and activity.</Text>
+              <Text style={styles.privateLockBody}>
+                {hasRequested
+                  ? `Your follow request to @${profile.username ?? "trader"} is pending approval.`
+                  : `Send a follow request to @${profile.username ?? "trader"} to see their posts, reels and activity.`}
+              </Text>
+              <Pressable
+                onPress={onToggleFollow}
+                disabled={isRequesting || isCancellingRequest}
+                style={[
+                  styles.privateLockCta,
+                  hasRequested ? styles.requestedBtn : styles.notFollowingBtn,
+                  (isRequesting || isCancellingRequest) && { opacity: 0.55 },
+                ]}
+                testID="private-lock-cta"
+              >
+                <Text
+                  style={[
+                    styles.privateLockCtaText,
+                    { color: hasRequested ? Colors.text : Colors.ink },
+                  ]}
+                >
+                  {hasRequested ? "Cancel request" : "Request to follow"}
+                </Text>
+              </Pressable>
             </View>
           ) : feedTab === "posts" ? (
             <PostsList
@@ -1042,6 +1108,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
   },
+  requestedBtn: {
+    backgroundColor: "rgba(255,184,76,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,184,76,0.38)",
+  },
   followBtnText: { fontSize: 13, fontWeight: "900", letterSpacing: 0.4 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 },
   displayName: { color: Colors.text, fontSize: 22, fontWeight: "900", letterSpacing: -0.4 },
@@ -1106,6 +1177,8 @@ const styles = StyleSheet.create({
   privateLockIcon: { width: 64, height: 64, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(63,169,255,0.12)", borderWidth: 1, borderColor: "rgba(98,208,255,0.22)", marginBottom: 16 },
   privateLockTitle: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
   privateLockBody: { color: Colors.muted, fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 8, lineHeight: 19 },
+  privateLockCta: { marginTop: 16, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 999 },
+  privateLockCtaText: { fontSize: 13, fontWeight: "900", letterSpacing: 0.4 },
   feedTabText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
   feedTabTextActive: { color: Colors.ink, fontWeight: "900" },
 

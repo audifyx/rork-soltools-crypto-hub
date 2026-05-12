@@ -114,6 +114,7 @@ function RootLayoutNav() {
       <Stack.Screen name="lobbies" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="lobby/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="notifications" options={{ presentation: "card", animation: "slide_from_right" }} />
+      <Stack.Screen name="follow-requests" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="posts" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="wallet" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="crypto-news" options={{ animation: "slide_from_right" }} />

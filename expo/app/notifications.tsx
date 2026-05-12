@@ -17,7 +17,7 @@ import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 
 type Tab = "all" | "mentions" | "social" | "trades" | "whales";
-type NotifKind = "like" | "repost" | "comment" | "mention" | "follow" | "trade" | "whale" | "alert" | "system" | "dm_message" | "dm_reaction" | "launchpad_update" | "lobby_invite" | "lobby_event" | "moderation_update" | "announcement";
+type NotifKind = "like" | "repost" | "comment" | "mention" | "follow" | "follow_request" | "trade" | "whale" | "alert" | "system" | "dm_message" | "dm_reaction" | "launchpad_update" | "lobby_invite" | "lobby_event" | "moderation_update" | "announcement";
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
 
 type Notif = {
@@ -62,6 +62,7 @@ const KIND_META: Record<NotifKind, { Icon: LucideIcon; color: string; bg: string
   comment: { Icon: MessageCircle, color: Colors.cyan, bg: "rgba(56,215,255,0.16)" },
   mention: { Icon: AtSign, color: Colors.cyan, bg: "rgba(56,215,255,0.16)" },
   follow: { Icon: UserPlus, color: Colors.violet, bg: "rgba(184,140,255,0.16)" },
+  follow_request: { Icon: UserPlus, color: Colors.orange, bg: "rgba(255,184,76,0.16)" },
   trade: { Icon: TrendingUp, color: Colors.mint, bg: "rgba(85,245,178,0.16)" },
   whale: { Icon: Waves, color: Colors.cyan, bg: "rgba(56,215,255,0.16)" },
   alert: { Icon: Bell, color: Colors.orange, bg: "rgba(255,184,76,0.16)" },
@@ -265,7 +266,8 @@ export default function NotificationsScreen() {
     tap();
     markLocalRead(n);
     if (n.remoteId && n.unread) markReadMut.mutate(n.remoteId);
-    if (n.kind === "follow" && n.actor) router.push({ pathname: "/u/[handle]", params: { handle: n.actor.replace(/^@/, "") } });
+    if (n.kind === "follow_request") router.push("/follow-requests");
+    else if (n.kind === "follow" && n.actor) router.push({ pathname: "/u/[handle]", params: { handle: n.actor.replace(/^@/, "") } });
     else if ((n.kind === "dm_message" || n.kind === "dm_reaction") && n.targetId) router.push({ pathname: "/dm/[id]", params: { id: n.targetId } });
     else if ((n.kind === "lobby_invite" || n.kind === "lobby_event") && n.targetId) router.push({ pathname: "/space/[id]", params: { id: n.targetId } });
     else if (n.kind === "launchpad_update" && n.targetId) router.push({ pathname: "/launch/[id]", params: { id: n.targetId } });
