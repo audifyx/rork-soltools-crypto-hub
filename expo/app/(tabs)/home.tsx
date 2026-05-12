@@ -754,7 +754,6 @@ export default function HomeFeedScreen() {
           </Pressable>
           <View style={styles.homeTitleWrap}>
             <Text style={styles.homeTitle}>Crypto Community App</Text>
-            <Text style={styles.homeSubtitle}>crypto community app</Text>
           </View>
           <View style={styles.topActions}>
             <Pressable
