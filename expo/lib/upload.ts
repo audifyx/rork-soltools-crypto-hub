@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { supabase } from "@/lib/supabase";
 
@@ -245,7 +246,14 @@ export async function uploadDMImage(
   return data.publicUrl;
 }
 
-/** Uploads a reel video to the public reel-media bucket. */
+/**
+ * Uploads a reel media file to the public reel-media bucket.
+ *
+ * For native platforms we stream the file via expo-file-system's uploadAsync
+ * (BINARY_CONTENT) against a Supabase signed upload URL. This avoids loading
+ * large videos into JS memory — which is what causes the "Network request
+ * failed" error on long/high-resolution clips when using fetch().arrayBuffer().
+ */
 export async function uploadReelMedia(
   userId: string,
   uri: string,
@@ -256,21 +264,44 @@ export async function uploadReelMedia(
   const path = `${userId}/reel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
   const ct = contentType(ext, mimeType);
 
-  let body: ArrayBuffer | Blob;
-  try {
-    body = await readBody(uri);
-  } catch (e) {
-    console.log("[upload] reel read failed", e);
-    throw new Error(e instanceof Error ? e.message : "Could not read selected video");
-  }
-
-  const { error } = await supabase.storage
-    .from(REELS_BUCKET)
-    .upload(path, body as ArrayBuffer, { contentType: ct, upsert: true });
-
-  if (error) {
-    console.log("[upload] reel storage error", error.message);
-    throw new Error(error.message);
+  if (Platform.OS !== "web") {
+    const signed = await supabase.storage.from(REELS_BUCKET).createSignedUploadUrl(path);
+    if (signed.error || !signed.data?.signedUrl) {
+      console.log("[upload] reel signed url error", signed.error?.message);
+      throw new Error(signed.error?.message ?? "Could not start upload");
+    }
+    try {
+      const result = await FileSystem.uploadAsync(signed.data.signedUrl, uri, {
+        httpMethod: "PUT",
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: {
+          "Content-Type": ct,
+          "x-upsert": "true",
+        },
+      });
+      if (result.status < 200 || result.status >= 300) {
+        console.log("[upload] reel upload http error", result.status, result.body);
+        throw new Error(`Upload failed (${result.status})`);
+      }
+    } catch (e) {
+      console.log("[upload] reel stream upload failed", e);
+      throw new Error(e instanceof Error ? e.message : "Network request failed");
+    }
+  } else {
+    let body: ArrayBuffer | Blob;
+    try {
+      body = await readBody(uri);
+    } catch (e) {
+      console.log("[upload] reel read failed", e);
+      throw new Error(e instanceof Error ? e.message : "Could not read selected video");
+    }
+    const { error } = await supabase.storage
+      .from(REELS_BUCKET)
+      .upload(path, body as ArrayBuffer, { contentType: ct, upsert: true });
+    if (error) {
+      console.log("[upload] reel storage error", error.message);
+      throw new Error(error.message);
+    }
   }
 
   const { data } = supabase.storage.from(REELS_BUCKET).getPublicUrl(path);
