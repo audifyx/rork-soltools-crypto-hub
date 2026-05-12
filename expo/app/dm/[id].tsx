@@ -1,3 +1,4 @@
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -11,10 +12,13 @@ import {
   Check,
   CheckCheck,
   ChevronRight,
+  ClipboardCopy,
   Coins,
+  CornerUpLeft,
   Hash,
   Image as ImageIcon,
   MoreHorizontal,
+  Pencil,
   Phone,
   Pin,
   Send,
@@ -25,6 +29,7 @@ import {
   UserX,
   Video,
   Wallet,
+  X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -49,9 +54,10 @@ import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import { uploadDMImage } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
-import { DMMessage, useDmPeerProfile, useDmThreadMessages, useDmTyping, useMessages } from "@/providers/messages-provider";
+import { DMMessage, DMReaction, DMReplyContext, useDmPeerProfile, useDmThreadMessages, useDmTyping, useMessages } from "@/providers/messages-provider";
 
 const QUICK_TICKERS = ["$SOL", "$BONK", "$WIF", "$JUP", "$AGNT", "$PYTH"];
+const QUICK_REACTIONS = ["❤️", "😂", "🔥", "🚀", "💯", "😮", "👀", "💎"] as const;
 // Dark room palette. Names kept for minimal diff.
 const IOS_BLUE = "#3FA9FF";
 const IOS_BG = "#05070D";
@@ -134,6 +140,8 @@ export default function DMThreadScreen() {
     deleteMessage,
     blockUser,
     setTyping,
+    reactToMessage,
+    editMessage,
   } = useMessages();
   const [uploading, setUploading] = useState<boolean>(false);
   const typingQuery = useDmTyping(id, !!id);
@@ -156,6 +164,10 @@ export default function DMThreadScreen() {
   const [text, setText] = useState<string>("");
   const [picker, setPicker] = useState<boolean>(false);
   const [menu, setMenu] = useState<boolean>(false);
+  const [actionMsg, setActionMsg] = useState<DMMessage | null>(null);
+  const [replyTo, setReplyTo] = useState<DMReplyContext | null>(null);
+  const [editing, setEditing] = useState<DMMessage | null>(null);
+  const [editText, setEditText] = useState<string>("");
   const listRef = useRef<FlatList<ListRow>>(null);
 
   useEffect(() => {
@@ -238,12 +250,58 @@ export default function DMThreadScreen() {
         clearTimeout(typingTimerRef.current);
         typingTimerRef.current = null;
       }
-      await sendMessage(id, t, override?.ticker, override?.imageUrl);
+      const replyId = replyTo?.id;
+      await sendMessage(id, t, override?.ticker, override?.imageUrl, replyId);
       setText("");
+      setReplyTo(null);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 30);
     },
-    [id, conv, text, sendMessage, setTyping],
+    [id, conv, text, sendMessage, setTyping, replyTo],
   );
+
+  const onReact = useCallback(
+    async (m: DMMessage, emoji: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      try {
+        await reactToMessage(m.id, emoji);
+      } catch (e) {
+        Alert.alert("Reaction failed", e instanceof Error ? e.message : "Try again.");
+      }
+    },
+    [reactToMessage],
+  );
+
+  const onCopy = useCallback(async (m: DMMessage) => {
+    Haptics.selectionAsync().catch(() => {});
+    try {
+      await Clipboard.setStringAsync(m.text ?? "");
+    } catch {}
+  }, []);
+
+  const onReply = useCallback((m: DMMessage) => {
+    Haptics.selectionAsync().catch(() => {});
+    setReplyTo({ id: m.id, fromHandle: m.fromHandle, text: m.text, type: m.type });
+  }, []);
+
+  const onEditStart = useCallback((m: DMMessage) => {
+    setEditing(m);
+    setEditText(m.text);
+  }, []);
+
+  const onEditSave = useCallback(async () => {
+    if (!editing) return;
+    const next = editText.trim();
+    if (!next || next === editing.text) {
+      setEditing(null);
+      return;
+    }
+    try {
+      await editMessage(editing.id, next);
+      setEditing(null);
+    } catch (e) {
+      Alert.alert("Edit failed", e instanceof Error ? e.message : "Try again.");
+    }
+  }, [editing, editText, editMessage]);
 
   const onPickImage = useCallback(async () => {
     if (!id || !conv) return;
@@ -334,6 +392,13 @@ export default function DMThreadScreen() {
     [deleteMessage],
   );
 
+  const onBubbleLongPress = useCallback((m: DMMessage) => {
+    if (m.id.startsWith("temp-")) return;
+    if (m.deletedAt) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setActionMsg(m);
+  }, []);
+
   const renderRow: ListRenderItem<ListRow> = ({ item }) => {
     if (item.kind === "day") {
       return (
@@ -346,7 +411,15 @@ export default function DMThreadScreen() {
     }
     const m = item.msg!;
     const mine = m.fromHandle === "@you";
-    return <Bubble msg={m} mine={mine} accent={conv.user.color} onLongPress={() => onDeleteMessage(m)} />;
+    return (
+      <Bubble
+        msg={m}
+        mine={mine}
+        accent={conv.user.color}
+        onLongPress={() => onBubbleLongPress(m)}
+        onReactionPress={(emoji) => onReact(m, emoji)}
+      />
+    );
   };
 
   return (
@@ -481,6 +554,23 @@ export default function DMThreadScreen() {
             }
           />
 
+          {replyTo ? (
+            <View style={styles.replyBanner} testID="reply-banner">
+              <View style={styles.replyBar} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.replyBannerTitle}>
+                  Replying to {replyTo.fromHandle === "@you" ? "yourself" : replyTo.fromHandle}
+                </Text>
+                <Text style={styles.replyBannerBody} numberOfLines={1}>
+                  {replyTo.text || "Photo"}
+                </Text>
+              </View>
+              <Pressable onPress={() => setReplyTo(null)} hitSlop={10} style={styles.replyClose}>
+                <X color={IOS_SECONDARY} size={14} strokeWidth={2.4} />
+              </Pressable>
+            </View>
+          ) : null}
+
           {picker ? (
             <View style={styles.tickerStrip}>
               <ScrollView
@@ -555,6 +645,39 @@ export default function DMThreadScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <BubbleActions
+        msg={actionMsg}
+        onClose={() => setActionMsg(null)}
+        onReact={(emoji) => {
+          if (actionMsg) onReact(actionMsg, emoji);
+          setActionMsg(null);
+        }}
+        onReply={() => {
+          if (actionMsg) onReply(actionMsg);
+          setActionMsg(null);
+        }}
+        onCopy={() => {
+          if (actionMsg) onCopy(actionMsg);
+          setActionMsg(null);
+        }}
+        onEdit={() => {
+          if (actionMsg) onEditStart(actionMsg);
+          setActionMsg(null);
+        }}
+        onDelete={() => {
+          if (actionMsg) onDeleteMessage(actionMsg);
+          setActionMsg(null);
+        }}
+      />
+
+      <EditModal
+        open={!!editing}
+        text={editText}
+        onChangeText={setEditText}
+        onClose={() => setEditing(null)}
+        onSave={onEditSave}
+      />
 
       <ActionMenu
         open={menu}
@@ -728,25 +851,85 @@ function ProfileBlurb({
   );
 }
 
+function ReplyContextRow({ reply, mine }: { reply: DMReplyContext; mine: boolean }) {
+  return (
+    <View style={[styles.replyContextRow, mine ? styles.replyContextRight : styles.replyContextLeft]}>
+      <View style={[styles.replyContextBar, { backgroundColor: mine ? "rgba(255,255,255,0.55)" : IOS_BLUE }]} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.replyContextWho} numberOfLines={1}>
+          {reply.fromHandle === "@you" ? "You" : reply.fromHandle}
+        </Text>
+        <Text style={styles.replyContextText} numberOfLines={1}>
+          {reply.text || (reply.type === "image" ? "Photo" : "")}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function ReactionsRow({
+  reactions,
+  mine,
+  onPress,
+}: {
+  reactions: DMReaction[];
+  mine: boolean;
+  onPress: (emoji: string) => void;
+}) {
+  if (!reactions || reactions.length === 0) return null;
+  return (
+    <View style={[styles.reactionsRow, mine ? { alignSelf: "flex-end" } : { alignSelf: "flex-start" }]}>
+      {reactions.map((r) => (
+        <Pressable
+          key={r.emoji}
+          onPress={() => onPress(r.emoji)}
+          style={[styles.reactionChip, r.mine && styles.reactionChipMine]}
+          testID={`react-${r.emoji}`}
+        >
+          <Text style={styles.reactionEmoji}>{r.emoji}</Text>
+          {r.count > 1 ? <Text style={styles.reactionCount}>{r.count}</Text> : null}
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 function Bubble({
   msg,
   mine,
   accent,
   onLongPress,
+  onReactionPress,
 }: {
   msg: DMMessage;
   mine: boolean;
   accent: string;
   onLongPress?: () => void;
+  onReactionPress: (emoji: string) => void;
 }) {
   void accent;
+
+  if (msg.deletedAt) {
+    return (
+      <View style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}>
+        <View style={[styles.bubble, styles.deletedBubble]}>
+          <Text style={styles.deletedText}>Message deleted</Text>
+        </View>
+        <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
+      </View>
+    );
+  }
+  const reply = msg.replyTo ?? null;
+  const reactions = msg.reactions ?? [];
+
   if (msg.type === "tip") {
     return (
       <Pressable
-        onLongPress={mine ? onLongPress : undefined}
-        delayLongPress={350}
+        onLongPress={onLongPress}
+        delayLongPress={300}
         style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}
       >
+        {reply ? <ReplyContextRow reply={reply} mine={mine} /> : null}
         <LinearGradient
           colors={["rgba(85,245,178,0.36)", "rgba(85,245,178,0.06)"]}
           start={{ x: 0, y: 0 }}
@@ -765,6 +948,7 @@ function Bubble({
           </View>
         </LinearGradient>
         <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
+        <ReactionsRow reactions={reactions} mine={mine} onPress={onReactionPress} />
       </Pressable>
     );
   }
@@ -772,10 +956,11 @@ function Bubble({
   if (msg.type === "image" && msg.imageUrl) {
     return (
       <Pressable
-        onLongPress={mine ? onLongPress : undefined}
-        delayLongPress={350}
+        onLongPress={onLongPress}
+        delayLongPress={300}
         style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}
       >
+        {reply ? <ReplyContextRow reply={reply} mine={mine} /> : null}
         <View
           style={[
             styles.imageBubble,
@@ -790,6 +975,7 @@ function Bubble({
           </View>
         ) : null}
         <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
+        <ReactionsRow reactions={reactions} mine={mine} onPress={onReactionPress} />
       </Pressable>
     );
   }
@@ -797,10 +983,11 @@ function Bubble({
   if (msg.type === "ticker" && msg.ticker) {
     return (
       <Pressable
-        onLongPress={mine ? onLongPress : undefined}
-        delayLongPress={350}
+        onLongPress={onLongPress}
+        delayLongPress={300}
         style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}
       >
+        {reply ? <ReplyContextRow reply={reply} mine={mine} /> : null}
         <View
           style={[
             styles.bubble,
@@ -830,17 +1017,20 @@ function Bubble({
         </View>
         <Text style={[styles.bubbleTime, mine && { color: IOS_SECONDARY }]}>
           {formatTime(msg.createdAt)}
+          {msg.editedAt ? " · edited" : ""}
         </Text>
+        <ReactionsRow reactions={reactions} mine={mine} onPress={onReactionPress} />
       </Pressable>
     );
   }
 
   return (
     <Pressable
-      onLongPress={mine ? onLongPress : undefined}
-      delayLongPress={350}
+      onLongPress={onLongPress}
+      delayLongPress={300}
       style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}
     >
+      {reply ? <ReplyContextRow reply={reply} mine={mine} /> : null}
       <View
         style={[
           styles.bubble,
@@ -857,7 +1047,10 @@ function Bubble({
         </Text>
       </View>
       <View style={styles.bubbleMeta}>
-        <Text style={styles.bubbleTime}>{formatTime(msg.createdAt)}</Text>
+        <Text style={styles.bubbleTime}>
+          {formatTime(msg.createdAt)}
+          {msg.editedAt ? " · edited" : ""}
+        </Text>
         {mine ? (
           <View style={styles.statusRow}>
             {msg.readAt ? (
@@ -879,7 +1072,146 @@ function Bubble({
           </View>
         ) : null}
       </View>
+      <ReactionsRow reactions={reactions} mine={mine} onPress={onReactionPress} />
     </Pressable>
+  );
+}
+
+function BubbleActions({
+  msg,
+  onClose,
+  onReact,
+  onReply,
+  onCopy,
+  onEdit,
+  onDelete,
+}: {
+  msg: DMMessage | null;
+  onClose: () => void;
+  onReact: (emoji: string) => void;
+  onReply: () => void;
+  onCopy: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const slide = useRef(new Animated.Value(0)).current;
+  const open = !!msg;
+  useEffect(() => {
+    Animated.timing(slide, {
+      toValue: open ? 1 : 0,
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [open, slide]);
+  if (!msg) {
+    return <Modal visible={false} transparent onRequestClose={onClose}><View /></Modal>;
+  }
+  const mine = msg.fromHandle === "@you";
+  const canEdit = mine && msg.type === "text";
+  return (
+    <Modal visible={open} transparent animationType="none" onRequestClose={onClose}>
+      <Pressable style={styles.menuBackdrop} onPress={onClose}>
+        <Animated.View
+          style={[
+            styles.menuSheet,
+            {
+              transform: [
+                { translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [400, 0] }) },
+              ],
+            },
+          ]}
+        >
+          <View style={styles.modalHandle} />
+          <View style={styles.reactPickerRow}>
+            {QUICK_REACTIONS.map((emoji) => (
+              <Pressable
+                key={emoji}
+                onPress={() => onReact(emoji)}
+                style={styles.reactPickerChip}
+                testID={`quick-react-${emoji}`}
+              >
+                <Text style={styles.reactPickerEmoji}>{emoji}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.menuSep} />
+          <MenuItem
+            icon={<CornerUpLeft color={IOS_TEXT} size={16} strokeWidth={2.4} />}
+            label="Reply"
+            onPress={onReply}
+          />
+          <MenuItem
+            icon={<ClipboardCopy color={IOS_TEXT} size={16} strokeWidth={2.4} />}
+            label="Copy text"
+            onPress={onCopy}
+          />
+          {canEdit ? (
+            <MenuItem
+              icon={<Pencil color={IOS_TEXT} size={16} strokeWidth={2.4} />}
+              label="Edit message"
+              onPress={onEdit}
+            />
+          ) : null}
+          {mine ? (
+            <>
+              <View style={styles.menuSep} />
+              <MenuItem
+                icon={<Trash2 color={IOS_RED} size={16} strokeWidth={2.4} />}
+                label="Delete for everyone"
+                tone={IOS_RED}
+                onPress={onDelete}
+              />
+            </>
+          ) : null}
+        </Animated.View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function EditModal({
+  open,
+  text,
+  onChangeText,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  text: string;
+  onChangeText: (s: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.menuBackdrop} onPress={onClose}>
+        <Pressable style={styles.editCard} onPress={() => {}}>
+          <View style={styles.editHead}>
+            <Pencil color={IOS_BLUE} size={14} strokeWidth={2.6} />
+            <Text style={styles.editTitle}>Edit message</Text>
+          </View>
+          <TextInput
+            value={text}
+            onChangeText={onChangeText}
+            multiline
+            style={styles.editInput}
+            placeholderTextColor={IOS_SECONDARY}
+            autoFocus
+            testID="edit-input"
+          />
+          <View style={styles.editActions}>
+            <Pressable onPress={onClose} style={[styles.editBtn, styles.editBtnGhost]}>
+              <Text style={styles.editBtnGhostText}>Cancel</Text>
+            </Pressable>
+            <Pressable onPress={onSave} style={[styles.editBtn, styles.editBtnPrimary]} testID="edit-save">
+              <Check color={"#FFFFFF"} size={14} strokeWidth={2.6} />
+              <Text style={styles.editBtnPrimaryText}>Save</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -1317,4 +1649,120 @@ const styles = StyleSheet.create({
   },
   menuLabel: { flex: 1, color: IOS_TEXT, fontSize: 16, fontWeight: "500" },
   menuSep: { height: StyleSheet.hairlineWidth, backgroundColor: IOS_SEPARATOR, marginVertical: 4 },
+
+  replyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 12,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: IOS_CARD,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOS_SEPARATOR,
+  },
+  replyBar: { width: 3, alignSelf: "stretch", borderRadius: 2, backgroundColor: IOS_BLUE },
+  replyBannerTitle: { color: IOS_BLUE, fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
+  replyBannerBody: { color: IOS_TEXT, fontSize: 12, fontWeight: "500", marginTop: 1 },
+  replyClose: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: IOS_CARD_SOFT },
+
+  replyContextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    marginBottom: 4,
+    maxWidth: "100%",
+  },
+  replyContextLeft: { alignSelf: "flex-start" },
+  replyContextRight: { alignSelf: "flex-end" },
+  replyContextBar: { width: 2.5, alignSelf: "stretch", borderRadius: 2 },
+  replyContextWho: { color: IOS_SECONDARY, fontSize: 10, fontWeight: "800" },
+  replyContextText: { color: IOS_TEXT, fontSize: 11, fontWeight: "500", marginTop: 1, maxWidth: 220 },
+
+  reactionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 4,
+    maxWidth: "100%",
+  },
+  reactionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: IOS_CARD_SOFT,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOS_SEPARATOR,
+  },
+  reactionChipMine: {
+    backgroundColor: "rgba(63,169,255,0.18)",
+    borderColor: "rgba(63,169,255,0.5)",
+  },
+  reactionEmoji: { fontSize: 12 },
+  reactionCount: { color: IOS_TEXT, fontSize: 10, fontWeight: "700" },
+
+  reactPickerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    marginBottom: 4,
+  },
+  reactPickerChip: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: IOS_CARD_SOFT,
+  },
+  reactPickerEmoji: { fontSize: 18 },
+
+  deletedBubble: {
+    backgroundColor: "transparent",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOS_SEPARATOR,
+    borderStyle: "dashed",
+  },
+  deletedText: { color: IOS_SECONDARY, fontSize: 13, fontStyle: "italic", fontWeight: "500" },
+
+  editCard: {
+    marginHorizontal: 24,
+    marginTop: "auto",
+    marginBottom: "auto",
+    backgroundColor: IOS_CARD,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOS_SEPARATOR,
+    padding: 16,
+  },
+  editHead: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  editTitle: { color: IOS_TEXT, fontSize: 14, fontWeight: "800" },
+  editInput: {
+    color: IOS_TEXT,
+    fontSize: 15,
+    fontWeight: "500",
+    backgroundColor: IOS_CARD_SOFT,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 80,
+    maxHeight: 200,
+    textAlignVertical: "top",
+  },
+  editActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 12 },
+  editBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
+  editBtnGhost: { backgroundColor: IOS_CARD_SOFT },
+  editBtnGhostText: { color: IOS_TEXT, fontSize: 13, fontWeight: "700" },
+  editBtnPrimary: { backgroundColor: IOS_BLUE },
+  editBtnPrimaryText: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
 });

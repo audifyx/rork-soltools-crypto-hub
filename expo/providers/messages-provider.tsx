@@ -21,6 +21,19 @@ export interface DMUser {
   bannerUrl?: string | null;
 }
 
+export interface DMReaction {
+  emoji: string;
+  count: number;
+  mine: boolean;
+}
+
+export interface DMReplyContext {
+  id: string;
+  fromHandle: string;
+  text: string;
+  type: DMMessage["type"];
+}
+
 export interface DMMessage {
   id: string;
   conversationId: string;
@@ -36,6 +49,10 @@ export interface DMMessage {
   read: boolean;
   deliveredAt?: number | null;
   readAt?: number | null;
+  editedAt?: number | null;
+  deletedAt?: number | null;
+  replyTo?: DMReplyContext | null;
+  reactions?: DMReaction[];
 }
 
 export interface Conversation {
@@ -69,6 +86,19 @@ interface ConversationRow {
   request: boolean | null;
 }
 
+interface MessageReactionRow {
+  emoji: string;
+  count: number | null;
+  mine: boolean | null;
+}
+
+interface MessageReplyRow {
+  id: string;
+  sender_id: string | null;
+  body: string | null;
+  message_type: string | null;
+}
+
 interface MessageRow {
   id: string;
   conversation_id: string;
@@ -81,6 +111,10 @@ interface MessageRow {
   read?: boolean | null;
   delivered_at?: string | null;
   read_at?: string | null;
+  edited_at?: string | null;
+  deleted_at?: string | null;
+  reply_to?: MessageReplyRow | null;
+  reactions?: MessageReactionRow[] | null;
 }
 
 interface ProfileSuggestionRow {
@@ -174,19 +208,40 @@ function messageFromRow(row: MessageRow, currentUserId: string | null, user?: DM
   const type = normalizeMessageType(row.message_type);
   const deliveredAt = row.delivered_at ? toMs(row.delivered_at) : null;
   const readAt = row.read_at ? toMs(row.read_at) : null;
+  const editedAt = row.edited_at ? toMs(row.edited_at) : null;
+  const deletedAt = row.deleted_at ? toMs(row.deleted_at) : null;
+  const replyRow = row.reply_to ?? null;
+  const replyTo: DMReplyContext | null = replyRow
+    ? {
+        id: replyRow.id,
+        fromHandle:
+          replyRow.sender_id && replyRow.sender_id === currentUserId
+            ? "@you"
+            : user?.handle ?? `@${(replyRow.sender_id ?? "user").slice(0, 8)}`,
+        text: replyRow.body ?? "",
+        type: normalizeMessageType(replyRow.message_type),
+      }
+    : null;
+  const reactions: DMReaction[] = (row.reactions ?? [])
+    .filter((r) => !!r && typeof r.emoji === "string")
+    .map((r) => ({ emoji: r.emoji, count: Number(r.count ?? 0), mine: !!r.mine }));
   return {
     id: row.id,
     conversationId: row.conversation_id,
     fromHandle: mine ? "@you" : user?.handle ?? `@${row.sender_id.slice(0, 8)}`,
     fromUserId: row.sender_id,
-    text: row.body ?? (type === "image" ? "Photo" : ""),
+    text: deletedAt ? "Message deleted" : row.body ?? (type === "image" ? "Photo" : ""),
     createdAt: toMs(row.created_at),
-    type,
+    type: deletedAt ? "system" : type,
     ticker: row.ticker ?? undefined,
-    imageUrl: row.image_url ?? undefined,
+    imageUrl: deletedAt ? undefined : row.image_url ?? undefined,
     read: !!row.read || !!readAt || mine,
     deliveredAt,
     readAt,
+    editedAt,
+    deletedAt,
+    replyTo,
+    reactions,
   };
 }
 
@@ -438,7 +493,7 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
   );
 
   const sendMutation = useMutation({
-    mutationFn: async (input: { id: string; text: string; ticker?: string; imageUrl?: string }) => {
+    mutationFn: async (input: { id: string; text: string; ticker?: string; imageUrl?: string; replyToId?: string }) => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to send messages.");
       const trimmed = input.text.trim();
       if (trimmed.length === 0 && !input.imageUrl) return null;
@@ -447,6 +502,7 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
         p_body: trimmed || (input.imageUrl ? "Photo" : ""),
         p_ticker: input.ticker ?? null,
         p_image_url: input.imageUrl ?? null,
+        p_reply_to_id: input.replyToId ?? null,
       });
       if (!messageId) throw new Error("Message failed to send.");
       return messageId;
@@ -471,6 +527,10 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
         read: true,
         deliveredAt: null,
         readAt: null,
+        editedAt: null,
+        deletedAt: null,
+        replyTo: null,
+        reactions: [],
       };
       queryClient.setQueryData<DMMessage[]>(threadKey, [...previous, optimistic]);
       return { previous, threadKey };
@@ -486,8 +546,8 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
   });
 
   const sendMessage = useCallback(
-    async (id: string, text: string, ticker?: string, imageUrl?: string) => {
-      await sendMutation.mutateAsync({ id, text, ticker, imageUrl });
+    async (id: string, text: string, ticker?: string, imageUrl?: string, replyToId?: string) => {
+      await sendMutation.mutateAsync({ id, text, ticker, imageUrl, replyToId });
     },
     [sendMutation],
   );
