@@ -101,9 +101,12 @@ export default function AuthScreen() {
       <View style={[styles.orb, styles.orbB]} />
 
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.backBtn} hitSlop={8} testID="auth-back">
-          <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
-        </Pressable>
+        <View style={styles.topBar}>
+          <View style={styles.flex} />
+          <Pressable onPress={() => navigateBack(router, "/(tabs)/home")} style={styles.backBtn} hitSlop={8} testID="auth-back">
+            <ArrowLeft color={Colors.text} size={18} strokeWidth={2.6} />
+          </Pressable>
+        </View>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.flex}
@@ -290,9 +293,13 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   safe: { flex: 1 },
   scroll: { padding: 24, paddingTop: 6, paddingBottom: 60 },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
   backBtn: {
-    marginLeft: 16,
-    marginTop: 4,
     width: 42,
     height: 42,
     borderRadius: 16,
