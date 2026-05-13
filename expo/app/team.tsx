@@ -109,14 +109,45 @@ interface UserRow {
 interface ReportRow {
   id: string;
   reporter_id: string | null;
+  target_type: string | null;
+  category: string | null;
   target_user_id: string | null;
   target_post_id: string | null;
+  target_comment_id: string | null;
   target_reel_id: string | null;
+  target_story_id: string | null;
+  target_story_comment_id: string | null;
+  target_community_id: string | null;
+  target_token: string | null;
   reason: string;
   details: string | null;
   status: string;
+  action_taken: string | null;
   created_at: string;
 }
+
+type ReportCategoryTab =
+  | "all"
+  | "post"
+  | "comment"
+  | "reel"
+  | "story"
+  | "story_comment"
+  | "user"
+  | "community"
+  | "token";
+
+const REPORT_CATEGORY_TABS: { key: ReportCategoryTab; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "post", label: "Posts" },
+  { key: "comment", label: "Comments" },
+  { key: "reel", label: "Reels" },
+  { key: "story", label: "Stories" },
+  { key: "story_comment", label: "Story replies" },
+  { key: "user", label: "Users" },
+  { key: "community", label: "Communities" },
+  { key: "token", label: "Tokens" },
+];
 
 interface OnlineRow {
   user_id: string;
@@ -846,18 +877,59 @@ function UsersTab() {
   );
 }
 
+function reportTargetId(row: ReportRow): string | null {
+  return (
+    row.target_post_id ??
+    row.target_comment_id ??
+    row.target_reel_id ??
+    row.target_story_id ??
+    row.target_story_comment_id ??
+    row.target_user_id ??
+    row.target_community_id ??
+    row.target_token ??
+    null
+  );
+}
+
 function ReportsTab() {
   const qc = useQueryClient();
-  const [filter, setFilter] = useState<string>("open");
+  const [status, setStatus] = useState<string>("open");
+  const [category, setCategory] = useState<ReportCategoryTab>("all");
 
   const reportsQuery = useQuery<ReportRow[]>({
-    queryKey: ["team", "reports", filter],
+    queryKey: ["team", "reports", status, category],
     queryFn: async () => {
-      let query = supabase.from("user_reports").select("id,reporter_id,target_user_id,target_post_id,target_reel_id,reason,details,status,created_at").order("created_at", { ascending: false }).limit(200);
-      if (filter !== "all") query = query.eq("status", filter);
+      let query = supabase
+        .from("user_reports")
+        .select(
+          "id,reporter_id,target_type,category,target_user_id,target_post_id,target_comment_id,target_reel_id,target_story_id,target_story_comment_id,target_community_id,target_token,reason,details,status,action_taken,created_at",
+        )
+        .order("created_at", { ascending: false })
+        .limit(300);
+      if (status !== "all") query = query.eq("status", status);
+      if (category !== "all") query = query.eq("target_type", category);
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as ReportRow[];
+    },
+  });
+
+  const countsQuery = useQuery<Record<string, number>>({
+    queryKey: ["team", "reports", "counts"],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("team_report_counts")
+        .select("target_type,status,total");
+      if (error) return {};
+      const map: Record<string, number> = { all: 0 };
+      ((data ?? []) as { target_type: string | null; status: string; total: number }[]).forEach((r) => {
+        if (r.status !== "open") return;
+        const key = r.target_type ?? "other";
+        map[key] = (map[key] ?? 0) + Number(r.total ?? 0);
+        map.all = (map.all ?? 0) + Number(r.total ?? 0);
+      });
+      return map;
     },
   });
 
@@ -874,12 +946,103 @@ function ReportsTab() {
     onError: (e: Error) => Alert.alert("Update failed", e.message),
   });
 
+  const actionMutation = useMutation({
+    mutationFn: async (input: { row: ReportRow }) => {
+      const row = input.row;
+      const kind = row.target_type ?? "";
+      switch (kind) {
+        case "post": {
+          if (!row.target_post_id) throw new Error("Missing post id");
+          const { error } = await supabase.rpc("team_delete_post", { p_post_id: row.target_post_id, p_reason: row.reason });
+          if (error) throw error;
+          break;
+        }
+        case "comment": {
+          if (!row.target_comment_id) throw new Error("Missing comment id");
+          const { error } = await supabase.rpc("team_delete_comment", { p_comment_id: row.target_comment_id, p_reason: row.reason });
+          if (error) throw error;
+          break;
+        }
+        case "reel": {
+          if (!row.target_reel_id) throw new Error("Missing reel id");
+          const { error } = await supabase.rpc("team_delete_reel", { p_reel_id: row.target_reel_id, p_reason: row.reason });
+          if (error) throw error;
+          break;
+        }
+        case "story": {
+          if (!row.target_story_id) throw new Error("Missing story id");
+          const { error } = await supabase.rpc("team_delete_story", { p_story_id: row.target_story_id, p_reason: row.reason });
+          if (error) throw error;
+          break;
+        }
+        case "story_comment": {
+          if (!row.target_story_comment_id) throw new Error("Missing comment id");
+          const { error } = await supabase.rpc("team_delete_story_comment", { p_comment_id: row.target_story_comment_id, p_reason: row.reason });
+          if (error) throw error;
+          break;
+        }
+        case "community": {
+          if (!row.target_community_id) throw new Error("Missing community id");
+          const { error } = await supabase.rpc("team_delete_community", { p_community_id: row.target_community_id, p_reason: row.reason });
+          if (error) throw error;
+          break;
+        }
+        case "token": {
+          if (!row.target_token) throw new Error("Missing token");
+          const { error } = await supabase.rpc("team_delete_token", { p_token: row.target_token, p_reason: row.reason });
+          if (error) throw error;
+          break;
+        }
+        case "user": {
+          if (!row.target_user_id) throw new Error("Missing user id");
+          const { error } = await supabase.rpc("team_ban_user", { p_user_id: row.target_user_id, p_reason: row.reason, p_hours: null });
+          if (error) throw error;
+          break;
+        }
+        default:
+          throw new Error(`Unsupported target type: ${kind || "unknown"}`);
+      }
+      const { error: resolveError } = await supabase.rpc("team_resolve_report", {
+        p_report_id: row.id,
+        p_status: "actioned",
+        p_notes: kind === "user" ? "User banned" : "Content removed",
+      });
+      if (resolveError) throw resolveError;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["team", "reports"] }),
+    onError: (e: Error) => Alert.alert("Action failed", e.message),
+  });
+
+  const counts = countsQuery.data ?? {};
+  const actionLabel = (kind: string | null): string => {
+    switch (kind) {
+      case "user": return "Ban user";
+      case "token": return "Remove token";
+      case "community": return "Delete community";
+      case "comment":
+      case "story_comment": return "Delete comment";
+      default: return "Delete content";
+    }
+  };
+
   return (
     <View style={styles.content}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
-        {(["open", "reviewing", "resolved", "dismissed", "all"] as const).map((s) => (
-          <Pressable key={s} onPress={() => setFilter(s)} style={[styles.filterChip, filter === s && styles.filterChipActive]}>
-            <Text style={[styles.filterChipText, filter === s && styles.filterChipTextActive]}>{s.toUpperCase()}</Text>
+        {REPORT_CATEGORY_TABS.map((t) => {
+          const open = counts[t.key] ?? 0;
+          return (
+            <Pressable key={t.key} onPress={() => setCategory(t.key)} style={[styles.filterChip, category === t.key && styles.filterChipActive]}>
+              <Text style={[styles.filterChipText, category === t.key && styles.filterChipTextActive]}>
+                {t.label}{open > 0 ? `  ·  ${open}` : ""}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
+        {(["open", "reviewing", "resolved", "dismissed", "actioned", "all"] as const).map((s) => (
+          <Pressable key={s} onPress={() => setStatus(s)} style={[styles.filterChip, status === s && styles.filterChipActive]}>
+            <Text style={[styles.filterChipText, status === s && styles.filterChipTextActive]}>{s.toUpperCase()}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -888,24 +1051,47 @@ function ReportsTab() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listPad}
         ListEmptyComponent={reportsQuery.isLoading ? <Loader /> : <EmptyState text="No reports in this queue." />}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.rowHeader}>
-              <AlertOctagon color={Colors.goldBright} size={18} strokeWidth={2.6} />
-              <View style={styles.rowMain}>
-                <Text style={styles.rowTitle}>{item.reason}</Text>
-                <Text style={styles.rowSub}>{relTime(item.created_at)} ago · target {(item.target_user_id ?? item.target_post_id ?? item.target_reel_id ?? "?").slice(0, 8)}</Text>
+        renderItem={({ item }) => {
+          const kind = (item.target_type ?? "other").toUpperCase();
+          const tgt = reportTargetId(item);
+          const tgtPreview = tgt ? (tgt.length > 18 ? `${tgt.slice(0, 10)}…${tgt.slice(-6)}` : tgt) : "—";
+          const canAction = !!item.target_type && item.target_type !== "other";
+          return (
+            <View style={styles.card}>
+              <View style={styles.rowHeader}>
+                <AlertOctagon color={Colors.goldBright} size={18} strokeWidth={2.6} />
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowTitle}>{(item.category ?? item.reason ?? "report").toString()}</Text>
+                  <Text style={styles.rowSub}>{kind} · {tgtPreview} · {relTime(item.created_at)} ago</Text>
+                </View>
+                <Pill label={item.status.toUpperCase()} color={item.status === "open" ? Colors.goldBright : item.status === "actioned" ? "#FF4D6D" : Colors.muted} />
               </View>
-              <Pill label={item.status.toUpperCase()} color={item.status === "open" ? Colors.goldBright : Colors.muted} />
+              {item.details ? <Text style={styles.rowSub}>{item.details}</Text> : null}
+              <View style={styles.actionGrid}>
+                <ActionButton label="Resolve" Icon={Check} onPress={() => resolveMutation.mutate({ row: item, status: "resolved" })} />
+                <ActionButton label="Reviewing" Icon={Clock} onPress={() => resolveMutation.mutate({ row: item, status: "reviewing" })} />
+                <ActionButton label="Dismiss" Icon={Trash2} onPress={() => resolveMutation.mutate({ row: item, status: "dismissed" })} />
+                {canAction ? (
+                  <ActionButton
+                    label={actionLabel(item.target_type)}
+                    Icon={Ban}
+                    danger
+                    onPress={() =>
+                      Alert.alert(
+                        actionLabel(item.target_type) + "?",
+                        "This action is permanent. Continue?",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Yes", style: "destructive", onPress: () => actionMutation.mutate({ row: item }) },
+                        ],
+                      )
+                    }
+                  />
+                ) : null}
+              </View>
             </View>
-            {item.details ? <Text style={styles.rowSub}>{item.details}</Text> : null}
-            <View style={styles.actionGrid}>
-              <ActionButton label="Resolve" Icon={Check} onPress={() => resolveMutation.mutate({ row: item, status: "resolved" })} />
-              <ActionButton label="Dismiss" Icon={Trash2} danger onPress={() => resolveMutation.mutate({ row: item, status: "dismissed" })} />
-              <ActionButton label="Reviewing" Icon={Clock} onPress={() => resolveMutation.mutate({ row: item, status: "reviewing" })} />
-            </View>
-          </View>
-        )}
+          );
+        }}
       />
     </View>
   );

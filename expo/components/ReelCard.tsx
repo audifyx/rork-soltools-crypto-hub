@@ -9,6 +9,7 @@ import { WebView } from "react-native-webview";
 import TokenAvatar from "@/components/TokenAvatar";
 import Colors from "@/constants/colors";
 import type { Reel } from "@/lib/api/reels";
+import { useReports } from "@/providers/reports-provider";
 
 interface ReelCardProps {
   reel: Reel;
@@ -88,6 +89,11 @@ function ReelCardBase({
   rounded = false,
 }: ReelCardProps) {
   const isOwner = !!viewerUserId && viewerUserId === reel.userId;
+  const reports = useReports();
+  const openReport = () => {
+    Haptics.selectionAsync().catch(() => {});
+    reports.open({ type: "reel", id: reel.id, label: reel.author?.displayName ?? undefined });
+  };
 
   const confirmDelete = () => {
     if (!onDelete) return;
@@ -103,22 +109,39 @@ function ReelCardBase({
   };
 
   const openOwnerMenu = () => {
-    if (!onDelete) return;
     Haptics.selectionAsync().catch(() => {});
+    if (isOwner && onDelete) {
+      if (Platform.OS === "ios") {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options: ["Cancel", "Delete reel"],
+            destructiveButtonIndex: 1,
+            cancelButtonIndex: 0,
+            userInterfaceStyle: "dark",
+          },
+          (idx) => {
+            if (idx === 1) confirmDelete();
+          },
+        );
+      } else {
+        confirmDelete();
+      }
+      return;
+    }
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ["Cancel", "Delete reel"],
+          options: ["Cancel", "Report reel"],
           destructiveButtonIndex: 1,
           cancelButtonIndex: 0,
           userInterfaceStyle: "dark",
         },
         (idx) => {
-          if (idx === 1) confirmDelete();
+          if (idx === 1) openReport();
         },
       );
     } else {
-      confirmDelete();
+      openReport();
     }
   };
   const heartScale = useRef<Animated.Value>(new Animated.Value(0)).current;
@@ -222,11 +245,9 @@ function ReelCardBase({
               )}
             </Pressable>
           ) : null}
-          {isOwner && onDelete ? (
-            <Pressable onPress={openOwnerMenu} style={styles.moreBtn} testID="reel-owner-menu" hitSlop={10}>
-              <MoreHorizontal color={Colors.text} size={16} strokeWidth={2.6} />
-            </Pressable>
-          ) : null}
+          <Pressable onPress={openOwnerMenu} style={styles.moreBtn} testID="reel-owner-menu" hitSlop={10}>
+            <MoreHorizontal color={Colors.text} size={16} strokeWidth={2.6} />
+          </Pressable>
         </View>
       </View>
 

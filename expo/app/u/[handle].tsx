@@ -53,6 +53,7 @@ import { SOLTOOLS_TRADING_DISABLED_MESSAGE } from "@/lib/soltools-platform";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useMessages, useBlockedUsers } from "@/providers/messages-provider";
+import { useReports } from "@/providers/reports-provider";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useFollowCounts,
@@ -268,15 +269,25 @@ export default function PublicProfileScreen() {
     );
   }, [profile, isSelf, isBlocked, blockUser, unblockUser, invalidateBlockQueries]);
 
+  const reports = useReports();
   const onOpenMore = useCallback(() => {
     if (!profile || isSelf) return;
     if (Platform.OS !== "web") {
       Haptics.selectionAsync().catch(() => {});
     }
+    const targetUserId = (profile.user_id ?? profile.id) as string | undefined;
     Alert.alert(
       profile.display_name ?? profile.username ?? "User",
       undefined,
       [
+        {
+          text: "Report user",
+          style: "destructive",
+          onPress: () => {
+            if (!targetUserId) return;
+            reports.open({ type: "user", id: targetUserId, label: profile.display_name ?? profile.username ?? undefined });
+          },
+        },
         {
           text: isBlocked ? "Unblock user" : "Block user",
           style: isBlocked ? "default" : "destructive",
@@ -285,7 +296,7 @@ export default function PublicProfileScreen() {
         { text: "Cancel", style: "cancel" },
       ],
     );
-  }, [profile, isSelf, isBlocked, onToggleBlock]);
+  }, [profile, isSelf, isBlocked, onToggleBlock, reports]);
 
   const onOpenLink = useCallback((url: string) => {
     if (!url) return;
