@@ -69,6 +69,8 @@ import {
   scanCommunityToken,
   type CommunityTokenCard,
 } from "@/lib/community-token";
+import { verifyHolder } from "@/lib/holder-verify";
+import { SOLTOOLS_TOKEN_MINT } from "@/lib/badge-system";
 import { supabase } from "@/lib/supabase";
 import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
@@ -182,6 +184,11 @@ export default function CommunityDetailScreen() {
   const [interactionText, setInteractionText] = useState<string>("");
   const [activeChartToken, setActiveChartToken] = useState<CommunityTokenCard | null>(null);
   const [activeFeatureCategory, setActiveFeatureCategory] = useState<CommunityFeatureCategory>("posting");
+  const [holderGateOpen, setHolderGateOpen] = useState<boolean>(false);
+  const [holderGateAddress, setHolderGateAddress] = useState<string>("");
+  const [holderGateScanning, setHolderGateScanning] = useState<boolean>(false);
+  const [holderGateError, setHolderGateError] = useState<string | null>(null);
+  const [holderGateBalance, setHolderGateBalance] = useState<number | null>(null);
 
   const community = useMemo(() => (id ? getCommunity(id) : undefined), [id, getCommunity]);
   const postsQuery = usePostsForCommunity(community?.id);
@@ -516,6 +523,59 @@ export default function CommunityDetailScreen() {
       Alert.alert("Follow failed", e instanceof Error ? e.message : "Try again.");
     }
   }, [ensureSignedIn, showToast, toggleFollow, userId]);
+
+  const requestJoin = useCallback(
+    (community_id: string) => {
+      if (!ensureSignedIn("Sign in to join communities.")) return;
+      const c = community;
+      const alreadyJoined = isJoined(community_id);
+      if (alreadyJoined) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        toggleJoin(community_id);
+        showToast("Left community");
+        return;
+      }
+      if (c?.holderOnly) {
+        Haptics.selectionAsync().catch(() => {});
+        setHolderGateAddress(profile.walletAddress || "");
+        setHolderGateError(null);
+        setHolderGateBalance(null);
+        setHolderGateOpen(true);
+        return;
+      }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      toggleJoin(community_id);
+      showToast("Joined community");
+    },
+    [community, ensureSignedIn, isJoined, profile.walletAddress, showToast, toggleJoin],
+  );
+
+  const onVerifyAndJoin = useCallback(async () => {
+    if (!community) return;
+    const mint = community.gateTokenMint || SOLTOOLS_TOKEN_MINT;
+    const required = Math.max(1, Number(community.gateMinimumBalance ?? 1));
+    setHolderGateScanning(true);
+    setHolderGateError(null);
+    setHolderGateBalance(null);
+    try {
+      const res = await verifyHolder(holderGateAddress.trim(), mint, required);
+      setHolderGateBalance(res.balance);
+      if (!res.ok) {
+        setHolderGateError(res.reason ?? "Wallet does not meet the holder requirement.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        return;
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      toggleJoin(community.id);
+      setHolderGateOpen(false);
+      showToast("Holder verified — joined community");
+    } catch (e) {
+      console.log("[community] holder verify failed", e);
+      setHolderGateError(e instanceof Error ? e.message : "Wallet scan failed.");
+    } finally {
+      setHolderGateScanning(false);
+    }
+  }, [community, holderGateAddress, showToast, toggleJoin]);
 
   const onToggleNotify = useCallback(() => {
     const next = !notifyOn;
@@ -963,9 +1023,7 @@ export default function CommunityDetailScreen() {
                 </Pressable>
                 <Pressable
                   onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-                    toggleJoin(community.id);
-                    showToast(joined ? "Left community" : "Joined community");
+                    requestJoin(community.id);
                   }}
                   style={[
                     styles.joinPrimary,
@@ -1052,9 +1110,7 @@ export default function CommunityDetailScreen() {
                   <Pressable
                     style={styles.headCircle}
                     onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                      toggleJoin(community.id);
-                      showToast(joined ? "Left community" : "Joined community");
+                      requestJoin(community.id);
                     }}
                     testID="community-join"
                   >
@@ -1626,6 +1682,106 @@ export default function CommunityDetailScreen() {
                 </View>
               </>
             ) : null}
+          </SafeAreaView>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={holderGateOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setHolderGateOpen(false)}
+      >
+        <View style={styles.chartBackdrop}>
+          <SafeAreaView edges={["bottom"]} style={styles.gateSheet}>
+            <View style={styles.gateHeader}>
+              <View style={styles.gateIcon}>
+                <Hash color={Colors.mint} size={18} strokeWidth={2.8} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.gateTitle}>Holder-only community</Text>
+                <Text style={styles.gateSub} numberOfLines={2}>
+                  Verify your wallet holds {Math.max(1, Number(community.gateMinimumBalance ?? 1)).toLocaleString()} ${"OGS"} to join {community.name}.
+                </Text>
+              </View>
+              <Pressable onPress={() => setHolderGateOpen(false)} style={styles.threadClose} hitSlop={8}>
+                <X color={Colors.text} size={18} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+
+            <Text style={styles.gateLabel}>Solana wallet address</Text>
+            <View style={styles.gateInputWrap}>
+              <TextInput
+                value={holderGateAddress}
+                onChangeText={(t) => {
+                  setHolderGateAddress(t);
+                  if (holderGateError) setHolderGateError(null);
+                }}
+                placeholder="7xKXt...abcd"
+                placeholderTextColor={Colors.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.gateInput}
+                testID="holder-gate-input"
+              />
+              <Pressable
+                onPress={async () => {
+                  try {
+                    const text = await Clipboard.getStringAsync();
+                    if (text) {
+                      setHolderGateAddress(text.trim());
+                      Haptics.selectionAsync().catch(() => {});
+                    }
+                  } catch (e) {
+                    console.log("[community] clipboard read failed", e);
+                  }
+                }}
+                style={styles.gatePasteBtn}
+                hitSlop={8}
+              >
+                <Text style={styles.gatePasteText}>Paste</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.gateMintLabel}>Gate token (Helius scan)</Text>
+            <Text style={styles.gateMintValue} numberOfLines={1}>
+              {community.gateTokenMint || SOLTOOLS_TOKEN_MINT}
+            </Text>
+
+            {holderGateBalance !== null ? (
+              <View style={styles.gateBalanceRow}>
+                <Text style={styles.gateBalanceLabel}>Wallet balance</Text>
+                <Text style={styles.gateBalanceValue}>{holderGateBalance.toLocaleString()}</Text>
+              </View>
+            ) : null}
+
+            {holderGateError ? (
+              <View style={styles.gateError}>
+                <Text style={styles.gateErrorText}>{holderGateError}</Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              onPress={onVerifyAndJoin}
+              disabled={holderGateScanning || holderGateAddress.trim().length < 32}
+              style={[
+                styles.gateVerifyBtn,
+                (holderGateScanning || holderGateAddress.trim().length < 32) && { opacity: 0.5 },
+              ]}
+              testID="holder-gate-verify"
+            >
+              {holderGateScanning ? (
+                <ActivityIndicator color={Colors.ink} />
+              ) : (
+                <>
+                  <Hash color={Colors.ink} size={14} strokeWidth={3} />
+                  <Text style={styles.gateVerifyText}>Scan wallet & join</Text>
+                </>
+              )}
+            </Pressable>
+            <Text style={styles.gateFootnote}>
+              We use Helius RPC to scan your token accounts. Read-only — we never request signing.
+            </Text>
           </SafeAreaView>
         </View>
       </Modal>
@@ -2776,6 +2932,86 @@ const styles = StyleSheet.create({
     borderColor: "rgba(85,245,178,0.18)",
   },
   quoteComposerText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
+
+  gateSheet: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 18,
+    gap: 12,
+    backgroundColor: Colors.ink,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.18)",
+  },
+  gateHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  gateIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(85,245,178,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.25)",
+  },
+  gateTitle: { color: Colors.text, fontSize: 16, fontWeight: "900" },
+  gateSub: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  gateLabel: { color: Colors.muted, fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 4 },
+  gateInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  gateInput: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: "700", padding: 0 },
+  gatePasteBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "rgba(85,245,178,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.28)",
+  },
+  gatePasteText: { color: Colors.mint, fontSize: 11, fontWeight: "900" },
+  gateMintLabel: { color: Colors.muted, fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.6 },
+  gateMintValue: { color: Colors.text, fontSize: 12, fontWeight: "700" },
+  gateBalanceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  gateBalanceLabel: { color: Colors.muted, fontSize: 12, fontWeight: "800" },
+  gateBalanceValue: { color: Colors.text, fontSize: 14, fontWeight: "900" },
+  gateError: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,93,143,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,93,143,0.3)",
+  },
+  gateErrorText: { color: Colors.rose, fontSize: 12, fontWeight: "800" },
+  gateVerifyBtn: {
+    marginTop: 4,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: Colors.mint,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  gateVerifyText: { color: Colors.ink, fontSize: 14, fontWeight: "900" },
+  gateFootnote: { color: Colors.muted, fontSize: 11, fontWeight: "700", textAlign: "center" },
 
   chartBackdrop: {
     flex: 1,
