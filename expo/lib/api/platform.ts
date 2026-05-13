@@ -293,21 +293,22 @@ export async function listFyp(userId: string): Promise<FypCard[]> {
   } catch (e) {
     console.log("[fyp] cache exception", e instanceof Error ? e.message : String(e));
   }
-  if (cached.length >= 6) return cached;
   let live: FypCard[] = [];
   try {
     live = await buildLiveFyp();
   } catch (e) {
     console.log("[fyp] live exception", e instanceof Error ? e.message : String(e));
   }
-  if (live.length === 0) return cached;
+  if (live.length === 0 && cached.length === 0) return [];
   const seen = new Set(cached.map((c) => c.ref_id));
-  const merged = [...cached];
+  const merged: FypCard[] = [...cached];
   for (const card of live) {
     if (seen.has(card.ref_id)) continue;
     seen.add(card.ref_id);
     merged.push(card);
   }
+  // Ensure every kind has representation by sorting so the top-N covers a mix.
+  merged.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   return merged;
 }
 
