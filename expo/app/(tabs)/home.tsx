@@ -26,6 +26,7 @@ import {
   Award,
   Skull,
   Sparkles,
+  Trash2,
   X,
   TrendingDown,
   TrendingUp,
@@ -77,7 +78,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchToken } from "@/types/launchpad";
 import { UserPost, useApp } from "@/providers/app-provider";
-import { useSocial } from "@/providers/social-provider";
+import { type CommunityPost, useSocial } from "@/providers/social-provider";
 
 const FILTERS = ["For You", "Following", "Trending", "New Pairs", "Whales", "OG Tokens"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -179,7 +180,7 @@ export default function HomeFeedScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const { posts: userPosts, togglePostLike, togglePostRepost, deletePost, profile } = useApp();
-  const { addPostReply, quotePost } = useSocial();
+  const { addPostReply, quotePost, deleteCommunityPost } = useSocial();
   const [interaction, setInteraction] = useState<{
     mode: "reply" | "quote";
     post: UserPost;
@@ -411,6 +412,16 @@ export default function HomeFeedScreen() {
       console.log("[home] share failed", e);
     }
   }, []);
+
+  const onDeleteReply = useCallback(
+    (reply: CommunityPost) => {
+      deleteCommunityPost(reply).catch((e: unknown) => {
+        console.log("[home] delete comment failed", e);
+        Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+      });
+    },
+    [deleteCommunityPost],
+  );
 
   const openReply = useCallback(
     (post: UserPost) => {
@@ -695,6 +706,8 @@ export default function HomeFeedScreen() {
             onComment={() => openReply(item.data)}
             onShare={() => void onTimelineShare(item.data)}
             onDelete={() => onTimelineDelete(item.data)}
+            viewerUserId={userId ?? null}
+            onDeleteReply={onDeleteReply}
           />
         );
       }
@@ -708,6 +721,7 @@ export default function HomeFeedScreen() {
       openReply,
       openQuote,
       onTimelineDelete,
+      onDeleteReply,
       router,
       userId,
     ],
@@ -1678,6 +1692,8 @@ function UserPostCard({
   onShare,
   onDelete,
   canDelete,
+  viewerUserId,
+  onDeleteReply,
 }: {
   post: UserPost;
   displayName: string;
@@ -1692,6 +1708,8 @@ function UserPostCard({
   onShare: () => void;
   onDelete: () => void;
   canDelete: boolean;
+  viewerUserId: string | null;
+  onDeleteReply: (reply: CommunityPost) => void;
 }) {
   const [commentsOpen, setCommentsOpen] = useState<boolean>(false);
   const toggleComments = useCallback(() => {
@@ -1831,6 +1849,8 @@ function UserPostCard({
             postId={post.id}
             onReply={onComment}
             onCollapse={toggleComments}
+            viewerUserId={viewerUserId}
+            onDeleteReply={onDeleteReply}
           />
         ) : null}
       </View>
@@ -1842,10 +1862,14 @@ function PostCommentsList({
   postId,
   onReply,
   onCollapse,
+  viewerUserId,
+  onDeleteReply,
 }: {
   postId: string;
   onReply: () => void;
   onCollapse: () => void;
+  viewerUserId: string | null;
+  onDeleteReply: (reply: CommunityPost) => void;
 }) {
   const { usePostReplies } = useSocial();
   const repliesQuery = usePostReplies(postId);
@@ -1865,7 +1889,14 @@ function PostCommentsList({
           <Text style={styles.commentsEmpty}>No comments yet. Be the first to reply.</Text>
         </Pressable>
       ) : (
-        replies.map((c) => <CommentRow key={c.id} reply={c} />)
+        replies.map((c) => (
+          <CommentRow
+            key={c.id}
+            reply={c}
+            canDelete={!!viewerUserId && c.authorUserId === viewerUserId}
+            onDelete={onDeleteReply}
+          />
+        ))
       )}
       <Pressable onPress={onReply} style={styles.commentReplyBtn} testID={`reply-from-comments-${postId}`}>
         <MessageCircle color={Colors.ink} size={13} strokeWidth={2.6} />
@@ -1877,17 +1908,19 @@ function PostCommentsList({
 
 function CommentRow({
   reply,
+  canDelete,
+  onDelete,
 }: {
-  reply: {
-    id: string;
-    authorName: string;
-    authorHandle: string;
-    authorColor: string;
-    content: string;
-    createdAt: number;
-    likes: number;
-  };
+  reply: CommunityPost;
+  canDelete: boolean;
+  onDelete: (reply: CommunityPost) => void;
 }) {
+  const confirmDelete = useCallback(() => {
+    Alert.alert("Delete comment?", "This will remove your comment.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => onDelete(reply) },
+    ]);
+  }, [onDelete, reply]);
   const time = useMemo(() => {
     const diff = Date.now() - reply.createdAt;
     const m = Math.floor(diff / 60000);
@@ -1899,7 +1932,11 @@ function CommentRow({
   }, [reply.createdAt]);
   const initial = (reply.authorName || reply.authorHandle || "?").replace("@", "").slice(0, 1).toUpperCase();
   return (
-    <View style={styles.commentRow} testID={`comment-${reply.id}`}>
+    <Pressable
+      style={styles.commentRow}
+      onLongPress={canDelete ? confirmDelete : undefined}
+      testID={`comment-${reply.id}`}
+    >
       <View style={[styles.commentAvatar, { backgroundColor: reply.authorColor || Colors.mint }]}>
         <Text style={styles.commentAvatarText}>{initial}</Text>
       </View>
@@ -1924,7 +1961,17 @@ function CommentRow({
           </View>
         ) : null}
       </View>
-    </View>
+      {canDelete ? (
+        <Pressable
+          onPress={confirmDelete}
+          hitSlop={10}
+          style={styles.commentDeleteBtn}
+          testID={`comment-delete-${reply.id}`}
+        >
+          <Trash2 color={Colors.muted} size={13} strokeWidth={2.4} />
+        </Pressable>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -3245,6 +3292,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
+  },
+  commentDeleteBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
   commentAvatar: {
     width: 28,

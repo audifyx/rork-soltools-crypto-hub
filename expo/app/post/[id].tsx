@@ -12,6 +12,7 @@ import {
   Send,
   Share2,
   Sparkles,
+  Trash2,
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -159,7 +160,7 @@ export default function PostDetailScreen() {
   const postId = (id ?? "").toString();
   const { userId, isAuthenticated } = useAuth();
   const { profile } = useApp();
-  const { usePostReplies, addPostReply, togglePostLike, togglePostRepost } = useSocial();
+  const { usePostReplies, addPostReply, togglePostLike, togglePostRepost, deleteCommunityPost } = useSocial();
 
   const postQ = useQuery<FullPost | null>({
     queryKey: ["post-detail", postId, userId ?? "guest"],
@@ -444,7 +445,23 @@ export default function PostDetailScreen() {
               data={replies}
               keyExtractor={(c) => c.id}
               ListHeaderComponent={ListHeader}
-              renderItem={({ item }) => <CommentRow reply={item} />}
+              renderItem={({ item }) => (
+                <CommentRow
+                  reply={item}
+                  canDelete={!!userId && item.authorUserId === userId}
+                  onDelete={async () => {
+                    try {
+                      await deleteCommunityPost(item);
+                      qc.setQueryData<FullPost | null>(
+                        ["post-detail", postId, userId ?? "guest"],
+                        (prev) => (prev ? { ...prev, comments: Math.max(0, prev.comments - 1) } : prev),
+                      );
+                    } catch (e) {
+                      Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+                    }
+                  }}
+                />
+              )}
               ItemSeparatorComponent={() => <View style={styles.divider} />}
               contentContainerStyle={{ paddingBottom: 28 }}
               keyboardShouldPersistTaps="handled"
@@ -505,15 +522,31 @@ export default function PostDetailScreen() {
   );
 }
 
-function CommentRow({ reply }: { reply: CommunityPost }) {
+function CommentRow({
+  reply,
+  canDelete,
+  onDelete,
+}: {
+  reply: CommunityPost;
+  canDelete: boolean;
+  onDelete: () => void;
+}) {
   const router = useRouter();
   const handle = reply.authorHandle?.replace(/^@/, "") ?? "";
+  const confirmDelete = useCallback(() => {
+    hapticSelect();
+    Alert.alert("Delete comment?", "This will remove your comment.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: onDelete },
+    ]);
+  }, [onDelete]);
   return (
     <Pressable
       style={styles.comment}
       onPress={() => {
         if (handle) router.push({ pathname: "/u/[handle]", params: { handle } });
       }}
+      onLongPress={canDelete ? confirmDelete : undefined}
       testID={`comment-${reply.id}`}
     >
       <View style={[styles.commentAvatar, { backgroundColor: reply.authorColor }]}>
@@ -536,6 +569,16 @@ function CommentRow({ reply }: { reply: CommunityPost }) {
         </View>
         {reply.content ? <Text style={styles.commentText}>{reply.content}</Text> : null}
       </View>
+      {canDelete ? (
+        <Pressable
+          onPress={confirmDelete}
+          hitSlop={10}
+          style={styles.commentDeleteBtn}
+          testID={`comment-delete-${reply.id}`}
+        >
+          <Trash2 color={Colors.muted} size={14} strokeWidth={2.4} />
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
@@ -662,6 +705,16 @@ const styles = StyleSheet.create({
   commentDot: { color: Colors.muted, fontSize: 11 },
   commentTime: { color: Colors.muted, fontSize: 11, fontWeight: "600" },
   commentText: { color: Colors.text, fontSize: 14, lineHeight: 19, fontWeight: "500", marginTop: 3 },
+  commentDeleteBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
 
   empty: {
     alignItems: "center",
