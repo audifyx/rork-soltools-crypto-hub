@@ -44,6 +44,13 @@ const CARD = "rgba(11,15,26,0.92)";
 const CARD_SOFT = "rgba(63,169,255,0.10)";
 const BORDER = "rgba(63,169,255,0.18)";
 const NOTE_BUBBLE = "rgba(63,169,255,0.14)";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function normalizeUuid(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return UUID_RE.test(trimmed) ? trimmed : null;
+}
 
 const QUICK_TAGS = ["#alpha", "#todo", "#idea", "#watchlist", "#thread"] as const;
 
@@ -116,24 +123,23 @@ export default function NotesToSelfScreen() {
     enabled: isAuthenticated && !!userId,
     staleTime: 60_000,
     retry: 1,
-    queryFn: async () => {
-      const id = await getSelfChat();
-      return id;
-    },
+    queryFn: async () => normalizeUuid(await getSelfChat()),
   });
-  const convId = convQ.data ?? null;
+  const convId = normalizeUuid(convQ.data);
+  const hasValidConvId = !!convId;
 
   const messagesQ = useQuery<NoteItem[]>({
     queryKey: ["notes-to-self", "messages", convId ?? "none"],
-    enabled: !!convId,
+    enabled: hasValidConvId,
     staleTime: 4_000,
-    refetchInterval: 15_000,
+    refetchInterval: hasValidConvId ? 15_000 : false,
     queryFn: async () => {
-      if (!convId) return [];
+      const safeConvId = normalizeUuid(convId);
+      if (!safeConvId) return [];
       const { data, error } = await supabase
         .from("dm_messages")
         .select("id,body,ticker,image_url,message_type,created_at,pinned_in_chat")
-        .eq("conversation_id", convId)
+        .eq("conversation_id", safeConvId)
         .is("deleted_at", null)
         .order("created_at", { ascending: true })
         .limit(500);
@@ -157,14 +163,15 @@ export default function NotesToSelfScreen() {
   });
 
   useEffect(() => {
-    if (!convId) return;
+    const safeConvId = normalizeUuid(convId);
+    if (!safeConvId) return;
     const channel = supabase
-      .channel(`notes-${convId}`)
+      .channel(`notes-${safeConvId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "dm_messages", filter: `conversation_id=eq.${convId}` },
+        { event: "*", schema: "public", table: "dm_messages", filter: `conversation_id=eq.${safeConvId}` },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", convId] }).catch(() => {});
+          queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", safeConvId] }).catch(() => {});
         },
       )
       .subscribe();
@@ -198,11 +205,12 @@ export default function NotesToSelfScreen() {
 
   const sendMutation = useMutation({
     mutationFn: async (body: string) => {
-      if (!convId) throw new Error("notes_unavailable");
+      const safeConvId = normalizeUuid(convId);
+      if (!safeConvId) throw new Error("Notes are still opening. Try again in a second.");
       const trimmed = body.trim();
       if (!trimmed) return null;
       const { data, error } = await supabase.rpc("send_dm_message", {
-        p_conversation_id: convId,
+        p_conversation_id: safeConvId,
         p_body: trimmed,
         p_ticker: null,
         p_image_url: null,
@@ -212,13 +220,15 @@ export default function NotesToSelfScreen() {
       return data as string;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", convId] }).catch(() => {});
+      const safeConvId = normalizeUuid(convId);
+      if (!safeConvId) return;
+      queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", safeConvId] }).catch(() => {});
     },
   });
 
   const onSend = useCallback(async () => {
     const value = text.trim();
-    if (!value || !convId) return;
+    if (!value || !hasValidConvId) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setText("");
     try {
@@ -227,42 +237,46 @@ export default function NotesToSelfScreen() {
       setText(value);
       Alert.alert("Couldn’t save note", e instanceof Error ? e.message : "Try again.");
     }
-  }, [text, convId, sendMutation]);
+  }, [text, hasValidConvId, sendMutation]);
 
   const toggleTodo = useCallback(
     async (note: NoteItem) => {
-      if (!note.body.length) return;
+      const safeConvId = normalizeUuid(convId);
+      if (!safeConvId || !note.body.length) return;
       Haptics.selectionAsync().catch(() => {});
       const nextBody = note.done ? note.body : `[x] ${note.body}`;
       const { error } = await supabase.rpc("edit_dm_message", {
         p_message_id: note.id,
-        p_body: note.done ? note.body : `[x] ${note.body}`,
+        p_body: nextBody,
       }).then((r) => ({ error: r.error })).catch((e: unknown) => ({ error: e as Error }));
       if (error) {
         console.log("[notes] toggle failed", error instanceof Error ? error.message : error);
         return;
       }
-      void nextBody;
-      queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", convId] }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", safeConvId] }).catch(() => {});
     },
     [convId, queryClient],
   );
 
   const togglePin = useCallback(
     async (note: NoteItem) => {
+      const safeConvId = normalizeUuid(convId);
+      if (!safeConvId) return;
       Haptics.selectionAsync().catch(() => {});
       const { error } = await supabase.rpc("toggle_pin_in_chat", { p_message_id: note.id });
       if (error) {
         console.log("[notes] pin failed", error.message);
         return;
       }
-      queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", convId] }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", safeConvId] }).catch(() => {});
     },
     [convId, queryClient],
   );
 
   const onLongPress = useCallback(
     (note: NoteItem) => {
+      const safeConvId = normalizeUuid(convId);
+      if (!safeConvId) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       Alert.alert(
         "Note actions",
@@ -277,7 +291,7 @@ export default function NotesToSelfScreen() {
             onPress: async () => {
               try {
                 await supabase.rpc("delete_dm_message", { p_message_id: note.id });
-                queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", convId] }).catch(() => {});
+                queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", safeConvId] }).catch(() => {});
               } catch (e) {
                 Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
               }
@@ -374,7 +388,7 @@ export default function NotesToSelfScreen() {
             </View>
           ) : null}
 
-          {convQ.isError ? (
+          {convQ.isError || (convQ.isFetched && !hasValidConvId) ? (
             <View style={styles.errorBanner}>
               <Text style={styles.errorBannerText}>
                 Couldn’t open your private notes. Pull to retry.
@@ -465,9 +479,9 @@ export default function NotesToSelfScreen() {
               onPress={onSend}
               style={[
                 styles.sendBtn,
-                { backgroundColor: text.trim().length > 0 ? ACCENT : "rgba(63,169,255,0.25)" },
+                { backgroundColor: text.trim().length > 0 && hasValidConvId ? ACCENT : "rgba(63,169,255,0.25)" },
               ]}
-              disabled={text.trim().length === 0 || !convId}
+              disabled={text.trim().length === 0 || !hasValidConvId}
               testID="notes-send"
             >
               <Send color="#FFFFFF" size={15} strokeWidth={2.8} />
@@ -494,7 +508,7 @@ function renderRow(
       );
     }
     const n = item.note!;
-    const isTodo = /^\[[ x]\]/i.test(n.body) || n.done; // legacy
+    const isTodo = /^\[[ x]\]/i.test(n.body) || n.done;
     return (
       <Pressable
         onLongPress={() => onLongPress(n)}
@@ -753,5 +767,4 @@ const styles = StyleSheet.create({
   errorRetryText: { color: "#FFFFFF", fontSize: 12, fontWeight: "600" },
 });
 
-// Silence unused import warning for icons we may show in future iterations.
 void Trash2;
