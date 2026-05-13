@@ -319,16 +319,14 @@ export async function listFyp(userId: string): Promise<FypCard[]> {
  */
 async function buildLiveFyp(): Promise<FypCard[]> {
   const now = Date.now();
-  const since = new Date(now - 7 * 24 * 3600_000).toISOString();
   const cards: FypCard[] = [];
 
   const settled = await Promise.allSettled([
     supabase
       .from("reels")
       .select("id,author_id,video_url,thumbnail_url,caption,like_count,view_count,comment_count,created_at")
-      .gte("created_at", since)
-      .order("like_count", { ascending: false })
-      .limit(18),
+      .order("created_at", { ascending: false })
+      .limit(30),
     supabase
       .from("stories")
       .select("id,author_id,media_url,media_type,caption,created_at,expires_at,view_count")
