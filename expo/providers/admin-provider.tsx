@@ -70,6 +70,18 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
         });
         if (ownerError) console.log("[admin] owner role ensure skipped", ownerError.message);
       }
+      // Prefer the SECURITY DEFINER RPC so RLS on admin_roles can't hide the
+      // current user's own row (this was the bug that left newly-promoted
+      // team members stuck on the locked dashboard).
+      const rpc = await supabase.rpc("get_my_admin_role");
+      if (!rpc.error && Array.isArray(rpc.data) && rpc.data.length > 0) {
+        const row = rpc.data[0] as { role: string | null; permissions: unknown };
+        const role = (row?.role as AdminRole) ?? null;
+        const perms = role === "team" ? normalizePerms(row.permissions) : null;
+        return { role, permissions: perms };
+      }
+      if (rpc.error) console.log("[admin] get_my_admin_role failed", rpc.error.message);
+
       const { data, error } = await supabase
         .from("admin_roles")
         .select("role,permissions")
