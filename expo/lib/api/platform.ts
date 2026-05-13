@@ -293,6 +293,85 @@ export async function listFyp(userId: string): Promise<FypCard[]> {
   return (data ?? []) as FypCard[];
 }
 
+/* =========================== HASHTAGS ================================ */
+
+export interface TrendingHashtagRow {
+  tag: string;
+  post_count: number;
+  trending_score: number;
+}
+
+export async function listTrendingHashtags(limit: number = 12): Promise<TrendingHashtagRow[]> {
+  const { data, error } = await supabase
+    .from("hashtags")
+    .select("tag,post_count,trending_score")
+    .order("trending_score", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.log("[hashtags] trending failed", error.message);
+    return [];
+  }
+  return (data ?? []) as TrendingHashtagRow[];
+}
+
+/* ====================== SUGGESTED FOLLOWS ============================ */
+
+export interface SuggestedFollowRow {
+  suggested_user_id: string;
+  mutual_count: number;
+  reason: string | null;
+  score: number;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  verified: boolean | null;
+}
+
+export async function listSuggestedFollows(userId: string, limit: number = 12): Promise<SuggestedFollowRow[]> {
+  const { data, error } = await supabase
+    .from("suggested_follows")
+    .select("suggested_user_id,mutual_count,reason,score")
+    .eq("user_id", userId)
+    .order("score", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.log("[suggested] failed", error.message);
+    return [];
+  }
+  const rows = (data ?? []) as { suggested_user_id: string; mutual_count: number; reason: string | null; score: number }[];
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.suggested_user_id);
+  const { data: profs } = await supabase
+    .from("profiles")
+    .select("id,username,display_name,avatar_url,verified")
+    .in("id", ids);
+  const profMap = new Map<string, { username: string | null; display_name: string | null; avatar_url: string | null; verified: boolean | null }>();
+  for (const p of (profs ?? []) as { id: string; username: string | null; display_name: string | null; avatar_url: string | null; verified: boolean | null }[]) {
+    profMap.set(p.id, p);
+  }
+  return rows.map((r) => {
+    const p = profMap.get(r.suggested_user_id);
+    return {
+      suggested_user_id: r.suggested_user_id,
+      mutual_count: r.mutual_count,
+      reason: r.reason,
+      score: r.score,
+      username: p?.username ?? null,
+      display_name: p?.display_name ?? null,
+      avatar_url: p?.avatar_url ?? null,
+      verified: p?.verified ?? false,
+    };
+  });
+}
+
+export async function hideFypCard(userId: string, cardId: string, refId: string): Promise<void> {
+  await supabase.from("fyp_cache").delete().eq("user_id", userId).eq("id", cardId).catch(() => {});
+  await supabase
+    .from("feed_signals")
+    .insert({ user_id: userId, post_id: refId, signal: "hide", weight: 2.0 })
+    .catch(() => {});
+}
+
 /* =========================== INTEREST QUIZ ============================ */
 
 export interface InterestTopicRow {
