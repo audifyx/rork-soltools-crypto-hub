@@ -25,6 +25,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import {
   addStoryComment,
+  deleteOwnStory,
   deleteStoryComment,
   getStoryEngagement,
   listActiveStories,
@@ -179,6 +180,34 @@ export default function StoryViewerScreen() {
 
   const isOwner = !!authUserId && authUserId === current.user_id;
 
+  const deleteStoryMutation = useMutation({
+    mutationFn: (id: string) => deleteOwnStory(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["stories"] });
+      router.back();
+    },
+    onError: (e: unknown) => {
+      Alert.alert("Could not delete", e instanceof Error ? e.message : "Try again.");
+    },
+  });
+
+  const onDeleteStory = useCallback(() => {
+    if (!current) return;
+    setPaused(true);
+    Alert.alert(
+      "Delete story?",
+      "This permanently removes your story for everyone.",
+      [
+        { text: "Cancel", style: "cancel", onPress: () => setPaused(false) },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteStoryMutation.mutate(current.id),
+        },
+      ],
+    );
+  }, [current, deleteStoryMutation]);
+
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false, animation: "fade" }} />
@@ -238,6 +267,11 @@ export default function StoryViewerScreen() {
               </Text>
             </View>
           </View>
+          {isOwner ? (
+            <Pressable onPress={onDeleteStory} style={styles.closeBtn} testID="story-delete" hitSlop={6}>
+              <Trash2 color={Colors.rose} size={16} strokeWidth={2.6} />
+            </Pressable>
+          ) : null}
           <Pressable onPress={() => router.back()} style={styles.closeBtn} testID="story-close">
             <X color={Colors.text} size={18} strokeWidth={2.6} />
           </Pressable>

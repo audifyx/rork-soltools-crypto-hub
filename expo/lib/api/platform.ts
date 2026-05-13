@@ -260,6 +260,45 @@ export async function deleteStoryComment(commentId: string): Promise<void> {
   }
 }
 
+export async function deleteOwnStory(storyId: string): Promise<void> {
+  const { error } = await supabase.rpc("delete_own_story", { p_story_id: storyId });
+  if (error) {
+    const msg = error.message ?? "";
+    const missingRpc = /could not find the function|function .* does not exist|schema cache/i.test(msg);
+    if (!missingRpc) {
+      console.log("[stories] delete failed", msg);
+      throw new Error(msg || "Could not delete story.");
+    }
+    // Fallback to direct delete bound to the current user — RLS still enforces.
+    const { data: auth } = await supabase.auth.getUser();
+    const uid = auth.user?.id;
+    if (!uid) throw new Error("Sign in to delete.");
+    let { error: delErr } = await supabase.from("stories").delete().eq("id", storyId).eq("author_id", uid);
+    if (delErr && /author_id/i.test(delErr.message)) {
+      const retry = await supabase.from("stories").delete().eq("id", storyId).eq("user_id", uid);
+      delErr = retry.error;
+    }
+    if (delErr) throw new Error(delErr.message || "Could not delete story.");
+  }
+}
+
+export async function deleteOwnCommunity(communityId: string): Promise<void> {
+  const { error } = await supabase.rpc("delete_own_community", { p_community_id: communityId });
+  if (error) {
+    const msg = error.message ?? "";
+    const missingRpc = /could not find the function|function .* does not exist|schema cache/i.test(msg);
+    if (!missingRpc) {
+      console.log("[communities] delete failed", msg);
+      throw new Error(msg || "Could not delete community.");
+    }
+    const { data: auth } = await supabase.auth.getUser();
+    const uid = auth.user?.id;
+    if (!uid) throw new Error("Sign in to delete.");
+    const { error: delErr } = await supabase.from("communities").delete().eq("id", communityId).eq("owner_id", uid);
+    if (delErr) throw new Error(delErr.message || "Could not delete community.");
+  }
+}
+
 export async function createStory(input: {
   mediaUrl: string;
   mediaType: "image" | "video";

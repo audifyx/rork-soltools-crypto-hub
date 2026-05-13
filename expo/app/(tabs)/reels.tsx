@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Compass, Globe2, MessageCircle, Plus, RefreshCcw, Sparkles, UserCheck, Users, X } from "lucide-react-native";
+import { Compass, Globe2, MessageCircle, Plus, RefreshCcw, Sparkles, Trash2, UserCheck, Users, X } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -29,6 +29,7 @@ import Colors from "@/constants/colors";
 import {
   addReelComment,
   deleteReel,
+  deleteReelComment,
   fetchReelsFeed,
   getReelComments,
   likeReel,
@@ -427,17 +428,47 @@ function CommentsSheet({
             ListEmptyComponent={
               <Text style={styles.noComments}>{commentsQuery.isLoading ? "Loading comments…" : "No comments yet. Start the trade thread."}</Text>
             }
-            renderItem={({ item }) => (
-              <View style={styles.commentRow}>
-                <View style={[styles.commentAvatar, { backgroundColor: item.author.avatarColor }]}>
-                  <Text style={styles.commentAvatarText}>{item.author.displayName.slice(0, 1).toUpperCase()}</Text>
+            renderItem={({ item }) => {
+              const ownComment = !!userId && item.userId === userId;
+              const onDeleteComment = () => {
+                Alert.alert("Delete comment?", undefined, [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                      const prev = queryClient.getQueryData<ReelComment[]>(["reels", "comments", item.reelId]);
+                      queryClient.setQueryData<ReelComment[]>(
+                        ["reels", "comments", item.reelId],
+                        (prev ?? []).filter((c) => c.id !== item.id),
+                      );
+                      try {
+                        await deleteReelComment(item.id);
+                      } catch (e) {
+                        if (prev) queryClient.setQueryData(["reels", "comments", item.reelId], prev);
+                        Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
+                      }
+                    },
+                  },
+                ]);
+              };
+              return (
+                <View style={styles.commentRow}>
+                  <View style={[styles.commentAvatar, { backgroundColor: item.author.avatarColor }]}>
+                    <Text style={styles.commentAvatarText}>{item.author.displayName.slice(0, 1).toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.commentBody}>
+                    <Text style={styles.commentAuthor}>{item.author.handle}</Text>
+                    <Text style={styles.commentText}>{item.body}</Text>
+                  </View>
+                  {ownComment ? (
+                    <Pressable onPress={onDeleteComment} hitSlop={8} testID={`reel-comment-delete-${item.id}`} style={styles.commentDeleteBtn}>
+                      <Trash2 color={Colors.muted} size={14} strokeWidth={2.4} />
+                    </Pressable>
+                  ) : null}
                 </View>
-                <View style={styles.commentBody}>
-                  <Text style={styles.commentAuthor}>{item.author.handle}</Text>
-                  <Text style={styles.commentText}>{item.body}</Text>
-                </View>
-              </View>
-            )}
+              );
+            }}
           />
           <View style={styles.commentInputRow}>
             <TextInput
@@ -578,7 +609,8 @@ const styles = StyleSheet.create({
   sheetClose: { width: 32, height: 32, borderRadius: 12, backgroundColor: Colors.card, alignItems: "center", justifyContent: "center" },
   commentsList: { paddingHorizontal: 18, paddingBottom: 16 },
   noComments: { color: Colors.muted, textAlign: "center", paddingVertical: 40, fontWeight: "700" },
-  commentRow: { flexDirection: "row", gap: 10, paddingVertical: 12 },
+  commentRow: { flexDirection: "row", gap: 10, paddingVertical: 12, alignItems: "flex-start" },
+  commentDeleteBtn: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
   commentAvatar: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   commentAvatarText: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
   commentBody: { flex: 1, backgroundColor: Colors.card, borderRadius: 15, paddingHorizontal: 12, paddingVertical: 9 },

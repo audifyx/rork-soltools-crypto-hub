@@ -279,6 +279,20 @@ export async function getReelComments(reelId: string): Promise<ReelComment[]> {
   }));
 }
 
+export async function deleteReelComment(commentId: string): Promise<void> {
+  const { error } = await supabase.rpc("delete_own_reel_comment", { p_comment_id: commentId });
+  if (error) {
+    const msg = error.message ?? "";
+    const missingRpc = /could not find the function|function .* does not exist|schema cache/i.test(msg);
+    if (!missingRpc) throw new Error(msg || "Could not delete comment.");
+    const { data: auth } = await supabase.auth.getUser();
+    const uid = auth.user?.id;
+    if (!uid) throw new Error("Sign in to delete.");
+    const { error: delErr } = await supabase.from("reel_comments").delete().eq("id", commentId).eq("user_id", uid);
+    if (delErr) throw new Error(delErr.message || "Could not delete comment.");
+  }
+}
+
 export async function shareReel(reelId: string, userId?: string | null, channel = "native"): Promise<void> {
   const { error } = await supabase.from("reel_shares").insert({ reel_id: reelId, user_id: userId ?? null, channel });
   if (error) throw new Error(error.message || "Could not track share");

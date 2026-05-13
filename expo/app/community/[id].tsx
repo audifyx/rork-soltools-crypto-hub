@@ -12,6 +12,7 @@ import {
   Bell,
   Bookmark,
   Calendar,
+  Trash2,
   Camera,
   ChartCandlestick,
   Copy,
@@ -23,7 +24,6 @@ import {
   MessageCircle,
   MoreVertical,
   Pin,
-  Trash2,
   Quote,
   Repeat2,
   Search,
@@ -71,6 +71,7 @@ import {
 } from "@/lib/community-token";
 import { verifyHolder } from "@/lib/holder-verify";
 import { SOLTOOLS_TOKEN_MINT } from "@/lib/badge-system";
+import { deleteOwnCommunity } from "@/lib/api/platform";
 import { supabase } from "@/lib/supabase";
 import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
@@ -515,6 +516,38 @@ export default function CommunityDetailScreen() {
       console.log("[community] invite failed", e);
     }
   }, [community, shareLink]);
+
+  const isOwner = !!community && !!userId && community.ownerId === userId;
+
+  const deleteCommunityMut = useMutation({
+    mutationFn: async (cid: string) => {
+      await deleteOwnCommunity(cid);
+    },
+    onSuccess: () => {
+      featureQueryClient.invalidateQueries({ queryKey: ["social", "communities"] });
+      navigateBack(router);
+    },
+    onError: (e: unknown) => {
+      Alert.alert("Could not delete", e instanceof Error ? e.message : "Try again.");
+    },
+  });
+
+  const onDeleteCommunity = useCallback(() => {
+    if (!community) return;
+    setMenuOpen(false);
+    Alert.alert(
+      `Delete ${community.name}?`,
+      "This permanently removes the community, its posts, and member list.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteCommunityMut.mutate(community.id),
+        },
+      ],
+    );
+  }, [community, deleteCommunityMut, router]);
 
   const openMemberProfile = useCallback((member: CommunityMember) => {
     const username = (member.username ?? member.handle).replace(/^@/, "").trim();
@@ -1650,6 +1683,18 @@ export default function CommunityDetailScreen() {
               onPress={onInvite}
               testID="menu-invite"
             />
+            {isOwner ? (
+              <>
+                <View style={styles.menuDivider} />
+                <MenuItem
+                  label="Delete community"
+                  icon={Trash2}
+                  onPress={onDeleteCommunity}
+                  testID="menu-delete-community"
+                  destructive
+                />
+              </>
+            ) : null}
           </View>
         </SafeAreaView>
       </Modal>
@@ -2195,16 +2240,19 @@ function MenuItem({
   icon: Icon,
   onPress,
   testID,
+  destructive,
 }: {
   label: string;
   icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
   onPress: () => void;
   testID?: string;
+  destructive?: boolean;
 }) {
+  const tint = destructive ? Colors.rose : Colors.text;
   return (
     <Pressable onPress={onPress} style={styles.menuItem} testID={testID}>
-      <Text style={styles.menuItemText}>{label}</Text>
-      <Icon color={Colors.text} size={18} strokeWidth={2.2} />
+      <Text style={[styles.menuItemText, destructive ? { color: Colors.rose } : null]}>{label}</Text>
+      <Icon color={tint} size={18} strokeWidth={2.2} />
     </Pressable>
   );
 }
