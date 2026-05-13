@@ -280,20 +280,27 @@ export interface FypCard {
 }
 
 export async function listFyp(userId: string): Promise<FypCard[]> {
-  const { data, error } = await supabase
-    .from("fyp_cache")
-    .select("id,kind,ref_id,score,payload,created_at")
-    .eq("user_id", userId)
-    .order("score", { ascending: false })
-    .limit(60);
-  if (error) {
-    console.log("[fyp] failed", error.message);
+  let cached: FypCard[] = [];
+  try {
+    const { data, error } = await supabase
+      .from("fyp_cache")
+      .select("id,kind,ref_id,score,payload,created_at")
+      .eq("user_id", userId)
+      .order("score", { ascending: false })
+      .limit(60);
+    if (error) console.log("[fyp] cache failed", error.message);
+    cached = (data ?? []) as FypCard[];
+  } catch (e) {
+    console.log("[fyp] cache exception", e instanceof Error ? e.message : String(e));
   }
-  const cached = (data ?? []) as FypCard[];
   if (cached.length >= 6) return cached;
-  const live = await buildLiveFyp();
+  let live: FypCard[] = [];
+  try {
+    live = await buildLiveFyp();
+  } catch (e) {
+    console.log("[fyp] live exception", e instanceof Error ? e.message : String(e));
+  }
   if (live.length === 0) return cached;
-  // Merge cache + live, dedupe by ref_id, keep cache first.
   const seen = new Set(cached.map((c) => c.ref_id));
   const merged = [...cached];
   for (const card of live) {
@@ -314,7 +321,7 @@ async function buildLiveFyp(): Promise<FypCard[]> {
   const since = new Date(now - 7 * 24 * 3600_000).toISOString();
   const cards: FypCard[] = [];
 
-  const [reelsRes, storiesRes, eventsRes, commRes] = await Promise.all([
+  const settled = await Promise.allSettled([
     supabase
       .from("reels")
       .select("id,author_id,video_url,thumbnail_url,caption,like_count,view_count,comment_count,created_at")
@@ -335,41 +342,66 @@ async function buildLiveFyp(): Promise<FypCard[]> {
       .limit(10),
     supabase
       .from("communities")
-      .select("id,name,description,avatar_url,members_count,trending_score")
+      .select("*")
       .order("trending_score", { ascending: false })
       .limit(8),
   ]);
 
-  const reels = (reelsRes.data ?? []) as {
+  const pickRows = <T,>(idx: number, label: string): T[] => {
+    const r = settled[idx];
+    if (r.status === "rejected") {
+      console.log(`[fyp] ${label} rejected`, r.reason instanceof Error ? r.reason.message : String(r.reason));
+      return [];
+    }
+    const { data, error } = r.value as { data: unknown; error: { message: string } | null };
+    if (error) {
+      console.log(`[fyp] ${label} error`, error.message);
+      return [];
+    }
+    return (data ?? []) as T[];
+  };
+
+  const reels = pickRows<{
     id: string; author_id: string; video_url: string; thumbnail_url: string | null;
     caption: string | null; like_count: number; view_count: number; comment_count: number; created_at: string;
-  }[];
-  const stories = (storiesRes.data ?? []) as {
+  }>(0, "reels");
+  const stories = pickRows<{
     id: string; author_id: string; media_url: string; media_type: "image" | "video";
     caption: string | null; created_at: string; view_count: number | null;
-  }[];
-  const events = (eventsRes.data ?? []) as {
+  }>(1, "stories");
+  const events = pickRows<{
     id: string; host_id: string; title: string; description: string | null;
     cover_url: string | null; starts_at: string; rsvp_count: number;
-  }[];
-  const communities = (commRes.data ?? []) as {
-    id: string; name: string; description: string | null; avatar_url: string | null;
-    members_count: number | null; trending_score: number | null;
-  }[];
+  }>(2, "events");
+  const communities = pickRows<{
+    id: string;
+    name?: string | null;
+    title?: string | null;
+    description: string | null;
+    avatar_url?: string | null;
+    icon_url?: string | null;
+    members_count?: number | null;
+    member_count?: number | null;
+    trending_score?: number | null;
+  }>(3, "communities");
 
   const authorIds = Array.from(new Set([
     ...reels.map((r) => r.author_id),
     ...stories.map((s) => s.author_id),
     ...events.map((e) => e.host_id),
-  ]));
+  ].filter(Boolean)));
   const profMap = new Map<string, { username: string | null; display_name: string | null; avatar_url: string | null }>();
   if (authorIds.length > 0) {
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id,username,display_name,avatar_url")
-      .in("id", authorIds);
-    for (const p of (profs ?? []) as { id: string; username: string | null; display_name: string | null; avatar_url: string | null }[]) {
-      profMap.set(p.id, p);
+    try {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id,username,display_name,avatar_url")
+        .in("id", authorIds);
+      for (const p of (profs ?? []) as { id: string; username: string | null; display_name: string | null; avatar_url: string | null }[]) {
+        profMap.set(p.id, p);
+      }
+    } catch (e) {
+      console.log("[fyp] profiles fetch failed", e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -446,18 +478,21 @@ async function buildLiveFyp(): Promise<FypCard[]> {
   }
 
   for (const c of communities) {
+    const name = c.name ?? c.title ?? "Community";
+    const avatar = c.avatar_url ?? c.icon_url ?? null;
+    const members = c.members_count ?? c.member_count ?? 0;
     cards.push({
       id: `live-community-${c.id}`,
       kind: "community",
       ref_id: c.id,
-      score: (c.trending_score ?? 0) + (c.members_count ?? 0) * 0.05,
+      score: (c.trending_score ?? 0) + (members ?? 0) * 0.05,
       created_at: new Date().toISOString(),
       payload: {
-        title: c.name,
+        title: name,
         body: c.description,
-        thumbnail_url: c.avatar_url,
-        avatar_url: c.avatar_url,
-        members_count: c.members_count ?? 0,
+        thumbnail_url: avatar,
+        avatar_url: avatar,
+        members_count: members ?? 0,
         reason: "Trending community",
       },
     });
@@ -476,16 +511,21 @@ export interface TrendingHashtagRow {
 }
 
 export async function listTrendingHashtags(limit: number = 12): Promise<TrendingHashtagRow[]> {
-  const { data, error } = await supabase
-    .from("hashtags")
-    .select("tag,post_count,trending_score")
-    .order("trending_score", { ascending: false })
-    .limit(limit);
-  if (error) {
-    console.log("[hashtags] trending failed", error.message);
+  try {
+    const { data, error } = await supabase
+      .from("hashtags")
+      .select("tag,post_count,trending_score")
+      .order("trending_score", { ascending: false })
+      .limit(limit);
+    if (error) {
+      console.log("[hashtags] trending failed", error.message);
+      return [];
+    }
+    return (data ?? []) as TrendingHashtagRow[];
+  } catch (e) {
+    console.log("[hashtags] exception", e instanceof Error ? e.message : String(e));
     return [];
   }
-  return (data ?? []) as TrendingHashtagRow[];
 }
 
 /* ====================== SUGGESTED FOLLOWS ============================ */
@@ -502,17 +542,23 @@ export interface SuggestedFollowRow {
 }
 
 export async function listSuggestedFollows(userId: string, limit: number = 12): Promise<SuggestedFollowRow[]> {
-  const { data, error } = await supabase
-    .from("suggested_follows")
-    .select("suggested_user_id,mutual_count,reason,score")
-    .eq("user_id", userId)
-    .order("score", { ascending: false })
-    .limit(limit);
-  if (error) {
-    console.log("[suggested] failed", error.message);
+  let rows: { suggested_user_id: string; mutual_count: number; reason: string | null; score: number }[] = [];
+  try {
+    const { data, error } = await supabase
+      .from("suggested_follows")
+      .select("suggested_user_id,mutual_count,reason,score")
+      .eq("user_id", userId)
+      .order("score", { ascending: false })
+      .limit(limit);
+    if (error) {
+      console.log("[suggested] failed", error.message);
+      return [];
+    }
+    rows = (data ?? []) as typeof rows;
+  } catch (e) {
+    console.log("[suggested] exception", e instanceof Error ? e.message : String(e));
     return [];
   }
-  const rows = (data ?? []) as { suggested_user_id: string; mutual_count: number; reason: string | null; score: number }[];
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.suggested_user_id);
   const { data: profs } = await supabase
