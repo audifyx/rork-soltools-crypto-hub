@@ -139,11 +139,15 @@ export default function ForYouScreen() {
   const onOpen = useCallback(
     (card: FypCard) => {
       hapticSelect().catch(() => {});
-      if (card.kind === "reel") router.push("/(tabs)/reels");
-      else if (card.kind === "story") router.push({ pathname: "/story/[id]", params: { id: card.ref_id } });
-      else if (card.kind === "event") router.push("/events");
-      else if (card.kind === "community") router.push("/communities");
-      else router.push("/(tabs)/home");
+      try {
+        if (card.kind === "reel") router.push("/(tabs)/reels");
+        else if (card.kind === "story") router.push({ pathname: "/story/[id]", params: { id: card.ref_id } });
+        else if (card.kind === "event") router.push("/events");
+        else if (card.kind === "community") router.push("/communities");
+        else router.push("/(tabs)/home");
+      } catch (e) {
+        console.log("[fyp] open failed", e instanceof Error ? e.message : String(e));
+      }
     },
     [router],
   );
@@ -173,15 +177,19 @@ export default function ForYouScreen() {
   const onHashtag = useCallback(
     (tag: string) => {
       hapticSelect().catch(() => {});
-      router.push({ pathname: "/(tabs)/discover", params: { tag } });
+      router.push({ pathname: "/(tabs)/discover", params: { q: `#${tag}` } });
     },
     [router],
   );
 
   const onOpenUser = useCallback(
-    (id: string) => {
+    (row: SuggestedFollowRow) => {
       hapticSelect().catch(() => {});
-      router.push({ pathname: "/user/[id]", params: { id } });
+      if (row.username) {
+        router.push({ pathname: "/u/[handle]", params: { handle: row.username } });
+      } else {
+        router.push({ pathname: "/u/[handle]", params: { handle: row.suggested_user_id } });
+      }
     },
     [router],
   );
@@ -292,7 +300,7 @@ export default function ForYouScreen() {
                           </Text>
                         </View>
                         <Text style={styles.hashtagCount}>
-                          {h.post_count.toLocaleString()} posts
+                          {(h.post_count ?? 0).toLocaleString()} posts
                         </Text>
                       </View>
                     </Pressable>
@@ -323,7 +331,7 @@ export default function ForYouScreen() {
                   contentContainerStyle={styles.suggestRow}
                 >
                   {suggestions.map((s) => (
-                    <SuggestionCard key={s.suggested_user_id} row={s} onPress={() => onOpenUser(s.suggested_user_id)} />
+                    <SuggestionCard key={s.suggested_user_id} row={s} onPress={() => onOpenUser(s)} />
                   ))}
                 </ScrollView>
               </View>
