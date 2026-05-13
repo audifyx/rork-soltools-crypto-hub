@@ -614,16 +614,48 @@ export const [AppProvider, useApp] = createContextHook(() => {
             patchPostEverywhere(qc, id, { liked: prevLiked, likesDelta: prevLiked ? 1 : -1 });
             throw gateErr;
           }
-          const { data, error } = await supabase.rpc("toggle_post_like", {
-            target_post_id: id,
-          });
-          if (error) throw error;
-          const row = Array.isArray(data) ? (data[0] as { liked: boolean; likes_count: number } | undefined) : undefined;
-          if (row) {
-            patchPostEverywhere(qc, id, {
-              liked: !!row.liked,
-              likes: Number(row.likes_count ?? 0),
+          let synced = false;
+          try {
+            const { data, error } = await supabase.rpc("toggle_post_like", {
+              target_post_id: id,
             });
+            if (error) throw error;
+            const row = Array.isArray(data) ? (data[0] as { liked: boolean; likes_count: number } | undefined) : undefined;
+            if (row) {
+              patchPostEverywhere(qc, id, {
+                liked: !!row.liked,
+                likes: Number(row.likes_count ?? 0),
+              });
+              synced = true;
+            }
+          } catch (rpcErr) {
+            console.log("[app] toggle_post_like RPC failed, falling back", rpcErr);
+          }
+          if (!synced) {
+            if (prevLiked) {
+              const { error: delErr } = await supabase
+                .from("community_post_likes")
+                .delete()
+                .eq("post_id", id)
+                .eq("user_id", userId);
+              if (delErr && delErr.code !== "PGRST116") throw delErr;
+            } else {
+              const { error: insErr } = await supabase
+                .from("community_post_likes")
+                .insert({ post_id: id, user_id: userId });
+              if (insErr && insErr.code !== "23505") throw insErr;
+            }
+            const { data: countRow } = await supabase
+              .from("community_posts")
+              .select("likes_count")
+              .eq("id", id)
+              .maybeSingle();
+            if (countRow && typeof countRow.likes_count === "number") {
+              patchPostEverywhere(qc, id, {
+                liked: !prevLiked,
+                likes: Number(countRow.likes_count ?? 0),
+              });
+            }
           }
         } catch (e) {
           patchPostEverywhere(qc, id, {
@@ -651,16 +683,48 @@ export const [AppProvider, useApp] = createContextHook(() => {
       });
       if (isAuthenticated && userId) {
         try {
-          const { data, error } = await supabase.rpc("toggle_post_repost", {
-            target_post_id: id,
-          });
-          if (error) throw error;
-          const row = Array.isArray(data) ? (data[0] as { reposted: boolean; reposts_count: number } | undefined) : undefined;
-          if (row) {
-            patchPostEverywhere(qc, id, {
-              reposted: !!row.reposted,
-              reposts: Number(row.reposts_count ?? 0),
+          let synced = false;
+          try {
+            const { data, error } = await supabase.rpc("toggle_post_repost", {
+              target_post_id: id,
             });
+            if (error) throw error;
+            const row = Array.isArray(data) ? (data[0] as { reposted: boolean; reposts_count: number } | undefined) : undefined;
+            if (row) {
+              patchPostEverywhere(qc, id, {
+                reposted: !!row.reposted,
+                reposts: Number(row.reposts_count ?? 0),
+              });
+              synced = true;
+            }
+          } catch (rpcErr) {
+            console.log("[app] toggle_post_repost RPC failed, falling back", rpcErr);
+          }
+          if (!synced) {
+            if (prevReposted) {
+              const { error: delErr } = await supabase
+                .from("community_post_reposts")
+                .delete()
+                .eq("post_id", id)
+                .eq("user_id", userId);
+              if (delErr && delErr.code !== "PGRST116") throw delErr;
+            } else {
+              const { error: insErr } = await supabase
+                .from("community_post_reposts")
+                .insert({ post_id: id, user_id: userId });
+              if (insErr && insErr.code !== "23505") throw insErr;
+            }
+            const { data: countRow } = await supabase
+              .from("community_posts")
+              .select("reposts_count")
+              .eq("id", id)
+              .maybeSingle();
+            if (countRow && typeof countRow.reposts_count === "number") {
+              patchPostEverywhere(qc, id, {
+                reposted: !prevReposted,
+                reposts: Number(countRow.reposts_count ?? 0),
+              });
+            }
           }
         } catch (e) {
           patchPostEverywhere(qc, id, {
