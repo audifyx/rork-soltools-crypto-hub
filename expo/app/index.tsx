@@ -2,7 +2,6 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { ScanLine } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -14,13 +13,20 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, {
+  Defs,
+  LinearGradient as SvgGradient,
+  Stop,
+  Path,
+} from "react-native-svg";
 
-import AnimatedGlobe from "@/components/AnimatedGlobe";
+import BootSequence from "@/components/BootSequence";
+import BrandLogo from "@/components/BrandLogo";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/providers/auth-provider";
 
-const BUILD_TAG = "welcome-x-v1";
-const { width: SCREEN_W } = Dimensions.get("window");
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+const BUILD_TAG = "welcome-x-v2-boot";
 
 const ROTATING_LINES: string[] = [
   "See what's moving on Solana.",
@@ -31,17 +37,15 @@ const ROTATING_LINES: string[] = [
 
 export default function WelcomeScreen() {
   const { isAuthenticated, isLoading } = useAuth();
-  const [showSplash, setShowSplash] = useState<boolean>(true);
+  const [showBoot, setShowBoot] = useState<boolean>(true);
   const [lineIndex, setLineIndex] = useState<number>(0);
 
-  const splashOpacity = useRef<Animated.Value>(new Animated.Value(1)).current;
-  const splashScale = useRef<Animated.Value>(new Animated.Value(0.85)).current;
-  const splashRingSpin = useRef<Animated.Value>(new Animated.Value(0)).current;
   const contentOpacity = useRef<Animated.Value>(new Animated.Value(0)).current;
   const contentRise = useRef<Animated.Value>(new Animated.Value(28)).current;
   const ctaScale = useRef<Animated.Value>(new Animated.Value(1)).current;
   const lineOpacity = useRef<Animated.Value>(new Animated.Value(1)).current;
   const lineShift = useRef<Animated.Value>(new Animated.Value(0)).current;
+  const stripeShift = useRef<Animated.Value>(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -53,41 +57,14 @@ export default function WelcomeScreen() {
   useEffect(() => {
     console.log("welcome mounted", { build: BUILD_TAG });
     Animated.loop(
-      Animated.timing(splashRingSpin, {
+      Animated.timing(stripeShift, {
         toValue: 1,
-        duration: 6000,
+        duration: 9000,
         easing: Easing.linear,
         useNativeDriver: true,
       })
     ).start();
-
-    Animated.sequence([
-      Animated.spring(splashScale, { toValue: 1, friction: 7, tension: 70, useNativeDriver: true }),
-      Animated.delay(900),
-      Animated.parallel([
-        Animated.timing(splashOpacity, {
-          toValue: 0,
-          duration: 520,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(contentOpacity, {
-          toValue: 1,
-          duration: 620,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(contentRise, {
-          toValue: 0,
-          duration: 620,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start(({ finished }) => {
-      if (finished) setShowSplash(false);
-    });
-  }, [contentOpacity, contentRise, splashOpacity, splashScale, splashRingSpin]);
+  }, [stripeShift]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -126,6 +103,24 @@ export default function WelcomeScreen() {
     return () => clearInterval(interval);
   }, [lineOpacity, lineShift]);
 
+  const onBootDone = useCallback(() => {
+    setShowBoot(false);
+    Animated.parallel([
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 620,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentRise, {
+        toValue: 0,
+        duration: 620,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [contentOpacity, contentRise]);
+
   const goSignUp = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
     router.push("/auth?mode=signup");
@@ -143,28 +138,45 @@ export default function WelcomeScreen() {
     Animated.spring(ctaScale, { toValue: 1, friction: 5, tension: 110, useNativeDriver: true }).start();
   }, [ctaScale]);
 
-  const splashRingRotate = splashRingSpin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
+  const stripeTx = stripeShift.interpolate({ inputRange: [0, 1], outputRange: [0, SCREEN_W] });
 
   return (
     <View style={styles.root} testID="welcome-root">
       <StatusBar style="light" />
       <LinearGradient
-        colors={["#020506", "#06120F", "#020708"]}
+        colors={["#000000", "#020A14", "#000814"]}
         start={{ x: 0.1, y: 0 }}
         end={{ x: 0.9, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={styles.globeWrap} pointerEvents="none">
-        <AnimatedGlobe size={SCREEN_W * 1.25} />
-      </View>
+      {/* Drifting Solana stripes background */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.stripeBg, { transform: [{ translateX: stripeTx }, { rotate: "-22deg" }] }]}
+      >
+        <Svg width={SCREEN_W * 2.4} height={SCREEN_H}>
+          <Defs>
+            <SvgGradient id="bgStripe" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor="#3FA9FF" stopOpacity="0" />
+              <Stop offset="0.5" stopColor="#3FA9FF" stopOpacity="0.18" />
+              <Stop offset="1" stopColor="#3FA9FF" stopOpacity="0" />
+            </SvgGradient>
+            <SvgGradient id="bgStripe2" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor="#62D0FF" stopOpacity="0" />
+              <Stop offset="0.5" stopColor="#62D0FF" stopOpacity="0.12" />
+              <Stop offset="1" stopColor="#62D0FF" stopOpacity="0" />
+            </SvgGradient>
+          </Defs>
+          <Path d={`M0 ${SCREEN_H * 0.28} H${SCREEN_W * 2.4} V${SCREEN_H * 0.28 + 90} H0 Z`} fill="url(#bgStripe)" />
+          <Path d={`M0 ${SCREEN_H * 0.52} H${SCREEN_W * 2.4} V${SCREEN_H * 0.52 + 60} H0 Z`} fill="url(#bgStripe2)" />
+          <Path d={`M0 ${SCREEN_H * 0.74} H${SCREEN_W * 2.4} V${SCREEN_H * 0.74 + 110} H0 Z`} fill="url(#bgStripe)" />
+        </Svg>
+      </Animated.View>
 
       <LinearGradient
-        colors={["transparent", "rgba(2,5,6,0.6)", "rgba(2,5,6,0.95)"]}
-        locations={[0, 0.55, 1]}
+        colors={["transparent", "rgba(0,0,0,0.55)", "rgba(0,0,0,0.96)"]}
+        locations={[0, 0.6, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
@@ -175,22 +187,19 @@ export default function WelcomeScreen() {
           testID="welcome-content"
         >
           <View style={styles.topRow}>
-            <View style={styles.logoBadge}>
-              <LinearGradient
-                colors={[Colors.mint, Colors.cyan]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.logoBadgeInner}
-              >
-                <ScanLine color={Colors.ink} size={22} strokeWidth={3} />
-              </LinearGradient>
+            <BrandLogo size={56} glow={false} />
+            <View style={styles.brandLabelWrap}>
+              <Text style={styles.brandLabel}>SOL TOOLS</Text>
+              <Text style={styles.brandLabelSub}>SOLANA TRADING SUITE</Text>
             </View>
           </View>
 
-          <View style={styles.spacer} />
+          <View style={styles.heroWrap}>
+            <BrandLogo size={Math.min(SCREEN_W * 0.42, 180)} />
+          </View>
 
           <View style={styles.headlineWrap}>
-            <Text style={styles.eyebrow}>SOL TOOLS</Text>
+            <Text style={styles.eyebrow}>BUILT ON SOLANA · ON-CHAIN ALPHA</Text>
             <Animated.Text
               style={[
                 styles.headline,
@@ -215,7 +224,7 @@ export default function WelcomeScreen() {
                 testID="cta-create"
               >
                 <LinearGradient
-                  colors={[Colors.mint, Colors.cyan]}
+                  colors={["#62D0FF", "#3FA9FF", "#1E88FF"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.primaryGradient}
@@ -225,12 +234,9 @@ export default function WelcomeScreen() {
               </Pressable>
             </Animated.View>
 
-            <View style={styles.signinRow}>
-              <Text style={styles.signinPrompt}>Have an account? </Text>
-              <Pressable onPress={goSignIn} hitSlop={10} testID="cta-signin">
-                <Text style={styles.signinLink}>Sign in</Text>
-              </Pressable>
-            </View>
+            <Pressable onPress={goSignIn} style={styles.secondaryBtn} testID="cta-signin">
+              <Text style={styles.secondaryText}>I already have an account</Text>
+            </Pressable>
 
             <Text style={styles.terms}>
               By continuing you agree to our{" "}
@@ -254,123 +260,107 @@ export default function WelcomeScreen() {
           </View>
         </Animated.View>
 
-        {showSplash ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.splash, { opacity: splashOpacity }]}
-            testID="welcome-splash"
-          >
-            <Animated.View
-              style={[styles.splashRing, { transform: [{ rotate: splashRingRotate }] }]}
-            />
-            <Animated.View style={{ transform: [{ scale: splashScale }], alignItems: "center" }}>
-              <View style={styles.splashLogo}>
-                <LinearGradient
-                  colors={[Colors.mint, Colors.cyan]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.splashLogoInner}
-                >
-                  <ScanLine color={Colors.ink} size={56} strokeWidth={3} />
-                </LinearGradient>
-              </View>
-              <Text style={styles.splashName}>SOL TOOLS</Text>
-              <Text style={styles.splashTag}>PRO TRADING SUITE</Text>
-            </Animated.View>
-          </Animated.View>
-        ) : null}
+        {showBoot ? <BootSequence onDone={onBootDone} /> : null}
       </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.ink },
+  root: { flex: 1, backgroundColor: "#000000" },
   safe: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 28 },
+  content: { flex: 1, paddingHorizontal: 24, paddingTop: 4 },
 
-  globeWrap: {
+  stripeBg: {
     position: "absolute",
-    top: -SCREEN_W * 0.3,
-    left: -SCREEN_W * 0.12,
-    right: 0,
-    alignItems: "center",
-    opacity: 0.9,
+    top: -SCREEN_H * 0.1,
+    left: -SCREEN_W * 1.2,
   },
 
-  topRow: { paddingTop: 8, alignItems: "flex-start" },
-  logoBadge: {
-    padding: 2,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
+  topRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 8 },
+  brandLabelWrap: { gap: 2 },
+  brandLabel: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 3,
   },
-  logoBadgeInner: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+  brandLabelSub: {
+    color: "#62D0FF",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+
+  heroWrap: {
     alignItems: "center",
     justifyContent: "center",
+    marginTop: SCREEN_H * 0.04,
+    marginBottom: SCREEN_H * 0.02,
   },
 
-  spacer: { flex: 1 },
-
-  headlineWrap: { marginBottom: 28 },
+  headlineWrap: { marginTop: 8 },
   eyebrow: {
-    color: Colors.mint,
+    color: "#62D0FF",
     fontSize: 11,
     fontWeight: "900",
-    letterSpacing: 3.2,
-    marginBottom: 14,
+    letterSpacing: 2.6,
+    marginBottom: 12,
   },
   headline: {
     color: Colors.text,
-    fontSize: 44,
-    lineHeight: 48,
+    fontSize: 38,
+    lineHeight: 42,
     fontWeight: "900",
-    letterSpacing: -1.6,
-    minHeight: 96,
+    letterSpacing: -1.4,
+    minHeight: 88,
   },
   sub: {
     color: Colors.muted,
     fontSize: 15,
     lineHeight: 22,
     fontWeight: "600",
-    marginTop: 16,
+    marginTop: 14,
   },
 
-  ctaStack: { gap: 14, paddingBottom: 12 },
+  ctaStack: { gap: 12, paddingBottom: 12, marginTop: "auto" },
 
   primaryBtn: {
-    borderRadius: 999,
+    borderRadius: 18,
     overflow: "hidden",
-    shadowColor: Colors.mint,
-    shadowOpacity: 0.4,
+    shadowColor: "#3FA9FF",
+    shadowOpacity: 0.5,
     shadowRadius: 22,
     shadowOffset: { width: 0, height: 12 },
     elevation: 12,
   },
   primaryGradient: {
-    minHeight: 56,
+    minHeight: 58,
     alignItems: "center",
     justifyContent: "center",
   },
   primaryText: {
-    color: Colors.ink,
+    color: "#001022",
     fontSize: 17,
     fontWeight: "900",
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
 
-  signinRow: {
-    flexDirection: "row",
+  secondaryBtn: {
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
-  signinPrompt: { color: Colors.muted, fontSize: 14, fontWeight: "600" },
-  signinLink: { color: Colors.mint, fontSize: 14, fontWeight: "900" },
+  secondaryText: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
 
   terms: {
     color: Colors.muted,
@@ -382,52 +372,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   termsLink: {
-    color: Colors.mint,
+    color: "#62D0FF",
     fontWeight: "800",
-  },
-
-  splash: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.ink,
-  },
-  splashRing: {
-    position: "absolute",
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    borderWidth: 1.5,
-    borderColor: "rgba(85,245,178,0.35)",
-    borderTopColor: "rgba(85,245,178,0.95)",
-    borderRightColor: "rgba(56,215,255,0.7)",
-  },
-  splashLogo: {
-    padding: 4,
-    borderRadius: 32,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-  },
-  splashLogoInner: {
-    width: 124,
-    height: 124,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  splashName: {
-    color: Colors.text,
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: 4,
-    marginTop: 22,
-  },
-  splashTag: {
-    color: Colors.mint,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 2.6,
-    marginTop: 6,
   },
 });

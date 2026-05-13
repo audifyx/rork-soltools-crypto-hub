@@ -10,7 +10,6 @@ import {
   EyeOff,
   Lock,
   Mail,
-  ScanLine,
   ShieldCheck,
   Sparkles,
   UserRound,
@@ -30,6 +29,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import BrandLogo from "@/components/BrandLogo";
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import { useAuth } from "@/providers/auth-provider";
@@ -96,7 +96,7 @@ export default function AuthScreen() {
     <View style={styles.root} testID="auth-screen">
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
-      <LinearGradient colors={["#020506", "#06120F", "#020708"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#000000", "#02060C", "#000814"]} style={StyleSheet.absoluteFill} />
       <View style={[styles.orb, styles.orbA]} />
       <View style={[styles.orb, styles.orbB]} />
 
@@ -110,18 +110,9 @@ export default function AuthScreen() {
         >
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
             <View style={styles.brandWrap}>
-              <View style={styles.brandIcon}>
-                <LinearGradient
-                  colors={[Colors.mint, Colors.cyan]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.brandIconInner}
-                >
-                  <ScanLine color={Colors.ink} size={26} strokeWidth={3} />
-                </LinearGradient>
-              </View>
+              <BrandLogo size={84} />
               <Text style={styles.brandName}>SOL TOOLS</Text>
-              <Text style={styles.brandSub}>PRO TRADING SUITE · V5</Text>
+              <Text style={styles.brandSub}>SOLANA TRADING SUITE</Text>
             </View>
 
             <View style={styles.modeSwitch}>
@@ -220,7 +211,7 @@ export default function AuthScreen() {
               testID="submit-button"
             >
               <LinearGradient
-                colors={[Colors.mint, Colors.cyan]}
+                colors={["#62D0FF", "#3FA9FF", "#1E88FF"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.ctaInner}
@@ -312,31 +303,23 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
   },
   orb: { position: "absolute", width: 320, height: 320, borderRadius: 160 },
-  orbA: { top: -110, right: -120, backgroundColor: "rgba(85,245,178,0.12)" },
-  orbB: { bottom: -120, left: -120, backgroundColor: "rgba(56,215,255,0.10)" },
+  orbA: { top: -110, right: -120, backgroundColor: "rgba(63,169,255,0.18)" },
+  orbB: { bottom: -120, left: -120, backgroundColor: "rgba(98,208,255,0.14)" },
 
   brandWrap: { alignItems: "center", marginTop: 8, marginBottom: 28 },
-  brandIcon: { padding: 2, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.1)" },
-  brandIconInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   brandName: {
     color: Colors.text,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "900",
-    letterSpacing: 3,
-    marginTop: 14,
+    letterSpacing: 4,
+    marginTop: 16,
   },
   brandSub: {
-    color: Colors.mint,
+    color: "#62D0FF",
     fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 2,
-    marginTop: 4,
+    fontWeight: "900",
+    letterSpacing: 2.4,
+    marginTop: 6,
   },
 
   modeSwitch: {
@@ -349,7 +332,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   modeBtn: { flex: 1, paddingVertical: 11, alignItems: "center", borderRadius: 11 },
-  modeBtnActive: { backgroundColor: "rgba(85,245,178,0.16)" },
+  modeBtnActive: { backgroundColor: "rgba(63,169,255,0.18)" },
   modeText: { color: Colors.muted, fontWeight: "800", fontSize: 13, letterSpacing: 0.4 },
   modeTextActive: { color: Colors.mint },
 
