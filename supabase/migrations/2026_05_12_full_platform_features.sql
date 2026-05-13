@@ -896,21 +896,45 @@ end $$;
 
 -- 4.8 Get or create the user's self-chat (Notes-to-self) --------------
 create or replace function public.get_self_chat() returns uuid
-language plpgsql security definer as $$
-declare conv_id uuid;
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  conv_id uuid;
+  uid uuid := auth.uid();
 begin
+  if uid is null then
+    raise exception 'auth_required';
+  end if;
+
+  -- Reuse existing self-chat if present.
   select c.id into conv_id
     from public.dm_conversations c
    where c.is_self_chat = true
-     and exists (select 1 from public.dm_participants p
-                  where p.conversation_id = c.id and p.user_id = auth.uid())
+     and (c.user_a = uid or c.user_b = uid)
    limit 1;
-  if conv_id is not null then return conv_id; end if;
-  insert into public.dm_conversations(is_self_chat) values (true) returning id into conv_id;
+  if conv_id is not null then
+    insert into public.dm_participants(conversation_id, user_id, role)
+      values (conv_id, uid, 'owner')
+      on conflict do nothing;
+    return conv_id;
+  end if;
+
+  -- Pre-existing dm_conversations table has NOT NULL user_a/user_b columns,
+  -- so we must populate both with the same user id for the notes-to-self row.
+  conv_id := gen_random_uuid();
+  insert into public.dm_conversations(id, user_a, user_b, is_self_chat)
+  values (conv_id, uid, uid, true);
+
   insert into public.dm_participants(conversation_id, user_id, role)
-    values (conv_id, auth.uid(), 'owner');
+    values (conv_id, uid, 'owner')
+    on conflict do nothing;
+
   return conv_id;
-end $$;
+end $;
+
+grant execute on function public.get_self_chat() to authenticated;
 
 -- 4.9 Report a screenshot --------------------------------------------
 create or replace function public.report_screenshot(

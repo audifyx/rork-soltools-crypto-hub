@@ -381,7 +381,7 @@ export async function getSelfChat(): Promise<string | null> {
   const { data, error } = await supabase.rpc("get_self_chat");
   if (error) {
     console.log("[dm] self chat failed", error.message);
-    return null;
+    throw new Error(error.message);
   }
   return (data as string) ?? null;
 }
