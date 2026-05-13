@@ -27,10 +27,7 @@ export interface StoryRow {
 export async function listActiveStories(): Promise<StoryRow[]> {
   const { data, error } = await supabase
     .from("stories")
-    .select(
-      `id,user_id,media_url,media_type,caption,duration_seconds,created_at,expires_at,view_count,
-       profile:profiles!stories_user_id_fkey(username,display_name,avatar_url,avatar_color,verified)`,
-    )
+    .select("id,author_id,media_url,media_type,caption,created_at,expires_at,view_count")
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false })
     .limit(120);
@@ -38,14 +35,46 @@ export async function listActiveStories(): Promise<StoryRow[]> {
     console.log("[stories] list failed", error.message);
     return [];
   }
-  return ((data ?? []) as unknown as (StoryRow & { profile?: Record<string, unknown> | null })[]).map((r) => ({
-    ...r,
-    username: (r.profile?.username as string | undefined) ?? null,
-    display_name: (r.profile?.display_name as string | undefined) ?? null,
-    avatar_url: (r.profile?.avatar_url as string | undefined) ?? null,
-    avatar_color: (r.profile?.avatar_color as string | undefined) ?? null,
-    verified: (r.profile?.verified as boolean | undefined) ?? false,
-  }));
+  const raw = (data ?? []) as {
+    id: string;
+    author_id: string;
+    media_url: string;
+    media_type: "image" | "video";
+    caption: string | null;
+    created_at: string;
+    expires_at: string;
+    view_count: number | null;
+  }[];
+  const authorIds = Array.from(new Set(raw.map((r) => r.author_id)));
+  const profileMap = new Map<string, { username: string | null; display_name: string | null; avatar_url: string | null; avatar_color: string | null; verified: boolean | null }>();
+  if (authorIds.length > 0) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id,username,display_name,avatar_url,avatar_color,verified")
+      .in("id", authorIds);
+    for (const p of (profs ?? []) as { id: string; username: string | null; display_name: string | null; avatar_url: string | null; avatar_color: string | null; verified: boolean | null }[]) {
+      profileMap.set(p.id, p);
+    }
+  }
+  return raw.map((r) => {
+    const p = profileMap.get(r.author_id);
+    return {
+      id: r.id,
+      user_id: r.author_id,
+      media_url: r.media_url,
+      media_type: r.media_type,
+      caption: r.caption,
+      duration_seconds: 5,
+      created_at: r.created_at,
+      expires_at: r.expires_at,
+      view_count: r.view_count,
+      username: p?.username ?? null,
+      display_name: p?.display_name ?? null,
+      avatar_url: p?.avatar_url ?? null,
+      avatar_color: p?.avatar_color ?? null,
+      verified: p?.verified ?? false,
+    };
+  });
 }
 
 export async function viewStory(storyId: string): Promise<void> {
@@ -65,11 +94,10 @@ export async function createStory(input: {
   const { data, error } = await supabase
     .from("stories")
     .insert({
-      user_id: uid,
+      author_id: uid,
       media_url: input.mediaUrl,
       media_type: input.mediaType,
       caption: input.caption ?? null,
-      duration_seconds: input.durationSeconds ?? 5,
     })
     .select("id")
     .single();
