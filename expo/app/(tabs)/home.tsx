@@ -20,8 +20,6 @@ import {
   Plus,
   Quote,
   Repeat2,
-  Rocket,
-  Search,
   Send,
   Share2,
   Award,
@@ -857,17 +855,14 @@ function FeedHeader({
     <View style={styles.headerStack}>
       {filter === "For You" ? (
         <>
-          <HomeCommandHero />
           <StoriesRail />
+          <MarketStrip />
           <View style={styles.tickerWrap}>
             <LiveTicker />
           </View>
           <OurTokenBadge />
-          <MarketStrip />
-          <CommunitiesRail />
-          <TrendingPairsRail />
           <TrendingTickersRail />
-          <TrendingTagsCard />
+          <CommunitiesRail />
         </>
       ) : null}
       <ComposePrompt
@@ -894,75 +889,6 @@ function FeedHeader({
           <View style={styles.liveDot} />
           <Text style={styles.liveText}>LIVE</Text>
         </View>
-      </View>
-    </View>
-  );
-}
-
-function HomeCommandHero() {
-  const router = useRouter();
-  return (
-    <View style={styles.commandHero} testID="home-command-hero">
-      <LinearGradient
-        colors={["rgba(63,169,255,0.20)", "rgba(221,227,236,0.075)", "rgba(0,0,0,0.24)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.commandGrid} pointerEvents="none" />
-      <View style={styles.commandTopRow}>
-        <View style={styles.commandBadge}>
-          <Sparkles color={Colors.goldBright} size={12} strokeWidth={3} />
-          <Text style={styles.commandBadgeText}>SOLTOOLS COMMAND</Text>
-        </View>
-        <View style={styles.commandLivePill}>
-          <View style={styles.commandLiveDot} />
-          <Text style={styles.commandLiveText}>LIVE DATA</Text>
-        </View>
-      </View>
-      <Text style={styles.commandTitle}>Your live Solana command center.</Text>
-      <Text style={styles.commandSub}>
-        Posts, rooms, fresh pairs, whale prints, and token rails redesigned into one fast tactical dashboard.
-      </Text>
-      <View style={styles.commandStatsRow}>
-        <View style={styles.commandStatBox}>
-          <Text style={styles.commandStatValue}>24/7</Text>
-          <Text style={styles.commandStatLabel}>market pulse</Text>
-        </View>
-        <View style={styles.commandStatBox}>
-          <Text style={styles.commandStatValue}>ALL</Text>
-          <Text style={styles.commandStatLabel}>Solana tokens</Text>
-        </View>
-        <View style={styles.commandStatBox}>
-          <Text style={styles.commandStatValue}>SOCIAL</Text>
-          <Text style={styles.commandStatLabel}>alpha feed</Text>
-        </View>
-      </View>
-      <View style={styles.commandActions}>
-        <Pressable
-          onPress={() => router.push("/(tabs)/discover")}
-          style={({ pressed }) => [styles.commandPrimary, pressed && styles.pressed]}
-          testID="hero-scan-alpha"
-        >
-          <Search color={Colors.ink} size={15} strokeWidth={3} />
-          <Text style={styles.commandPrimaryText}>Scan alpha</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push("/(tabs)/tools")}
-          style={({ pressed }) => [styles.commandSecondary, pressed && styles.pressed]}
-          testID="hero-open-tools"
-        >
-          <Zap color={Colors.goldBright} size={15} strokeWidth={2.8} />
-          <Text style={styles.commandSecondaryText}>Tools</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push("/list-token")}
-          style={({ pressed }) => [styles.commandSecondary, pressed && styles.pressed]}
-          testID="hero-list-token"
-        >
-          <Rocket color={Colors.silver} size={15} strokeWidth={2.8} />
-          <Text style={styles.commandSecondaryText}>List token</Text>
-        </Pressable>
       </View>
     </View>
   );
