@@ -4,32 +4,54 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
   Bell,
+  Bookmark,
+  CalendarDays,
+  ChevronDown,
   ChevronRight,
+  Compass,
+  Film,
+  Flame,
   Headphones,
+  Layers,
+  LineChart,
   LogOut,
+  MessageCircle,
   Newspaper,
   Radio,
   Settings,
-  TrendingUp,
+  Shield,
+  Sparkles,
+  Trophy,
+  Users,
+  UserPlus,
   Wallet,
   Wrench,
   X,
+  type LucideIcon,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  LayoutAnimation,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  UIManager,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useAuth } from "@/providers/auth-provider";
+import { useAdmin } from "@/providers/admin-provider";
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 interface QuickAccessMenuProps {
   visible: boolean;
@@ -40,16 +62,27 @@ interface MenuItem {
   key: string;
   label: string;
   description: string;
-  Icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+  Icon: LucideIcon;
   color: string;
-  onPress: () => void;
+  path: string;
+}
+
+interface MenuCategory {
+  key: string;
+  label: string;
+  caption: string;
+  Icon: LucideIcon;
+  color: string;
+  items: MenuItem[];
 }
 
 export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuProps) {
   const router = useRouter();
   const { signOut, isSigningOut } = useAuth();
+  const { isTeam, isAdmin } = useAdmin();
   const sheetTranslate = useRef(new Animated.Value(40)).current;
   const sheetOpacity = useRef(new Animated.Value(0)).current;
+  const [expanded, setExpanded] = useState<string | null>("trading");
 
   useEffect(() => {
     if (visible) {
@@ -66,7 +99,6 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
     (path: string) => {
       Haptics.selectionAsync().catch(() => {});
       onClose();
-      // small delay so the modal closes cleanly first
       setTimeout(() => {
         router.push(path as never);
       }, 80);
@@ -85,72 +117,87 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
     }
   }, [onClose, signOut, router]);
 
-  const items: MenuItem[] = [
-    {
-      key: "tools",
-      label: "Tools",
-      description: "OG scanner, token lookup, wallets, AI and trading tools",
-      Icon: Wrench,
-      color: Colors.goldBright,
-      onPress: () => navigate("/(tabs)/tools"),
-    },
-    {
-      key: "spaces",
-      label: "Spaces",
-      description: "Live audio rooms, alpha calls, AMAs and trading shows",
-      Icon: Headphones,
-      color: Colors.rose,
-      onPress: () => navigate("/spaces"),
-    },
-    {
-      key: "news",
-      label: "Crypto News",
-      description: "Trending headlines, KOL signals, viral mentions",
-      Icon: Newspaper,
-      color: Colors.mint,
-      onPress: () => navigate("/crypto-news"),
-    },
-    {
-      key: "settings",
-      label: "Settings",
-      description: "Preferences, privacy, notifications, account controls",
-      Icon: Settings,
-      color: Colors.text,
-      onPress: () => navigate("/(tabs)/settings"),
-    },
-    {
-      key: "portfolio",
-      label: "Portfolio Tracker",
-      description: "Multi-wallet balances, top holdings, P&L",
-      Icon: Wallet,
-      color: Colors.cyan,
-      onPress: () => navigate("/wallet"),
-    },
-    {
-      key: "kol",
-      label: "KOL Scan",
-      description: "Track smart money: live KOL on-chain activity",
-      Icon: Radio,
-      color: Colors.magenta,
-      onPress: () => navigate("/kol-scan"),
-    },
-    {
-      key: "alerts",
-      label: "Price Alerts",
-      description: "Get pinged when tokens hit your levels",
-      Icon: Bell,
-      color: Colors.orange,
-      onPress: () => navigate("/notifications"),
-    },
-    {
-      key: "trends",
-      label: "Market Trends",
-      description: "Live trending pairs, gainers, and volume",
-      Icon: TrendingUp,
-      color: Colors.violet,
-      onPress: () => navigate("/(tabs)/discover"),
-    },
-  ];
+  const toggleCategory = useCallback((key: string) => {
+    Haptics.selectionAsync().catch(() => {});
+    LayoutAnimation.configureNext(LayoutAnimation.create(220, "easeInEaseOut", "opacity"));
+    setExpanded((prev) => (prev === key ? null : key));
+  }, []);
+
+  const categories = useMemo<MenuCategory[]>(() => {
+    const base: MenuCategory[] = [
+      {
+        key: "trading",
+        label: "Trading & Markets",
+        caption: "Tokens, wallets, alpha and on-chain tools",
+        Icon: LineChart,
+        color: Colors.goldBright,
+        items: [
+          { key: "tools", label: "Tools hub", description: "OG scanner, lookup, AI, trading", Icon: Wrench, color: Colors.goldBright, path: "/(tabs)/tools" },
+          { key: "portfolio", label: "Portfolio tracker", description: "Multi-wallet balances and P&L", Icon: Wallet, color: Colors.cyan, path: "/wallet" },
+          { key: "kol", label: "KOL scan", description: "Smart money live activity", Icon: Radio, color: Colors.magenta, path: "/kol-scan" },
+          { key: "alerts", label: "Price alerts", description: "Pings when tokens hit levels", Icon: Bell, color: Colors.orange, path: "/notifications" },
+          { key: "trends", label: "Market trends", description: "Live trending pairs and gainers", Icon: Flame, color: Colors.violet, path: "/(tabs)/discover" },
+        ],
+      },
+      {
+        key: "social",
+        label: "Social & Community",
+        caption: "Feeds, reels, spaces and events",
+        Icon: Users,
+        color: Colors.rose,
+        items: [
+          { key: "fyp", label: "For You", description: "Personalized feed", Icon: Sparkles, color: Colors.rose, path: "/(tabs)/fyp" },
+          { key: "reels", label: "Reels", description: "Short-form video", Icon: Film, color: Colors.magenta, path: "/(tabs)/reels" },
+          { key: "spaces", label: "Spaces", description: "Live audio rooms and AMAs", Icon: Headphones, color: Colors.rose, path: "/spaces" },
+          { key: "events", label: "Events", description: "Community events and RSVPs", Icon: CalendarDays, color: Colors.mint, path: "/events" },
+          { key: "communities", label: "Communities", description: "Discover and join groups", Icon: Compass, color: Colors.cyan, path: "/(tabs)/community" },
+          { key: "messages", label: "Messages", description: "DMs, group chats, notes-to-self", Icon: MessageCircle, color: Colors.violet, path: "/(tabs)/messages" },
+        ],
+      },
+      {
+        key: "discover",
+        label: "Discover",
+        caption: "News, search, bookmarks",
+        Icon: Compass,
+        color: Colors.mint,
+        items: [
+          { key: "news", label: "Crypto news", description: "Headlines and viral mentions", Icon: Newspaper, color: Colors.mint, path: "/crypto-news" },
+          { key: "bookmarks", label: "Bookmarks", description: "Saved posts and collections", Icon: Bookmark, color: Colors.goldBright, path: "/bookmarks" },
+          { key: "invites", label: "Invite friends", description: "Codes, referrals, leaderboard", Icon: UserPlus, color: Colors.cyan, path: "/invites" },
+          { key: "achievements", label: "Achievements", description: "Badges, streaks, weekly recap", Icon: Trophy, color: Colors.orange, path: "/(tabs)/profile" },
+        ],
+      },
+      {
+        key: "account",
+        label: "Account",
+        caption: "Settings, profile and preferences",
+        Icon: Settings,
+        color: Colors.text,
+        items: [
+          { key: "settings", label: "Settings", description: "Privacy, notifications, account", Icon: Settings, color: Colors.text, path: "/(tabs)/settings" },
+          { key: "profile", label: "My profile", description: "Themes, badges, identity", Icon: Layers, color: Colors.violet, path: "/(tabs)/profile" },
+        ],
+      },
+    ];
+
+    if (isTeam || isAdmin) {
+      base.push({
+        key: "staff",
+        label: isAdmin ? "Admin & Team" : "Team tools",
+        caption: isAdmin ? "Platform admin and moderation" : "Moderation and reports",
+        Icon: Shield,
+        color: Colors.rose,
+        items: [
+          ...(isAdmin
+            ? [{ key: "admin", label: "Admin dashboard", description: "Full platform controls", Icon: Wrench, color: Colors.goldBright, path: "/admin" } as MenuItem]
+            : []),
+          { key: "team", label: "Team dashboard", description: "Reports, online, analytics", Icon: Shield, color: Colors.rose, path: "/team" },
+        ],
+      });
+    }
+
+    return base;
+  }, [isAdmin, isTeam]);
 
   return (
     <Modal
@@ -180,7 +227,7 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
           />
           <View style={styles.handle} />
           <View style={styles.header}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.eyebrow}>QUICK ACCESS</Text>
               <Text style={styles.title}>Jump anywhere</Text>
             </View>
@@ -189,25 +236,60 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
             </Pressable>
           </View>
 
-          <View style={styles.list}>
-            {items.map((it) => (
-              <Pressable
-                key={it.key}
-                onPress={it.onPress}
-                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-                testID={`quick-menu-${it.key}`}
-              >
-                <View style={[styles.rowIcon, { backgroundColor: `${it.color}1F`, borderColor: `${it.color}55` }]}>
-                  <it.Icon color={it.color} size={18} strokeWidth={2.6} />
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            bounces
+          >
+            {categories.map((cat) => {
+              const isOpen = expanded === cat.key;
+              return (
+                <View key={cat.key} style={styles.categoryWrap} testID={`quick-menu-cat-${cat.key}`}>
+                  <Pressable
+                    onPress={() => toggleCategory(cat.key)}
+                    style={({ pressed }) => [styles.catHeader, pressed && styles.pressed, isOpen && styles.catHeaderOpen]}
+                  >
+                    <View style={[styles.catIcon, { backgroundColor: `${cat.color}1F`, borderColor: `${cat.color}55` }]}>
+                      <cat.Icon color={cat.color} size={18} strokeWidth={2.6} />
+                    </View>
+                    <View style={styles.catMid}>
+                      <Text style={styles.catLabel}>{cat.label}</Text>
+                      <Text style={styles.catCaption} numberOfLines={1}>{cat.caption}</Text>
+                    </View>
+                    <View style={styles.catBadge}>
+                      <Text style={styles.catBadgeText}>{cat.items.length}</Text>
+                    </View>
+                    <Animated.View style={{ transform: [{ rotate: isOpen ? "180deg" : "0deg" }] }}>
+                      <ChevronDown color={Colors.muted} size={18} strokeWidth={2.6} />
+                    </Animated.View>
+                  </Pressable>
+
+                  {isOpen ? (
+                    <View style={styles.subList}>
+                      {cat.items.map((it) => (
+                        <Pressable
+                          key={it.key}
+                          onPress={() => navigate(it.path)}
+                          style={({ pressed }) => [styles.subRow, pressed && styles.pressed]}
+                          testID={`quick-menu-${it.key}`}
+                        >
+                          <View style={[styles.subIcon, { backgroundColor: `${it.color}1A`, borderColor: `${it.color}40` }]}>
+                            <it.Icon color={it.color} size={15} strokeWidth={2.6} />
+                          </View>
+                          <View style={styles.subMid}>
+                            <Text style={styles.subLabel}>{it.label}</Text>
+                            <Text style={styles.subDesc} numberOfLines={1}>{it.description}</Text>
+                          </View>
+                          <ChevronRight color={Colors.muted} size={14} strokeWidth={2.6} />
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
                 </View>
-                <View style={styles.rowMid}>
-                  <Text style={styles.rowLabel}>{it.label}</Text>
-                  <Text style={styles.rowDesc} numberOfLines={1}>{it.description}</Text>
-                </View>
-                <ChevronRight color={Colors.muted} size={16} strokeWidth={2.6} />
-              </Pressable>
-            ))}
-          </View>
+              );
+            })}
+          </ScrollView>
 
           <Pressable
             onPress={onLogout}
@@ -236,7 +318,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(216,183,90,0.22)",
     overflow: "hidden",
-    gap: 14,
+    gap: 12,
+    maxHeight: "82%",
   },
   handle: { alignSelf: "center", width: 38, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.18)" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -252,31 +335,73 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  list: { gap: 8 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
+  scroll: { maxHeight: 520 },
+  scrollContent: { gap: 8, paddingBottom: 4 },
+  pressed: { opacity: 0.85 },
+
+  categoryWrap: {
     borderRadius: 18,
     backgroundColor: "rgba(16,16,14,0.94)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
   },
-  pressed: { opacity: 0.9 },
-  rowIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+  catHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+  },
+  catHeaderOpen: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  catIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  rowMid: { flex: 1 },
-  rowLabel: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.2 },
-  rowDesc: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  catMid: { flex: 1 },
+  catLabel: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.2 },
+  catCaption: { color: Colors.muted, fontSize: 11.5, fontWeight: "700", marginTop: 2 },
+  catBadge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 7,
+    borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  catBadgeText: { color: Colors.muted, fontSize: 11, fontWeight: "900" },
+
+  subList: { paddingHorizontal: 8, paddingVertical: 6, gap: 4 },
+  subRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  subIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  subMid: { flex: 1 },
+  subLabel: { color: Colors.text, fontSize: 13.5, fontWeight: "800", letterSpacing: -0.1 },
+  subDesc: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 1 },
+
   logoutBtn: {
-    marginTop: 4,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
