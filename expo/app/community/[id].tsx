@@ -2261,8 +2261,8 @@ const styles = StyleSheet.create({
   },
   editBannerBtn: {
     position: "absolute",
-    left: 18,
-    bottom: 16,
+    right: 14,
+    bottom: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
