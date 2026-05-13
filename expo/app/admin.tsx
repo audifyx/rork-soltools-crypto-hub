@@ -12,8 +12,10 @@ import {
   Coins,
   Crown,
   FileText,
+  Film,
   Headphones,
   Megaphone,
+  MessageSquare,
   Radio,
   RefreshCw,
   Rocket,
@@ -63,6 +65,7 @@ type Section =
   | "users"
   | "badges"
   | "submissions"
+  | "stories"
   | "lobbies"
   | "events"
   | "credits"
@@ -88,6 +91,7 @@ const TABS: TabItem[] = [
   { val: "users", label: "Users", Icon: Users },
   { val: "badges", label: "Badges", Icon: Tag },
   { val: "submissions", label: "Submissions", Icon: Rocket },
+  { val: "stories", label: "Stories", Icon: Film },
   { val: "lobbies", label: "Lobbies", Icon: Volume2 },
   { val: "events", label: "Events", Icon: CalendarDays },
   { val: "credits", label: "Credits", Icon: Coins },
@@ -351,6 +355,7 @@ export default function AdminDashboard() {
           {section === "users" && <UsersSection />}
           {section === "badges" && <BadgesSection />}
           {section === "submissions" && <SubmissionsSection />}
+          {section === "stories" && <StoriesSection />}
           {section === "lobbies" && <LobbiesSection />}
           {section === "events" && <EventsSection />}
           {section === "credits" && <CreditsSection />}
@@ -808,6 +813,190 @@ function SubmissionsSection() {
           </View>
         )}
       />
+    </View>
+  );
+}
+
+/* -------------------------------- STORIES -------------------------------- */
+
+interface AdminStoryRow {
+  id: string;
+  author_id: string | null;
+  caption: string | null;
+  media_url: string | null;
+  media_type: string | null;
+  view_count: number | null;
+  likes_count: number | null;
+  comments_count: number | null;
+  created_at: string;
+  expires_at: string | null;
+}
+
+interface AdminStoryCommentRow {
+  id: string;
+  story_id: string;
+  user_id: string;
+  body: string;
+  parent_comment_id: string | null;
+  created_at: string;
+  likes_count: number | null;
+}
+
+function StoriesSection() {
+  const qc = useQueryClient();
+  const logAction = useAuditLogger();
+  const [mode, setMode] = useState<"stories" | "comments">("comments");
+  const [query, setQuery] = useState<string>("");
+
+  const storiesQuery = useQuery<AdminStoryRow[]>({
+    queryKey: ["admin", "stories"],
+    enabled: mode === "stories",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("stories")
+        .select("id,author_id,caption,media_url,media_type,view_count,likes_count,comments_count,created_at,expires_at")
+        .order("created_at", { ascending: false })
+        .limit(150);
+      if (error) throw error;
+      return (data ?? []) as AdminStoryRow[];
+    },
+  });
+
+  const commentsQuery = useQuery<AdminStoryCommentRow[]>({
+    queryKey: ["admin", "story-comments"],
+    enabled: mode === "comments",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("story_comments")
+        .select("id,story_id,user_id,body,parent_comment_id,created_at,likes_count")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data ?? []) as AdminStoryCommentRow[];
+    },
+  });
+
+  const deleteStoryMutation = useMutation({
+    mutationFn: async (row: AdminStoryRow) => {
+      const { error: rpcError } = await supabase.rpc("team_delete_story", { p_story_id: row.id, p_reason: null });
+      if (rpcError) {
+        const { error } = await supabase.from("stories").delete().eq("id", row.id);
+        if (error) throw error;
+      }
+      await logAction("admin_delete_story", "story", row.id, row, null);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "stories"] });
+      qc.invalidateQueries({ queryKey: ["stories"] });
+    },
+    onError: (e: Error) => Alert.alert("Delete failed", e.message),
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: async (row: AdminStoryCommentRow) => {
+      const { error: rpcError } = await supabase.rpc("team_delete_story_comment", { p_comment_id: row.id, p_reason: null });
+      if (rpcError) {
+        const { error: altError } = await supabase.rpc("delete_story_comment", { p_comment_id: row.id });
+        if (altError) {
+          const { error } = await supabase.from("story_comments").delete().eq("id", row.id);
+          if (error) throw error;
+        }
+      }
+      await logAction("admin_delete_story_comment", "story_comment", row.id, row, null);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "story-comments"] });
+      qc.invalidateQueries({ queryKey: ["story"] });
+    },
+    onError: (e: Error) => Alert.alert("Delete failed", e.message),
+  });
+
+  const filteredStories = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = storiesQuery.data ?? [];
+    if (!q) return list;
+    return list.filter((s) => `${s.caption ?? ""} ${s.author_id ?? ""} ${s.id}`.toLowerCase().includes(q));
+  }, [query, storiesQuery.data]);
+
+  const filteredComments = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = commentsQuery.data ?? [];
+    if (!q) return list;
+    return list.filter((c) => `${c.body} ${c.user_id} ${c.story_id}`.toLowerCase().includes(q));
+  }, [query, commentsQuery.data]);
+
+  return (
+    <View style={styles.content}>
+      <FilterRail values={["comments", "stories"]} active={mode} onChange={(v) => setMode(v as "stories" | "comments")} />
+      <SearchBox value={query} onChangeText={setQuery} placeholder={mode === "stories" ? "Search stories…" : "Search story comments…"} />
+      {mode === "stories" ? (
+        <FlatList
+          data={filteredStories}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listPad}
+          ListEmptyComponent={storiesQuery.isLoading ? <Loader /> : <EmptyState text="No stories found." />}
+          renderItem={({ item }) => {
+            const expired = item.expires_at ? new Date(item.expires_at).getTime() < Date.now() : false;
+            return (
+              <View style={styles.card} testID={`admin-story-${item.id}`}>
+                <View style={styles.rowHeader}>
+                  <Avatar label={(item.caption ?? "S").slice(0, 2)} Icon={Film} />
+                  <View style={styles.rowMain}>
+                    <Text style={styles.rowTitle} numberOfLines={2}>{item.caption ?? "(no caption)"}</Text>
+                    <Text style={styles.rowSub}>{(item.author_id ?? "?").slice(0, 8)} · {item.media_type ?? "media"} · {relTime(item.created_at)} ago · {item.view_count ?? 0} views · {item.likes_count ?? 0} likes · {item.comments_count ?? 0} comments</Text>
+                  </View>
+                  <Pill label={expired ? "EXPIRED" : "LIVE"} color={expired ? Colors.muted : Colors.goldBright} />
+                </View>
+                <View style={styles.actionGrid}>
+                  <ActionButton
+                    label="Delete story"
+                    Icon={Trash2}
+                    danger
+                    onPress={() =>
+                      Alert.alert("Delete story?", "This removes the story and its comments for everyone.", [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Delete", style: "destructive", onPress: () => deleteStoryMutation.mutate(item) },
+                      ])
+                    }
+                  />
+                </View>
+              </View>
+            );
+          }}
+        />
+      ) : (
+        <FlatList
+          data={filteredComments}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listPad}
+          ListHeaderComponent={
+            <View style={styles.noticeCard}>
+              <MessageSquare color={Colors.goldBright} size={18} strokeWidth={2.6} />
+              <Text style={styles.noticeText}>Remove abusive story comments and replies. Deletion is permanent and recorded in the audit log.</Text>
+            </View>
+          }
+          ListEmptyComponent={commentsQuery.isLoading ? <Loader /> : <EmptyState text="No story comments found." />}
+          renderItem={({ item }) => (
+            <View style={styles.card} testID={`admin-story-comment-${item.id}`}>
+              <Text style={styles.rowTitle} numberOfLines={4}>{item.body}</Text>
+              <Text style={styles.rowSub}>{item.user_id.slice(0, 8)} · on story {item.story_id.slice(0, 8)} · {relTime(item.created_at)} ago · {item.likes_count ?? 0} likes{item.parent_comment_id ? " · reply" : ""}</Text>
+              <View style={styles.actionGrid}>
+                <ActionButton
+                  label="Delete comment"
+                  Icon={Trash2}
+                  danger
+                  onPress={() =>
+                    Alert.alert("Delete comment?", "This removes the comment and its replies for everyone.", [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Delete", style: "destructive", onPress: () => deleteCommentMutation.mutate(item) },
+                    ])
+                  }
+                />
+              </View>
+            </View>
+          )}
+        />
+      )}
     </View>
   );
 }
