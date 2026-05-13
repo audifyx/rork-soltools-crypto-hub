@@ -876,12 +876,70 @@ export async function setDmFolder(
 }
 
 export async function getSelfChat(): Promise<string | null> {
-  const { data, error } = await supabase.rpc("get_self_chat");
-  if (error) {
-    console.log("[dm] self chat failed", error.message);
-    throw new Error(error.message);
+  // 1) Try the RPC first (cheap when it works).
+  try {
+    const { data, error } = await supabase.rpc("get_self_chat");
+    if (!error && typeof data === "string" && data.length > 0) {
+      return data;
+    }
+    if (error) console.log("[dm] self chat rpc failed, falling back", error.message);
+  } catch (e) {
+    console.log("[dm] self chat rpc exception, falling back", e instanceof Error ? e.message : String(e));
   }
-  return (data as string) ?? null;
+
+  // 2) Fallback: do it client-side. RLS allows the owner to read/insert
+  //    their own self-chat row, so we can be self-healing when the
+  //    server-side function is missing or buggy.
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !authData.user?.id) {
+    throw new Error(authErr?.message ?? "Not signed in");
+  }
+  const uid = authData.user.id;
+
+  // Look up existing self-chat conversation.
+  const { data: existing, error: lookupErr } = await supabase
+    .from("dm_conversations")
+    .select("id")
+    .eq("user_a", uid)
+    .eq("user_b", uid)
+    .eq("is_self_chat", true)
+    .limit(1)
+    .maybeSingle();
+  if (lookupErr) {
+    console.log("[dm] self chat lookup failed", lookupErr.message);
+    throw new Error(lookupErr.message);
+  }
+  if (existing?.id) {
+    await ensureSelfParticipant(existing.id as string, uid);
+    return existing.id as string;
+  }
+
+  // Insert a fresh self-chat row.
+  const { data: created, error: insertErr } = await supabase
+    .from("dm_conversations")
+    .insert({ user_a: uid, user_b: uid, is_self_chat: true })
+    .select("id")
+    .single();
+  if (insertErr || !created?.id) {
+    console.log("[dm] self chat insert failed", insertErr?.message);
+    throw new Error(insertErr?.message ?? "Could not create private notes");
+  }
+  await ensureSelfParticipant(created.id as string, uid);
+  return created.id as string;
+}
+
+async function ensureSelfParticipant(conversationId: string, userId: string): Promise<void> {
+  try {
+    await supabase
+      .from("dm_participants")
+      .upsert(
+        { conversation_id: conversationId, user_id: userId },
+        { onConflict: "conversation_id,user_id" },
+      );
+  } catch (e) {
+    // Non-fatal: messages still load via conversation_id.
+    console.log("[dm] self participant upsert skipped", e instanceof Error ? e.message : String(e));
+  }
 }
 
 export async function reportScreenshot(conversationId: string): Promise<void> {
