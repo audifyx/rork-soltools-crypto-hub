@@ -343,7 +343,14 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
     },
   });
 
-  const conversations = conversationsQuery.data ?? [];
+  const rawConversations = conversationsQuery.data ?? [];
+  // Hide the notes-to-self conversation from the inbox/requests lists.
+  // It has its own dedicated entry point (the "Notes to self" pin) and screen,
+  // so it should never appear as a regular DM thread.
+  const conversations = useMemo<Conversation[]>(
+    () => rawConversations.filter((c) => !c.user.userId || c.user.userId !== userId),
+    [rawConversations, userId],
+  );
   const previousUnreadRef = useRef<Record<string, number>>({});
   const conversationIds = useMemo<string[]>(() => conversations.map((c) => c.id), [conversations]);
   const userByConversation = useMemo<Record<string, DMUser>>(
