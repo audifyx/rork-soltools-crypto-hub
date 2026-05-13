@@ -389,23 +389,23 @@ export async function fetchLivePairs(): Promise<LaunchToken[]> {
   const retained = [...top, ...organic, ...birdTokens, ...dexTokens, ...pumpTokens, ...moonshotTokens, ...fomoTokens].filter(
     (t) => (t.volume24hUsd ?? 0) >= MIN_RETAIN_VOLUME_USD,
   );
+  // Lightweight display gate. We previously ran every non-pump.fun token
+  // through the strict cross-market `isSafeToken` check here, but that filter
+  // requires fields like `holders` and `audit` that many DexScreener / Birdeye
+  // rows simply don't carry — wiping the entire Discover feed when upstream
+  // sources changed their payload shape. The per-source mappers and the
+  // upstream `safeFromJupiter` gate already drop honeypots/rugs, so at this
+  // merge layer we only screen tokens that literally have no market data,
+  // collapsed >80% in 24h, or are explicitly tagged as a scam.
+  const SCAM_RE = /scam|honeypot|rug|blacklist|unsafe|fake|spam/;
   [...retained, ...newp, ...pumpTokens, ...dexTokens, ...moonshotTokens, ...fomoTokens].forEach((t) => {
     if (!t.contract) return;
-    const isPumpSource = t.tags.includes("pump.fun");
-    const isLaunchpadSource = t.venue === "moonshot" || t.venue === "fomo";
-    const safe = isPumpSource || isLaunchpadSource
-      ? (t.marketCapUsd ?? 0) >= 1_000 && (t.change24hPct ?? -100) > -80
-      : isSafeToken({
-          marketCapUsd: t.marketCapUsd,
-          liquidityUsd: t.liquidityUsd,
-          volume24hUsd: t.volume24hUsd,
-          holders: t.holders,
-          priceUsd: t.price,
-          priceChange24hPct: t.change24hPct,
-          venue: t.venue,
-          tags: t.tags,
-        });
-    if (!safe) return;
+    const mc = t.marketCapUsd ?? 0;
+    const liq = t.liquidityUsd ?? 0;
+    const vol = t.volume24hUsd ?? 0;
+    if (mc <= 0 && liq <= 0 && vol <= 0) return;
+    if ((t.change24hPct ?? 0) <= -80) return;
+    if ((t.tags ?? []).some((tag) => SCAM_RE.test(tag.toLowerCase()))) return;
     const existing = map.get(t.contract);
     map.set(t.contract, existing ? mergeToken(existing, t) : { ...t, featured: false });
   });
