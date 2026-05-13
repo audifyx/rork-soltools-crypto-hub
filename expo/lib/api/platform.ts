@@ -381,16 +381,68 @@ export interface InterestTopicRow {
   category: string | null;
 }
 
+/**
+ * Rich catalog of interests grouped by category. We keep this in code so the
+ * quiz always renders even if the DB seed is sparse. user_interests still
+ * persist by slug in Supabase.
+ */
+export const INTEREST_CATALOG: InterestTopicRow[] = [
+  { category: "Crypto", slug: "solana", label: "Solana", emoji: "\u{1FA90}" },
+  { category: "Crypto", slug: "memecoins", label: "Memecoins", emoji: "\u{1F436}" },
+  { category: "Crypto", slug: "defi", label: "DeFi", emoji: "\u{1F4B1}" },
+  { category: "Crypto", slug: "nfts", label: "NFTs", emoji: "\u{1F5BC}\uFE0F" },
+  { category: "Crypto", slug: "trading", label: "Trading", emoji: "\u{1F4C8}" },
+  { category: "Crypto", slug: "airdrops", label: "Airdrops", emoji: "\u{1FA82}" },
+  { category: "Crypto", slug: "onchain-data", label: "On-chain data", emoji: "\u{1F4CA}" },
+  { category: "Crypto", slug: "kols", label: "KOLs", emoji: "\u{1F3AF}" },
+
+  { category: "Markets", slug: "alpha", label: "Alpha calls", emoji: "\u{26A1}" },
+  { category: "Markets", slug: "newcoins", label: "New launches", emoji: "\u{1F195}" },
+  { category: "Markets", slug: "runners", label: "Runners", emoji: "\u{1F3C3}" },
+  { category: "Markets", slug: "whales", label: "Whale moves", emoji: "\u{1F40B}" },
+  { category: "Markets", slug: "narratives", label: "Narratives", emoji: "\u{1F9E0}" },
+
+  { category: "Culture", slug: "memes", label: "Memes", emoji: "\u{1F606}" },
+  { category: "Culture", slug: "art", label: "Art", emoji: "\u{1F3A8}" },
+  { category: "Culture", slug: "music", label: "Music", emoji: "\u{1F3B5}" },
+  { category: "Culture", slug: "fashion", label: "Fashion", emoji: "\u{1F457}" },
+  { category: "Culture", slug: "film", label: "Film & TV", emoji: "\u{1F3AC}" },
+  { category: "Culture", slug: "sports", label: "Sports", emoji: "\u{26BD}" },
+
+  { category: "Tech", slug: "ai", label: "AI", emoji: "\u{1F916}" },
+  { category: "Tech", slug: "startups", label: "Startups", emoji: "\u{1F680}" },
+  { category: "Tech", slug: "founders", label: "Founders", emoji: "\u{1F9D1}\u200D\u{1F4BB}" },
+  { category: "Tech", slug: "dev", label: "Dev", emoji: "\u{1F4BB}" },
+  { category: "Tech", slug: "design", label: "Design", emoji: "\u{1F3A8}" },
+  { category: "Tech", slug: "gaming", label: "Gaming", emoji: "\u{1F3AE}" },
+
+  { category: "Lifestyle", slug: "fitness", label: "Fitness", emoji: "\u{1F3CB}\uFE0F" },
+  { category: "Lifestyle", slug: "food", label: "Food", emoji: "\u{1F35C}" },
+  { category: "Lifestyle", slug: "travel", label: "Travel", emoji: "\u{2708}\uFE0F" },
+  { category: "Lifestyle", slug: "mindset", label: "Mindset", emoji: "\u{1F9D8}" },
+  { category: "Lifestyle", slug: "finance", label: "Personal finance", emoji: "\u{1F4B0}" },
+
+  { category: "News", slug: "news", label: "World news", emoji: "\u{1F4F0}" },
+  { category: "News", slug: "politics", label: "Politics", emoji: "\u{1F3DB}\uFE0F" },
+  { category: "News", slug: "science", label: "Science", emoji: "\u{1F52C}" },
+  { category: "News", slug: "space", label: "Space", emoji: "\u{1F680}" },
+];
+
 export async function listInterestTopics(): Promise<InterestTopicRow[]> {
-  const { data, error } = await supabase
-    .from("interest_topics")
-    .select("slug,label,emoji,category")
-    .order("category", { ascending: true });
-  if (error) {
-    console.log("[interests] failed", error.message);
-    return [];
+  // DB schema diverged from the typed columns we use in code (emoji/category),
+  // so we ship the canonical catalog from code. Still attempt a remote pull
+  // for any extra topics curators add later — but ignore failures.
+  try {
+    const { data } = await supabase.from("interest_topics").select("slug,label");
+    const remote = (data ?? []) as { slug: string; label: string }[];
+    const known = new Set(INTEREST_CATALOG.map((t) => t.slug));
+    const extras: InterestTopicRow[] = remote
+      .filter((r) => !known.has(r.slug))
+      .map((r) => ({ slug: r.slug, label: r.label, emoji: null, category: "More" }));
+    return [...INTEREST_CATALOG, ...extras];
+  } catch {
+    return INTEREST_CATALOG;
   }
-  return (data ?? []) as InterestTopicRow[];
 }
 
 export async function getMyInterests(userId: string): Promise<string[]> {
