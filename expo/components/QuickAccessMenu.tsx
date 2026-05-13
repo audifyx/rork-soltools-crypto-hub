@@ -79,7 +79,7 @@ interface MenuCategory {
 export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuProps) {
   const router = useRouter();
   const { signOut, isSigningOut } = useAuth();
-  const { isTeam, isAdmin } = useAdmin();
+  const { isTeam, isAdmin, role, refetch } = useAdmin();
   const sheetTranslate = useRef(new Animated.Value(40)).current;
   const sheetOpacity = useRef(new Animated.Value(0)).current;
   const [expanded, setExpanded] = useState<string | null>("trading");
@@ -92,8 +92,13 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
         Animated.timing(sheetOpacity, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
         Animated.spring(sheetTranslate, { toValue: 0, friction: 8, tension: 90, useNativeDriver: true }),
       ]).start();
+      // Refresh admin role on open so newly-promoted team members see the
+      // Team dashboard entry without restarting the app.
+      refetch?.().catch((e: unknown) => {
+        console.log("[quick-menu] admin refetch failed", e instanceof Error ? e.message : e);
+      });
     }
-  }, [visible, sheetOpacity, sheetTranslate]);
+  }, [visible, sheetOpacity, sheetTranslate, refetch]);
 
   const navigate = useCallback(
     (path: string) => {
@@ -180,7 +185,8 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
       },
     ];
 
-    if (isTeam || isAdmin) {
+    const staffRole = role === "owner" || role === "superadmin" || role === "admin" || role === "moderator" || role === "team" || role === "support";
+    if (isTeam || isAdmin || staffRole) {
       base.push({
         key: "staff",
         label: isAdmin ? "Admin & Team" : "Team tools",
@@ -197,7 +203,7 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
     }
 
     return base;
-  }, [isAdmin, isTeam]);
+  }, [isAdmin, isTeam, role]);
 
   return (
     <Modal

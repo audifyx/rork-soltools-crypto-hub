@@ -112,7 +112,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   const isOwner = role === "owner";
   const isSuperadmin = isOwner || role === "superadmin";
   const isAdmin = isOwner || role === "superadmin" || role === "admin";
-  const isTeam = isAdmin || role === "team" || role === "moderator";
+  const isTeam = isAdmin || role === "team" || role === "moderator" || role === "support";
 
   const effectivePermissions: TeamPermissions = useMemo(() => {
     if (isAdmin) return DEFAULT_TEAM_PERMISSIONS;
@@ -132,6 +132,8 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     };
   }, [isAdmin, permissions, role]);
 
+  const refetch = roleQuery.refetch;
+
   return useMemo(
     () => ({
       role,
@@ -141,7 +143,8 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       isSuperadmin,
       isTeam,
       isLoading: roleQuery.isLoading,
+      refetch,
     }),
-    [role, effectivePermissions, isAdmin, isOwner, isSuperadmin, isTeam, roleQuery.isLoading],
+    [role, effectivePermissions, isAdmin, isOwner, isSuperadmin, isTeam, roleQuery.isLoading, refetch],
   );
 });
