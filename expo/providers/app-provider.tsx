@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { setHapticsEnabled } from "@/lib/haptics";
 
 import { normalizeMediaUrl } from "@/lib/media";
-import { patchPostEverywhere } from "@/lib/post-sync";
+import { findPostEverywhere, patchPostEverywhere } from "@/lib/post-sync";
 import { fetchOwnProfileRow, saveOwnProfilePatch, type ProfilePatch } from "@/lib/profile-db";
 import { supabase } from "@/lib/supabase";
 import { uploadPostImage, uploadReelMedia } from "@/lib/upload";
@@ -596,8 +596,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const togglePostLike = useCallback(
     async (id: string) => {
+      const cached = findPostEverywhere(qc, id);
       const prev = posts.find((p) => p.id === id);
-      const prevLiked = !!prev?.liked;
+      const prevLiked = !!(cached?.liked ?? prev?.liked);
       patchPostEverywhere(qc, id, {
         liked: !prevLiked,
         likesDelta: prevLiked ? -1 : 1,
@@ -632,8 +633,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const togglePostRepost = useCallback(
     async (id: string) => {
+      const cached = findPostEverywhere(qc, id);
       const prev = posts.find((p) => p.id === id);
-      const prevReposted = !!prev?.reposted;
+      const prevReposted = !!(cached?.reposted ?? prev?.reposted);
       patchPostEverywhere(qc, id, {
         reposted: !prevReposted,
         repostsDelta: prevReposted ? -1 : 1,

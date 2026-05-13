@@ -46,6 +46,56 @@ function applyPatch<T extends PatchablePost>(post: T, patch: PostPatch): T {
   return next;
 }
 
+/**
+ * Walk every cached query and return the first matching post snapshot for
+ * `postId`. Used by toggle handlers so optimistic state mirrors whatever the
+ * UI is actually rendering (community feeds, live feed, FYP, detail, etc.).
+ */
+export function findPostEverywhere(
+  qc: import("@tanstack/react-query").QueryClient,
+  postId: string,
+): PatchablePost | null {
+  const entries = qc.getQueryCache().getAll();
+  for (const entry of entries) {
+    const data = entry.state.data;
+    if (data == null) continue;
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        if (looksLikePost(item) && item.id === postId) return item;
+      }
+      continue;
+    }
+    if (looksLikePost(data) && (data as PatchablePost).id === postId) {
+      return data as PatchablePost;
+    }
+    if (typeof data === "object") {
+      const record = data as Record<string, unknown>;
+      if (Array.isArray(record.pages)) {
+        for (const page of record.pages as unknown[]) {
+          if (Array.isArray(page)) {
+            for (const item of page) {
+              if (looksLikePost(item) && item.id === postId) return item;
+            }
+          } else if (page && typeof page === "object") {
+            const items = (page as Record<string, unknown>).items;
+            if (Array.isArray(items)) {
+              for (const item of items) {
+                if (looksLikePost(item) && item.id === postId) return item;
+              }
+            }
+          }
+        }
+      }
+      if (Array.isArray(record.items)) {
+        for (const item of record.items as unknown[]) {
+          if (looksLikePost(item) && item.id === postId) return item;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function looksLikePost(value: unknown): value is PatchablePost {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
