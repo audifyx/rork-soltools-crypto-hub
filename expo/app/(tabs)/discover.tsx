@@ -1000,25 +1000,6 @@ function DiscoverHeader({
         onWatch={onWatch}
       />
 
-      {trendingTags.length > 0 ? (
-        <View style={styles.tagsWrap}>
-          <View style={styles.sectionHead}>
-            <View style={styles.sectionHeadLeft}>
-              <Hash color={Colors.mint} size={15} strokeWidth={2.6} />
-              <Text style={styles.sectionTitle}>Trending tags</Text>
-            </View>
-          </View>
-          <View style={styles.tagsRow}>
-            {trendingTags.map(({ tag, count }) => (
-              <View key={tag} style={styles.tagChip}>
-                <Text style={styles.tagText}>#{tag}</Text>
-                <Text style={styles.tagCount}>{count}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      ) : null}
-
       <View style={styles.allWrap}>
         <View style={styles.sectionHead}>
           <View style={styles.sectionHeadLeft}>
@@ -1053,6 +1034,73 @@ function DiscoverHeader({
       </View>
 
       {filtered.length === 0 ? <EmptyDiscover /> : null}
+
+      {trendingTags.length > 0 ? (
+        <View style={styles.tagsWrap}>
+          <LinearGradient
+            colors={["rgba(63,169,255,0.12)", "rgba(184,255,60,0.06)", "rgba(0,0,0,0)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.tagsHead}>
+            <View style={styles.tagsHeadLeft}>
+              <View style={styles.tagsIcon}>
+                <Hash color={Colors.mint} size={14} strokeWidth={2.8} />
+              </View>
+              <View>
+                <Text style={styles.tagsEyebrow}>TRENDING TAGS</Text>
+                <Text style={styles.tagsTitle}>What the community is hunting</Text>
+              </View>
+            </View>
+            <View style={styles.tagsHeadBadge}>
+              <Flame color={Colors.orange} size={10} strokeWidth={3} />
+              <Text style={styles.tagsHeadBadgeText}>LIVE</Text>
+            </View>
+          </View>
+          <View style={styles.tagsGrid}>
+            {trendingTags.map(({ tag, count }, idx) => {
+              const tones = [Colors.mint, Colors.cyan, Colors.orange, Colors.magenta, Colors.rose, Colors.goldBright];
+              const tone = tones[idx % tones.length];
+              const isTop = idx < 3;
+              return (
+                <Pressable
+                  key={tag}
+                  style={[styles.tagCard, { borderColor: `${tone}33` }]}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setQuery(`#${tag}`);
+                  }}
+                  testID={`tag-${tag}`}
+                >
+                  <LinearGradient
+                    colors={[`${tone}1F`, `${tone}06`]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.tagCardTop}>
+                    <View style={[styles.tagRank, { backgroundColor: `${tone}1F`, borderColor: `${tone}40` }]}>
+                      <Text style={[styles.tagRankText, { color: tone }]}>{idx + 1}</Text>
+                    </View>
+                    {isTop ? (
+                      <View style={[styles.tagHot, { backgroundColor: `${Colors.orange}1A`, borderColor: `${Colors.orange}33` }]}>
+                        <Flame color={Colors.orange} size={9} strokeWidth={3} />
+                        <Text style={styles.tagHotText}>HOT</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={styles.tagCardText} numberOfLines={1}>#{tag}</Text>
+                  <View style={styles.tagCardFoot}>
+                    <Text style={[styles.tagCardCount, { color: tone }]}>{count}</Text>
+                    <Text style={styles.tagCardCountLabel}>posts</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -2187,34 +2235,138 @@ const styles = StyleSheet.create({
   newChange: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8 },
   newChangeText: { fontSize: 10, fontWeight: "900" },
 
-  tagsWrap: { marginTop: 26 },
-  tagsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingHorizontal: 20,
+  tagsWrap: {
+    marginTop: 32,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 18,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+    backgroundColor: "rgba(12,14,18,0.85)",
+    overflow: "hidden",
   },
-  tagChip: {
+  tagsHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
-  tagText: { color: Colors.text, fontSize: 11, fontWeight: "800" },
-  tagCount: {
+  tagsHeadLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  tagsIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "rgba(184,255,60,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(184,255,60,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tagsEyebrow: {
     color: Colors.muted,
     fontSize: 10,
     fontWeight: "900",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 6,
+    letterSpacing: 1.6,
+  },
+  tagsTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 2,
+    letterSpacing: -0.2,
+  },
+  tagsHeadBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,138,76,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,138,76,0.28)",
+  },
+  tagsHeadBadgeText: {
+    color: Colors.orange,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  tagsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  tagCard: {
+    width: "48.5%",
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
     overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.02)",
+  },
+  tagCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  tagRank: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tagRankText: {
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  tagHot: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  tagHotText: {
+    color: Colors.orange,
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  tagCardText: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+  },
+  tagCardFoot: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 4,
+    marginTop: 6,
+  },
+  tagCardCount: {
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+  },
+  tagCardCountLabel: {
+    color: Colors.muted,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
   },
 
   allWrap: { marginTop: 26 },
