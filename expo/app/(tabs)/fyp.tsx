@@ -140,7 +140,7 @@ export default function ForYouScreen() {
     (card: FypCard) => {
       hapticSelect();
       try {
-        if (card.kind === "reel") router.push("/(tabs)/reels");
+        if (card.kind === "reel") router.push({ pathname: "/(tabs)/reels", params: { focus: card.ref_id } });
         else if (card.kind === "story") router.push({ pathname: "/story/[id]", params: { id: card.ref_id } });
         else if (card.kind === "event") router.push("/events");
         else if (card.kind === "community") router.push({ pathname: "/community/[id]", params: { id: card.ref_id } });

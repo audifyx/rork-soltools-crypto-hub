@@ -1,10 +1,10 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Compass, Globe2, MessageCircle, Plus, RefreshCcw, Sparkles, UserCheck, Users, X } from "lucide-react-native";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -52,11 +52,15 @@ const FEED_TABS: { key: ReelsTab; label: string; Icon: typeof Compass }[] = [
 
 export default function ReelsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ focus?: string }>();
+  const focusId = typeof params.focus === "string" ? params.focus : null;
   const queryClient = useQueryClient();
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { userId, isAuthenticated } = useAuth();
   const [activeId, setActiveId] = useState<string | null>(null);
+  const listRef = useRef<FlatList<Reel>>(null);
+  const focusedRef = useRef<string | null>(null);
   const [commentReel, setCommentReel] = useState<Reel | null>(null);
   const [feedTab, setFeedTab] = useState<ReelsTab>("all");
   const [muted, setMuted] = useState<boolean>(true);
@@ -103,6 +107,21 @@ export default function ReelsScreen() {
     const idx = reels.findIndex((r) => r.id === visibleId);
     return idx >= 0 ? idx : 0;
   }, [reels, visibleId]);
+
+  useEffect(() => {
+    if (!focusId || focusedRef.current === focusId) return;
+    const idx = reels.findIndex((r) => r.id === focusId);
+    if (idx < 0) return;
+    focusedRef.current = focusId;
+    setActiveId(focusId);
+    requestAnimationFrame(() => {
+      try {
+        listRef.current?.scrollToIndex({ index: idx, animated: false });
+      } catch (e) {
+        console.log("[reels] focus scroll failed", e instanceof Error ? e.message : String(e));
+      }
+    });
+  }, [focusId, reels]);
 
   const viewabilityConfig = useMemo(() => ({ itemVisiblePercentThreshold: 72 }), []);
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<Reel>[] }) => {
@@ -300,6 +319,7 @@ export default function ReelsScreen() {
 
       <View style={[styles.feedWrap, { marginBottom: TAB_BAR_BLOCK }]}>
         <FlatList
+          ref={listRef}
           data={reels}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
