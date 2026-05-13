@@ -545,14 +545,9 @@ function UsersSection() {
               </View>
               {item.is_banned ? <Pill label="BANNED" color={Colors.platinum} /> : <Pill label="ACTIVE" color={Colors.goldBright} />}
             </View>
-            <View style={styles.metricsRow}>
-              <Metric label="PNL" value={`${Number(item.pnl_pct ?? 0).toFixed(1)}%`} />
-              <Metric label="TRADES" value={String(item.trades_count ?? 0)} />
-              <Metric label="WIN" value={`${Number(item.win_rate ?? 0).toFixed(0)}%`} />
-            </View>
             <BadgeAdminPanel row={item} onToggle={(badge, remove) => quickBadgeMutation.mutate({ row: item, badge, remove })} />
             <View style={styles.actionGrid}>
-              <ActionButton label="View" Icon={Wallet} onPress={() => Alert.alert("User activity", `PnL: ${Number(item.pnl_pct ?? 0).toFixed(1)}%\nTrades: ${item.trades_count ?? 0}\nWin rate: ${Number(item.win_rate ?? 0).toFixed(0)}%`)} />
+              <ActionButton label="View" Icon={Wallet} onPress={() => Alert.alert("User", item.display_name ?? item.username ?? profileUserId(item))} />
               <ActionButton label={item.is_banned ? "Unban" : "Ban"} Icon={Ban} danger onPress={() => banMutation.mutate(item)} />
               <ActionButton label="Reset credits" Icon={Coins} onPress={() => resetCreditsMutation.mutate(item)} />
             </View>
