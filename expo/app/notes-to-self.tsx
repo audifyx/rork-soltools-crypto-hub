@@ -12,6 +12,8 @@ import {
   Lock,
   NotebookPen,
   Pencil,
+  Pin,
+  PinOff,
   Send,
   Sparkles,
   Trash2,
@@ -21,9 +23,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   FlatList,
   KeyboardAvoidingView,
   ListRenderItem,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -120,6 +125,7 @@ export default function NotesToSelfScreen() {
   const [text, setText] = useState<string>("");
   const [tagBar, setTagBar] = useState<boolean>(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [actionNote, setActionNote] = useState<NoteItem | null>(null);
   const isEditing = !!editingNoteId;
   const listRef = useRef<FlatList<ListRow>>(null);
 
@@ -360,20 +366,12 @@ export default function NotesToSelfScreen() {
       const safeConvId = normalizeUuid(convId);
       if (!safeConvId) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      Alert.alert(
-        "Note actions",
-        note.body.slice(0, 80) || "Manage this note",
-        [
-          { text: "Edit", onPress: () => startEdit(note) },
-          { text: note.pinned ? "Unpin" : "Pin to top", onPress: () => togglePin(note) },
-          { text: note.done ? "Mark as not done" : "Mark as done", onPress: () => toggleTodo(note) },
-          { text: "Delete", style: "destructive", onPress: () => confirmDelete(note) },
-          { text: "Cancel", style: "cancel" },
-        ],
-      );
+      setActionNote(note);
     },
-    [convId, toggleTodo, togglePin, startEdit, confirmDelete],
+    [convId],
   );
+
+  const closeActionSheet = useCallback(() => setActionNote(null), []);
 
   const goBack = useCallback(() => {
     navigateBack(router, "/messages");
@@ -590,7 +588,152 @@ export default function NotesToSelfScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <NoteActionSheet
+        note={actionNote}
+        onClose={closeActionSheet}
+        onEdit={(n) => {
+          closeActionSheet();
+          startEdit(n);
+        }}
+        onPin={(n) => {
+          closeActionSheet();
+          togglePin(n);
+        }}
+        onToggleDone={(n) => {
+          closeActionSheet();
+          toggleTodo(n);
+        }}
+        onDelete={(n) => {
+          closeActionSheet();
+          confirmDelete(n);
+        }}
+      />
     </View>
+  );
+}
+
+interface NoteActionSheetProps {
+  note: NoteItem | null;
+  onClose: () => void;
+  onEdit: (n: NoteItem) => void;
+  onPin: (n: NoteItem) => void;
+  onToggleDone: (n: NoteItem) => void;
+  onDelete: (n: NoteItem) => void;
+}
+
+function NoteActionSheet({ note, onClose, onEdit, onPin, onToggleDone, onDelete }: NoteActionSheetProps) {
+  const slide = useRef(new Animated.Value(0)).current;
+  const open = note !== null;
+
+  useEffect(() => {
+    Animated.timing(slide, {
+      toValue: open ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [open, slide]);
+
+  if (!note) return null;
+
+  const items: { id: string; label: string; Icon: typeof Pencil; color: string; destructive?: boolean; onPress: () => void }[] = [
+    {
+      id: "edit",
+      label: "Edit note",
+      Icon: Pencil,
+      color: ACCENT,
+      onPress: () => onEdit(note),
+    },
+    {
+      id: "pin",
+      label: note.pinned ? "Unpin from top" : "Pin to top",
+      Icon: note.pinned ? PinOff : Pin,
+      color: Colors.orange,
+      onPress: () => onPin(note),
+    },
+    {
+      id: "done",
+      label: note.done ? "Mark as not done" : "Mark as done",
+      Icon: note.done ? Circle : CheckCircle2,
+      color: "#5B8DEF",
+      onPress: () => onToggleDone(note),
+    },
+    {
+      id: "delete",
+      label: "Delete note",
+      Icon: Trash2,
+      color: "#E63946",
+      destructive: true,
+      onPress: () => onDelete(note),
+    },
+  ];
+
+  return (
+    <Modal visible={open} transparent animationType="none" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Animated.View
+          style={[
+            sheetStyles.sheet,
+            {
+              transform: [
+                {
+                  translateY: slide.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [500, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Pressable onPress={() => {}}>
+            <View style={sheetStyles.handle} />
+            <View style={sheetStyles.header}>
+              <View style={sheetStyles.headerIcon}>
+                <NotebookPen color={ACCENT} size={14} strokeWidth={2.6} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={sheetStyles.headerTitle}>Note actions</Text>
+                <Text style={sheetStyles.headerSubtitle} numberOfLines={2}>
+                  {note.body.trim().slice(0, 90) || "Manage this note"}
+                </Text>
+              </View>
+            </View>
+            <View style={sheetStyles.list}>
+              {items.map((it, idx) => {
+                const Icon = it.Icon;
+                return (
+                  <Pressable
+                    key={it.id}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      it.onPress();
+                    }}
+                    style={({ pressed }) => [
+                      sheetStyles.item,
+                      idx !== items.length - 1 && sheetStyles.itemDivider,
+                      pressed && sheetStyles.itemPressed,
+                    ]}
+                    testID={`note-action-${it.id}`}
+                  >
+                    <View style={[sheetStyles.itemIcon, { backgroundColor: `${it.color}26`, borderColor: `${it.color}55` }]}>
+                      <Icon color={it.color} size={18} strokeWidth={2.6} />
+                    </View>
+                    <Text style={[sheetStyles.itemLabel, it.destructive && sheetStyles.itemLabelDestructive]}>
+                      {it.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable onPress={onClose} style={sheetStyles.cancel} testID="note-action-cancel">
+              <Text style={sheetStyles.cancelText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Animated.View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -924,4 +1067,84 @@ const styles = StyleSheet.create({
   composerEditing: { borderTopColor: ACCENT, backgroundColor: "rgba(63,169,255,0.06)" },
 });
 
-void Trash2;
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#0B0F1A",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 28,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  handle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    marginBottom: 12,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 4,
+    paddingBottom: 14,
+    marginBottom: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  headerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: "rgba(63,169,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  headerTitle: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.1 },
+  headerSubtitle: { color: Colors.muted, fontSize: 12, fontWeight: "600", marginTop: 2, lineHeight: 16 },
+  list: { paddingTop: 6 },
+  item: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  itemDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  itemPressed: { opacity: 0.6 },
+  itemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  itemLabel: { color: Colors.text, fontSize: 15, fontWeight: "800", letterSpacing: -0.1, flex: 1 },
+  itemLabelDestructive: { color: "#FF6B6B" },
+  cancel: {
+    marginTop: 12,
+    height: 50,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  cancelText: { color: Colors.text, fontSize: 15, fontWeight: "900" },
+});
