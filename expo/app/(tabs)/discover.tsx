@@ -69,7 +69,6 @@ import {
 } from "@/lib/alpha-runners";
 import { fmtNum, fmtUsd } from "@/utils/format";
 import { useApp } from "@/providers/app-provider";
-import { isSafeToken } from "@/lib/safety";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import {
@@ -132,17 +131,27 @@ function hasRealMarket(token: LaunchToken): boolean {
   return (token.marketCapUsd ?? 0) > 0 && (token.liquidityUsd ?? 0) > 0;
 }
 
+/**
+ * Lightweight display gate used by the Discover tab.
+ *
+ * The upstream `fetchLivePairs` pipeline already runs each external API
+ * source through the strict `isSafeToken` rug filter. Re-applying that
+ * full check here was eating the entire feed whenever a source returned
+ * tokens missing one optional field (e.g. holders, audit). At this UI
+ * layer we only need to drop tokens with literally no market data, an
+ * extreme drawdown, or an explicit scam tag — everything else has
+ * already been vetted at the data layer.
+ */
 function isDiscoverSafeToken(token: LaunchToken): boolean {
-  return isSafeToken({
-    marketCapUsd: token.marketCapUsd,
-    liquidityUsd: token.liquidityUsd,
-    volume24hUsd: token.volume24hUsd,
-    holders: token.holders,
-    priceUsd: token.price,
-    priceChange24hPct: token.change24hPct,
-    venue: token.venue,
-    tags: token.tags,
-  });
+  const mc = token.marketCapUsd ?? 0;
+  const liq = token.liquidityUsd ?? 0;
+  const vol = token.volume24hUsd ?? 0;
+  if (mc <= 0 && liq <= 0 && vol <= 0) return false;
+  const change = token.change24hPct;
+  if (typeof change === "number" && change <= -80) return false;
+  const tags = (token.tags ?? []).map((t) => t.toLowerCase());
+  if (tags.some((t) => /scam|honeypot|rug|blacklist|unsafe|fake/.test(t))) return false;
+  return true;
 }
 
 function heatScore(token: LaunchToken): number {
