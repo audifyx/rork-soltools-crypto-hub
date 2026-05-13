@@ -58,19 +58,19 @@ export default function StoryViewerScreen() {
         else router.back();
       }
     });
-    viewStory(current.id).catch(() => {});
+    void viewStory(current.id).catch(() => {});
     return () => {
       animation.stop();
     };
   }, [current, index, progress, router, stories.length]);
 
   const goNext = () => {
-    hapticSelect().catch(() => {});
+    hapticSelect();
     if (index < stories.length - 1) setIndex(index + 1);
     else router.back();
   };
   const goPrev = () => {
-    hapticSelect().catch(() => {});
+    hapticSelect();
     if (index > 0) setIndex(index - 1);
   };
 

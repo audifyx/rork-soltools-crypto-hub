@@ -21,7 +21,7 @@ export default function CreateStoryScreen() {
   const [caption, setCaption] = useState<string>("");
 
   const pick = async (camera: boolean) => {
-    hapticSelect().catch(() => {});
+    hapticSelect();
     const perm = camera
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
