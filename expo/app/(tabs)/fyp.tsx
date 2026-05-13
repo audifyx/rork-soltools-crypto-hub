@@ -219,6 +219,8 @@ export default function ForYouScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterRow}
+          keyboardShouldPersistTaps="always"
+          removeClippedSubviews={false}
         >
           {FILTERS.map((f) => {
             const active = filter === f.key;
@@ -229,8 +231,15 @@ export default function ForYouScreen() {
                   hapticSelect().catch(() => {});
                   setFilter(f.key);
                 }}
-                style={[styles.filterChip, active && styles.filterChipActive]}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.filterChip,
+                  active && styles.filterChipActive,
+                  pressed && { opacity: 0.7 },
+                ]}
                 testID={`fyp-filter-${f.key}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter ${f.label}`}
               >
                 <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{f.label}</Text>
               </Pressable>
