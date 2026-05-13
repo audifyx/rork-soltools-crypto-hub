@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { clearSignedOutCache, invalidateCacheScopes } from "@/lib/provider-cache";
 import { saveOwnProfilePatch } from "@/lib/profile-db";
+import { registerPushTokenForUser, unregisterPushToken } from "@/lib/push-notifications";
 import { SUPABASE_ANON_KEY, SUPABASE_READY, SUPABASE_URL, supabase } from "@/lib/supabase";
 import { clearAllUserCache } from "@/lib/user-cache";
 
@@ -40,6 +41,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         currentUserIdRef.current = nextUser?.id ?? null;
         setSession(data.session ?? null);
         setUser(nextUser);
+        if (nextUser?.id) {
+          registerPushTokenForUser(nextUser.id).catch(() => {});
+        }
         console.log("[auth] initial session", nextUser?.email ?? "(none)");
       })
       .catch((e) => console.log("[auth] getSession error", e))
@@ -58,8 +62,14 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
       if (prevId !== nextId) {
         clearSignedOutCache(qc).catch(() => {});
+        if (!nextId) {
+          unregisterPushToken().catch(() => {});
+        }
       } else {
         invalidateCacheScopes(qc, ["profile", "social", "feed", "notifications"]).catch(() => {});
+      }
+      if (nextId) {
+        registerPushTokenForUser(nextId).catch(() => {});
       }
     });
     return () => {

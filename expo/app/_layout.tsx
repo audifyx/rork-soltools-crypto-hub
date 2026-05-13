@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -10,7 +10,7 @@ enableFreeze(true);
 
 import Colors from "@/constants/colors";
 import { registerKOLSync } from "@/lib/kol-background";
-import { ensureNotificationPermission } from "@/lib/push-notifications";
+import { attachNotificationTapHandler, ensureNotificationPermission } from "@/lib/push-notifications";
 import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
 import BiometricGate from "@/components/ui/BiometricGate";
@@ -58,6 +58,24 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => voi
 }
 
 function RootLayoutNav() {
+  const router = useRouter();
+  useEffect(() => {
+    let teardown: (() => void) | null = null;
+    attachNotificationTapHandler((route) => {
+      try {
+        router.push(route as never);
+      } catch (error) {
+        console.log("SolTools notification route push skipped", error instanceof Error ? error.message : error);
+      }
+    })
+      .then((fn) => {
+        teardown = fn;
+      })
+      .catch(() => {});
+    return () => {
+      if (teardown) teardown();
+    };
+  }, [router]);
   return (
     <Stack
       screenOptions={{
