@@ -60,7 +60,12 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   const roleQuery = useQuery<{ role: AdminRole | null; permissions: TeamPermissions | null }>({
     queryKey: ["admin", "self-role", userId ?? "guest", normalizedEmail],
     enabled: isAuthenticated && !!userId,
-    staleTime: 30_000,
+    // Short stale time + periodic refetch so newly-promoted moderators see
+    // their team dashboard unlock automatically without restarting the app.
+    staleTime: 10_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
     queryFn: async () => {
       if (!userId) return { role: null, permissions: null };
       if (isOwnerEmail) {
@@ -76,9 +81,13 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       const rpc = await supabase.rpc("get_my_admin_role");
       if (!rpc.error && Array.isArray(rpc.data) && rpc.data.length > 0) {
         const row = rpc.data[0] as { role: string | null; permissions: unknown };
-        const role = (row?.role as AdminRole) ?? null;
-        const perms = role === "team" ? normalizePerms(row.permissions) : null;
-        return { role, permissions: perms };
+        const rpcRole = (row?.role as AdminRole | null) ?? null;
+        if (rpcRole) {
+          const perms = rpcRole === "team" ? normalizePerms(row.permissions) : null;
+          return { role: rpcRole, permissions: perms };
+        }
+        // RPC returned a null-role placeholder — user has no admin_roles row.
+        return { role: isOwnerEmail ? ("owner" as const) : null, permissions: null };
       }
       if (rpc.error) console.log("[admin] get_my_admin_role failed", rpc.error.message);
 
