@@ -88,22 +88,41 @@ export async function createStory(input: {
   caption?: string | null;
   durationSeconds?: number | null;
 }): Promise<string | null> {
-  const { data: auth } = await supabase.auth.getUser();
+  const { data: auth, error: authErr } = await supabase.auth.getUser();
   const uid = auth.user?.id;
-  if (!uid) return null;
-  const { data, error } = await supabase
+  if (authErr) {
+    console.log("[stories] auth failed", authErr.message);
+    throw new Error(authErr.message);
+  }
+  if (!uid) throw new Error("Sign in to publish a story.");
+
+  const basePayload: Record<string, unknown> = {
+    media_url: input.mediaUrl,
+    media_type: input.mediaType,
+    caption: input.caption ?? null,
+  };
+
+  // Try the canonical schema first (author_id), then fall back to user_id if
+  // the deployed table happens to use the older column name.
+  let { data, error } = await supabase
     .from("stories")
-    .insert({
-      author_id: uid,
-      media_url: input.mediaUrl,
-      media_type: input.mediaType,
-      caption: input.caption ?? null,
-    })
+    .insert({ ...basePayload, author_id: uid })
     .select("id")
     .single();
+
+  if (error && /author_id/i.test(error.message)) {
+    const retry = await supabase
+      .from("stories")
+      .insert({ ...basePayload, user_id: uid })
+      .select("id")
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
+
   if (error) {
     console.log("[stories] create failed", error.message);
-    return null;
+    throw new Error(error.message);
   }
   return (data?.id as string) ?? null;
 }
