@@ -1,6 +1,6 @@
 import createContextHook from "@nkzw/create-context-hook";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
@@ -96,6 +96,38 @@ export const [ModerationProvider, useModeration] = createContextHook(() => {
   const isLimited =
     !isBanned && !isSuspended && (!status.can_post || !status.can_comment || !status.can_like || !status.can_dm);
 
+  /**
+   * Throws a user-friendly error when the current account cannot perform the
+   * given action because they are banned, suspended, or limited. Callers should
+   * invoke this BEFORE any optimistic UI update or RPC call.
+   */
+  const assertCanAct = useCallback(
+    (action: "post" | "comment" | "like" | "dm") => {
+      if (status.is_banned) {
+        throw new Error("Your account is banned. You can't use the app.");
+      }
+      if (status.is_suspended) {
+        const when = status.suspend_expires_at
+          ? ` until ${new Date(status.suspend_expires_at).toLocaleString()}`
+          : "";
+        throw new Error(`Your account is suspended${when}. You can't ${action === "dm" ? "send messages" : action} right now.`);
+      }
+      if (action === "post" && !status.can_post) {
+        throw new Error("Posting is temporarily disabled on your account.");
+      }
+      if (action === "comment" && !status.can_comment) {
+        throw new Error("Commenting is temporarily disabled on your account.");
+      }
+      if (action === "like" && !status.can_like) {
+        throw new Error("Liking is temporarily disabled on your account.");
+      }
+      if (action === "dm" && !status.can_dm) {
+        throw new Error("Messaging is temporarily disabled on your account.");
+      }
+    },
+    [status],
+  );
+
   return useMemo(
     () => ({
       status,
@@ -103,8 +135,9 @@ export const [ModerationProvider, useModeration] = createContextHook(() => {
       isSuspended,
       isLimited,
       isLoading: query.isLoading,
+      assertCanAct,
       refresh: () => qc.invalidateQueries({ queryKey: ["moderation", "self", userId ?? "guest"] }),
     }),
-    [status, isBanned, isSuspended, isLimited, query.isLoading, qc, userId],
+    [status, isBanned, isSuspended, isLimited, query.isLoading, assertCanAct, qc, userId],
   );
 });

@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase";
 import { uploadPostImage } from "@/lib/upload";
 import { useAdmin } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
+import { useModeration } from "@/providers/moderation-provider";
 
 export interface Community {
   id: string;
@@ -379,6 +380,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
   const { role } = useAdmin();
   const canModeratePosts = role === "superadmin" || role === "admin" || role === "moderator";
   const { userId, isAuthenticated } = useAuth();
+  const { assertCanAct } = useModeration();
   const scope = userId ?? "guest";
   // Local-only communities (created while offline / before RPC succeeded)
   // are scoped per user so they never leak across accounts after sign-out.
@@ -946,6 +948,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       if (!isAuthenticated || !userId) {
         throw new Error("Sign in to like posts.");
       }
+      assertCanAct("like");
       const prevLiked =
         qc.getQueriesData<CommunityPost[]>({ queryKey: ["social"] })
           .flatMap(([, list]) => (Array.isArray(list) ? list : []))
@@ -981,6 +984,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
   const togglePostRepost = useCallback(
     async (id: string) => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to repost.");
+      assertCanAct("post");
       const prevReposted =
         qc.getQueriesData<CommunityPost[]>({ queryKey: ["social"] })
           .flatMap(([, list]) => (Array.isArray(list) ? list : []))
@@ -1044,6 +1048,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       authorColor: string;
     }): Promise<CommunityPost> => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to reply.");
+      assertCanAct("comment");
       const text = input.content.trim();
       if (!text) throw new Error("Reply cannot be empty.");
       const optimistic: CommunityPost = {

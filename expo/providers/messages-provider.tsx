@@ -7,6 +7,7 @@ import { normalizeMediaUrl } from "@/lib/media";
 import { scheduleLocalNotification, setAppBadgeCount } from "@/lib/push-notifications";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
+import { useModeration } from "@/providers/moderation-provider";
 
 export interface DMUser {
   userId?: string;
@@ -499,9 +500,12 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
     [conversations, isAuthenticated, queryClient, userId],
   );
 
+  const { assertCanAct } = useModeration();
+
   const sendMutation = useMutation({
     mutationFn: async (input: { id: string; text: string; ticker?: string; imageUrl?: string; replyToId?: string }) => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to send messages.");
+      assertCanAct("dm");
       const trimmed = input.text.trim();
       if (trimmed.length === 0 && !input.imageUrl) return null;
       const messageId = await safeRpc<string>("send_dm_message", {

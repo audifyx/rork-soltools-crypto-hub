@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { setHapticsEnabled } from "@/lib/haptics";
 
@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { uploadPostImage, uploadReelMedia } from "@/lib/upload";
 import type { CustomBadge } from "@/providers/profile-provider";
 import { useAuth } from "@/providers/auth-provider";
+import { useModeration } from "@/providers/moderation-provider";
 
 import { clearAllUserCache, userKeys } from "@/lib/user-cache";
 
@@ -211,6 +212,9 @@ const condToAlertType: Record<string, AlertItem["type"]> = {
 export const [AppProvider, useApp] = createContextHook(() => {
   const qc = useQueryClient();
   const { userId, isAuthenticated } = useAuth();
+  const moderation = useModeration();
+  const moderationRef = useRef(moderation);
+  useEffect(() => { moderationRef.current = moderation; }, [moderation]);
   const scope = userId ?? "guest";
   const K = userKeys(scope);
   const POSTS_KEY = K.posts;
@@ -480,6 +484,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const addPost = useMutation({
     mutationFn: async (input: { text: string; ticker?: string; contract?: string; token?: PostTokenInput | null; changePct?: number; images?: string[]; video?: { uri: string; mimeType?: string | null; fileName?: string | null } }) => {
       if (isAuthenticated && userId) {
+        try { moderationRef.current?.assertCanAct("post"); } catch (e) { throw e; }
         let uploadedUrl: string | undefined;
         if (input.video?.uri) {
           try {
@@ -605,6 +610,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
       });
       if (isAuthenticated && userId) {
         try {
+          try { moderationRef.current?.assertCanAct("like"); } catch (gateErr) {
+            patchPostEverywhere(qc, id, { liked: prevLiked, likesDelta: prevLiked ? 1 : -1 });
+            throw gateErr;
+          }
           const { data, error } = await supabase.rpc("toggle_post_like", {
             target_post_id: id,
           });
