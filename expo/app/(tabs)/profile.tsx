@@ -308,7 +308,7 @@ export default function ProfileScreen() {
   } = useApp();
   const { listings } = useLaunchpad();
   const { isAuthenticated, signOut, userId } = useAuth();
-  const { isAdmin, role: adminRole } = useAdmin();
+  const { isAdmin, isTeam, role: adminRole } = useAdmin();
   const { uploadMedia, isUploading } = useProfileProvider();
   const qc = useQueryClient();
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -990,6 +990,15 @@ export default function ProfileScreen() {
                     sub={`Logged in as ${adminRole ?? "admin"}`}
                     rightLabel="OPEN"
                     onPress={() => router.push("/admin")}
+                  />
+                ) : null}
+                {isTeam ? (
+                  <MenuRow
+                    Icon={Shield}
+                    label="Team Dashboard"
+                    sub={`Moderator console · ${adminRole ?? "team"}`}
+                    rightLabel="OPEN"
+                    onPress={() => router.push("/team")}
                   />
                 ) : null}
                 <MenuRow
