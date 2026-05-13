@@ -44,9 +44,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
-import { getSelfChat } from "@/lib/api/platform";
 import { navigateBack } from "@/lib/navigation";
-import { useAuth } from "@/providers/auth-provider";
 import { Conversation, DMUser, useMessageableUsersSearch, useMessages } from "@/providers/messages-provider";
 
 type Tab = "inbox" | "requests";
@@ -145,24 +143,10 @@ export default function MessagesScreen() {
     router.push({ pathname: "/dm/[id]", params: { id } });
   };
 
-  const { user } = useAuth();
-  const openSelfChat = useCallback(async () => {
+  const openSelfChat = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
-    if (!user) {
-      router.push("/auth?mode=signin");
-      return;
-    }
-    try {
-      const id = await getSelfChat();
-      if (id) {
-        router.push({ pathname: "/dm/[id]", params: { id } });
-        return;
-      }
-      Alert.alert("Notes to self", "Couldn’t open your private notes. Try again.");
-    } catch (e) {
-      Alert.alert("Could not open", e instanceof Error ? e.message : "Try again.");
-    }
-  }, [router, user]);
+    router.push("/notes-to-self");
+  }, [router]);
 
   const onMarkAllRead = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});

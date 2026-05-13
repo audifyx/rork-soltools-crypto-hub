@@ -111,6 +111,7 @@ function RootLayoutNav() {
       <Stack.Screen name="space/[id]" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="messages" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="dm/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="notes-to-self" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="lobbies" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="lobby/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="notifications" options={{ presentation: "card", animation: "slide_from_right" }} />
