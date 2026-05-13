@@ -45,7 +45,7 @@ import {
   type SuggestedFollowRow,
   type TrendingHashtagRow,
 } from "@/lib/api/platform";
-import { hapticImpact, hapticSelect } from "@/lib/haptics";
+import { hapticMedium, hapticSelect } from "@/lib/haptics";
 import { useAuth } from "@/providers/auth-provider";
 
 interface CardPayload {
@@ -132,13 +132,13 @@ export default function ForYouScreen() {
   const rest = filtered.slice(1);
 
   const onRefresh = useCallback(() => {
-    hapticSelect().catch(() => {});
+    hapticSelect();
     Promise.all([fypQuery.refetch(), hashtagsQuery.refetch(), suggestionsQuery.refetch()]).catch(() => {});
   }, [fypQuery, hashtagsQuery, suggestionsQuery]);
 
   const onOpen = useCallback(
     (card: FypCard) => {
-      hapticSelect().catch(() => {});
+      hapticSelect();
       try {
         if (card.kind === "reel") router.push("/(tabs)/reels");
         else if (card.kind === "story") router.push({ pathname: "/story/[id]", params: { id: card.ref_id } });
@@ -155,7 +155,7 @@ export default function ForYouScreen() {
   const onHide = useCallback(
     (card: FypCard) => {
       if (!userId) return;
-      hapticImpact("medium").catch(() => {});
+      hapticMedium();
       queryClient.setQueryData<FypCard[]>(["fyp", userId], (prev) =>
         (prev ?? []).filter((c) => c.id !== card.id),
       );
@@ -176,7 +176,7 @@ export default function ForYouScreen() {
 
   const onHashtag = useCallback(
     (tag: string) => {
-      hapticSelect().catch(() => {});
+      hapticSelect();
       router.push({ pathname: "/(tabs)/discover", params: { q: `#${tag}` } });
     },
     [router],
@@ -184,7 +184,7 @@ export default function ForYouScreen() {
 
   const onOpenUser = useCallback(
     (row: SuggestedFollowRow) => {
-      hapticSelect().catch(() => {});
+      hapticSelect();
       if (row.username) {
         router.push({ pathname: "/u/[handle]", params: { handle: row.username } });
       } else {
@@ -236,7 +236,7 @@ export default function ForYouScreen() {
               <Pressable
                 key={f.key}
                 onPress={() => {
-                  hapticSelect().catch(() => {});
+                  hapticSelect();
                   setFilter(f.key);
                 }}
                 hitSlop={8}
