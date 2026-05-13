@@ -98,6 +98,11 @@ interface UserRow {
   username: string | null;
   display_name: string | null;
   is_banned: boolean | null;
+  is_suspended: boolean | null;
+  ban_expires_at: string | null;
+  ban_reason: string | null;
+  suspend_expires_at: string | null;
+  suspend_reason: string | null;
   created_at: string;
 }
 
@@ -640,13 +645,15 @@ function UsersTab() {
   const { permissions } = useAdmin();
   const [query, setQuery] = useState<string>("");
   const [suspendHours, setSuspendHours] = useState<Record<string, string>>({});
+  const [banHours, setBanHours] = useState<Record<string, string>>({});
+  const [reasonText, setReasonText] = useState<Record<string, string>>({});
 
   const usersQuery = useQuery<UserRow[]>({
     queryKey: ["team", "users"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id,user_id,username,display_name,is_banned,created_at")
+        .select("id,user_id,username,display_name,is_banned,is_suspended,ban_expires_at,ban_reason,suspend_expires_at,suspend_reason,created_at")
         .order("created_at", { ascending: false })
         .limit(120);
       if (error) throw error;
@@ -655,40 +662,54 @@ function UsersTab() {
   });
 
   const banMutation = useMutation({
-    mutationFn: async (row: UserRow) => {
-      const uid = row.user_id ?? row.id;
-      const rpc = row.is_banned ? "team_unban_user" : "team_ban_user";
-      const { error } = await supabase.rpc(rpc, { p_user_id: uid });
-      if (error) throw error;
+    mutationFn: async (input: { row: UserRow; hours: number | null; reason: string | null }) => {
+      const uid = input.row.user_id ?? input.row.id;
+      if (input.row.is_banned) {
+        const { error } = await supabase.rpc("team_unban_user", { p_user_id: uid });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.rpc("team_ban_user", {
+          p_user_id: uid,
+          p_reason: input.reason,
+          p_hours: input.hours,
+        });
+        if (error) throw error;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["team", "users"] }),
     onError: (e: Error) => Alert.alert("Action failed", e.message),
   });
 
   const suspendMutation = useMutation({
-    mutationFn: async (input: { row: UserRow; hours: number }) => {
+    mutationFn: async (input: { row: UserRow; hours: number | null; reason: string | null }) => {
       const uid = input.row.user_id ?? input.row.id;
-      const { error } = await supabase.rpc("team_suspend_user", {
-        p_user_id: uid,
-        p_hours: input.hours,
-        p_reason: null,
-      });
-      if (error) throw error;
+      if (input.row.is_suspended) {
+        const { error } = await supabase.rpc("team_unsuspend_user", { p_user_id: uid });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.rpc("team_suspend_user", {
+          p_user_id: uid,
+          p_hours: input.hours,
+          p_reason: input.reason,
+        });
+        if (error) throw error;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["team", "users"] }),
     onError: (e: Error) => Alert.alert("Suspend failed", e.message),
   });
 
   const limitMutation = useMutation({
-    mutationFn: async (input: { row: UserRow; can_post: boolean; can_comment: boolean; can_dm: boolean }) => {
+    mutationFn: async (input: { row: UserRow; can_post: boolean; can_comment: boolean; can_like: boolean; can_dm: boolean; hours: number }) => {
       const uid = input.row.user_id ?? input.row.id;
       const { error } = await supabase.rpc("team_limit_user", {
         p_user_id: uid,
         p_can_post: input.can_post,
         p_can_comment: input.can_comment,
+        p_can_like: input.can_like,
         p_can_dm: input.can_dm,
+        p_hours: input.hours,
         p_reason: null,
-        p_hours: 24,
       });
       if (error) throw error;
     },
@@ -713,44 +734,108 @@ function UsersTab() {
         ListEmptyComponent={usersQuery.isLoading ? <Loader /> : <EmptyState text="No users." />}
         renderItem={({ item }) => {
           const uid = item.user_id ?? item.id;
-          const hoursStr = suspendHours[uid] ?? "24";
-          const hours = Math.max(1, Number(hoursStr) || 24);
+          const suspendStr = suspendHours[uid] ?? "24";
+          const banStr = banHours[uid] ?? "";
+          const reason = reasonText[uid] ?? "";
+          const suspendH = Math.max(1, Number(suspendStr) || 24);
+          const banH = banStr.trim() === "" ? null : Math.max(1, Number(banStr) || 24);
+          const reasonVal = reason.trim() === "" ? null : reason.trim();
           return (
             <View style={styles.card}>
               <View style={styles.rowHeader}>
                 <View style={styles.rowMain}>
                   <Text style={styles.rowTitle}>{item.display_name ?? item.username ?? uid.slice(0, 8)}</Text>
                   <Text style={styles.rowSub}>@{item.username ?? "unset"}</Text>
+                  {item.is_banned && item.ban_reason ? (
+                    <Text style={styles.rowSub}>Ban: “{item.ban_reason}”{item.ban_expires_at ? ` · until ${new Date(item.ban_expires_at).toLocaleString()}` : " · permanent"}</Text>
+                  ) : null}
+                  {item.is_suspended && item.suspend_reason ? (
+                    <Text style={styles.rowSub}>Suspended: “{item.suspend_reason}”{item.suspend_expires_at ? ` · until ${new Date(item.suspend_expires_at).toLocaleString()}` : " · permanent"}</Text>
+                  ) : null}
                 </View>
-                {item.is_banned ? <Pill label="BANNED" color={Colors.platinum} /> : <Pill label="ACTIVE" color={Colors.goldBright} />}
+                {item.is_banned ? (
+                  <Pill label="BANNED" color={"#FF4D6D"} />
+                ) : item.is_suspended ? (
+                  <Pill label="SUSPENDED" color={"#FFB84C"} />
+                ) : (
+                  <Pill label="ACTIVE" color={Colors.goldBright} />
+                )}
               </View>
-              <View style={styles.actionGrid}>
-                {permissions.ban_users ? (
-                  <ActionButton
-                    label={item.is_banned ? "Unban" : "Ban"}
-                    Icon={Ban}
-                    danger
-                    onPress={() => banMutation.mutate(item)}
-                  />
-                ) : null}
-                {permissions.limit_users ? (
-                  <>
-                    <ActionButton label="Mute posts 24h" Icon={Clock} onPress={() => limitMutation.mutate({ row: item, can_post: false, can_comment: true, can_dm: true })} />
-                    <ActionButton label="Mute all 24h" Icon={Clock} onPress={() => limitMutation.mutate({ row: item, can_post: false, can_comment: false, can_dm: false })} />
-                  </>
-                ) : null}
-              </View>
+
+              {(permissions.ban_users || permissions.suspend_users) && !item.is_banned ? (
+                <TextInput
+                  value={reason}
+                  onChangeText={(value) => setReasonText((prev) => ({ ...prev, [uid]: value }))}
+                  placeholder="Reason (optional, shown to the user)"
+                  placeholderTextColor={Colors.muted2}
+                  style={styles.reasonInput}
+                  multiline
+                />
+              ) : null}
+
+              {permissions.ban_users ? (
+                <View style={styles.inlineInputRow}>
+                  {item.is_banned ? (
+                    <ActionButton
+                      label="Unban"
+                      Icon={Ban}
+                      onPress={() => banMutation.mutate({ row: item, hours: null, reason: null })}
+                    />
+                  ) : (
+                    <>
+                      <TextInput
+                        value={banStr}
+                        onChangeText={(value) => setBanHours((prev) => ({ ...prev, [uid]: value }))}
+                        keyboardType="numeric"
+                        placeholder="Ban hours · blank = forever"
+                        placeholderTextColor={Colors.muted2}
+                        style={styles.compactInput}
+                      />
+                      <ActionButton
+                        label={banH ? `Ban ${banH}h` : "Ban forever"}
+                        Icon={Ban}
+                        danger
+                        onPress={() => banMutation.mutate({ row: item, hours: banH, reason: reasonVal })}
+                      />
+                    </>
+                  )}
+                </View>
+              ) : null}
+
               {permissions.suspend_users ? (
                 <View style={styles.inlineInputRow}>
-                  <TextInput
-                    value={hoursStr}
-                    onChangeText={(value) => setSuspendHours((prev) => ({ ...prev, [uid]: value }))}
-                    keyboardType="numeric"
-                    placeholder="Hours"
-                    placeholderTextColor={Colors.muted2}
-                    style={styles.compactInput}
-                  />
-                  <ActionButton label={`Suspend ${hours}h`} Icon={Clock} onPress={() => suspendMutation.mutate({ row: item, hours })} />
+                  {item.is_suspended ? (
+                    <ActionButton
+                      label="Unsuspend"
+                      Icon={Clock}
+                      onPress={() => suspendMutation.mutate({ row: item, hours: null, reason: null })}
+                    />
+                  ) : (
+                    <>
+                      <TextInput
+                        value={suspendStr}
+                        onChangeText={(value) => setSuspendHours((prev) => ({ ...prev, [uid]: value }))}
+                        keyboardType="numeric"
+                        placeholder="Hours · blank = forever"
+                        placeholderTextColor={Colors.muted2}
+                        style={styles.compactInput}
+                      />
+                      <ActionButton
+                        label={suspendStr.trim() === "" ? "Suspend forever" : `Suspend ${suspendH}h`}
+                        Icon={Clock}
+                        onPress={() => suspendMutation.mutate({ row: item, hours: suspendStr.trim() === "" ? null : suspendH, reason: reasonVal })}
+                      />
+                    </>
+                  )}
+                </View>
+              ) : null}
+
+              {permissions.limit_users && !item.is_banned && !item.is_suspended ? (
+                <View style={styles.actionGrid}>
+                  <ActionButton label="Mute posts 24h" Icon={Clock} onPress={() => limitMutation.mutate({ row: item, can_post: false, can_comment: true, can_like: true, can_dm: true, hours: 24 })} />
+                  <ActionButton label="Mute comments 24h" Icon={Clock} onPress={() => limitMutation.mutate({ row: item, can_post: true, can_comment: false, can_like: true, can_dm: true, hours: 24 })} />
+                  <ActionButton label="Mute likes 24h" Icon={Clock} onPress={() => limitMutation.mutate({ row: item, can_post: true, can_comment: true, can_like: false, can_dm: true, hours: 24 })} />
+                  <ActionButton label="Mute all 24h" Icon={Clock} onPress={() => limitMutation.mutate({ row: item, can_post: false, can_comment: false, can_like: false, can_dm: false, hours: 24 })} />
                 </View>
               ) : null}
             </View>

@@ -14,7 +14,9 @@ import { ensureNotificationPermission } from "@/lib/push-notifications";
 import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
 import BiometricGate from "@/components/ui/BiometricGate";
+import ModerationGate from "@/components/ui/ModerationGate";
 import { AuthProvider } from "@/providers/auth-provider";
+import { ModerationProvider } from "@/providers/moderation-provider";
 import { LaunchpadProvider } from "@/providers/launchpad-provider";
 import { LobbiesProvider } from "@/providers/lobbies-provider";
 import { MessagesProvider } from "@/providers/messages-provider";
@@ -147,23 +149,27 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <AdminProvider>
-          <ProfileProvider>
-            <AppProvider>
-              <LaunchpadProvider>
-                <SocialProvider>
-                  <MessagesProvider>
-                    <LobbiesProvider>
-                      <GestureHandlerRootView style={styles.gestureRoot}>
-                        <BiometricGate>
-                          <RootLayoutNav />
-                        </BiometricGate>
-                      </GestureHandlerRootView>
-                    </LobbiesProvider>
-                  </MessagesProvider>
-                </SocialProvider>
-              </LaunchpadProvider>
-            </AppProvider>
-          </ProfileProvider>
+          <ModerationProvider>
+            <ProfileProvider>
+              <AppProvider>
+                <LaunchpadProvider>
+                  <SocialProvider>
+                    <MessagesProvider>
+                      <LobbiesProvider>
+                        <GestureHandlerRootView style={styles.gestureRoot}>
+                          <BiometricGate>
+                            <ModerationGate>
+                              <RootLayoutNav />
+                            </ModerationGate>
+                          </BiometricGate>
+                        </GestureHandlerRootView>
+                      </LobbiesProvider>
+                    </MessagesProvider>
+                  </SocialProvider>
+                </LaunchpadProvider>
+              </AppProvider>
+            </ProfileProvider>
+          </ModerationProvider>
         </AdminProvider>
       </AuthProvider>
     </QueryClientProvider>
