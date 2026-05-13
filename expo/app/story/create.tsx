@@ -12,12 +12,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { createStory } from "@/lib/api/platform";
 import { hapticSelect } from "@/lib/haptics";
-import { uploadDMImage } from "@/lib/upload";
+import { uploadPostImage } from "@/lib/upload";
+import { useAuth } from "@/providers/auth-provider";
 
 export default function CreateStoryScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { userId, isAuthenticated } = useAuth();
   const [uri, setUri] = useState<string | null>(null);
+  const [assetBase64, setAssetBase64] = useState<string | null>(null);
   const [caption, setCaption] = useState<string>("");
 
   const pick = async (camera: boolean) => {
@@ -29,17 +32,25 @@ export default function CreateStoryScreen() {
       Alert.alert("Permission required", "Allow access to add a story photo.");
       return;
     }
+    const options: ImagePicker.ImagePickerOptions = {
+      quality: 0.85,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      base64: true,
+    };
     const result = camera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.85, mediaTypes: ImagePicker.MediaTypeOptions.Images })
-      : await ImagePicker.launchImageLibraryAsync({ quality: 0.85, mediaTypes: ImagePicker.MediaTypeOptions.Images });
-    if (result.canceled || !result.assets?.[0]?.uri) return;
-    setUri(result.assets[0].uri);
+      ? await ImagePicker.launchCameraAsync(options)
+      : await ImagePicker.launchImageLibraryAsync(options);
+    const asset = result.assets?.[0];
+    if (result.canceled || !asset?.uri) return;
+    setUri(asset.uri);
+    setAssetBase64(asset.base64 ?? null);
   };
 
   const publish = useMutation({
     mutationFn: async () => {
+      if (!isAuthenticated || !userId) throw new Error("Sign in to publish a story.");
       if (!uri) throw new Error("Pick a photo first.");
-      const url = await uploadDMImage(uri);
+      const url = await uploadPostImage(userId, uri, assetBase64);
       if (!url) throw new Error("Upload failed.");
       const id = await createStory({ mediaUrl: url, mediaType: "image", caption: caption.trim() || null });
       if (!id) throw new Error("Could not publish story.");
