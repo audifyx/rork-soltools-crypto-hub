@@ -677,6 +677,19 @@ export async function getMyInterests(userId: string): Promise<string[]> {
 }
 
 export async function setMyInterests(userId: string, slugs: string[]): Promise<void> {
+  // Ensure topic rows exist first (FK target). The code catalog can include
+  // slugs that aren't seeded in the `interest_topics` table.
+  if (slugs.length > 0) {
+    const catalog = new Map(INTEREST_CATALOG.map((t) => [t.slug, t]));
+    const topicRows = slugs.map((s) => {
+      const t = catalog.get(s);
+      return { slug: s, label: t?.label ?? s };
+    });
+    const { error: upsertErr } = await supabase
+      .from("interest_topics")
+      .upsert(topicRows, { onConflict: "slug" });
+    if (upsertErr) console.log("[interests] topic upsert failed", upsertErr.message);
+  }
   await supabase.from("user_interests").delete().eq("user_id", userId);
   if (slugs.length === 0) return;
   const rows = slugs.map((s) => ({ user_id: userId, topic_slug: s }));

@@ -46,7 +46,7 @@ export default function InterestQuizScreen() {
   }, [topicsQuery.data]);
 
   const toggle = (slug: string) => {
-    hapticSelect().catch(() => {});
+    hapticSelect();
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(slug)) next.delete(slug);
