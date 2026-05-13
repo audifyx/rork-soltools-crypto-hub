@@ -17,6 +17,8 @@ export interface StoryRow {
   created_at: string;
   expires_at: string;
   view_count: number | null;
+  likes_count?: number | null;
+  comments_count?: number | null;
   username?: string | null;
   display_name?: string | null;
   avatar_url?: string | null;
@@ -24,10 +26,29 @@ export interface StoryRow {
   verified?: boolean | null;
 }
 
+export interface StoryCommentRow {
+  id: string;
+  story_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  avatar_color: string | null;
+}
+
+export interface StoryEngagement {
+  liked: boolean;
+  likes_count: number;
+  comments_count: number;
+  view_count: number;
+}
+
 export async function listActiveStories(): Promise<StoryRow[]> {
   const { data, error } = await supabase
     .from("stories")
-    .select("id,author_id,media_url,media_type,caption,created_at,expires_at,view_count")
+    .select("id,author_id,media_url,media_type,caption,created_at,expires_at,view_count,likes_count,comments_count")
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false })
     .limit(120);
@@ -44,6 +65,8 @@ export async function listActiveStories(): Promise<StoryRow[]> {
     created_at: string;
     expires_at: string;
     view_count: number | null;
+    likes_count: number | null;
+    comments_count: number | null;
   }[];
   const authorIds = Array.from(new Set(raw.map((r) => r.author_id)));
   const profileMap = new Map<string, { username: string | null; display_name: string | null; avatar_url: string | null; avatar_color: string | null; verified: boolean | null }>();
@@ -68,6 +91,8 @@ export async function listActiveStories(): Promise<StoryRow[]> {
       created_at: r.created_at,
       expires_at: r.expires_at,
       view_count: r.view_count,
+      likes_count: r.likes_count ?? 0,
+      comments_count: r.comments_count ?? 0,
       username: p?.username ?? null,
       display_name: p?.display_name ?? null,
       avatar_url: p?.avatar_url ?? null,
@@ -80,6 +105,104 @@ export async function listActiveStories(): Promise<StoryRow[]> {
 export async function viewStory(storyId: string): Promise<void> {
   const { error } = await supabase.rpc("view_story", { p_story_id: storyId });
   if (error) console.log("[stories] view failed", error.message);
+}
+
+export async function getStoryEngagement(storyId: string): Promise<StoryEngagement> {
+  const { data: auth } = await supabase.auth.getUser();
+  const uid = auth.user?.id ?? null;
+
+  const [storyRes, likedRes] = await Promise.all([
+    supabase
+      .from("stories")
+      .select("likes_count,comments_count,view_count")
+      .eq("id", storyId)
+      .maybeSingle(),
+    uid
+      ? supabase
+          .from("story_likes")
+          .select("user_id", { head: true, count: "exact" })
+          .eq("story_id", storyId)
+          .eq("user_id", uid)
+      : Promise.resolve({ count: 0, error: null } as { count: number | null; error: null }),
+  ]);
+
+  const row = (storyRes.data ?? null) as { likes_count: number | null; comments_count: number | null; view_count: number | null } | null;
+  const likedCount = (likedRes as { count: number | null }).count ?? 0;
+  return {
+    liked: likedCount > 0,
+    likes_count: row?.likes_count ?? 0,
+    comments_count: row?.comments_count ?? 0,
+    view_count: row?.view_count ?? 0,
+  };
+}
+
+export async function toggleStoryLike(storyId: string): Promise<{ liked: boolean; likes_count: number }> {
+  const { data, error } = await supabase.rpc("toggle_story_like", { p_story_id: storyId });
+  if (error) {
+    console.log("[stories] like failed", error.message);
+    throw new Error(error.message);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  const r = (row ?? {}) as { liked?: boolean; likes_count?: number };
+  return { liked: !!r.liked, likes_count: r.likes_count ?? 0 };
+}
+
+export async function listStoryComments(storyId: string): Promise<StoryCommentRow[]> {
+  const { data, error } = await supabase
+    .from("story_comments")
+    .select("id,story_id,user_id,body,created_at")
+    .eq("story_id", storyId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) {
+    console.log("[stories] comments list failed", error.message);
+    return [];
+  }
+  const raw = (data ?? []) as { id: string; story_id: string; user_id: string; body: string; created_at: string }[];
+  const userIds = Array.from(new Set(raw.map((r) => r.user_id)));
+  const map = new Map<string, { username: string | null; display_name: string | null; avatar_url: string | null; avatar_color: string | null }>();
+  if (userIds.length > 0) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id,username,display_name,avatar_url,avatar_color")
+      .in("id", userIds);
+    for (const p of (profs ?? []) as { id: string; username: string | null; display_name: string | null; avatar_url: string | null; avatar_color: string | null }[]) {
+      map.set(p.id, p);
+    }
+  }
+  return raw.map((r) => {
+    const p = map.get(r.user_id);
+    return {
+      id: r.id,
+      story_id: r.story_id,
+      user_id: r.user_id,
+      body: r.body,
+      created_at: r.created_at,
+      username: p?.username ?? null,
+      display_name: p?.display_name ?? null,
+      avatar_url: p?.avatar_url ?? null,
+      avatar_color: p?.avatar_color ?? null,
+    };
+  });
+}
+
+export async function addStoryComment(storyId: string, body: string): Promise<string | null> {
+  const trimmed = body.trim();
+  if (!trimmed) throw new Error("Comment is empty.");
+  const { data, error } = await supabase.rpc("add_story_comment", { p_story_id: storyId, p_body: trimmed });
+  if (error) {
+    console.log("[stories] comment failed", error.message);
+    throw new Error(error.message);
+  }
+  return (data as string | null) ?? null;
+}
+
+export async function deleteStoryComment(commentId: string): Promise<void> {
+  const { error } = await supabase.rpc("delete_story_comment", { p_comment_id: commentId });
+  if (error) {
+    console.log("[stories] comment delete failed", error.message);
+    throw new Error(error.message);
+  }
 }
 
 export async function createStory(input: {

@@ -1,21 +1,48 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Eye, Heart, MessageCircle, X } from "lucide-react-native";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Eye, Heart, MessageCircle, Send, Trash2, X } from "lucide-react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Easing,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import { listActiveStories, type StoryRow, viewStory } from "@/lib/api/platform";
+import {
+  addStoryComment,
+  deleteStoryComment,
+  getStoryEngagement,
+  listActiveStories,
+  listStoryComments,
+  type StoryCommentRow,
+  type StoryRow,
+  toggleStoryLike,
+  viewStory,
+} from "@/lib/api/platform";
 import { hapticSelect } from "@/lib/haptics";
+import { useAuth } from "@/providers/auth-provider";
 
 const STORY_DURATION = 5000;
 
 export default function StoryViewerScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { userId: authUserId } = useAuth();
   const params = useLocalSearchParams<{ id?: string; userId?: string }>();
   const startId = typeof params.id === "string" ? params.id : null;
   const userId = typeof params.userId === "string" ? params.userId : null;
@@ -42,9 +69,32 @@ export default function StoryViewerScreen() {
 
   const current = stories[index];
 
+  const [commentsOpen, setCommentsOpen] = useState<boolean>(false);
+  const [paused, setPaused] = useState<boolean>(false);
+
+  const engagementQuery = useQuery({
+    queryKey: ["stories", "engagement", current?.id ?? ""],
+    queryFn: () => getStoryEngagement(current!.id),
+    enabled: !!current?.id,
+    staleTime: 5_000,
+  });
+
+  const commentsQuery = useQuery<StoryCommentRow[]>({
+    queryKey: ["stories", "comments", current?.id ?? ""],
+    queryFn: () => listStoryComments(current!.id),
+    enabled: !!current?.id && commentsOpen,
+    staleTime: 5_000,
+  });
+
+  const liked = engagementQuery.data?.liked ?? false;
+  const likeCount = engagementQuery.data?.likes_count ?? current?.likes_count ?? 0;
+  const commentCount = engagementQuery.data?.comments_count ?? current?.comments_count ?? 0;
+  const viewCount = engagementQuery.data?.view_count ?? current?.view_count ?? 0;
+
   const progress = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!current) return;
+    if (paused) return;
     progress.setValue(0);
     const animation = Animated.timing(progress, {
       toValue: 1,
@@ -62,17 +112,56 @@ export default function StoryViewerScreen() {
     return () => {
       animation.stop();
     };
-  }, [current, index, progress, router, stories.length]);
+  }, [current, index, paused, progress, router, stories.length]);
 
-  const goNext = () => {
+  const goNext = useCallback(() => {
     hapticSelect();
     if (index < stories.length - 1) setIndex(index + 1);
     else router.back();
-  };
-  const goPrev = () => {
+  }, [index, stories.length, router]);
+
+  const goPrev = useCallback(() => {
     hapticSelect();
     if (index > 0) setIndex(index - 1);
-  };
+  }, [index]);
+
+  const likeMutation = useMutation({
+    mutationFn: () => toggleStoryLike(current!.id),
+    onMutate: async () => {
+      hapticSelect();
+      if (!current) return;
+      const key = ["stories", "engagement", current.id];
+      await queryClient.cancelQueries({ queryKey: key });
+      const prev = queryClient.getQueryData<{ liked: boolean; likes_count: number; comments_count: number; view_count: number }>(key);
+      if (prev) {
+        queryClient.setQueryData(key, {
+          ...prev,
+          liked: !prev.liked,
+          likes_count: prev.liked ? Math.max(0, prev.likes_count - 1) : prev.likes_count + 1,
+        });
+      }
+      return { prev, key };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev && ctx.key) queryClient.setQueryData(ctx.key, ctx.prev);
+    },
+    onSettled: () => {
+      if (current) {
+        void queryClient.invalidateQueries({ queryKey: ["stories", "engagement", current.id] });
+      }
+    },
+  });
+
+  const openComments = useCallback(() => {
+    hapticSelect();
+    setPaused(true);
+    setCommentsOpen(true);
+  }, []);
+
+  const closeComments = useCallback(() => {
+    setCommentsOpen(false);
+    setPaused(false);
+  }, []);
 
   if (!current) {
     return (
@@ -86,6 +175,8 @@ export default function StoryViewerScreen() {
       </View>
     );
   }
+
+  const isOwner = !!authUserId && authUserId === current.user_id;
 
   return (
     <View style={styles.root}>
@@ -162,19 +253,195 @@ export default function StoryViewerScreen() {
           </Text>
         ) : null}
         <View style={styles.bottomBar}>
-          <View style={styles.viewerPill}>
+          <Pressable
+            style={styles.viewerPill}
+            onPress={isOwner ? openComments : undefined}
+            testID="story-views"
+          >
             <Eye color={Colors.text} size={12} strokeWidth={2.6} />
-            <Text style={styles.viewerText}>{current.view_count ?? 0}</Text>
-          </View>
-          <Pressable style={styles.iconRound} testID="story-react">
-            <Heart color={Colors.rose} size={18} strokeWidth={2.5} />
+            <Text style={styles.viewerText}>{viewCount}</Text>
           </Pressable>
-          <Pressable style={styles.iconRound} testID="story-reply">
-            <MessageCircle color={Colors.text} size={18} strokeWidth={2.5} />
+          <View style={{ flex: 1 }} />
+          <Pressable
+            style={styles.iconRound}
+            testID="story-react"
+            onPress={() => likeMutation.mutate()}
+          >
+            <Heart
+              color={liked ? Colors.rose : Colors.text}
+              size={20}
+              strokeWidth={2.5}
+              fill={liked ? Colors.rose : "transparent"}
+            />
+            {likeCount > 0 ? <Text style={styles.iconCount}>{likeCount}</Text> : null}
+          </Pressable>
+          <Pressable style={styles.iconRound} testID="story-reply" onPress={openComments}>
+            <MessageCircle color={Colors.text} size={20} strokeWidth={2.5} />
+            {commentCount > 0 ? <Text style={styles.iconCount}>{commentCount}</Text> : null}
           </Pressable>
         </View>
       </SafeAreaView>
+
+      <CommentsSheet
+        visible={commentsOpen}
+        onClose={closeComments}
+        storyId={current.id}
+        comments={commentsQuery.data ?? []}
+        loading={commentsQuery.isLoading}
+        currentUserId={authUserId}
+      />
     </View>
+  );
+}
+
+function CommentsSheet({
+  visible,
+  onClose,
+  storyId,
+  comments,
+  loading,
+  currentUserId,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  storyId: string;
+  comments: StoryCommentRow[];
+  loading: boolean;
+  currentUserId: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const [text, setText] = useState<string>("");
+
+  const addMutation = useMutation({
+    mutationFn: (body: string) => addStoryComment(storyId, body),
+    onSuccess: async () => {
+      setText("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["stories", "comments", storyId] }),
+        queryClient.invalidateQueries({ queryKey: ["stories", "engagement", storyId] }),
+      ]);
+    },
+    onError: (e: unknown) => {
+      Alert.alert("Could not post", e instanceof Error ? e.message : "Try again.");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteStoryComment(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["stories", "comments", storyId] }),
+        queryClient.invalidateQueries({ queryKey: ["stories", "engagement", storyId] }),
+      ]);
+    },
+    onError: (e: unknown) => {
+      Alert.alert("Could not delete", e instanceof Error ? e.message : "Try again.");
+    },
+  });
+
+  const onSend = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    addMutation.mutate(trimmed);
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.sheetWrap}
+      >
+        <View style={styles.sheet}>
+          <View style={styles.sheetGrabber} />
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>Comments</Text>
+            <Pressable onPress={onClose} style={styles.sheetClose} testID="story-comments-close">
+              <X color={Colors.text} size={16} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+
+          {loading ? (
+            <View style={styles.sheetLoading}>
+              <ActivityIndicator color={Colors.mint} />
+            </View>
+          ) : comments.length === 0 ? (
+            <View style={styles.sheetEmpty}>
+              <MessageCircle color={Colors.muted} size={22} strokeWidth={2.2} />
+              <Text style={styles.sheetEmptyText}>No comments yet</Text>
+              <Text style={styles.sheetEmptyBody}>Be the first to reply.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={comments}
+              keyExtractor={(c) => c.id}
+              contentContainerStyle={styles.list}
+              renderItem={({ item }) => (
+                <View style={styles.commentRow}>
+                  <View style={[styles.commentAvatar, { backgroundColor: item.avatar_color ?? Colors.mint }]}>
+                    {item.avatar_url ? (
+                      <ExpoImage source={{ uri: item.avatar_url }} style={styles.commentAvatarImg} contentFit="cover" />
+                    ) : (
+                      <Text style={styles.commentAvatarInit}>
+                        {(item.display_name ?? item.username ?? "U").slice(0, 1).toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.commentName} numberOfLines={1}>
+                      {item.display_name ?? item.username ?? "User"}
+                    </Text>
+                    <Text style={styles.commentBody}>{item.body}</Text>
+                  </View>
+                  {currentUserId === item.user_id ? (
+                    <Pressable
+                      onPress={() =>
+                        Alert.alert("Delete comment?", undefined, [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(item.id) },
+                        ])
+                      }
+                      style={styles.commentDelete}
+                      testID={`story-comment-delete-${item.id}`}
+                    >
+                      <Trash2 color={Colors.muted} size={14} strokeWidth={2.4} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              )}
+            />
+          )}
+
+          <View style={styles.composer}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder="Add a comment…"
+              placeholderTextColor={Colors.muted}
+              style={styles.composerInput}
+              maxLength={500}
+              multiline
+              editable={!!currentUserId}
+            />
+            <Pressable
+              onPress={onSend}
+              disabled={!text.trim() || addMutation.isPending || !currentUserId}
+              style={[
+                styles.composerSend,
+                (!text.trim() || addMutation.isPending || !currentUserId) && styles.composerSendDisabled,
+              ]}
+              testID="story-comment-send"
+            >
+              {addMutation.isPending ? (
+                <ActivityIndicator color={Colors.ink} />
+              ) : (
+                <Send color={Colors.ink} size={16} strokeWidth={2.8} />
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -230,13 +497,90 @@ const styles = StyleSheet.create({
   },
   viewerText: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
   iconRound: {
-    width: 40,
+    minWidth: 44,
     height: 40,
+    paddingHorizontal: 10,
     borderRadius: 20,
     backgroundColor: "rgba(0,0,0,0.45)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
   },
+  iconCount: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+
+  // Comments sheet
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
+  sheetWrap: { flex: 1, justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: Colors.panel,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === "ios" ? 24 : 12,
+    maxHeight: "78%",
+    minHeight: "55%",
+    borderTopWidth: 1,
+    borderColor: Colors.line,
+  },
+  sheetGrabber: { width: 38, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.22)", alignSelf: "center", marginBottom: 8 },
+  sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingBottom: 8 },
+  sheetTitle: { color: Colors.text, fontSize: 16, fontWeight: "900" },
+  sheetClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetLoading: { paddingVertical: 32, alignItems: "center" },
+  sheetEmpty: { paddingVertical: 32, alignItems: "center", gap: 6, paddingHorizontal: 32 },
+  sheetEmptyText: { color: Colors.text, fontSize: 14, fontWeight: "800" },
+  sheetEmptyBody: { color: Colors.muted, fontSize: 12, fontWeight: "700", textAlign: "center" },
+  list: { paddingHorizontal: 14, paddingBottom: 8, gap: 12 },
+  commentRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 6 },
+  commentAvatar: { width: 32, height: 32, borderRadius: 16, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  commentAvatarImg: { width: "100%", height: "100%" },
+  commentAvatarInit: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
+  commentName: { color: Colors.text, fontSize: 12, fontWeight: "800" },
+  commentBody: { color: Colors.muted, fontSize: 13, fontWeight: "600", marginTop: 2, lineHeight: 18 },
+  commentDelete: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
+  composer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderColor: Colors.line,
+  },
+  composerInput: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "600",
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
+    minHeight: 40,
+    maxHeight: 110,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  composerSend: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.mint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  composerSendDisabled: { opacity: 0.45 },
 });
