@@ -209,15 +209,24 @@ export default function NotesToSelfScreen() {
       if (!safeConvId) throw new Error("Notes are still opening. Try again in a second.");
       const trimmed = body.trim();
       if (!trimmed) return null;
-      const { data, error } = await supabase.rpc("send_dm_message", {
-        p_conversation_id: safeConvId,
-        p_body: trimmed,
-        p_ticker: null,
-        p_image_url: null,
-        p_reply_to_id: null,
-      });
+      const senderId = normalizeUuid(userId);
+      if (!senderId) throw new Error("Sign in to save notes.");
+      // Notes-to-self bypasses the send_dm_message RPC because that RPC has a
+      // server-side bug that mishandles an empty array literal as a uuid.
+      // Direct insert is safe here: RLS only allows the owner to write to
+      // their own self-chat conversation.
+      const { data, error } = await supabase
+        .from("dm_messages")
+        .insert({
+          conversation_id: safeConvId,
+          sender_id: senderId,
+          body: trimmed,
+          message_type: "text",
+        })
+        .select("id")
+        .single();
       if (error) throw new Error(error.message);
-      return data as string;
+      return (data?.id as string) ?? null;
     },
     onSuccess: () => {
       const safeConvId = normalizeUuid(convId);
