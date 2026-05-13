@@ -78,6 +78,31 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       // Prefer the SECURITY DEFINER RPC so RLS on admin_roles can't hide the
       // current user's own row (this was the bug that left newly-promoted
       // team members stuck on the locked dashboard).
+      // Helper: check if the user has a "team" / "mod" / "admin" custom badge
+      // on their profile, which should also unlock the Team Dashboard.
+      const fetchBadgeRole = async (): Promise<AdminRole | null> => {
+        try {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("custom_badges")
+            .eq("user_id", userId)
+            .maybeSingle();
+          const raw = (prof as { custom_badges?: unknown } | null)?.custom_badges;
+          if (!Array.isArray(raw)) return null;
+          const ids = raw
+            .map((b) => (b && typeof b === "object" ? String((b as Record<string, unknown>).id ?? "").toLowerCase() : ""))
+            .filter(Boolean);
+          if (ids.includes("admin")) return "admin";
+          if (ids.includes("mod") || ids.includes("moderator")) return "moderator";
+          if (ids.includes("team")) return "team";
+          if (ids.includes("support")) return "support";
+          return null;
+        } catch (e) {
+          console.log("[admin] badge role fetch failed", e instanceof Error ? e.message : e);
+          return null;
+        }
+      };
+
       const rpc = await supabase.rpc("get_my_admin_role");
       if (!rpc.error && Array.isArray(rpc.data) && rpc.data.length > 0) {
         const row = rpc.data[0] as { role: string | null; permissions: unknown };
@@ -86,7 +111,12 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
           const perms = rpcRole === "team" ? normalizePerms(row.permissions) : null;
           return { role: rpcRole, permissions: perms };
         }
-        // RPC returned a null-role placeholder — user has no admin_roles row.
+        // RPC returned a null-role placeholder — fall through to badge check.
+        const badgeRole = await fetchBadgeRole();
+        if (badgeRole) {
+          const perms = badgeRole === "team" ? DEFAULT_TEAM_PERMISSIONS : null;
+          return { role: badgeRole, permissions: perms };
+        }
         return { role: isOwnerEmail ? ("owner" as const) : null, permissions: null };
       }
       if (rpc.error) console.log("[admin] get_my_admin_role failed", rpc.error.message);
@@ -98,12 +128,18 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
         .maybeSingle();
       if (error) {
         console.log("[admin] role fetch failed", error.message);
-        return { role: isOwnerEmail ? ("owner" as const) : null, permissions: null };
       }
-      if (!data) return { role: isOwnerEmail ? ("owner" as const) : null, permissions: null };
-      const role = (data.role as AdminRole) ?? null;
-      const perms = role === "team" ? normalizePerms(data.permissions) : null;
-      return { role, permissions: perms };
+      if (data) {
+        const role = (data.role as AdminRole) ?? null;
+        const perms = role === "team" ? normalizePerms(data.permissions) : null;
+        if (role) return { role, permissions: perms };
+      }
+      const badgeRole = await fetchBadgeRole();
+      if (badgeRole) {
+        const perms = badgeRole === "team" ? DEFAULT_TEAM_PERMISSIONS : null;
+        return { role: badgeRole, permissions: perms };
+      }
+      return { role: isOwnerEmail ? ("owner" as const) : null, permissions: null };
     },
   });
 
