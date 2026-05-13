@@ -32,6 +32,10 @@ export interface StoryCommentRow {
   user_id: string;
   body: string;
   created_at: string;
+  parent_comment_id: string | null;
+  likes_count: number;
+  replies_count: number;
+  liked: boolean;
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
@@ -150,15 +154,25 @@ export async function toggleStoryLike(storyId: string): Promise<{ liked: boolean
 export async function listStoryComments(storyId: string): Promise<StoryCommentRow[]> {
   const { data, error } = await supabase
     .from("story_comments")
-    .select("id,story_id,user_id,body,created_at")
+    .select("id,story_id,user_id,body,created_at,parent_comment_id,likes_count,replies_count")
     .eq("story_id", storyId)
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(400);
   if (error) {
     console.log("[stories] comments list failed", error.message);
     return [];
   }
-  const raw = (data ?? []) as { id: string; story_id: string; user_id: string; body: string; created_at: string }[];
+  const raw = (data ?? []) as {
+    id: string;
+    story_id: string;
+    user_id: string;
+    body: string;
+    created_at: string;
+    parent_comment_id: string | null;
+    likes_count: number | null;
+    replies_count: number | null;
+  }[];
+
   const userIds = Array.from(new Set(raw.map((r) => r.user_id)));
   const map = new Map<string, { username: string | null; display_name: string | null; avatar_url: string | null; avatar_color: string | null }>();
   if (userIds.length > 0) {
@@ -170,6 +184,22 @@ export async function listStoryComments(storyId: string): Promise<StoryCommentRo
       map.set(p.id, p);
     }
   }
+
+  const { data: auth } = await supabase.auth.getUser();
+  const uid = auth.user?.id ?? null;
+  const likedSet = new Set<string>();
+  if (uid && raw.length > 0) {
+    const ids = raw.map((r) => r.id);
+    const { data: likes } = await supabase
+      .from("story_comment_likes")
+      .select("comment_id")
+      .eq("user_id", uid)
+      .in("comment_id", ids);
+    for (const l of (likes ?? []) as { comment_id: string }[]) {
+      likedSet.add(l.comment_id);
+    }
+  }
+
   return raw.map((r) => {
     const p = map.get(r.user_id);
     return {
@@ -178,6 +208,10 @@ export async function listStoryComments(storyId: string): Promise<StoryCommentRo
       user_id: r.user_id,
       body: r.body,
       created_at: r.created_at,
+      parent_comment_id: r.parent_comment_id,
+      likes_count: r.likes_count ?? 0,
+      replies_count: r.replies_count ?? 0,
+      liked: likedSet.has(r.id),
       username: p?.username ?? null,
       display_name: p?.display_name ?? null,
       avatar_url: p?.avatar_url ?? null,
@@ -186,15 +220,36 @@ export async function listStoryComments(storyId: string): Promise<StoryCommentRo
   });
 }
 
-export async function addStoryComment(storyId: string, body: string): Promise<string | null> {
+export async function addStoryComment(
+  storyId: string,
+  body: string,
+  parentCommentId?: string | null,
+): Promise<string | null> {
   const trimmed = body.trim();
   if (!trimmed) throw new Error("Comment is empty.");
-  const { data, error } = await supabase.rpc("add_story_comment", { p_story_id: storyId, p_body: trimmed });
+  const { data, error } = await supabase.rpc("add_story_comment", {
+    p_story_id: storyId,
+    p_body: trimmed,
+    p_parent_comment_id: parentCommentId ?? null,
+  });
   if (error) {
     console.log("[stories] comment failed", error.message);
     throw new Error(error.message);
   }
   return (data as string | null) ?? null;
+}
+
+export async function toggleStoryCommentLike(
+  commentId: string,
+): Promise<{ liked: boolean; likes_count: number }> {
+  const { data, error } = await supabase.rpc("toggle_story_comment_like", { p_comment_id: commentId });
+  if (error) {
+    console.log("[stories] comment like failed", error.message);
+    throw new Error(error.message);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  const r = (row ?? {}) as { liked?: boolean; likes_count?: number };
+  return { liked: !!r.liked, likes_count: r.likes_count ?? 0 };
 }
 
 export async function deleteStoryComment(commentId: string): Promise<void> {

@@ -3,7 +3,7 @@ import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Eye, Heart, MessageCircle, Send, Trash2, X } from "lucide-react-native";
+import { CornerDownRight, Eye, Heart, MessageCircle, Send, Trash2, X } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -31,6 +31,7 @@ import {
   listStoryComments,
   type StoryCommentRow,
   type StoryRow,
+  toggleStoryCommentLike,
   toggleStoryLike,
   viewStory,
 } from "@/lib/api/platform";
@@ -294,6 +295,31 @@ export default function StoryViewerScreen() {
   );
 }
 
+interface CommentTreeNode extends StoryCommentRow {
+  replies: StoryCommentRow[];
+}
+
+function buildCommentTree(comments: StoryCommentRow[]): CommentTreeNode[] {
+  const roots: CommentTreeNode[] = [];
+  const map = new Map<string, CommentTreeNode>();
+  // Sort: top-level newest first, replies oldest first for natural threading.
+  const topLevel = comments.filter((c) => !c.parent_comment_id);
+  const replies = comments.filter((c) => !!c.parent_comment_id);
+  for (const c of topLevel) {
+    const node: CommentTreeNode = { ...c, replies: [] };
+    map.set(c.id, node);
+    roots.push(node);
+  }
+  const sortedReplies = [...replies].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+  for (const r of sortedReplies) {
+    const parent = r.parent_comment_id ? map.get(r.parent_comment_id) : null;
+    if (parent) parent.replies.push(r);
+  }
+  return roots;
+}
+
 function CommentsSheet({
   visible,
   onClose,
@@ -311,15 +337,25 @@ function CommentsSheet({
 }) {
   const queryClient = useQueryClient();
   const [text, setText] = useState<string>("");
+  const [replyTo, setReplyTo] = useState<StoryCommentRow | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const tree = useMemo<CommentTreeNode[]>(() => buildCommentTree(comments), [comments]);
+
+  const invalidate = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["stories", "comments", storyId] }),
+      queryClient.invalidateQueries({ queryKey: ["stories", "engagement", storyId] }),
+    ]);
+  }, [queryClient, storyId]);
 
   const addMutation = useMutation({
-    mutationFn: (body: string) => addStoryComment(storyId, body),
+    mutationFn: ({ body, parentId }: { body: string; parentId: string | null }) =>
+      addStoryComment(storyId, body, parentId),
     onSuccess: async () => {
       setText("");
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["stories", "comments", storyId] }),
-        queryClient.invalidateQueries({ queryKey: ["stories", "engagement", storyId] }),
-      ]);
+      setReplyTo(null);
+      await invalidate();
     },
     onError: (e: unknown) => {
       Alert.alert("Could not post", e instanceof Error ? e.message : "Try again.");
@@ -328,22 +364,126 @@ function CommentsSheet({
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteStoryComment(id),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["stories", "comments", storyId] }),
-        queryClient.invalidateQueries({ queryKey: ["stories", "engagement", storyId] }),
-      ]);
-    },
+    onSuccess: invalidate,
     onError: (e: unknown) => {
       Alert.alert("Could not delete", e instanceof Error ? e.message : "Try again.");
+    },
+  });
+
+  const likeMutation = useMutation({
+    mutationFn: (commentId: string) => toggleStoryCommentLike(commentId),
+    onMutate: async (commentId) => {
+      hapticSelect();
+      const key = ["stories", "comments", storyId];
+      await queryClient.cancelQueries({ queryKey: key });
+      const prev = queryClient.getQueryData<StoryCommentRow[]>(key);
+      if (prev) {
+        queryClient.setQueryData<StoryCommentRow[]>(
+          key,
+          prev.map((c) =>
+            c.id === commentId
+              ? {
+                  ...c,
+                  liked: !c.liked,
+                  likes_count: c.liked ? Math.max(0, c.likes_count - 1) : c.likes_count + 1,
+                }
+              : c,
+          ),
+        );
+      }
+      return { prev, key };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev && ctx.key) queryClient.setQueryData(ctx.key, ctx.prev);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["stories", "comments", storyId] });
     },
   });
 
   const onSend = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    addMutation.mutate(trimmed);
+    addMutation.mutate({ body: trimmed, parentId: replyTo?.id ?? null });
   };
+
+  const onPickReply = useCallback((c: StoryCommentRow) => {
+    hapticSelect();
+    setReplyTo(c);
+  }, []);
+
+  const renderComment = useCallback(
+    (item: StoryCommentRow, isReply: boolean) => (
+      <View
+        key={item.id}
+        style={[styles.commentRow, isReply && styles.commentRowReply]}
+      >
+        <View style={[styles.commentAvatar, { backgroundColor: item.avatar_color ?? Colors.mint }]}>
+          {item.avatar_url ? (
+            <ExpoImage source={{ uri: item.avatar_url }} style={styles.commentAvatarImg} contentFit="cover" />
+          ) : (
+            <Text style={styles.commentAvatarInit}>
+              {(item.display_name ?? item.username ?? "U").slice(0, 1).toUpperCase()}
+            </Text>
+          )}
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.commentName} numberOfLines={1}>
+            {item.display_name ?? item.username ?? "User"}
+          </Text>
+          <Text style={styles.commentBody}>{item.body}</Text>
+          <View style={styles.commentActions}>
+            <Pressable
+              onPress={() => likeMutation.mutate(item.id)}
+              style={styles.commentAction}
+              hitSlop={8}
+              testID={`story-comment-like-${item.id}`}
+              disabled={!currentUserId}
+            >
+              <Heart
+                color={item.liked ? Colors.rose : Colors.muted}
+                size={13}
+                strokeWidth={2.5}
+                fill={item.liked ? Colors.rose : "transparent"}
+              />
+              {item.likes_count > 0 ? (
+                <Text style={[styles.commentActionText, item.liked && { color: Colors.rose }]}>
+                  {item.likes_count}
+                </Text>
+              ) : null}
+            </Pressable>
+            {!isReply ? (
+              <Pressable
+                onPress={() => onPickReply(item)}
+                style={styles.commentAction}
+                hitSlop={8}
+                testID={`story-comment-reply-${item.id}`}
+                disabled={!currentUserId}
+              >
+                <CornerDownRight color={Colors.muted} size={13} strokeWidth={2.5} />
+                <Text style={styles.commentActionText}>Reply</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+        {currentUserId === item.user_id ? (
+          <Pressable
+            onPress={() =>
+              Alert.alert("Delete comment?", undefined, [
+                { text: "Cancel", style: "cancel" },
+                { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(item.id) },
+              ])
+            }
+            style={styles.commentDelete}
+            testID={`story-comment-delete-${item.id}`}
+          >
+            <Trash2 color={Colors.muted} size={14} strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
+      </View>
+    ),
+    [currentUserId, deleteMutation, likeMutation, onPickReply],
+  );
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -365,7 +505,7 @@ function CommentsSheet({
             <View style={styles.sheetLoading}>
               <ActivityIndicator color={Colors.mint} />
             </View>
-          ) : comments.length === 0 ? (
+          ) : tree.length === 0 ? (
             <View style={styles.sheetEmpty}>
               <MessageCircle color={Colors.muted} size={22} strokeWidth={2.2} />
               <Text style={styles.sheetEmptyText}>No comments yet</Text>
@@ -373,50 +513,64 @@ function CommentsSheet({
             </View>
           ) : (
             <FlatList
-              data={comments}
+              data={tree}
               keyExtractor={(c) => c.id}
               contentContainerStyle={styles.list}
-              renderItem={({ item }) => (
-                <View style={styles.commentRow}>
-                  <View style={[styles.commentAvatar, { backgroundColor: item.avatar_color ?? Colors.mint }]}>
-                    {item.avatar_url ? (
-                      <ExpoImage source={{ uri: item.avatar_url }} style={styles.commentAvatarImg} contentFit="cover" />
-                    ) : (
-                      <Text style={styles.commentAvatarInit}>
-                        {(item.display_name ?? item.username ?? "U").slice(0, 1).toUpperCase()}
-                      </Text>
-                    )}
+              renderItem={({ item }) => {
+                const isOpen = !!expanded[item.id];
+                const hasReplies = item.replies.length > 0;
+                return (
+                  <View style={styles.commentGroup}>
+                    {renderComment(item, false)}
+                    {hasReplies ? (
+                      <View style={styles.repliesWrap}>
+                        {isOpen
+                          ? item.replies.map((r) => renderComment(r, true))
+                          : null}
+                        <Pressable
+                          onPress={() =>
+                            setExpanded((s) => ({ ...s, [item.id]: !s[item.id] }))
+                          }
+                          style={styles.repliesToggle}
+                          hitSlop={6}
+                          testID={`story-comment-toggle-${item.id}`}
+                        >
+                          <View style={styles.repliesDash} />
+                          <Text style={styles.repliesToggleText}>
+                            {isOpen
+                              ? "Hide replies"
+                              : `View ${item.replies.length} ${item.replies.length === 1 ? "reply" : "replies"}`}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
                   </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.commentName} numberOfLines={1}>
-                      {item.display_name ?? item.username ?? "User"}
-                    </Text>
-                    <Text style={styles.commentBody}>{item.body}</Text>
-                  </View>
-                  {currentUserId === item.user_id ? (
-                    <Pressable
-                      onPress={() =>
-                        Alert.alert("Delete comment?", undefined, [
-                          { text: "Cancel", style: "cancel" },
-                          { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(item.id) },
-                        ])
-                      }
-                      style={styles.commentDelete}
-                      testID={`story-comment-delete-${item.id}`}
-                    >
-                      <Trash2 color={Colors.muted} size={14} strokeWidth={2.4} />
-                    </Pressable>
-                  ) : null}
-                </View>
-              )}
+                );
+              }}
             />
           )}
+
+          {replyTo ? (
+            <View style={styles.replyBanner}>
+              <CornerDownRight color={Colors.mint} size={14} strokeWidth={2.6} />
+              <Text style={styles.replyBannerText} numberOfLines={1}>
+                Replying to {replyTo.display_name ?? replyTo.username ?? "user"}
+              </Text>
+              <Pressable
+                onPress={() => setReplyTo(null)}
+                style={styles.replyBannerClose}
+                testID="story-comment-reply-cancel"
+              >
+                <X color={Colors.muted} size={12} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+          ) : null}
 
           <View style={styles.composer}>
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder="Add a comment…"
+              placeholder={replyTo ? "Write a reply…" : "Add a comment…"}
               placeholderTextColor={Colors.muted}
               style={styles.composerInput}
               maxLength={500}
@@ -543,7 +697,40 @@ const styles = StyleSheet.create({
   sheetEmptyText: { color: Colors.text, fontSize: 14, fontWeight: "800" },
   sheetEmptyBody: { color: Colors.muted, fontSize: 12, fontWeight: "700", textAlign: "center" },
   list: { paddingHorizontal: 14, paddingBottom: 8, gap: 12 },
+  commentGroup: { gap: 4 },
   commentRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 6 },
+  commentRowReply: { paddingLeft: 12 },
+  commentActions: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 6 },
+  commentAction: { flexDirection: "row", alignItems: "center", gap: 4 },
+  commentActionText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
+  repliesWrap: { paddingLeft: 42, gap: 4 },
+  repliesToggle: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4 },
+  repliesDash: { width: 22, height: 1, backgroundColor: Colors.line },
+  repliesToggleText: { color: Colors.mint, fontSize: 12, fontWeight: "800" },
+  replyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginHorizontal: 14,
+    marginBottom: 6,
+    borderRadius: 12,
+    backgroundColor: "rgba(54,229,209,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(54,229,209,0.30)",
+  },
+  replyBannerText: { flex: 1, color: Colors.text, fontSize: 12, fontWeight: "800" },
+  replyBannerClose: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
   commentAvatar: { width: 32, height: 32, borderRadius: 16, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   commentAvatarImg: { width: "100%", height: "100%" },
   commentAvatarInit: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
