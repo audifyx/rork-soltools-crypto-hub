@@ -11,6 +11,8 @@ export type AdminRole = "owner" | "superadmin" | "admin" | "moderator" | "team" 
 export interface TeamPermissions {
   delete_posts: boolean;
   delete_reels: boolean;
+  delete_comments: boolean;
+  delete_stories: boolean;
   ban_users: boolean;
   suspend_users: boolean;
   limit_users: boolean;
@@ -22,6 +24,8 @@ export interface TeamPermissions {
 export const DEFAULT_TEAM_PERMISSIONS: TeamPermissions = {
   delete_posts: true,
   delete_reels: true,
+  delete_comments: true,
+  delete_stories: true,
   ban_users: true,
   suspend_users: true,
   limit_users: true,
@@ -37,6 +41,8 @@ function normalizePerms(input: unknown): TeamPermissions {
   return {
     delete_posts: get("delete_posts"),
     delete_reels: get("delete_reels"),
+    delete_comments: get("delete_comments"),
+    delete_stories: get("delete_stories"),
     ban_users: get("ban_users"),
     suspend_users: get("suspend_users"),
     limit_users: get("limit_users"),
@@ -94,6 +100,8 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     return {
       delete_posts: false,
       delete_reels: false,
+      delete_comments: false,
+      delete_stories: false,
       ban_users: false,
       suspend_users: false,
       limit_users: false,

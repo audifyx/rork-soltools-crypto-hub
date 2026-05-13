@@ -7,10 +7,12 @@ import {
   ArrowLeft,
   Ban,
   BarChart3,
+  BookOpen,
   Check,
   Clock,
   FileText,
   Flag,
+  MessageSquare,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -39,7 +41,7 @@ import { supabase } from "@/lib/supabase";
 import { useAdmin, type TeamPermissions } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
 
-type Tab = "overview" | "posts" | "reels" | "users" | "reports" | "online" | "log";
+type Tab = "overview" | "posts" | "comments" | "stories" | "reels" | "users" | "reports" | "online" | "log";
 
 interface TabItem {
   key: Tab;
@@ -51,6 +53,8 @@ interface TabItem {
 const TABS: TabItem[] = [
   { key: "overview", label: "Overview", Icon: BarChart3, perm: "view_analytics" },
   { key: "posts", label: "Posts", Icon: FileText, perm: "delete_posts" },
+  { key: "comments", label: "Comments", Icon: MessageSquare, perm: "delete_comments" },
+  { key: "stories", label: "Stories", Icon: BookOpen, perm: "delete_stories" },
   { key: "reels", label: "Reels", Icon: Video, perm: "delete_reels" },
   { key: "users", label: "Users", Icon: Users, perm: "ban_users" },
   { key: "reports", label: "Reports", Icon: Flag, perm: "resolve_reports" },
@@ -219,6 +223,8 @@ export default function TeamDashboard() {
         <View style={styles.content}>
           {tab === "overview" && <OverviewTab />}
           {tab === "posts" && <PostsTab />}
+          {tab === "comments" && <CommentsTab />}
+          {tab === "stories" && <StoriesTab />}
           {tab === "reels" && <ReelsTab />}
           {tab === "users" && <UsersTab />}
           {tab === "reports" && <ReportsTab />}
@@ -327,6 +333,251 @@ function PostsTab() {
           </View>
         )}
       />
+    </View>
+  );
+}
+
+interface CommentRow {
+  id: string;
+  post_id: string | null;
+  parent_post_id: string | null;
+  user_id: string | null;
+  content: string | null;
+  created_at: string;
+  likes_count: number | null;
+}
+
+function CommentsTab() {
+  const qc = useQueryClient();
+  const [query, setQuery] = useState<string>("");
+  const commentsQuery = useQuery<CommentRow[]>({
+    queryKey: ["team", "comments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("community_posts")
+        .select("id,parent_post_id,user_id,content,created_at,likes_count")
+        .not("parent_post_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(150);
+      if (error) throw error;
+      const rows = ((data ?? []) as Omit<CommentRow, "post_id">[]).map((r) => ({
+        ...r,
+        post_id: r.parent_post_id,
+      })) as CommentRow[];
+      return rows;
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (row: CommentRow) => {
+      const { error } = await supabase.rpc("team_delete_comment", { p_comment_id: row.id, p_reason: null });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["team", "comments"] }),
+    onError: (e: Error) => Alert.alert("Delete failed", e.message),
+  });
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = commentsQuery.data ?? [];
+    if (!q) return list;
+    return list.filter((c) => `${c.content ?? ""} ${c.user_id ?? ""}`.toLowerCase().includes(q));
+  }, [commentsQuery.data, query]);
+
+  return (
+    <View style={styles.content}>
+      <SearchBox value={query} onChangeText={setQuery} placeholder="Search comments…" />
+      <FlatList
+        data={rows}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listPad}
+        ListEmptyComponent={commentsQuery.isLoading ? <Loader /> : <EmptyState text="No comments found." />}
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <Text style={styles.rowTitle} numberOfLines={4}>{item.content ?? "(empty)"}</Text>
+            <Text style={styles.rowSub}>{(item.user_id ?? "?").slice(0, 8)} · on post {(item.post_id ?? "?").slice(0, 8)} · {relTime(item.created_at)} ago · {item.likes_count ?? 0} likes</Text>
+            <View style={styles.actionGrid}>
+              <ActionButton
+                label="Delete"
+                Icon={Trash2}
+                danger
+                onPress={() =>
+                  Alert.alert("Delete comment?", "This removes the comment for everyone.", [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(item) },
+                  ])
+                }
+              />
+            </View>
+          </View>
+        )}
+      />
+    </View>
+  );
+}
+
+interface StoryRow {
+  id: string;
+  author_id: string | null;
+  caption: string | null;
+  media_url: string | null;
+  media_type: string | null;
+  created_at: string;
+  expires_at: string | null;
+  view_count: number | null;
+  likes_count: number | null;
+  comments_count: number | null;
+}
+
+interface StoryCommentRow {
+  id: string;
+  story_id: string;
+  user_id: string;
+  body: string;
+  parent_comment_id: string | null;
+  created_at: string;
+  likes_count: number | null;
+}
+
+function StoriesTab() {
+  const qc = useQueryClient();
+  const [mode, setMode] = useState<"stories" | "comments">("stories");
+  const [query, setQuery] = useState<string>("");
+
+  const storiesQuery = useQuery<StoryRow[]>({
+    queryKey: ["team", "stories"],
+    enabled: mode === "stories",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("stories")
+        .select("id,author_id,caption,media_url,media_type,created_at,expires_at,view_count,likes_count,comments_count")
+        .order("created_at", { ascending: false })
+        .limit(120);
+      if (error) throw error;
+      return (data ?? []) as StoryRow[];
+    },
+  });
+
+  const storyCommentsQuery = useQuery<StoryCommentRow[]>({
+    queryKey: ["team", "story-comments"],
+    enabled: mode === "comments",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("story_comments")
+        .select("id,story_id,user_id,body,parent_comment_id,created_at,likes_count")
+        .order("created_at", { ascending: false })
+        .limit(150);
+      if (error) throw error;
+      return (data ?? []) as StoryCommentRow[];
+    },
+  });
+
+  const deleteStoryMutation = useMutation({
+    mutationFn: async (row: StoryRow) => {
+      const { error } = await supabase.rpc("team_delete_story", { p_story_id: row.id, p_reason: null });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["team", "stories"] }),
+    onError: (e: Error) => Alert.alert("Delete failed", e.message),
+  });
+
+  const deleteStoryCommentMutation = useMutation({
+    mutationFn: async (row: StoryCommentRow) => {
+      const { error } = await supabase.rpc("team_delete_story_comment", { p_comment_id: row.id, p_reason: null });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["team", "story-comments"] }),
+    onError: (e: Error) => Alert.alert("Delete failed", e.message),
+  });
+
+  const filteredStories = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = storiesQuery.data ?? [];
+    if (!q) return list;
+    return list.filter((s) => `${s.caption ?? ""} ${s.author_id ?? ""}`.toLowerCase().includes(q));
+  }, [storiesQuery.data, query]);
+
+  const filteredStoryComments = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = storyCommentsQuery.data ?? [];
+    if (!q) return list;
+    return list.filter((c) => `${c.body ?? ""} ${c.user_id ?? ""}`.toLowerCase().includes(q));
+  }, [storyCommentsQuery.data, query]);
+
+  return (
+    <View style={styles.content}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
+        {([
+          { key: "stories", label: "STORIES" },
+          { key: "comments", label: "STORY COMMENTS" },
+        ] as const).map((m) => (
+          <Pressable key={m.key} onPress={() => setMode(m.key)} style={[styles.filterChip, mode === m.key && styles.filterChipActive]}>
+            <Text style={[styles.filterChipText, mode === m.key && styles.filterChipTextActive]}>{m.label}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+      <SearchBox value={query} onChangeText={setQuery} placeholder={mode === "stories" ? "Search stories…" : "Search story comments…"} />
+      {mode === "stories" ? (
+        <FlatList
+          data={filteredStories}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listPad}
+          ListEmptyComponent={storiesQuery.isLoading ? <Loader /> : <EmptyState text="No stories found." />}
+          renderItem={({ item }) => {
+            const expired = item.expires_at ? new Date(item.expires_at).getTime() < Date.now() : false;
+            return (
+              <View style={styles.card}>
+                <View style={styles.rowHeader}>
+                  <View style={styles.rowMain}>
+                    <Text style={styles.rowTitle} numberOfLines={2}>{item.caption ?? "(no caption)"}</Text>
+                    <Text style={styles.rowSub}>{(item.author_id ?? "?").slice(0, 8)} · {item.media_type ?? "media"} · {relTime(item.created_at)} ago · {item.view_count ?? 0} views · {item.likes_count ?? 0} likes · {item.comments_count ?? 0} comments</Text>
+                  </View>
+                  <Pill label={expired ? "EXPIRED" : "LIVE"} color={expired ? Colors.muted : Colors.goldBright} />
+                </View>
+                <View style={styles.actionGrid}>
+                  <ActionButton
+                    label="Delete"
+                    Icon={Trash2}
+                    danger
+                    onPress={() =>
+                      Alert.alert("Delete story?", "This removes the story and its comments for everyone.", [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Delete", style: "destructive", onPress: () => deleteStoryMutation.mutate(item) },
+                      ])
+                    }
+                  />
+                </View>
+              </View>
+            );
+          }}
+        />
+      ) : (
+        <FlatList
+          data={filteredStoryComments}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listPad}
+          ListEmptyComponent={storyCommentsQuery.isLoading ? <Loader /> : <EmptyState text="No story comments found." />}
+          renderItem={({ item }) => (
+            <View style={styles.card}>
+              <Text style={styles.rowTitle} numberOfLines={4}>{item.body}</Text>
+              <Text style={styles.rowSub}>{item.user_id.slice(0, 8)} · on story {item.story_id.slice(0, 8)} · {relTime(item.created_at)} ago · {item.likes_count ?? 0} likes{item.parent_comment_id ? " · reply" : ""}</Text>
+              <View style={styles.actionGrid}>
+                <ActionButton
+                  label="Delete"
+                  Icon={Trash2}
+                  danger
+                  onPress={() =>
+                    Alert.alert("Delete comment?", "This removes the comment and its replies for everyone.", [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Delete", style: "destructive", onPress: () => deleteStoryCommentMutation.mutate(item) },
+                    ])
+                  }
+                />
+              </View>
+            </View>
+          )}
+        />
+      )}
     </View>
   );
 }
