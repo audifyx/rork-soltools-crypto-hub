@@ -58,7 +58,7 @@ export default function StoriesRail() {
   const buckets = useMemo<AuthorBucket[]>(() => bucketize(query.data ?? []), [query.data]);
 
   const onOpen = (bucket: AuthorBucket) => {
-    hapticSelect().catch(() => {});
+    hapticSelect();
     const first = bucket.stories[0];
     if (!first) return;
     router.push({
@@ -68,7 +68,7 @@ export default function StoriesRail() {
   };
 
   const onCreate = () => {
-    hapticSelect().catch(() => {});
+    hapticSelect();
     router.push("/story/create");
   };
 
