@@ -147,6 +147,71 @@ export async function rsvpEvent(eventId: string, status: "going" | "interested" 
   if (error) throw error;
 }
 
+/* =========================== ADMIN EVENTS ============================= */
+
+export interface AdminEventInput {
+  title: string;
+  description?: string | null;
+  bannerUrl?: string | null;
+  startsAt: string;
+  endsAt?: string | null;
+  location?: string | null;
+  isVirtual?: boolean;
+  category?: string | null;
+  eventUrl?: string | null;
+  isFeatured?: boolean;
+}
+
+export async function adminCreateEvent(input: AdminEventInput): Promise<string | null> {
+  const { data, error } = await supabase.rpc("admin_create_event", {
+    p_title: input.title,
+    p_description: input.description ?? null,
+    p_banner_url: input.bannerUrl ?? null,
+    p_starts_at: input.startsAt,
+    p_ends_at: input.endsAt ?? null,
+    p_location: input.location ?? null,
+    p_is_virtual: input.isVirtual ?? true,
+    p_category: input.category ?? null,
+    p_event_url: input.eventUrl ?? null,
+    p_is_featured: input.isFeatured ?? false,
+  });
+  if (error) throw error;
+  return (data as string) ?? null;
+}
+
+export async function adminUpdateEvent(eventId: string, input: Partial<AdminEventInput> & { isPublished?: boolean }): Promise<void> {
+  const { error } = await supabase.rpc("admin_update_event", {
+    p_event_id: eventId,
+    p_title: input.title ?? null,
+    p_description: input.description ?? null,
+    p_banner_url: input.bannerUrl ?? null,
+    p_starts_at: input.startsAt ?? null,
+    p_ends_at: input.endsAt ?? null,
+    p_location: input.location ?? null,
+    p_is_virtual: input.isVirtual ?? null,
+    p_category: input.category ?? null,
+    p_event_url: input.eventUrl ?? null,
+    p_is_featured: input.isFeatured ?? null,
+    p_is_published: input.isPublished ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function adminDeleteEvent(eventId: string): Promise<void> {
+  const { error } = await supabase.rpc("admin_delete_event", { p_event_id: eventId });
+  if (error) throw error;
+}
+
+export async function adminListEvents(): Promise<EventRow[]> {
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .order("starts_at", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []) as EventRow[];
+}
+
 /* ============================ COMMUNITIES ============================= */
 
 export interface CommunityCategoryRow {
@@ -344,6 +409,12 @@ async function buildLiveFyp(): Promise<FypCard[]> {
       .select("*")
       .order("trending_score", { ascending: false })
       .limit(8),
+    supabase
+      .from("community_posts")
+      .select("id,user_id,content,image_url,ticker,likes_count,comments_count,reposts_count,created_at")
+      .is("parent_post_id", null)
+      .order("created_at", { ascending: false })
+      .limit(40),
   ]);
 
   const pickRows = <T,>(idx: number, label: string): T[] => {
@@ -383,11 +454,17 @@ async function buildLiveFyp(): Promise<FypCard[]> {
     member_count?: number | null;
     trending_score?: number | null;
   }>(3, "communities");
+  const posts = pickRows<{
+    id: string; user_id: string; content: string | null; image_url: string | null;
+    ticker: string | null; likes_count: number | null; comments_count: number | null;
+    reposts_count: number | null; created_at: string;
+  }>(4, "posts");
 
   const authorIds = Array.from(new Set([
     ...reels.map((r) => r.author_id),
     ...stories.map((s) => s.author_id),
     ...events.map((e) => e.host_id),
+    ...posts.map((p) => p.user_id),
   ].filter(Boolean)));
   const profMap = new Map<string, { username: string | null; display_name: string | null; avatar_url: string | null }>();
   if (authorIds.length > 0) {
@@ -497,8 +574,38 @@ async function buildLiveFyp(): Promise<FypCard[]> {
     });
   }
 
+  for (const p of posts) {
+    const ageH = Math.max(1, (now - new Date(p.created_at).getTime()) / 3600_000);
+    const likes = Number(p.likes_count ?? 0);
+    const comments = Number(p.comments_count ?? 0);
+    const reposts = Number(p.reposts_count ?? 0);
+    const score = (likes * 2 + comments * 4 + reposts * 3 + 8) / Math.pow(ageH + 2, 0.55);
+    const prof = profMap.get(p.user_id);
+    cards.push({
+      id: `live-post-${p.id}`,
+      kind: "post",
+      ref_id: p.id,
+      score,
+      created_at: p.created_at,
+      payload: {
+        title: p.content ?? "New post",
+        body: p.content,
+        caption: p.content,
+        media_url: p.image_url,
+        thumbnail_url: p.image_url,
+        avatar_url: prof?.avatar_url ?? null,
+        username: prof?.username ?? null,
+        display_name: prof?.display_name ?? null,
+        ticker: p.ticker,
+        likes,
+        comments,
+        reason: reposts > 0 ? `${reposts} reposts` : "Fresh post",
+      },
+    });
+  }
+
   cards.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  return cards.slice(0, 40);
+  return cards.slice(0, 60);
 }
 
 /* =========================== HASHTAGS ================================ */

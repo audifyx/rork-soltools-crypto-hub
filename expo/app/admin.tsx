@@ -6,6 +6,8 @@ import {
   Ban,
   BarChart3,
   Bell,
+  CalendarDays,
+  CalendarPlus,
   Check,
   Coins,
   Crown,
@@ -61,6 +63,7 @@ type Section =
   | "badges"
   | "submissions"
   | "lobbies"
+  | "events"
   | "credits"
   | "logs"
   | "announcements"
@@ -84,6 +87,7 @@ const TABS: TabItem[] = [
   { val: "badges", label: "Badges", Icon: Tag },
   { val: "submissions", label: "Submissions", Icon: Rocket },
   { val: "lobbies", label: "Lobbies", Icon: Volume2 },
+  { val: "events", label: "Events", Icon: CalendarDays },
   { val: "credits", label: "Credits", Icon: Coins },
   { val: "logs", label: "Logs", Icon: FileText },
   { val: "announcements", label: "Announce", Icon: Bell },
@@ -345,6 +349,7 @@ export default function AdminDashboard() {
           {section === "badges" && <BadgesSection />}
           {section === "submissions" && <SubmissionsSection />}
           {section === "lobbies" && <LobbiesSection />}
+          {section === "events" && <EventsSection />}
           {section === "credits" && <CreditsSection />}
           {section === "logs" && <LogsSection />}
           {section === "announcements" && <AnnouncementsSection />}
@@ -889,6 +894,320 @@ function LobbiesSection() {
         </View>
       ))}
       {communitiesQuery.isLoading ? <Loader /> : (communitiesQuery.data ?? []).length === 0 ? <EmptyState text="No communities yet." /> : null}
+    </ScrollView>
+  );
+}
+
+/* --------------------------------- EVENTS -------------------------------- */
+
+interface AdminEventRow {
+  id: string;
+  title: string;
+  description: string | null;
+  banner_url: string | null;
+  cover_url: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  location: string | null;
+  is_virtual: boolean;
+  category: string | null;
+  event_url: string | null;
+  is_featured: boolean;
+  is_published: boolean;
+  rsvp_count: number;
+  going_count: number;
+  created_at: string;
+}
+
+interface EventDraft {
+  id: string | null;
+  title: string;
+  description: string;
+  bannerUrl: string;
+  startsAt: string;
+  endsAt: string;
+  location: string;
+  isVirtual: boolean;
+  category: string;
+  eventUrl: string;
+  isFeatured: boolean;
+  isPublished: boolean;
+}
+
+const EMPTY_EVENT: EventDraft = {
+  id: null,
+  title: "",
+  description: "",
+  bannerUrl: "",
+  startsAt: "",
+  endsAt: "",
+  location: "",
+  isVirtual: true,
+  category: "",
+  eventUrl: "",
+  isFeatured: false,
+  isPublished: true,
+};
+
+function toLocalInputValue(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function parseLocalInput(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(" ", "T");
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function EventsSection() {
+  const qc = useQueryClient();
+  const logAction = useAuditLogger();
+  const [draft, setDraft] = useState<EventDraft>(EMPTY_EVENT);
+
+  const eventsQuery = useQuery<AdminEventRow[]>({
+    queryKey: ["admin", "events"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("id,title,description,banner_url,cover_url,starts_at,ends_at,location,is_virtual,category,event_url,is_featured,is_published,rsvp_count,going_count,created_at")
+        .order("starts_at", { ascending: false })
+        .limit(120);
+      if (error) throw error;
+      return (data ?? []) as AdminEventRow[];
+    },
+  });
+
+  const resetDraft = useCallback(() => setDraft(EMPTY_EVENT), []);
+
+  const saveMutation = useMutation({
+    mutationFn: async (input: EventDraft) => {
+      const title = input.title.trim();
+      if (!title) throw new Error("Title is required");
+      const startsAtIso = parseLocalInput(input.startsAt);
+      if (!startsAtIso) throw new Error("Start time must be like 2026-05-20 19:30");
+      const endsAtIso = input.endsAt.trim() ? parseLocalInput(input.endsAt) : null;
+      if (input.endsAt.trim() && !endsAtIso) throw new Error("End time must be like 2026-05-20 21:00");
+      const payload = {
+        title,
+        description: input.description.trim() || null,
+        bannerUrl: input.bannerUrl.trim() || null,
+        startsAt: startsAtIso,
+        endsAt: endsAtIso,
+        location: input.location.trim() || null,
+        isVirtual: input.isVirtual,
+        category: input.category.trim() || null,
+        eventUrl: input.eventUrl.trim() || null,
+        isFeatured: input.isFeatured,
+      };
+      if (input.id) {
+        const { error } = await supabase.rpc("admin_update_event", {
+          p_event_id: input.id,
+          p_title: payload.title,
+          p_description: payload.description,
+          p_banner_url: payload.bannerUrl,
+          p_starts_at: payload.startsAt,
+          p_ends_at: payload.endsAt,
+          p_location: payload.location,
+          p_is_virtual: payload.isVirtual,
+          p_category: payload.category,
+          p_event_url: payload.eventUrl,
+          p_is_featured: payload.isFeatured,
+          p_is_published: input.isPublished,
+        });
+        if (error) throw error;
+        await logAction("admin_update_event", "event", input.id, null, payload);
+        return input.id;
+      }
+      const { data, error } = await supabase.rpc("admin_create_event", {
+        p_title: payload.title,
+        p_description: payload.description,
+        p_banner_url: payload.bannerUrl,
+        p_starts_at: payload.startsAt,
+        p_ends_at: payload.endsAt,
+        p_location: payload.location,
+        p_is_virtual: payload.isVirtual,
+        p_category: payload.category,
+        p_event_url: payload.eventUrl,
+        p_is_featured: payload.isFeatured,
+      });
+      if (error) throw error;
+      const newId = (data as string) ?? null;
+      await logAction("admin_create_event", "event", newId ?? "new", null, payload);
+      return newId;
+    },
+    onSuccess: () => {
+      resetDraft();
+      qc.invalidateQueries({ queryKey: ["admin", "events"] });
+      qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["fyp"] });
+    },
+    onError: (e: Error) => Alert.alert("Save failed", e.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (row: AdminEventRow) => {
+      const { error } = await supabase.rpc("admin_delete_event", { p_event_id: row.id });
+      if (error) throw error;
+      await logAction("admin_delete_event", "event", row.id, row, null);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "events"] });
+      qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["fyp"] });
+    },
+    onError: (e: Error) => Alert.alert("Delete failed", e.message),
+  });
+
+  const togglePublishMutation = useMutation({
+    mutationFn: async (row: AdminEventRow) => {
+      const { error } = await supabase.rpc("admin_update_event", {
+        p_event_id: row.id,
+        p_title: null,
+        p_description: null,
+        p_banner_url: null,
+        p_starts_at: null,
+        p_ends_at: null,
+        p_location: null,
+        p_is_virtual: null,
+        p_category: null,
+        p_event_url: null,
+        p_is_featured: null,
+        p_is_published: !row.is_published,
+      });
+      if (error) throw error;
+      await logAction("admin_toggle_event_published", "event", row.id, { is_published: row.is_published }, { is_published: !row.is_published });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "events"] });
+      qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["fyp"] });
+    },
+    onError: (e: Error) => Alert.alert("Toggle failed", e.message),
+  });
+
+  const onEdit = useCallback((row: AdminEventRow) => {
+    setDraft({
+      id: row.id,
+      title: row.title ?? "",
+      description: row.description ?? "",
+      bannerUrl: row.banner_url ?? row.cover_url ?? "",
+      startsAt: toLocalInputValue(row.starts_at),
+      endsAt: row.ends_at ? toLocalInputValue(row.ends_at) : "",
+      location: row.location ?? "",
+      isVirtual: !!row.is_virtual,
+      category: row.category ?? "",
+      eventUrl: row.event_url ?? "",
+      isFeatured: !!row.is_featured,
+      isPublished: !!row.is_published,
+    });
+  }, []);
+
+  const list = eventsQuery.data ?? [];
+
+  return (
+    <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <View style={styles.noticeCard}>
+        <CalendarPlus color={Colors.goldBright} size={16} strokeWidth={2.6} />
+        <Text style={styles.noticeText}>Create Discord-style events with banner, date, location and details. Published events surface on every user&apos;s For You tab and on the Events screen.</Text>
+      </View>
+
+      <Text style={styles.sectionLabel}>{draft.id ? "EDIT EVENT" : "NEW EVENT"}</Text>
+      <View style={styles.cardLarge}>
+        {draft.bannerUrl.trim() ? (
+          <View style={styles.eventBannerPreview}>
+            <ExpoImage source={{ uri: draft.bannerUrl.trim() }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          </View>
+        ) : null}
+        <Text style={styles.inputLabel}>TITLE</Text>
+        <TextInput value={draft.title} onChangeText={(v) => setDraft((d) => ({ ...d, title: v }))} placeholder="Launch party, AMA, community meetup…" placeholderTextColor={Colors.muted2} style={styles.input} />
+
+        <Text style={styles.inputLabel}>BANNER URL</Text>
+        <TextInput value={draft.bannerUrl} onChangeText={(v) => setDraft((d) => ({ ...d, bannerUrl: v }))} placeholder="https://..." placeholderTextColor={Colors.muted2} style={styles.input} autoCapitalize="none" autoCorrect={false} />
+
+        <Text style={styles.inputLabel}>DESCRIPTION</Text>
+        <TextInput value={draft.description} onChangeText={(v) => setDraft((d) => ({ ...d, description: v }))} placeholder="What is this event about?" placeholderTextColor={Colors.muted2} style={[styles.input, styles.textArea]} multiline />
+
+        <Text style={styles.inputLabel}>STARTS AT (YYYY-MM-DD HH:MM)</Text>
+        <TextInput value={draft.startsAt} onChangeText={(v) => setDraft((d) => ({ ...d, startsAt: v }))} placeholder="2026-05-20 19:30" placeholderTextColor={Colors.muted2} style={styles.input} autoCapitalize="none" autoCorrect={false} />
+
+        <Text style={styles.inputLabel}>ENDS AT (optional)</Text>
+        <TextInput value={draft.endsAt} onChangeText={(v) => setDraft((d) => ({ ...d, endsAt: v }))} placeholder="2026-05-20 21:00" placeholderTextColor={Colors.muted2} style={styles.input} autoCapitalize="none" autoCorrect={false} />
+
+        <Text style={styles.inputLabel}>LOCATION / LINK INFO</Text>
+        <TextInput value={draft.location} onChangeText={(v) => setDraft((d) => ({ ...d, location: v }))} placeholder="Discord voice, NYC HQ, Twitter Space…" placeholderTextColor={Colors.muted2} style={styles.input} />
+
+        <Text style={styles.inputLabel}>CATEGORY</Text>
+        <TextInput value={draft.category} onChangeText={(v) => setDraft((d) => ({ ...d, category: v }))} placeholder="ama, launch, party, workshop…" placeholderTextColor={Colors.muted2} style={styles.input} autoCapitalize="none" />
+
+        <Text style={styles.inputLabel}>JOIN URL (optional)</Text>
+        <TextInput value={draft.eventUrl} onChangeText={(v) => setDraft((d) => ({ ...d, eventUrl: v }))} placeholder="https://discord.gg/..." placeholderTextColor={Colors.muted2} style={styles.input} autoCapitalize="none" autoCorrect={false} />
+
+        <View style={styles.settingRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowTitle}>Virtual event</Text>
+            <Text style={styles.rowSub}>Online instead of in-person.</Text>
+          </View>
+          <Switch value={draft.isVirtual} onValueChange={(v) => setDraft((d) => ({ ...d, isVirtual: v }))} trackColor={{ true: Colors.goldBright, false: Colors.line }} thumbColor={Colors.text} />
+        </View>
+        <View style={styles.settingRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowTitle}>Featured on For You</Text>
+            <Text style={styles.rowSub}>Boost to the top of the FYP feed.</Text>
+          </View>
+          <Switch value={draft.isFeatured} onValueChange={(v) => setDraft((d) => ({ ...d, isFeatured: v }))} trackColor={{ true: Colors.goldBright, false: Colors.line }} thumbColor={Colors.text} />
+        </View>
+        {draft.id ? (
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>Published</Text>
+              <Text style={styles.rowSub}>Unpublish to hide from users without deleting.</Text>
+            </View>
+            <Switch value={draft.isPublished} onValueChange={(v) => setDraft((d) => ({ ...d, isPublished: v }))} trackColor={{ true: Colors.goldBright, false: Colors.line }} thumbColor={Colors.text} />
+          </View>
+        ) : null}
+
+        <PrimaryButton label={draft.id ? "Save changes" : "Create event"} Icon={draft.id ? Check : CalendarPlus} onPress={() => saveMutation.mutate(draft)} disabled={saveMutation.isPending} style={styles.formButton} />
+        {draft.id ? <ActionButton label="Cancel edit" Icon={X} onPress={resetDraft} /> : null}
+      </View>
+
+      <Text style={styles.sectionLabel}>EVENTS ({list.length})</Text>
+      {list.map((item) => (
+        <View key={item.id} style={styles.card} testID={`admin-event-${item.id}`}>
+          {item.banner_url || item.cover_url ? (
+            <View style={styles.eventCardBanner}>
+              <ExpoImage source={{ uri: item.banner_url ?? item.cover_url ?? "" }} style={StyleSheet.absoluteFill} contentFit="cover" />
+            </View>
+          ) : null}
+          <View style={styles.rowHeader}>
+            <Avatar label={item.title.slice(0, 2).toUpperCase()} Icon={CalendarDays} />
+            <View style={styles.rowMain}>
+              <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
+              <Text style={styles.rowSub} numberOfLines={1}>
+                {new Date(item.starts_at).toLocaleString()} · {item.is_virtual ? "Virtual" : item.location ?? "In person"}
+              </Text>
+            </View>
+            <Pill label={item.is_published ? "LIVE" : "DRAFT"} color={item.is_published ? Colors.goldBright : Colors.muted} />
+          </View>
+          <View style={styles.metricsRow}>
+            <Metric label="GOING" value={String(item.going_count ?? 0)} />
+            <Metric label="RSVPS" value={String(item.rsvp_count ?? 0)} />
+            <Metric label="FEATURED" value={item.is_featured ? "YES" : "NO"} />
+          </View>
+          <View style={styles.actionGrid}>
+            <ActionButton label="Edit" Icon={FileText} onPress={() => onEdit(item)} />
+            <ActionButton label={item.is_published ? "Unpublish" : "Publish"} Icon={item.is_published ? ShieldOff : Check} onPress={() => togglePublishMutation.mutate(item)} />
+            <ActionButton label="Delete" Icon={Trash2} danger onPress={() => Alert.alert("Delete event?", item.title, [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(item) }])} />
+          </View>
+        </View>
+      ))}
+      {eventsQuery.isLoading ? <Loader /> : list.length === 0 ? <EmptyState text="No events yet. Create the first one above." /> : null}
     </ScrollView>
   );
 }
@@ -1711,4 +2030,7 @@ const styles = StyleSheet.create({
   settingInput: { minWidth: 86, flex: 1, color: Colors.text, backgroundColor: Colors.cardSoft, borderWidth: 1, borderColor: Colors.line, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 7, fontSize: 12 },
   smallGoldBtn: { backgroundColor: Colors.goldBright, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 8 },
   smallGoldText: { color: Colors.ink, fontSize: 10, fontWeight: "900" },
+
+  eventBannerPreview: { height: 140, borderRadius: 16, overflow: "hidden", backgroundColor: Colors.cardSoft, marginBottom: 6 },
+  eventCardBanner: { height: 96, borderRadius: 14, overflow: "hidden", backgroundColor: Colors.cardSoft, marginBottom: 4 },
 });
