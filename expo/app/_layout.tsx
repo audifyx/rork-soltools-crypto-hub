@@ -119,6 +119,7 @@ function RootLayoutNav() {
       <Stack.Screen name="follow-requests" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="blocked-users" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="posts" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="post/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="wallet" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="crypto-news" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="kol-scan" options={{ animation: "slide_from_right" }} />

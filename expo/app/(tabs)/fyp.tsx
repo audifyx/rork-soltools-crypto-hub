@@ -143,7 +143,8 @@ export default function ForYouScreen() {
         if (card.kind === "reel") router.push("/(tabs)/reels");
         else if (card.kind === "story") router.push({ pathname: "/story/[id]", params: { id: card.ref_id } });
         else if (card.kind === "event") router.push("/events");
-        else if (card.kind === "community") router.push("/communities");
+        else if (card.kind === "community") router.push({ pathname: "/community/[id]", params: { id: card.ref_id } });
+        else if (card.kind === "post") router.push({ pathname: "/post/[id]", params: { id: card.ref_id } });
         else router.push("/(tabs)/home");
       } catch (e) {
         console.log("[fyp] open failed", e instanceof Error ? e.message : String(e));

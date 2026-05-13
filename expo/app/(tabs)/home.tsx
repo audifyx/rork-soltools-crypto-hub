@@ -1834,7 +1834,13 @@ function UserPostCard({
         <View style={styles.actionsRow}>
           <Pressable
             style={styles.actionBtn}
-            onPress={post.comments > 0 ? toggleComments : onComment}
+            onPress={() => {
+              try {
+                router.push({ pathname: "/post/[id]", params: { id: post.id } });
+              } catch (e) {
+                console.log("[home] open post detail failed", e);
+              }
+            }}
             onLongPress={onComment}
             hitSlop={6}
             testID={`comment-user-${post.id}`}
