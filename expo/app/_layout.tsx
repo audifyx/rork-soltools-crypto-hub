@@ -104,6 +104,7 @@ function RootLayoutNav() {
       <Stack.Screen name="page-[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="u/[handle]" />
       <Stack.Screen name="admin" />
+      <Stack.Screen name="team" animation="slide_from_right" />
       <Stack.Screen name="communities" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="community/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="community/create" options={{ presentation: "modal", animation: "slide_from_bottom" }} />

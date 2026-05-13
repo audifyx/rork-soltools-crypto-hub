@@ -20,6 +20,7 @@ import {
   Search,
   Settings as SettingsIcon,
   ShieldAlert,
+  ShieldCheck,
   ShieldOff,
   Star,
   Tag,
@@ -68,6 +69,7 @@ type Section =
   | "logs"
   | "announcements"
   | "security"
+  | "team"
   | "ops"
   | "growth"
   | "settings"
@@ -92,6 +94,7 @@ const TABS: TabItem[] = [
   { val: "logs", label: "Logs", Icon: FileText },
   { val: "announcements", label: "Announce", Icon: Bell },
   { val: "security", label: "Security", Icon: ShieldAlert },
+  { val: "team", label: "Team", Icon: ShieldCheck },
   { val: "ops", label: "Ops", Icon: Radio },
   { val: "growth", label: "Growth", Icon: Megaphone },
   { val: "settings", label: "Settings", Icon: SettingsIcon },
@@ -354,6 +357,7 @@ export default function AdminDashboard() {
           {section === "logs" && <LogsSection />}
           {section === "announcements" && <AnnouncementsSection />}
           {section === "security" && <SecuritySection isOwner={isOwner} />}
+          {section === "team" && <TeamSection isOwner={isOwner} />}
           {section === "ops" && <OpsSection onJump={setSection} />}
           {section === "growth" && <GrowthSection onJump={setSection} />}
           {section === "settings" && <SettingsSection />}
@@ -1677,6 +1681,226 @@ function SupportSection() {
         </View>
       )}
     />
+  );
+}
+
+/* ---------------------------------- TEAM --------------------------------- */
+
+interface TeamMemberRow {
+  user_id: string;
+  email: string | null;
+  role: AdminRole;
+  permissions: Record<string, boolean> | null;
+  created_at: string;
+}
+
+interface TeamPermissionKey {
+  key: string;
+  label: string;
+  desc: string;
+}
+
+const TEAM_PERMISSION_KEYS: TeamPermissionKey[] = [
+  { key: "delete_posts", label: "Delete posts", desc: "Remove community posts and replies." },
+  { key: "delete_reels", label: "Delete reels", desc: "Remove reels and short videos." },
+  { key: "ban_users", label: "Ban users", desc: "Permanently revoke account access." },
+  { key: "suspend_users", label: "Suspend users", desc: "Temporary timeout with expiry." },
+  { key: "limit_users", label: "Limit users", desc: "Restrict posting, commenting, DMs." },
+  { key: "resolve_reports", label: "Resolve reports", desc: "Triage report queue." },
+  { key: "view_online", label: "View online users", desc: "See live presence." },
+  { key: "view_analytics", label: "View analytics", desc: "Mod-tier dashboard metrics." },
+];
+
+const DEFAULT_TEAM_PERMS: Record<string, boolean> = Object.fromEntries(
+  TEAM_PERMISSION_KEYS.map((p) => [p.key, true]),
+);
+
+function TeamSection({ isOwner }: { isOwner: boolean }) {
+  const qc = useQueryClient();
+  const logAction = useAuditLogger();
+  const [query, setQuery] = useState<string>("");
+  const [permsDraft, setPermsDraft] = useState<Record<string, Record<string, boolean>>>({});
+
+  const teamQuery = useQuery<TeamMemberRow[]>({
+    queryKey: ["admin", "team-members"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("admin_roles")
+        .select("user_id,email,role,permissions,created_at")
+        .eq("role", "team")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as TeamMemberRow[];
+    },
+  });
+
+  const candidatesQuery = useQuery<ProfileRow[]>({
+    queryKey: ["admin", "team-candidates", query],
+    enabled: query.trim().length >= 2,
+    queryFn: async () => {
+      const q = query.trim();
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,user_id,username,display_name,avatar_url,sol_wallet,wallet_address,is_public,is_banned,verified,badge,custom_badges,followers_count,trades_count,win_rate,pnl_pct,created_at")
+        .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
+        .limit(20);
+      if (error) throw error;
+      return (data ?? []) as ProfileRow[];
+    },
+  });
+
+  const promoteMutation = useMutation({
+    mutationFn: async (input: { row: ProfileRow }) => {
+      const uid = profileUserId(input.row);
+      const { error } = await supabase.rpc("promote_team_member", {
+        p_user_id: uid,
+        p_email: input.row.username ?? null,
+        p_permissions: DEFAULT_TEAM_PERMS,
+      });
+      if (error) throw error;
+      await logAction("promote_team_member", "user", uid, null, { role: "team", permissions: DEFAULT_TEAM_PERMS });
+    },
+    onSuccess: () => {
+      setQuery("");
+      qc.invalidateQueries({ queryKey: ["admin", "team-members"] });
+      qc.invalidateQueries({ queryKey: ["admin", "security"] });
+    },
+    onError: (e: Error) => Alert.alert("Promote failed", e.message),
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: async (row: TeamMemberRow) => {
+      const { error } = await supabase.rpc("revoke_team_member", { p_user_id: row.user_id });
+      if (error) throw error;
+      await logAction("revoke_team_member", "user", row.user_id, row, null);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "team-members"] }),
+    onError: (e: Error) => Alert.alert("Revoke failed", e.message),
+  });
+
+  const updatePermsMutation = useMutation({
+    mutationFn: async (input: { row: TeamMemberRow; perms: Record<string, boolean> }) => {
+      const { error } = await supabase.rpc("update_team_permissions", {
+        p_user_id: input.row.user_id,
+        p_permissions: input.perms,
+      });
+      if (error) throw error;
+      await logAction("update_team_permissions", "user", input.row.user_id, input.row.permissions, input.perms);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "team-members"] }),
+    onError: (e: Error) => Alert.alert("Update failed", e.message),
+  });
+
+  const teamList = teamQuery.data ?? [];
+
+  if (!isOwner) {
+    return (
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.noticeCard}>
+          <ShieldAlert color={Colors.goldBright} size={18} strokeWidth={2.6} />
+          <Text style={styles.noticeText}>Only the owner can promote and manage team moderators.</Text>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <View style={styles.noticeCard}>
+        <ShieldCheck color={Colors.goldBright} size={18} strokeWidth={2.6} />
+        <Text style={styles.noticeText}>Promote trusted users to the team role so they can moderate posts, ban/suspend abusers, resolve reports, and watch the platform pulse from a dedicated dashboard.</Text>
+      </View>
+
+      <Text style={styles.sectionLabel}>PROMOTE A USER</Text>
+      <SearchBox value={query} onChangeText={setQuery} placeholder="Search username or display name…" />
+      {query.trim().length >= 2 ? (
+        <View style={{ gap: 8 }}>
+          {(candidatesQuery.data ?? []).map((row) => {
+            const uid = profileUserId(row);
+            const alreadyTeam = teamList.some((m) => m.user_id === uid);
+            return (
+              <View key={uid} style={styles.card}>
+                <View style={styles.rowHeader}>
+                  <Avatar label={row.display_name ?? row.username ?? "U"} Icon={Users} />
+                  <View style={styles.rowMain}>
+                    <Text style={styles.rowTitle}>{row.display_name ?? row.username ?? uid.slice(0, 8)}</Text>
+                    <Text style={styles.rowSub}>@{row.username ?? "unset"}</Text>
+                  </View>
+                  {alreadyTeam ? (
+                    <Pill label="TEAM" color={Colors.goldBright} />
+                  ) : (
+                    <ActionButton label="Promote" Icon={ShieldCheck} onPress={() => promoteMutation.mutate({ row })} />
+                  )}
+                </View>
+              </View>
+            );
+          })}
+          {candidatesQuery.isLoading ? <Loader /> : null}
+          {!candidatesQuery.isLoading && (candidatesQuery.data ?? []).length === 0 ? (
+            <EmptyState text="No users matched." />
+          ) : null}
+        </View>
+      ) : (
+        <Text style={styles.rowSub}>Type at least 2 characters to search.</Text>
+      )}
+
+      <Text style={styles.sectionLabel}>TEAM MEMBERS ({teamList.length})</Text>
+      {teamList.map((row) => {
+        const draft = permsDraft[row.user_id] ?? { ...DEFAULT_TEAM_PERMS, ...(row.permissions ?? {}) };
+        return (
+          <View key={row.user_id} style={styles.card}>
+            <View style={styles.rowHeader}>
+              <Avatar label={row.email ?? "T"} Icon={ShieldCheck} />
+              <View style={styles.rowMain}>
+                <Text style={styles.rowTitle}>{row.email ?? row.user_id.slice(0, 8)}</Text>
+                <Text style={styles.rowSub}>{row.user_id} · added {new Date(row.created_at).toLocaleDateString()}</Text>
+              </View>
+              <Pill label="TEAM" color={Colors.goldBright} />
+            </View>
+
+            <Text style={styles.inputLabel}>PERMISSIONS</Text>
+            {TEAM_PERMISSION_KEYS.map((p) => (
+              <View key={p.key} style={styles.settingRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle}>{p.label}</Text>
+                  <Text style={styles.rowSub}>{p.desc}</Text>
+                </View>
+                <Switch
+                  value={!!draft[p.key]}
+                  onValueChange={(v) =>
+                    setPermsDraft((prev) => ({
+                      ...prev,
+                      [row.user_id]: { ...draft, [p.key]: v },
+                    }))
+                  }
+                  trackColor={{ true: Colors.goldBright, false: Colors.line }}
+                  thumbColor={Colors.text}
+                />
+              </View>
+            ))}
+            <View style={styles.actionGrid}>
+              <ActionButton
+                label="Save permissions"
+                Icon={Check}
+                onPress={() => updatePermsMutation.mutate({ row, perms: draft })}
+              />
+              <ActionButton
+                label="Revoke team"
+                Icon={ShieldOff}
+                danger
+                onPress={() =>
+                  Alert.alert("Revoke team role?", row.email ?? row.user_id, [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Revoke", style: "destructive", onPress: () => revokeMutation.mutate(row) },
+                  ])
+                }
+              />
+            </View>
+          </View>
+        );
+      })}
+      {teamQuery.isLoading ? <Loader /> : teamList.length === 0 ? <EmptyState text="No team members yet. Search above to promote your first mod." /> : null}
+    </ScrollView>
   );
 }
 

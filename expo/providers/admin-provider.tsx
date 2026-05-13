@@ -6,41 +6,113 @@ import { SOLTOOLS_ADMIN_EMAIL } from "@/lib/soltools-platform";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 
-export type AdminRole = "owner" | "superadmin" | "admin" | "moderator" | "support" | "user";
+export type AdminRole = "owner" | "superadmin" | "admin" | "moderator" | "team" | "support" | "user";
+
+export interface TeamPermissions {
+  delete_posts: boolean;
+  delete_reels: boolean;
+  ban_users: boolean;
+  suspend_users: boolean;
+  limit_users: boolean;
+  resolve_reports: boolean;
+  view_online: boolean;
+  view_analytics: boolean;
+}
+
+export const DEFAULT_TEAM_PERMISSIONS: TeamPermissions = {
+  delete_posts: true,
+  delete_reels: true,
+  ban_users: true,
+  suspend_users: true,
+  limit_users: true,
+  resolve_reports: true,
+  view_online: true,
+  view_analytics: true,
+};
+
+function normalizePerms(input: unknown): TeamPermissions {
+  if (!input || typeof input !== "object") return DEFAULT_TEAM_PERMISSIONS;
+  const r = input as Record<string, unknown>;
+  const get = (k: keyof TeamPermissions) => (typeof r[k] === "boolean" ? (r[k] as boolean) : DEFAULT_TEAM_PERMISSIONS[k]);
+  return {
+    delete_posts: get("delete_posts"),
+    delete_reels: get("delete_reels"),
+    ban_users: get("ban_users"),
+    suspend_users: get("suspend_users"),
+    limit_users: get("limit_users"),
+    resolve_reports: get("resolve_reports"),
+    view_online: get("view_online"),
+    view_analytics: get("view_analytics"),
+  };
+}
 
 export const [AdminProvider, useAdmin] = createContextHook(() => {
   const { userId, email, isAuthenticated } = useAuth();
   const normalizedEmail = email?.trim().toLowerCase() ?? "";
   const isOwnerEmail = normalizedEmail === SOLTOOLS_ADMIN_EMAIL;
 
-  const roleQuery = useQuery<AdminRole | null>({
+  const roleQuery = useQuery<{ role: AdminRole | null; permissions: TeamPermissions | null }>({
     queryKey: ["admin", "self-role", userId ?? "guest", normalizedEmail],
-    enabled: isAuthenticated && !!userId && isOwnerEmail,
-    staleTime: 60_000,
+    enabled: isAuthenticated && !!userId,
+    staleTime: 30_000,
     queryFn: async () => {
-      if (!userId || !isOwnerEmail) return null;
-      const { error: ownerError } = await supabase.rpc("ensure_owner_role", {
-        check_user_id: userId,
-        check_email: normalizedEmail,
-      });
-      if (ownerError) console.log("[admin] owner role ensure skipped", ownerError.message);
-      return "owner" as const;
+      if (!userId) return { role: null, permissions: null };
+      if (isOwnerEmail) {
+        const { error: ownerError } = await supabase.rpc("ensure_owner_role", {
+          check_user_id: userId,
+          check_email: normalizedEmail,
+        });
+        if (ownerError) console.log("[admin] owner role ensure skipped", ownerError.message);
+      }
+      const { data, error } = await supabase
+        .from("admin_roles")
+        .select("role,permissions")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (error) {
+        console.log("[admin] role fetch failed", error.message);
+        return { role: isOwnerEmail ? ("owner" as const) : null, permissions: null };
+      }
+      if (!data) return { role: isOwnerEmail ? ("owner" as const) : null, permissions: null };
+      const role = (data.role as AdminRole) ?? null;
+      const perms = role === "team" ? normalizePerms(data.permissions) : null;
+      return { role, permissions: perms };
     },
   });
 
-  const role = isOwnerEmail ? roleQuery.data ?? "owner" : null;
-  const isOwner = role === "owner" && isOwnerEmail;
-  const isAdmin = isOwner;
-  const isSuperadmin = isOwner;
+  const role = roleQuery.data?.role ?? (isOwnerEmail ? "owner" : null);
+  const permissions = roleQuery.data?.permissions ?? null;
+  const isOwner = role === "owner";
+  const isSuperadmin = isOwner || role === "superadmin";
+  const isAdmin = isOwner || role === "superadmin" || role === "admin";
+  const isTeam = isAdmin || role === "team" || role === "moderator";
+
+  const effectivePermissions: TeamPermissions = useMemo(() => {
+    if (isAdmin) return DEFAULT_TEAM_PERMISSIONS;
+    if (role === "team" && permissions) return permissions;
+    if (role === "moderator") return DEFAULT_TEAM_PERMISSIONS;
+    return {
+      delete_posts: false,
+      delete_reels: false,
+      ban_users: false,
+      suspend_users: false,
+      limit_users: false,
+      resolve_reports: false,
+      view_online: false,
+      view_analytics: false,
+    };
+  }, [isAdmin, permissions, role]);
 
   return useMemo(
     () => ({
       role,
+      permissions: effectivePermissions,
       isAdmin,
       isOwner,
       isSuperadmin,
-      isLoading: isOwnerEmail && roleQuery.isLoading,
+      isTeam,
+      isLoading: roleQuery.isLoading,
     }),
-    [role, isAdmin, isOwner, isSuperadmin, isOwnerEmail, roleQuery.isLoading],
+    [role, effectivePermissions, isAdmin, isOwner, isSuperadmin, isTeam, roleQuery.isLoading],
   );
 });
