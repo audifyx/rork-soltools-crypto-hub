@@ -408,7 +408,13 @@ export default function ProfileScreen() {
         rarity: "rare",
       });
     });
-    return sortBadges(out);
+    const seen = new Set<string>();
+    const deduped = out.filter((b) => {
+      if (seen.has(b.id)) return false;
+      seen.add(b.id);
+      return true;
+    });
+    return sortBadges(deduped);
   }, [profile.customBadges, profile.xp, isAdmin, adminRole]);
 
   const rank = useMemo(() => computeRank(computedXp), [computedXp]);
