@@ -2,7 +2,7 @@ import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { hapticSelect } from "@/lib/haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { Compass, House, MessageCircle, Play, Sparkles, User } from "lucide-react-native";
+import { Compass, House, MessageCircle, Sparkles, User } from "lucide-react-native";
 import React, { memo } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
@@ -86,8 +86,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="reels"
         options={{
-          title: "Reels",
-          tabBarIcon: ({ color, size }) => <Play color={color} size={size} strokeWidth={2.6} fill="none" />,
+          href: null,
         }}
       />
       <Tabs.Screen
