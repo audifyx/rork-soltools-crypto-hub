@@ -595,6 +595,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
     onSuccess: (next) => {
       qc.setQueryData(["app", "posts", userId ?? "guest"], next);
+      // Surface the brand-new post in the live feed immediately so it doesn't
+      // wait for the next refetch interval (~20s).
+      const fresh = next[0];
+      if (fresh) {
+        qc.setQueryData<UserPost[]>(
+          ["home", "live-feed", userId ?? "guest"],
+          (prev) => {
+            const list = prev ?? [];
+            if (list.some((p) => p.id === fresh.id)) return list;
+            return [fresh, ...list];
+          },
+        );
+      }
+      qc.invalidateQueries({ queryKey: ["home", "live-feed"] }).catch(() => {});
       qc.invalidateQueries({ queryKey: ["home", "following-feed"] }).catch(() => {});
     },
   });

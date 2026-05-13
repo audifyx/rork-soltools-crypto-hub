@@ -374,12 +374,17 @@ export default function HomeFeedScreen() {
 
   const onTimelineLike = useCallback(
     (post: UserPost) => {
+      if (!isAuthenticated) {
+        Alert.alert("Sign in", "Sign in to like posts.");
+        return;
+      }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       togglePostLike(post.id).catch((e) => {
         console.log("[home] timeline like failed", e);
+        Alert.alert("Like failed", e instanceof Error ? e.message : "Try again.");
       });
     },
-    [togglePostLike],
+    [togglePostLike, isAuthenticated],
   );
 
   const onTimelineRepost = useCallback(
@@ -1741,14 +1746,14 @@ function UserPostCard({
         <View style={styles.actionsRow}>
           <Pressable
             style={styles.actionBtn}
-            onPress={() => {
+            onPress={onComment}
+            onLongPress={() => {
               try {
                 router.push({ pathname: "/post/[id]", params: { id: post.id } });
               } catch (e) {
                 console.log("[home] open post detail failed", e);
               }
             }}
-            onLongPress={onComment}
             hitSlop={6}
             testID={`comment-user-${post.id}`}
           >
