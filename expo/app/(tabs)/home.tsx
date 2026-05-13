@@ -20,6 +20,7 @@ import {
   Plus,
   Quote,
   Repeat2,
+  Rocket,
   Send,
   Share2,
   Award,
