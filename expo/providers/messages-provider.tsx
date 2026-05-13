@@ -516,28 +516,28 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
         p_reply_to_id: input.replyToId ?? null,
       });
       if (!messageId) throw new Error("Message failed to send.");
-      // Auto-accept: replying to a message request moves the convo into the inbox.
-      const convo = conversations.find((c) => c.id === input.id);
-      if (convo?.request) {
-        try {
-          const { error: flagErr } = await supabase.rpc("set_dm_participant_flag", {
-            p_conversation_id: input.id,
-            p_pinned: null,
-            p_muted: null,
-            p_request: false,
-            p_hidden_at: null,
-            p_clear_hidden: false,
-          });
-          if (flagErr) {
-            await supabase
-              .from("dm_participants")
-              .update({ request: false })
-              .eq("conversation_id", input.id)
-              .eq("user_id", userId);
-          }
-        } catch (e) {
-          console.log("[messages] auto-accept request failed", e instanceof Error ? e.message : e);
+      // Auto-accept: replying to any conversation flips the caller's own
+      // request flag off, moving the convo from the Requests tab into Inbox.
+      // Always run this (idempotent if the flag is already false) so we don't
+      // depend on a possibly-stale cached conversation row.
+      try {
+        const { error: flagErr } = await supabase.rpc("set_dm_participant_flag", {
+          p_conversation_id: input.id,
+          p_pinned: null,
+          p_muted: null,
+          p_request: false,
+          p_hidden_at: null,
+          p_clear_hidden: false,
+        });
+        if (flagErr) {
+          await supabase
+            .from("dm_participants")
+            .update({ request: false })
+            .eq("conversation_id", input.id)
+            .eq("user_id", userId);
         }
+      } catch (e) {
+        console.log("[messages] auto-accept request failed", e instanceof Error ? e.message : e);
       }
       return messageId;
     },
@@ -567,6 +567,16 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
         reactions: [],
       };
       queryClient.setQueryData<DMMessage[]>(threadKey, [...previous, optimistic]);
+      // Optimistically flip the conversation out of the Requests tab so the UI
+      // moves it into Inbox immediately, without waiting on the server refetch.
+      const convKey = ["messages", "conversations", userId ?? "guest"] as const;
+      queryClient.setQueryData<Conversation[]>(convKey, (prev) =>
+        (prev ?? []).map((c) =>
+          c.id === input.id
+            ? { ...c, request: false, lastMessage: optimistic.text, lastAt: optimistic.createdAt }
+            : c,
+        ),
+      );
       return { previous, threadKey };
     },
     onError: (_err, _input, ctx) => {
