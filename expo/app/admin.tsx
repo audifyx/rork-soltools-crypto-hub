@@ -2275,27 +2275,30 @@ async function updateProfileBadge(
 
 function normalizeAdminBadges(input: unknown): UserBadge[] {
   if (!Array.isArray(input)) return [];
-  return input
-    .map((row) => {
-      if (!row || typeof row !== "object") return null;
-      const r = row as Record<string, unknown>;
-      const id = String(r.id ?? "").trim();
-      const label = String(r.label ?? "").trim();
-      if (!id || !label) return null;
-      return {
-        id,
-        label,
-        color: typeof r.color === "string" ? r.color : Colors.goldBright,
-        icon: typeof r.icon === "string" ? r.icon : undefined,
-        glow: typeof r.glow === "boolean" ? r.glow : true,
-        priority: typeof r.priority === "number" ? r.priority : 70,
-        rarity: typeof r.rarity === "string" ? (r.rarity as UserBadge["rarity"]) : "rare",
-        background: typeof r.background === "string" ? r.background : undefined,
-        textColor: typeof r.textColor === "string" ? r.textColor : undefined,
-        animated: typeof r.animated === "boolean" ? r.animated : undefined,
-      };
-    })
-    .filter((badge): badge is UserBadge => badge !== null);
+  const seen = new Set<string>();
+  const out: UserBadge[] = [];
+  for (const row of input) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const id = String(r.id ?? "").trim();
+    const label = String(r.label ?? "").trim();
+    if (!id || !label) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      label,
+      color: typeof r.color === "string" ? r.color : Colors.goldBright,
+      icon: typeof r.icon === "string" ? r.icon : undefined,
+      glow: typeof r.glow === "boolean" ? r.glow : true,
+      priority: typeof r.priority === "number" ? r.priority : 70,
+      rarity: typeof r.rarity === "string" ? (r.rarity as UserBadge["rarity"]) : "rare",
+      background: typeof r.background === "string" ? r.background : undefined,
+      textColor: typeof r.textColor === "string" ? r.textColor : undefined,
+      animated: typeof r.animated === "boolean" ? r.animated : undefined,
+    });
+  }
+  return out;
 }
 
 function isUuid(value: string): boolean {

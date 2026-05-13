@@ -99,22 +99,25 @@ function normalizeDisplayName(input: unknown, username: string | null): string |
 
 function normalizeBadges(input: unknown): CustomBadge[] {
   if (!Array.isArray(input)) return [];
-  return input
-    .map((row) => {
-      if (!row || typeof row !== "object") return null;
-      const r = row as Record<string, unknown>;
-      const id = String(r.id ?? "").trim();
-      const label = String(r.label ?? "").trim();
-      if (!id || !label) return null;
-      return {
-        id,
-        label,
-        color: typeof r.color === "string" ? r.color : undefined,
-        icon: typeof r.icon === "string" ? r.icon : undefined,
-        granted_at: typeof r.granted_at === "string" ? r.granted_at : undefined,
-      } as CustomBadge;
-    })
-    .filter((b): b is CustomBadge => b !== null);
+  const seen = new Set<string>();
+  const out: CustomBadge[] = [];
+  for (const row of input) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const id = String(r.id ?? "").trim();
+    const label = String(r.label ?? "").trim();
+    if (!id || !label) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      label,
+      color: typeof r.color === "string" ? r.color : undefined,
+      icon: typeof r.icon === "string" ? r.icon : undefined,
+      granted_at: typeof r.granted_at === "string" ? r.granted_at : undefined,
+    } as CustomBadge);
+  }
+  return out;
 }
 
 export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
