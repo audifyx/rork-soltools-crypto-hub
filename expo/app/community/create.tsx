@@ -46,6 +46,9 @@ import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
 import { SOLTOOLS_TOKEN_MINT } from "@/lib/badge-system";
 import { Community, useSocial } from "@/providers/social-provider";
+import { useCommunityAccess } from "@/providers/community-access-provider";
+import type { CommunityAccessType } from "@/lib/community-access";
+import { Globe, KeyRound, UserCheck, Coins } from "lucide-react-native";
 
 type Step = 0 | 1 | 2 | 3;
 type Category = Community["category"];
@@ -79,6 +82,7 @@ const HANDLE_RE = /^[a-z0-9_]{0,24}$/;
 export default function CreateCommunityScreen() {
   const router = useRouter();
   const { createCommunity, communities } = useSocial();
+  const { initialize: initializeAccess } = useCommunityAccess();
   const { profile } = useApp();
   const [step, setStep] = useState<Step>(0);
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -97,9 +101,11 @@ export default function CreateCommunityScreen() {
     "Keep posts on-topic.",
   ]);
   const [ruleInput, setRuleInput] = useState<string>("");
-  const [isPrivate, setIsPrivate] = useState<boolean>(false);
-  const [holderOnly, setHolderOnly] = useState<boolean>(false);
+  const [accessType, setAccessType] = useState<CommunityAccessType>("public");
+  const [passcode, setPasscode] = useState<string>("");
   const [gateMinimumBalance, setGateMinimumBalance] = useState<string>("1000000");
+  const isPrivate = accessType !== "public";
+  const holderOnly = accessType === "holders";
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
@@ -204,6 +210,10 @@ export default function CreateCommunityScreen() {
 
   const onSubmit = useCallback(async () => {
     if (submitting) return;
+    if (accessType === "passcode" && passcode.trim().length < 4) {
+      Alert.alert("Passcode too short", "Pick a passcode of at least 4 characters.");
+      return;
+    }
     setSubmitting(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     try {
@@ -216,13 +226,17 @@ export default function CreateCommunityScreen() {
         accent: palette,
         tags,
         rules,
-        isPrivate: isPrivate || holderOnly,
-        holderOnly,
-        gateTokenMint: holderOnly ? SOLTOOLS_TOKEN_MINT : null,
-        gateMinimumBalance: holderOnly ? Number(gateMinimumBalance) || 1 : null,
+        isPrivate: accessType !== "public",
+        holderOnly: accessType === "holders",
+        gateTokenMint: accessType === "holders" ? SOLTOOLS_TOKEN_MINT : null,
+        gateMinimumBalance: accessType === "holders" ? Number(gateMinimumBalance) || 1 : null,
         ownerHandle: profile.handle || "",
         avatarUrl,
         bannerUrl,
+      });
+      initializeAccess(created.id, {
+        accessType,
+        passcode: accessType === "passcode" ? passcode.trim() : null,
       });
       router.replace({ pathname: "/community/[id]", params: { id: created.id } });
     } catch (e) {
@@ -240,13 +254,14 @@ export default function CreateCommunityScreen() {
     palette,
     tags,
     rules,
-    isPrivate,
-    holderOnly,
+    accessType,
+    passcode,
     gateMinimumBalance,
     profile.handle,
     router,
     avatarUrl,
     bannerUrl,
+    initializeAccess,
   ]);
 
   return (
@@ -352,15 +367,12 @@ export default function CreateCommunityScreen() {
                 onRemoveRule={(idx) =>
                   setRules((prev) => prev.filter((_, i) => i !== idx))
                 }
-                isPrivate={isPrivate}
-                holderOnly={holderOnly}
+                accessType={accessType}
+                onChangeAccessType={setAccessType}
+                passcode={passcode}
+                onChangePasscode={setPasscode}
                 gateMinimumBalance={gateMinimumBalance}
                 onChangeGateMinimumBalance={setGateMinimumBalance}
-                onTogglePrivate={() => setIsPrivate((p) => !p)}
-                onToggleHolderOnly={() => {
-                  setHolderOnly((p) => !p);
-                  setIsPrivate(true);
-                }}
               />
             ) : null}
 
@@ -374,8 +386,8 @@ export default function CreateCommunityScreen() {
                 palette={palette}
                 tags={tags}
                 rules={rules}
-                isPrivate={isPrivate || holderOnly}
-                holderOnly={holderOnly}
+                accessType={accessType}
+                passcode={passcode}
                 gateMinimumBalance={gateMinimumBalance}
               />
             ) : null}
@@ -808,6 +820,19 @@ function StepStory({
   );
 }
 
+const ACCESS_OPTIONS: {
+  id: CommunityAccessType;
+  title: string;
+  body: string;
+  icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+  accent: string;
+}[] = [
+  { id: "public", title: "Public", body: "Anyone can discover and join instantly. Shows in live feeds.", icon: Globe, accent: Colors.mint },
+  { id: "holders", title: "Holders only", body: "Members must verify they hold $OGS via a wallet scan.", icon: Coins, accent: Colors.cyan },
+  { id: "passcode", title: "Passcode locked", body: "Members must enter the passcode you set to join.", icon: KeyRound, accent: Colors.orange },
+  { id: "request", title: "Request to join", body: "You approve every member from a requests queue.", icon: UserCheck, accent: Colors.violet },
+];
+
 function StepRulesTags({
   tags,
   tagInput,
@@ -819,12 +844,12 @@ function StepRulesTags({
   onChangeRuleInput,
   onAddRule,
   onRemoveRule,
-  isPrivate,
-  holderOnly,
+  accessType,
+  onChangeAccessType,
+  passcode,
+  onChangePasscode,
   gateMinimumBalance,
   onChangeGateMinimumBalance,
-  onTogglePrivate,
-  onToggleHolderOnly,
 }: {
   tags: string[];
   tagInput: string;
@@ -836,13 +861,14 @@ function StepRulesTags({
   onChangeRuleInput: (t: string) => void;
   onAddRule: () => void;
   onRemoveRule: (idx: number) => void;
-  isPrivate: boolean;
-  holderOnly: boolean;
+  accessType: CommunityAccessType;
+  onChangeAccessType: (t: CommunityAccessType) => void;
+  passcode: string;
+  onChangePasscode: (t: string) => void;
   gateMinimumBalance: string;
   onChangeGateMinimumBalance: (value: string) => void;
-  onTogglePrivate: () => void;
-  onToggleHolderOnly: () => void;
 }) {
+  const holderOnly = accessType === "holders";
   return (
     <View style={styles.card}>
       <SectionTitle icon={BookOpen} eyebrow="Step 3 of 4" title="Tags & rules" />
@@ -916,53 +942,53 @@ function StepRulesTags({
         ))}
       </View>
 
-      <View style={styles.privacyRow}>
-        <View style={styles.privacyLeft}>
-          <View style={styles.privacyIcon}>
-            {isPrivate ? (
-              <Lock color={Colors.orange} size={16} strokeWidth={2.6} />
-            ) : (
-              <Unlock color={Colors.mint} size={16} strokeWidth={2.6} />
-            )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.privacyTitle}>
-              {isPrivate ? "Private community" : "Public community"}
-            </Text>
-            <Text style={styles.privacyBody}>
-              {isPrivate
-                ? "Only invited members can see posts."
-                : "Anyone can discover and join."}
-            </Text>
-          </View>
-        </View>
-        <Switch
-          value={isPrivate}
-          onValueChange={onTogglePrivate}
-          trackColor={{ false: "rgba(255,255,255,0.12)", true: Colors.orange }}
-          thumbColor={Colors.text}
-          testID="switch-private"
-        />
+      <FieldLabel icon={Lock}>Access</FieldLabel>
+      <View style={{ gap: 10, marginTop: 4 }}>
+        {ACCESS_OPTIONS.map((opt) => {
+          const active = opt.id === accessType;
+          const Icon = opt.icon;
+          return (
+            <Pressable
+              key={opt.id}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                onChangeAccessType(opt.id);
+              }}
+              style={[styles.accessRow, active && { borderColor: opt.accent, backgroundColor: "rgba(255,255,255,0.06)" }]}
+              testID={`access-${opt.id}`}
+            >
+              <View style={[styles.privacyIcon, { backgroundColor: `${opt.accent}22` }]}>
+                <Icon color={opt.accent} size={16} strokeWidth={2.6} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.privacyTitle}>{opt.title}</Text>
+                <Text style={styles.privacyBody}>{opt.body}</Text>
+              </View>
+              <View style={[styles.radio, active && { borderColor: opt.accent }]}>
+                {active ? <View style={[styles.radioDot, { backgroundColor: opt.accent }]} /> : null}
+              </View>
+            </Pressable>
+          );
+        })}
       </View>
 
-      <View style={styles.privacyRow}>
-        <View style={styles.privacyLeft}>
-          <View style={styles.privacyIcon}>
-            <Lock color={Colors.mint} size={16} strokeWidth={2.6} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.privacyTitle}>Holder-only community</Text>
-            <Text style={styles.privacyBody}>Requires $OGS holdings to enter and gives members holder-only status.</Text>
-          </View>
-        </View>
-        <Switch
-          value={holderOnly}
-          onValueChange={onToggleHolderOnly}
-          trackColor={{ false: "rgba(255,255,255,0.12)", true: Colors.mint }}
-          thumbColor={Colors.text}
-          testID="switch-holder-only"
-        />
-      </View>
+      {accessType === "passcode" ? (
+        <>
+          <FieldLabel icon={KeyRound}>Community passcode</FieldLabel>
+          <TextInput
+            value={passcode}
+            onChangeText={onChangePasscode}
+            placeholder="e.g. moonshot-2026"
+            placeholderTextColor={Colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.input}
+            maxLength={32}
+            testID="input-passcode"
+          />
+          <Text style={styles.helper}>Share this passcode with the people you want to join. Minimum 4 characters.</Text>
+        </>
+      ) : null}
 
       {holderOnly ? (
         <>
@@ -991,8 +1017,8 @@ function StepReview({
   palette,
   tags,
   rules,
-  isPrivate,
-  holderOnly,
+  accessType,
+  passcode,
   gateMinimumBalance,
 }: {
   name: string;
@@ -1003,10 +1029,18 @@ function StepReview({
   palette: [string, string];
   tags: string[];
   rules: string[];
-  isPrivate: boolean;
-  holderOnly: boolean;
+  accessType: CommunityAccessType;
+  passcode: string;
   gateMinimumBalance: string;
 }) {
+  const accessLabel =
+    accessType === "holders"
+      ? "Holders only"
+      : accessType === "passcode"
+        ? "Passcode locked"
+        : accessType === "request"
+          ? "Request to join"
+          : "Public";
   const cat = CATEGORIES.find((c) => c.id === category);
   return (
     <View style={styles.card}>
@@ -1038,13 +1072,19 @@ function StepReview({
         </View>
       </View>
       <View style={styles.reviewRow}>
-        <Text style={styles.reviewLabel}>Privacy</Text>
-        <Text style={styles.reviewValue}>{holderOnly ? "Holder-only" : isPrivate ? "Private" : "Public"}</Text>
+        <Text style={styles.reviewLabel}>Access</Text>
+        <Text style={styles.reviewValue}>{accessLabel}</Text>
       </View>
-      {holderOnly ? (
+      {accessType === "holders" ? (
         <View style={styles.reviewRow}>
           <Text style={styles.reviewLabel}>Gate</Text>
           <Text style={styles.reviewValue}>{Number(gateMinimumBalance || 0).toLocaleString()} $OGS</Text>
+        </View>
+      ) : null}
+      {accessType === "passcode" ? (
+        <View style={styles.reviewRow}>
+          <Text style={styles.reviewLabel}>Passcode</Text>
+          <Text style={styles.reviewValue}>{passcode ? "\u2022".repeat(Math.min(passcode.length, 8)) : "—"}</Text>
         </View>
       ) : null}
 
@@ -1482,6 +1522,26 @@ const styles = StyleSheet.create({
   },
   privacyTitle: { color: Colors.text, fontSize: 14, fontWeight: "900" },
   privacyBody: { color: Colors.muted, fontSize: 12, fontWeight: "600", marginTop: 2 },
+  accessRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: 12,
+  },
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioDot: { width: 10, height: 10, borderRadius: 999 },
 
   reviewRow: {
     flexDirection: "row",

@@ -78,6 +78,9 @@ import { useAdmin } from "@/providers/admin-provider";
 import { useAuth } from "@/providers/auth-provider";
 import { useProfileProvider } from "@/providers/profile-provider";
 import { CommunityPost, useSocial } from "@/providers/social-provider";
+import { useCommunityAccess } from "@/providers/community-access-provider";
+import type { CommunityAccessType } from "@/lib/community-access";
+import { KeyRound, Lock as LockIcon, Globe, UserCheck, ShieldCheck, Coins } from "lucide-react-native";
 
 interface CommunityMember {
   id: string;
@@ -169,6 +172,14 @@ export default function CommunityDetailScreen() {
   const canModeratePosts = role === "superadmin" || role === "admin" || role === "moderator";
   const { isAuthenticated, userId } = useAuth();
   const { toggleFollow, isToggling } = useProfileProvider();
+  const {
+    getConfig: getAccessConfig,
+    submitJoinRequest,
+    approveRequest,
+    rejectRequest,
+    verifyPasscode,
+    isRequestPending,
+  } = useCommunityAccess();
   const [tab, setTab] = useState<Tab>("recent");
   const [composer, setComposer] = useState<string>("");
   const [composerImage, setComposerImage] = useState<ComposerImage | null>(null);
@@ -189,6 +200,10 @@ export default function CommunityDetailScreen() {
   const [holderGateScanning, setHolderGateScanning] = useState<boolean>(false);
   const [holderGateError, setHolderGateError] = useState<string | null>(null);
   const [holderGateBalance, setHolderGateBalance] = useState<number | null>(null);
+  const [passcodeOpen, setPasscodeOpen] = useState<boolean>(false);
+  const [passcodeInput, setPasscodeInput] = useState<string>("");
+  const [passcodeError, setPasscodeError] = useState<string | null>(null);
+  const [requestsOpen, setRequestsOpen] = useState<boolean>(false);
 
   const community = useMemo(() => (id ? getCommunity(id) : undefined), [id, getCommunity]);
   const postsQuery = usePostsForCommunity(community?.id);
@@ -524,10 +539,26 @@ export default function CommunityDetailScreen() {
     }
   }, [ensureSignedIn, showToast, toggleFollow, userId]);
 
+  const accessConfig = useMemo(
+    () => (community ? getAccessConfig(community.id) : null),
+    [community, getAccessConfig],
+  );
+  const effectiveAccessType: CommunityAccessType = useMemo(() => {
+    if (!community) return "public";
+    if (accessConfig && accessConfig.accessType !== "public") return accessConfig.accessType;
+    if (community.holderOnly) return "holders";
+    if (community.isPrivate) return "request";
+    return "public";
+  }, [accessConfig, community]);
+  const pendingForMe = community && userId
+    ? isRequestPending(community.id, userId)
+    : false;
+
   const requestJoin = useCallback(
     (community_id: string) => {
       if (!ensureSignedIn("Sign in to join communities.")) return;
       const c = community;
+      if (!c) return;
       const alreadyJoined = isJoined(community_id);
       if (alreadyJoined) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -535,7 +566,7 @@ export default function CommunityDetailScreen() {
         showToast("Left community");
         return;
       }
-      if (c?.holderOnly) {
+      if (effectiveAccessType === "holders") {
         Haptics.selectionAsync().catch(() => {});
         setHolderGateAddress(profile.walletAddress || "");
         setHolderGateError(null);
@@ -543,11 +574,83 @@ export default function CommunityDetailScreen() {
         setHolderGateOpen(true);
         return;
       }
+      if (effectiveAccessType === "passcode") {
+        Haptics.selectionAsync().catch(() => {});
+        setPasscodeInput("");
+        setPasscodeError(null);
+        setPasscodeOpen(true);
+        return;
+      }
+      if (effectiveAccessType === "request") {
+        Haptics.selectionAsync().catch(() => {});
+        if (!userId) return;
+        if (isRequestPending(community_id, userId)) {
+          showToast("Request already pending");
+          return;
+        }
+        submitJoinRequest(community_id, {
+          userId,
+          handle: profile.handle || "@you",
+          name: profile.displayName || "Member",
+          avatarColor: profile.avatarColor,
+        });
+        showToast("Request sent — waiting for owner approval");
+        return;
+      }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       toggleJoin(community_id);
       showToast("Joined community");
     },
-    [community, ensureSignedIn, isJoined, profile.walletAddress, showToast, toggleJoin],
+    [
+      community,
+      effectiveAccessType,
+      ensureSignedIn,
+      isJoined,
+      isRequestPending,
+      profile.avatarColor,
+      profile.displayName,
+      profile.handle,
+      profile.walletAddress,
+      showToast,
+      submitJoinRequest,
+      toggleJoin,
+      userId,
+    ],
+  );
+
+  const onSubmitPasscode = useCallback(() => {
+    if (!community) return;
+    const ok = verifyPasscode(community.id, passcodeInput);
+    if (!ok) {
+      setPasscodeError("Incorrect passcode. Try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      return;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    toggleJoin(community.id);
+    setPasscodeOpen(false);
+    setPasscodeInput("");
+    showToast("Passcode accepted — joined community");
+  }, [community, passcodeInput, showToast, toggleJoin, verifyPasscode]);
+
+  const onApproveRequest = useCallback(
+    (uid: string) => {
+      if (!community) return;
+      approveRequest(community.id, uid);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      showToast("Request approved");
+    },
+    [approveRequest, community, showToast],
+  );
+
+  const onRejectRequest = useCallback(
+    (uid: string) => {
+      if (!community) return;
+      rejectRequest(community.id, uid);
+      Haptics.selectionAsync().catch(() => {});
+      showToast("Request declined");
+    },
+    [community, rejectRequest, showToast],
   );
 
   const onVerifyAndJoin = useCallback(async () => {
@@ -909,14 +1012,28 @@ export default function CommunityDetailScreen() {
     />
   );
 
-  const dataForTab: CommunityPost[] =
-    tab === "recent"
+  const isLocked = effectiveAccessType !== "public" && !joined && !canEditMedia;
+  const dataForTab: CommunityPost[] = isLocked
+    ? []
+    : tab === "recent"
       ? posts.filter(matchesSearch)
       : tab === "media"
         ? mediaPosts.filter(matchesSearch)
         : tab === "bookmarks"
           ? bookmarkedPosts.filter(matchesSearch)
           : [];
+  const pendingCount = accessConfig?.pendingRequests.length ?? 0;
+  const joinLabel = joined
+    ? "Joined"
+    : pendingForMe
+      ? "Pending approval"
+      : effectiveAccessType === "holders"
+        ? "Verify & join"
+        : effectiveAccessType === "passcode"
+          ? "Enter passcode"
+          : effectiveAccessType === "request"
+            ? "Request to join"
+            : "Join community";
 
   return (
     <View style={styles.root} testID="community-detail">
@@ -1042,7 +1159,7 @@ export default function CommunityDetailScreen() {
                       joined && { color: Colors.mint },
                     ]}
                   >
-                    {joined ? "Joined" : "Join community"}
+                    {joinLabel}
                   </Text>
                 </Pressable>
               </View>
@@ -1216,7 +1333,77 @@ export default function CommunityDetailScreen() {
               </View>
             ) : null}
 
-            {tab === "recent" ? (
+            {isLocked ? (
+              <View style={styles.lockedBanner} testID="community-lock-banner">
+                <View style={styles.lockedIcon}>
+                  {effectiveAccessType === "holders" ? (
+                    <Coins color={Colors.cyan} size={20} strokeWidth={2.6} />
+                  ) : effectiveAccessType === "passcode" ? (
+                    <KeyRound color={Colors.orange} size={20} strokeWidth={2.6} />
+                  ) : (
+                    <UserCheck color={Colors.violet} size={20} strokeWidth={2.6} />
+                  )}
+                </View>
+                <Text style={styles.lockedTitle}>
+                  {pendingForMe
+                    ? "Please wait for an admin to add you"
+                    : effectiveAccessType === "holders"
+                      ? "Holders-only community"
+                      : effectiveAccessType === "passcode"
+                        ? "Passcode required"
+                        : "Approval required"}
+                </Text>
+                <Text style={styles.lockedBody}>
+                  {pendingForMe
+                    ? `Your request to join ${community.name} is pending the owner's approval. You will gain access automatically once approved.`
+                    : effectiveAccessType === "holders"
+                      ? `Verify your wallet holds ${Math.max(1, Number(community.gateMinimumBalance ?? 1)).toLocaleString()} $OGS to read posts and chat here.`
+                      : effectiveAccessType === "passcode"
+                        ? "Enter the passcode the creator shared to unlock posts and chat."
+                        : "Send a request to the owner. You'll see posts and chat once they approve you."}
+                </Text>
+                <Pressable
+                  onPress={() => requestJoin(community.id)}
+                  disabled={pendingForMe}
+                  style={[styles.lockedCta, pendingForMe && { opacity: 0.55 }]}
+                  testID="community-locked-cta"
+                >
+                  <Text style={styles.lockedCtaText}>
+                    {pendingForMe
+                      ? "Awaiting approval"
+                      : effectiveAccessType === "holders"
+                        ? "Verify wallet"
+                        : effectiveAccessType === "passcode"
+                          ? "Enter passcode"
+                          : "Request to join"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {canEditMedia && effectiveAccessType === "request" && pendingCount > 0 ? (
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setRequestsOpen(true);
+                }}
+                style={styles.requestsBanner}
+                testID="community-requests-banner"
+              >
+                <View style={styles.requestsBannerIcon}>
+                  <UserCheck color={Colors.violet} size={16} strokeWidth={2.6} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.requestsBannerTitle}>{pendingCount} join request{pendingCount === 1 ? "" : "s"}</Text>
+                  <Text style={styles.requestsBannerBody}>Review and approve members waiting to join.</Text>
+                </View>
+                <View style={styles.requestsBannerBadge}>
+                  <Text style={styles.requestsBannerBadgeText}>{pendingCount}</Text>
+                </View>
+              </Pressable>
+            ) : null}
+
+            {tab === "recent" && !isLocked ? (
               <View style={styles.composer}>
                 <View
                   style={[
@@ -1682,6 +1869,131 @@ export default function CommunityDetailScreen() {
                 </View>
               </>
             ) : null}
+          </SafeAreaView>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={passcodeOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPasscodeOpen(false)}
+      >
+        <View style={styles.chartBackdrop}>
+          <SafeAreaView edges={["bottom"]} style={styles.gateSheet}>
+            <View style={styles.gateHeader}>
+              <View style={[styles.gateIcon, { backgroundColor: "rgba(255,138,60,0.16)" }]}>
+                <KeyRound color={Colors.orange} size={18} strokeWidth={2.8} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.gateTitle}>Passcode required</Text>
+                <Text style={styles.gateSub} numberOfLines={2}>
+                  Enter the passcode the creator of {community.name} shared with you.
+                </Text>
+              </View>
+              <Pressable onPress={() => setPasscodeOpen(false)} style={styles.threadClose} hitSlop={8}>
+                <X color={Colors.text} size={18} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+
+            <Text style={styles.gateLabel}>Passcode</Text>
+            <View style={styles.gateInputWrap}>
+              <TextInput
+                value={passcodeInput}
+                onChangeText={(t) => {
+                  setPasscodeInput(t);
+                  if (passcodeError) setPasscodeError(null);
+                }}
+                placeholder="Enter passcode"
+                placeholderTextColor={Colors.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry
+                style={styles.gateInput}
+                testID="community-passcode-input"
+              />
+            </View>
+
+            {passcodeError ? (
+              <View style={styles.gateError}>
+                <Text style={styles.gateErrorText}>{passcodeError}</Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              onPress={onSubmitPasscode}
+              disabled={passcodeInput.trim().length === 0}
+              style={[
+                styles.gateVerifyBtn,
+                { backgroundColor: Colors.orange },
+                passcodeInput.trim().length === 0 && { opacity: 0.5 },
+              ]}
+              testID="community-passcode-submit"
+            >
+              <KeyRound color={Colors.ink} size={14} strokeWidth={3} />
+              <Text style={styles.gateVerifyText}>Unlock community</Text>
+            </Pressable>
+            <Text style={styles.gateFootnote}>
+              Passcodes are set by the community creator. Ask them if you do not have one.
+            </Text>
+          </SafeAreaView>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={requestsOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setRequestsOpen(false)}
+      >
+        <View style={styles.chartBackdrop}>
+          <SafeAreaView edges={["bottom"]} style={styles.gateSheet}>
+            <View style={styles.gateHeader}>
+              <View style={[styles.gateIcon, { backgroundColor: "rgba(168,85,247,0.18)" }]}>
+                <UserCheck color={Colors.violet} size={18} strokeWidth={2.8} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.gateTitle}>Join requests</Text>
+                <Text style={styles.gateSub} numberOfLines={2}>
+                  Approve or decline members waiting to join {community.name}.
+                </Text>
+              </View>
+              <Pressable onPress={() => setRequestsOpen(false)} style={styles.threadClose} hitSlop={8}>
+                <X color={Colors.text} size={18} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+
+            <ScrollView style={{ maxHeight: 360, marginTop: 8 }} contentContainerStyle={{ gap: 10, paddingBottom: 14 }}>
+              {(accessConfig?.pendingRequests ?? []).length === 0 ? (
+                <Text style={[styles.gateFootnote, { marginTop: 16 }]}>No pending requests.</Text>
+              ) : (
+                (accessConfig?.pendingRequests ?? []).map((req) => (
+                  <View key={req.userId} style={styles.requestRow}>
+                    <View style={[styles.requestAvatar, { backgroundColor: req.avatarColor ?? Colors.violet }]}>
+                      <Text style={styles.requestAvatarText}>{(req.name || "M").slice(0, 1).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.requestName} numberOfLines={1}>{req.name}</Text>
+                      <Text style={styles.requestHandle} numberOfLines={1}>{req.handle}</Text>
+                    </View>
+                    <Pressable
+                      onPress={() => onRejectRequest(req.userId)}
+                      style={styles.requestRejectBtn}
+                      testID={`request-reject-${req.userId}`}
+                    >
+                      <Text style={styles.requestRejectText}>Decline</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => onApproveRequest(req.userId)}
+                      style={styles.requestApproveBtn}
+                      testID={`request-approve-${req.userId}`}
+                    >
+                      <Text style={styles.requestApproveText}>Approve</Text>
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </ScrollView>
           </SafeAreaView>
         </View>
       </Modal>
@@ -3012,6 +3324,102 @@ const styles = StyleSheet.create({
   },
   gateVerifyText: { color: Colors.ink, fontSize: 14, fontWeight: "900" },
   gateFootnote: { color: Colors.muted, fontSize: 11, fontWeight: "700", textAlign: "center" },
+
+  lockedBanner: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: 8,
+  },
+  lockedIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lockedTitle: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.3 },
+  lockedBody: { color: Colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 17 },
+  lockedCta: {
+    alignSelf: "flex-start",
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.mint,
+  },
+  lockedCtaText: { color: Colors.ink, fontSize: 12, fontWeight: "900" },
+  requestsBanner: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(168,85,247,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,0.28)",
+  },
+  requestsBannerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(168,85,247,0.18)",
+  },
+  requestsBannerTitle: { color: Colors.text, fontSize: 13, fontWeight: "900" },
+  requestsBannerBody: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  requestsBannerBadge: {
+    minWidth: 26,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: Colors.violet,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  requestsBannerBadgeText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
+  requestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  requestAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  requestAvatarText: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
+  requestName: { color: Colors.text, fontSize: 13, fontWeight: "800" },
+  requestHandle: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 1 },
+  requestRejectBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  requestRejectText: { color: Colors.muted, fontSize: 11, fontWeight: "900" },
+  requestApproveBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.mint,
+  },
+  requestApproveText: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
 
   chartBackdrop: {
     flex: 1,

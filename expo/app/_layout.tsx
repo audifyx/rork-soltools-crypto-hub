@@ -24,6 +24,7 @@ import { MessagesProvider } from "@/providers/messages-provider";
 import { ProfileProvider } from "@/providers/profile-provider";
 import { ReportsProvider } from "@/providers/reports-provider";
 import { SocialProvider } from "@/providers/social-provider";
+import { CommunityAccessProvider } from "@/providers/community-access-provider";
 import ReportSheet from "@/components/social/ReportSheet";
 
 SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
@@ -184,6 +185,7 @@ export default function RootLayout() {
               <AppProvider>
                 <LaunchpadProvider>
                   <SocialProvider>
+                    <CommunityAccessProvider>
                     <MessagesProvider>
                       <LobbiesProvider>
                         <ReportsProvider>
@@ -198,6 +200,7 @@ export default function RootLayout() {
                         </ReportsProvider>
                       </LobbiesProvider>
                     </MessagesProvider>
+                    </CommunityAccessProvider>
                   </SocialProvider>
                 </LaunchpadProvider>
               </AppProvider>
