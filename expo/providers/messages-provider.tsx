@@ -516,6 +516,29 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
         p_reply_to_id: input.replyToId ?? null,
       });
       if (!messageId) throw new Error("Message failed to send.");
+      // Auto-accept: replying to a message request moves the convo into the inbox.
+      const convo = conversations.find((c) => c.id === input.id);
+      if (convo?.request) {
+        try {
+          const { error: flagErr } = await supabase.rpc("set_dm_participant_flag", {
+            p_conversation_id: input.id,
+            p_pinned: null,
+            p_muted: null,
+            p_request: false,
+            p_hidden_at: null,
+            p_clear_hidden: false,
+          });
+          if (flagErr) {
+            await supabase
+              .from("dm_participants")
+              .update({ request: false })
+              .eq("conversation_id", input.id)
+              .eq("user_id", userId);
+          }
+        } catch (e) {
+          console.log("[messages] auto-accept request failed", e instanceof Error ? e.message : e);
+        }
+      }
       return messageId;
     },
     onMutate: async (input) => {
