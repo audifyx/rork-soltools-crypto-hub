@@ -9,6 +9,7 @@ import { enableFreeze } from "react-native-screens";
 enableFreeze(true);
 
 import Colors from "@/constants/colors";
+import { checkTeamStatus } from "@/lib/check-team-status";
 import { registerKOLSync } from "@/lib/kol-background";
 import { attachNotificationTapHandler, ensureNotificationPermission } from "@/lib/push-notifications";
 import { AdminProvider } from "@/providers/admin-provider";
@@ -163,6 +164,15 @@ export default function RootLayout() {
     ensureNotificationPermission().catch((error: unknown) => {
       console.log("SolTools notification setup skipped", error instanceof Error ? error.message : error);
     });
+    checkTeamStatus()
+      .then((status) => {
+        if (status.isTeam) {
+          console.log("[team] dashboard unlocked", status.role);
+        }
+      })
+      .catch((error: unknown) => {
+        console.log("SolTools team status check skipped", error instanceof Error ? error.message : error);
+      });
   }, []);
 
   return (
