@@ -15,9 +15,7 @@ import {
   Crosshair,
   Eye,
   Filter,
-  ListChecks,
   Flame,
-  Hash,
   Heart,
   Moon,
   Pickaxe,
@@ -545,38 +543,47 @@ export default function DiscoverScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.eyebrowRow}>
-              <Compass color={Colors.cyan} size={13} strokeWidth={2.6} />
-              <Text style={styles.eyebrow}>EXPLORER GRID</Text>
+              <Compass color={Colors.cyan} size={12} strokeWidth={2.6} />
+              <Text style={styles.eyebrow}>EXPLORER</Text>
+              <View style={styles.headerCountPill}>
+                <View style={styles.headerLiveDot} />
+                <Text style={styles.headerCountText}>{stats.total}</Text>
+              </View>
             </View>
-            <Text style={styles.title}>Explorer</Text>
-            <Text style={styles.sub}>
-              {listings.length > 0
-                ? `${stats.total} live coins · runners, migrations, watchlists`
-                : "Fresh tokens, AI runners, OG memes, and Solana market feeds"}
-            </Text>
+            <Text style={styles.title}>Discover</Text>
           </View>
           <View style={styles.headerActions}>
             <Pressable
               style={styles.iconBtn}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                onListToken();
+              }}
+              testID="discover-list-token"
+            >
+              <Plus color={Colors.ink} size={16} strokeWidth={3} />
+            </Pressable>
+            <Pressable
+              style={styles.iconBtnGhost}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                 router.push("/notifications");
               }}
               testID="discover-alerts"
             >
-              <Bell color={Colors.text} size={16} strokeWidth={2.4} />
+              <Bell color={Colors.text} size={15} strokeWidth={2.4} />
             </Pressable>
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                 refresh();
               }}
-              style={styles.iconBtn}
+              style={styles.iconBtnGhost}
               testID="discover-refresh"
             >
               <RefreshCcw
                 color={Colors.text}
-                size={16}
+                size={15}
                 strokeWidth={2.6}
                 style={isRefreshing ? { opacity: 0.4 } : undefined}
               />
@@ -806,8 +813,6 @@ function DiscoverHeader({
 
   return (
     <View>
-      <DiscoverLaunchHero stats={stats} onListToken={onListToken} />
-
       {recentSearches.length > 0 ? (
         <View style={styles.recentWrap}>
           <View style={styles.recentHeader}>
@@ -836,25 +841,42 @@ function DiscoverHeader({
         </View>
       ) : null}
 
-      <View style={styles.statsRow}>
-        <StatTile label="HOT" value={stats.hot.toString()} accent={Colors.orange} Icon={Flame} />
-        <StatTile label="TOKENS" value={stats.listed.toString()} accent={Colors.mint} Icon={Rocket} />
-        <StatTile
-          label="FEATURED"
-          value={stats.featured.toString()}
-          accent={Colors.cyan}
-          Icon={Star}
-        />
-        <StatTile
-          label="24H VOL"
-          value={fmtUsd(stats.totalVol)}
-          accent={Colors.rose}
-          Icon={BarChart3}
-        />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.primaryChipsRow}
+      >
+        {SECTIONS.map((s) => {
+          const active = section === s.id && !activeCat;
+          return (
+            <Pressable
+              key={`top-${s.id}`}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setActiveCat(null);
+                setSection(s.id);
+              }}
+              style={[styles.primaryChip, active && styles.primaryChipActive]}
+              testID={`discover-top-${s.id}`}
+            >
+              <s.Icon color={active ? Colors.ink : Colors.text} size={13} strokeWidth={2.6} />
+              <Text style={[styles.primaryChipText, active && styles.primaryChipTextActive]}>{s.label}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <View style={styles.statsStrip}>
+        <StatMini label="Hot" value={stats.hot.toString()} accent={Colors.orange} Icon={Flame} />
+        <View style={styles.statMiniDivider} />
+        <StatMini label="Tokens" value={stats.listed.toString()} accent={Colors.mint} Icon={Rocket} />
+        <View style={styles.statMiniDivider} />
+        <StatMini label="Featured" value={stats.featured.toString()} accent={Colors.cyan} Icon={Star} />
+        <View style={styles.statMiniDivider} />
+        <StatMini label="24h Vol" value={fmtUsd(stats.totalVol)} accent={Colors.rose} Icon={BarChart3} />
       </View>
 
       <AlphaInsightsCard />
-      <RunnerSourceStrip />
 
       <TokenOvalRail
         title="Spotlight +50% Today"
@@ -916,8 +938,14 @@ function DiscoverHeader({
       />
 
       <View style={styles.categoriesWrap}>
-        <Text style={styles.sectionLabel}>DISCOVER CATEGORIES</Text>
-        <View style={styles.categoriesGrid}>
+        <View style={styles.categoriesHead}>
+          <Text style={styles.sectionLabel}>CATEGORIES</Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesScroll}
+        >
           {CATEGORIES.map((c) => {
             const active = activeCat === c.id;
             return (
@@ -928,19 +956,17 @@ function DiscoverHeader({
                   setActiveCat(active ? null : c.id);
                 }}
                 style={[
-                  styles.catCard,
-                  active && { borderColor: c.tone, backgroundColor: `${c.tone}14` },
+                  styles.catChip,
+                  { borderColor: active ? c.tone : "rgba(255,255,255,0.07)", backgroundColor: active ? `${c.tone}1A` : Colors.card },
                 ]}
                 testID={`cat-${c.id}`}
               >
-                <View style={[styles.catIcon, { backgroundColor: `${c.tone}1A` }]}>
-                  <c.Icon color={c.tone} size={16} strokeWidth={2.6} />
-                </View>
-                <Text style={styles.catLabel}>{c.label}</Text>
+                <c.Icon color={c.tone} size={13} strokeWidth={2.8} />
+                <Text style={[styles.catChipLabel, active && { color: c.tone }]}>{c.label}</Text>
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
       </View>
 
       <View style={styles.gainerLoserRow}>
@@ -1017,143 +1043,14 @@ function DiscoverHeader({
             <Text style={styles.sectionCount}>{filtered.length}</Text>
           </View>
         </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-        >
-          {SECTIONS.map((s) => {
-            const active = section === s.id;
-            return (
-              <Pressable
-                key={s.id}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setSection(s.id);
-                }}
-                style={[styles.chip, active && styles.chipActive]}
-                testID={`discover-${s.id}`}
-              >
-                <s.Icon color={active ? Colors.ink : Colors.text} size={13} strokeWidth={2.6} />
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
       </View>
 
       {filtered.length === 0 ? <EmptyDiscover /> : null}
-
-      {trendingTags.length > 0 ? (
-        <View style={styles.tagsWrap}>
-          <LinearGradient
-            colors={["rgba(63,169,255,0.12)", "rgba(184,255,60,0.06)", "rgba(0,0,0,0)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.tagsHead}>
-            <View style={styles.tagsHeadLeft}>
-              <View style={styles.tagsIcon}>
-                <Hash color={Colors.mint} size={14} strokeWidth={2.8} />
-              </View>
-              <View>
-                <Text style={styles.tagsEyebrow}>TRENDING TAGS</Text>
-                <Text style={styles.tagsTitle}>What the community is hunting</Text>
-              </View>
-            </View>
-            <View style={styles.tagsHeadBadge}>
-              <Flame color={Colors.orange} size={10} strokeWidth={3} />
-              <Text style={styles.tagsHeadBadgeText}>LIVE</Text>
-            </View>
-          </View>
-          <View style={styles.tagsGrid}>
-            {trendingTags.map(({ tag, count }, idx) => {
-              const tones = [Colors.mint, Colors.cyan, Colors.orange, Colors.magenta, Colors.rose, Colors.goldBright];
-              const tone = tones[idx % tones.length];
-              const isTop = idx < 3;
-              return (
-                <Pressable
-                  key={tag}
-                  style={[styles.tagCard, { borderColor: `${tone}33` }]}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    setQuery(`#${tag}`);
-                  }}
-                  testID={`tag-${tag}`}
-                >
-                  <LinearGradient
-                    colors={[`${tone}1F`, `${tone}06`]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View style={styles.tagCardTop}>
-                    <View style={[styles.tagRank, { backgroundColor: `${tone}1F`, borderColor: `${tone}40` }]}>
-                      <Text style={[styles.tagRankText, { color: tone }]}>{idx + 1}</Text>
-                    </View>
-                    {isTop ? (
-                      <View style={[styles.tagHot, { backgroundColor: `${Colors.orange}1A`, borderColor: `${Colors.orange}33` }]}>
-                        <Flame color={Colors.orange} size={9} strokeWidth={3} />
-                        <Text style={styles.tagHotText}>HOT</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <Text style={styles.tagCardText} numberOfLines={1}>#{tag}</Text>
-                  <View style={styles.tagCardFoot}>
-                    <Text style={[styles.tagCardCount, { color: tone }]}>{count}</Text>
-                    <Text style={styles.tagCardCountLabel}>posts</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 }
 
-function DiscoverLaunchHero({ stats, onListToken }: { stats: DiscoverStats; onListToken: () => void }) {
-  return (
-    <View style={styles.launchHero} testID="discover-listing-hero">
-      <LinearGradient
-        colors={["rgba(63,169,255,0.18)", "rgba(229,231,235,0.065)", "rgba(0,0,0,0.1)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.launchHeroTop}>
-        <View style={styles.launchHeroIcon}>
-          <Rocket color={Colors.ink} size={22} strokeWidth={3} />
-        </View>
-        <View style={styles.launchHeroCopy}>
-          <Text style={styles.launchHeroEyebrow}>TOKEN LAUNCH CONTROL</Text>
-          <Text style={styles.launchHeroTitle}>Surface the next runner</Text>
-          <Text style={styles.launchHeroSub}>
-            Submit any Solana token into the Explorer rails. Admin review keeps the signal clean without breaking live discovery.
-          </Text>
-        </View>
-      </View>
-      <View style={styles.launchHeroMetaRow}>
-        <View style={styles.launchHeroMeta}>
-          <Star color={Colors.goldBright} size={12} strokeWidth={3} />
-          <Text style={styles.launchHeroMetaText}>{stats.featured} featured</Text>
-        </View>
-        <View style={styles.launchHeroMeta}>
-          <ListChecks color={Colors.cyan} size={12} strokeWidth={3} />
-          <Text style={styles.launchHeroMetaText}>{stats.pending} pending</Text>
-        </View>
-      </View>
-      <Pressable onPress={onListToken} style={({ pressed }) => [styles.launchHeroBtn, pressed && styles.launchHeroBtnPressed]} testID="discover-list-token">
-        <Plus color={Colors.ink} size={15} strokeWidth={3} />
-        <Text style={styles.launchHeroBtnText}>Submit token</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function StatTile({
+function StatMini({
   label,
   value,
   accent,
@@ -1165,41 +1062,13 @@ function StatTile({
   Icon: LucideIcon;
 }) {
   return (
-    <View style={[styles.statTile, { borderColor: `${accent}33` }]}>
-      <View style={[styles.statIcon, { backgroundColor: `${accent}1A` }]}>
-        <Icon color={accent} size={13} strokeWidth={2.6} />
+    <View style={styles.statMini}>
+      <Icon color={accent} size={11} strokeWidth={2.8} />
+      <View style={styles.statMiniText}>
+        <Text style={styles.statMiniValue}>{value}</Text>
+        <Text style={styles.statMiniLabel}>{label}</Text>
       </View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
     </View>
-  );
-}
-
-function RunnerSourceStrip() {
-  const sources = [
-    { label: "Pump.fun", sub: "migration scan", tone: Colors.orange },
-    { label: "Moonshot", sub: "auto-listed", tone: Colors.cyan },
-    { label: "Fomo", sub: "auto-listed", tone: Colors.magenta },
-    { label: "Birdeye", sub: "volume proof", tone: Colors.cyan },
-    { label: "DexScreener", sub: "liq + pair age", tone: Colors.rose },
-    { label: "Jupiter", sub: "holder checks", tone: Colors.mint },
-  ];
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.sourceRow}
-    >
-      {sources.map((source) => (
-        <View key={source.label} style={[styles.sourcePill, { borderColor: `${source.tone}33` }]}> 
-          <View style={[styles.sourceDot, { backgroundColor: source.tone }]} />
-          <View>
-            <Text style={styles.sourceLabel}>{source.label}</Text>
-            <Text style={styles.sourceSub}>{source.sub}</Text>
-          </View>
-        </View>
-      ))}
-    </ScrollView>
   );
 }
 
@@ -1779,28 +1648,46 @@ const styles = StyleSheet.create({
 
   header: {
     marginHorizontal: 14,
-    marginTop: 6,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 14,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "rgba(98,208,255,0.22)",
-    backgroundColor: "rgba(3,8,18,0.86)",
+    marginTop: 4,
+    paddingHorizontal: 4,
+    paddingTop: 6,
+    paddingBottom: 8,
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
   },
   headerLeft: { flex: 1 },
-  headerActions: { flexDirection: "row", gap: 8 },
+  headerActions: { flexDirection: "row", gap: 8, alignItems: "center" },
   eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   eyebrow: { color: Colors.cyan, fontSize: 10, fontWeight: "900", letterSpacing: 1.6 },
-  title: { color: Colors.text, fontSize: 34, fontWeight: "900", letterSpacing: -1.2, marginTop: 6 },
+  headerCountPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "rgba(184,255,60,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(184,255,60,0.24)",
+    marginLeft: 4,
+  },
+  headerLiveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.mint },
+  headerCountText: { color: Colors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
+  title: { color: Colors.text, fontSize: 30, fontWeight: "900", letterSpacing: -1.1, marginTop: 4 },
   sub: { color: Colors.muted, fontSize: 12, fontWeight: "800", marginTop: 3, lineHeight: 17 },
   iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: Colors.goldBright,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconBtnGhost: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
@@ -1836,62 +1723,6 @@ const styles = StyleSheet.create({
   searchHeadTitle: { color: Colors.text, fontSize: 18, fontWeight: "900", letterSpacing: -0.3 },
   searchHeadSub: { color: Colors.muted, fontSize: 13, fontWeight: "700" },
 
-  launchHero: {
-    marginHorizontal: 14,
-    marginTop: 18,
-    borderRadius: 30,
-    overflow: "hidden",
-    padding: 16,
-    backgroundColor: "rgba(3,9,22,0.94)",
-    borderWidth: 1,
-    borderColor: "rgba(98,208,255,0.34)",
-    shadowColor: Colors.cyan,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 26,
-    elevation: 8,
-  },
-  launchHeroTop: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  launchHeroIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: Colors.goldBright,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  launchHeroCopy: { flex: 1, minWidth: 0 },
-  launchHeroEyebrow: { color: Colors.goldBright, fontSize: 9, fontWeight: "900", letterSpacing: 1.4 },
-  launchHeroTitle: { color: Colors.text, fontSize: 20, fontWeight: "900", letterSpacing: -0.6, marginTop: 4 },
-  launchHeroSub: { color: Colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 17, marginTop: 5 },
-  launchHeroMetaRow: { flexDirection: "row", gap: 8, marginTop: 14 },
-  launchHeroMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.055)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  launchHeroMetaText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
-  launchHeroBtn: {
-    marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingVertical: 13,
-    borderRadius: 15,
-    backgroundColor: Colors.goldBright,
-    borderBottomWidth: 4,
-    borderBottomColor: Colors.gold,
-  },
-  launchHeroBtnPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },
-  launchHeroBtnText: { color: Colors.ink, fontSize: 14, fontWeight: "900", letterSpacing: 0.2 },
-
   recentWrap: { marginTop: 14 },
   recentHeader: {
     flexDirection: "row",
@@ -1915,32 +1746,41 @@ const styles = StyleSheet.create({
   recentText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
   clearText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
 
-  statsRow: { flexDirection: "row", gap: 8, paddingHorizontal: 14, marginTop: 16 },
-  statTile: {
-    flex: 1,
-    padding: 10,
+  statsStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginHorizontal: 14,
+    marginTop: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 14,
     backgroundColor: Colors.card,
     borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
-  statIcon: { width: 24, height: 24, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  statValue: { color: Colors.text, fontSize: 18, fontWeight: "900", marginTop: 8, letterSpacing: -0.4 },
-  statLabel: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1, marginTop: 2 },
+  statMini: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6 },
+  statMiniDivider: { width: 1, height: 20, backgroundColor: "rgba(255,255,255,0.06)" },
+  statMiniText: { minWidth: 0 },
+  statMiniValue: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.3 },
+  statMiniLabel: { color: Colors.muted, fontSize: 9, fontWeight: "800", letterSpacing: 0.4, marginTop: 1 },
 
-  sourceRow: { paddingHorizontal: 20, paddingTop: 12, gap: 8 },
-  sourcePill: {
+  primaryChipsRow: { paddingHorizontal: 14, paddingTop: 14, gap: 7 },
+  primaryChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.035)",
+    backgroundColor: Colors.card,
     borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
-  sourceDot: { width: 7, height: 7, borderRadius: 4 },
-  sourceLabel: { color: Colors.text, fontSize: 11, fontWeight: "900" },
-  sourceSub: { color: Colors.muted, fontSize: 9, fontWeight: "800", marginTop: 1 },
+  primaryChipActive: { backgroundColor: Colors.goldBright, borderColor: Colors.goldBright },
+  primaryChipText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
+  primaryChipTextActive: { color: Colors.ink, fontWeight: "900" },
+
 
   sectionHead: {
     flexDirection: "row",
@@ -2141,21 +1981,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.3)",
   },
 
-  categoriesWrap: { marginTop: 26, paddingHorizontal: 14 },
-  categoriesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  catCard: {
-    width: "31.5%",
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+  categoriesWrap: { marginTop: 24 },
+  categoriesHead: { paddingHorizontal: 20, marginBottom: 8 },
+  categoriesScroll: { paddingHorizontal: 14, gap: 7 },
+  catChip: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
   },
-  catIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  catLabel: { color: Colors.text, fontSize: 12, fontWeight: "800" },
+  catChipLabel: { color: Colors.text, fontSize: 12, fontWeight: "800" },
 
   gainerLoserRow: { flexDirection: "row", gap: 10, marginTop: 22, paddingHorizontal: 14 },
   moverCard: {
@@ -2244,141 +2082,7 @@ const styles = StyleSheet.create({
   newChange: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8 },
   newChangeText: { fontSize: 10, fontWeight: "900" },
 
-  tagsWrap: {
-    marginTop: 32,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    padding: 18,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.07)",
-    backgroundColor: "rgba(12,14,18,0.85)",
-    overflow: "hidden",
-  },
-  tagsHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  tagsHeadLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  tagsIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: "rgba(184,255,60,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(184,255,60,0.25)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tagsEyebrow: {
-    color: Colors.muted,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.6,
-  },
-  tagsTitle: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: "900",
-    marginTop: 2,
-    letterSpacing: -0.2,
-  },
-  tagsHeadBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,138,76,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(255,138,76,0.28)",
-  },
-  tagsHeadBadgeText: {
-    color: Colors.orange,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  tagsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  tagCard: {
-    width: "48.5%",
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 12,
-    overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.02)",
-  },
-  tagCardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  tagRank: {
-    minWidth: 22,
-    height: 22,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tagRankText: {
-    fontSize: 11,
-    fontWeight: "900",
-  },
-  tagHot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  tagHotText: {
-    color: Colors.orange,
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-  },
-  tagCardText: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: "900",
-    letterSpacing: -0.3,
-  },
-  tagCardFoot: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 4,
-    marginTop: 6,
-  },
-  tagCardCount: {
-    fontSize: 18,
-    fontWeight: "900",
-    letterSpacing: -0.5,
-  },
-  tagCardCountLabel: {
-    color: Colors.muted,
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-  },
-
-  allWrap: { marginTop: 26 },
+  allWrap: { marginTop: 22 },
   chipsRow: { paddingHorizontal: 20, gap: 8 },
   chip: {
     flexDirection: "row",
