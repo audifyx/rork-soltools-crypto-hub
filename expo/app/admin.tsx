@@ -1611,7 +1611,19 @@ function SecuritySection({ isOwner }: { isOwner: boolean }) {
     queryFn: async () => {
       const { data, error } = await supabase.from("admin_roles").select("id,user_id,email,role,permissions,created_at").order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as AdminRoleRow[];
+      const rows = (data ?? []) as AdminRoleRow[];
+      // Dedupe: an older bootstrap migration could insert multiple rows for
+      // the same (user_id, role) pair, which would crash the list with a
+      // duplicate-key warning. Keep the newest row per (user_id, role).
+      const seen = new Set<string>();
+      const unique: AdminRoleRow[] = [];
+      for (const row of rows) {
+        const key = `${row.user_id ?? ""}::${row.role ?? ""}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(row);
+      }
+      return unique;
     },
   });
 
@@ -1632,8 +1644,8 @@ function SecuritySection({ isOwner }: { isOwner: boolean }) {
         <ShieldAlert color={Colors.goldBright} size={18} strokeWidth={2.6} />
         <Text style={styles.noticeText}>Admin access is owner-only. Any legacy admin/superadmin rows are ignored by the app and should be revoked here after applying the owner-lock SQL.</Text>
       </View>
-      {(adminsQuery.data ?? []).map((row) => (
-        <View key={`${row.user_id}-${row.role}`} style={styles.card}>
+      {(adminsQuery.data ?? []).map((row, index) => (
+        <View key={row.id ?? `${row.user_id ?? "unknown"}-${row.role ?? "role"}-${index}`} style={styles.card}>
           <View style={styles.rowHeader}>
             <Avatar label={row.email ?? row.role} Icon={Crown} />
             <View style={styles.rowMain}>
