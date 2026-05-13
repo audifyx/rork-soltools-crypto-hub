@@ -242,7 +242,12 @@ export default function CreateCommunityScreen() {
     } catch (e) {
       console.log("[create-community] failed", e);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      const msg = e instanceof Error ? e.message : "Something went wrong creating your community. Please try again.";
+      const anyErr = e as { message?: string; details?: string; hint?: string; code?: string } | null;
+      const msg =
+        (typeof anyErr?.message === "string" && anyErr.message.length > 0 && anyErr.message) ||
+        (typeof anyErr?.details === "string" && anyErr.details.length > 0 && anyErr.details) ||
+        (typeof anyErr?.hint === "string" && anyErr.hint.length > 0 && anyErr.hint) ||
+        "Something went wrong creating your community. Please try again.";
       Alert.alert("Couldn't launch community", msg);
       setSubmitting(false);
     }
