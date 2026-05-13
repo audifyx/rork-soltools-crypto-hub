@@ -8,11 +8,14 @@ import {
   CheckCircle2,
   Circle,
   Hash,
+  Info,
   Lock,
   NotebookPen,
+  Pencil,
   Send,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -116,6 +119,8 @@ export default function NotesToSelfScreen() {
   const queryClient = useQueryClient();
   const [text, setText] = useState<string>("");
   const [tagBar, setTagBar] = useState<boolean>(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const isEditing = !!editingNoteId;
   const listRef = useRef<FlatList<ListRow>>(null);
 
   const convQ = useQuery<string | null>({
@@ -235,10 +240,38 @@ export default function NotesToSelfScreen() {
     },
   });
 
+  const cancelEdit = useCallback(() => {
+    setEditingNoteId(null);
+    setText("");
+  }, []);
+
   const onSend = useCallback(async () => {
     const value = text.trim();
     if (!value || !hasValidConvId) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    if (editingNoteId) {
+      const editId = editingNoteId;
+      const safeConvId = normalizeUuid(convId);
+      setText("");
+      setEditingNoteId(null);
+      try {
+        const { error } = await supabase.rpc("edit_dm_message", {
+          p_message_id: editId,
+          p_body: value,
+        });
+        if (error) throw new Error(error.message);
+        if (safeConvId) {
+          queryClient
+            .invalidateQueries({ queryKey: ["notes-to-self", "messages", safeConvId] })
+            .catch(() => {});
+        }
+      } catch (e) {
+        setText(value);
+        setEditingNoteId(editId);
+        Alert.alert("Couldn’t update note", e instanceof Error ? e.message : "Try again.");
+      }
+      return;
+    }
     setText("");
     try {
       await sendMutation.mutateAsync(value);
@@ -246,7 +279,7 @@ export default function NotesToSelfScreen() {
       setText(value);
       Alert.alert("Couldn’t save note", e instanceof Error ? e.message : "Try again.");
     }
-  }, [text, hasValidConvId, sendMutation]);
+  }, [text, hasValidConvId, sendMutation, editingNoteId, convId, queryClient]);
 
   const toggleTodo = useCallback(
     async (note: NoteItem) => {
@@ -282,25 +315,35 @@ export default function NotesToSelfScreen() {
     [convId, queryClient],
   );
 
-  const onLongPress = useCallback(
+  const startEdit = useCallback((note: NoteItem) => {
+    setEditingNoteId(note.id);
+    setText(note.body);
+    setTagBar(false);
+  }, []);
+
+  const confirmDelete = useCallback(
     (note: NoteItem) => {
       const safeConvId = normalizeUuid(convId);
       if (!safeConvId) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       Alert.alert(
-        "Note actions",
-        note.body.slice(0, 80),
+        "Delete note?",
+        "This can’t be undone.",
         [
           { text: "Cancel", style: "cancel" },
-          { text: note.done ? "Mark as not done" : "Mark as done", onPress: () => toggleTodo(note) },
-          { text: note.pinned ? "Unpin" : "Pin to top", onPress: () => togglePin(note) },
           {
             text: "Delete",
             style: "destructive",
             onPress: async () => {
               try {
-                await supabase.rpc("delete_dm_message", { p_message_id: note.id });
-                queryClient.invalidateQueries({ queryKey: ["notes-to-self", "messages", safeConvId] }).catch(() => {});
+                const { error } = await supabase.rpc("delete_dm_message", { p_message_id: note.id });
+                if (error) throw new Error(error.message);
+                if (editingNoteId === note.id) {
+                  setEditingNoteId(null);
+                  setText("");
+                }
+                queryClient
+                  .invalidateQueries({ queryKey: ["notes-to-self", "messages", safeConvId] })
+                  .catch(() => {});
               } catch (e) {
                 Alert.alert("Delete failed", e instanceof Error ? e.message : "Try again.");
               }
@@ -309,7 +352,27 @@ export default function NotesToSelfScreen() {
         ],
       );
     },
-    [convId, queryClient, toggleTodo, togglePin],
+    [convId, queryClient, editingNoteId],
+  );
+
+  const onLongPress = useCallback(
+    (note: NoteItem) => {
+      const safeConvId = normalizeUuid(convId);
+      if (!safeConvId) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      Alert.alert(
+        "Note actions",
+        note.body.slice(0, 80) || "Manage this note",
+        [
+          { text: "Edit", onPress: () => startEdit(note) },
+          { text: note.pinned ? "Unpin" : "Pin to top", onPress: () => togglePin(note) },
+          { text: note.done ? "Mark as not done" : "Mark as done", onPress: () => toggleTodo(note) },
+          { text: "Delete", style: "destructive", onPress: () => confirmDelete(note) },
+          { text: "Cancel", style: "cancel" },
+        ],
+      );
+    },
+    [convId, toggleTodo, togglePin, startEdit, confirmDelete],
   );
 
   const goBack = useCallback(() => {
@@ -373,6 +436,15 @@ export default function NotesToSelfScreen() {
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
+          <View style={styles.hintBanner} testID="notes-hint">
+            <View style={styles.hintIcon}>
+              <Info color={ACCENT} size={12} strokeWidth={2.6} />
+            </View>
+            <Text style={styles.hintText} numberOfLines={2}>
+              Press and hold any note to edit, delete, pin, or mark done.
+            </Text>
+          </View>
+
           {pinned.length > 0 ? (
             <View style={styles.pinnedStrip}>
               <View style={styles.pinnedHeader}>
@@ -430,6 +502,26 @@ export default function NotesToSelfScreen() {
             }
           />
 
+          {isEditing ? (
+            <View style={styles.editBar} testID="notes-edit-bar">
+              <View style={styles.editBarIcon}>
+                <Pencil color={ACCENT} size={12} strokeWidth={2.6} />
+              </View>
+              <Text style={styles.editBarText}>Editing note</Text>
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  cancelEdit();
+                }}
+                style={styles.editBarCancel}
+                testID="notes-edit-cancel"
+              >
+                <X color={Colors.text} size={12} strokeWidth={2.6} />
+                <Text style={styles.editBarCancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {tagBar ? (
             <View style={styles.tagStrip}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagRow}>
@@ -462,7 +554,7 @@ export default function NotesToSelfScreen() {
             </View>
           ) : null}
 
-          <View style={styles.composer}>
+          <View style={[styles.composer, isEditing && styles.composerEditing]}>
             <Pressable
               onPress={() => {
                 Haptics.selectionAsync().catch(() => {});
@@ -477,7 +569,7 @@ export default function NotesToSelfScreen() {
               <TextInput
                 value={text}
                 onChangeText={setText}
-                placeholder="Capture a thought…"
+                placeholder={isEditing ? "Edit your note…" : "Capture a thought…"}
                 placeholderTextColor={Colors.muted2}
                 style={styles.input}
                 multiline
@@ -607,7 +699,7 @@ function EmptyState({ username }: { username: string }) {
         </View>
         <View style={styles.emptyHintRow}>
           <Sparkles color={ACCENT} size={12} strokeWidth={2.6} />
-          <Text style={styles.emptyHintText}>Long-press a note to pin or check off</Text>
+          <Text style={styles.emptyHintText}>Long-press notes to edit, delete, pin, or complete them.</Text>
         </View>
       </View>
     </View>
@@ -774,6 +866,62 @@ const styles = StyleSheet.create({
   errorBannerText: { flex: 1, color: "#FFB4B0", fontSize: 12.5 },
   errorRetry: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.10)" },
   errorRetryText: { color: "#FFFFFF", fontSize: 12, fontWeight: "600" },
+  hintBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 10,
+    marginBottom: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: CARD,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  hintIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(63,169,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hintText: { flex: 1, color: Colors.muted, fontSize: 11.5, lineHeight: 16 },
+  editBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 12,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "rgba(63,169,255,0.14)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: ACCENT,
+  },
+  editBarIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(63,169,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editBarText: { flex: 1, color: Colors.text, fontSize: 12.5, fontWeight: "600" },
+  editBarCancel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  editBarCancelText: { color: Colors.text, fontSize: 11.5, fontWeight: "600" },
+  composerEditing: { borderTopColor: ACCENT, backgroundColor: "rgba(63,169,255,0.06)" },
 });
 
 void Trash2;
