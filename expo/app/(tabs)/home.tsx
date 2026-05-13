@@ -71,6 +71,7 @@ import {
 } from "@/lib/api/market";
 import { type DexPair, useDexTokens } from "@/lib/api/dexscreener";
 import { getOgMemeTokens } from "@/lib/alpha-runners";
+import { patchPostEverywhere } from "@/lib/post-sync";
 import { isSafeToken } from "@/lib/safety";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
@@ -311,6 +312,9 @@ export default function HomeFeedScreen() {
 
   const patchTimelinePost = useCallback(
     (postId: string, updater: (post: UserPost) => UserPost) => {
+      // Local helper retained for delete / non-counter flows. Likes/reposts
+      // route through `togglePostLike` / `togglePostRepost` which patch every
+      // post-bearing cache via `patchPostEverywhere`.
       qc.setQueryData<UserPost[]>(["home", "live-feed", userId ?? "guest"], (prev) =>
         prev?.map((post) => (post.id === postId ? updater(post) : post)),
       );
@@ -372,41 +376,21 @@ export default function HomeFeedScreen() {
   const onTimelineLike = useCallback(
     (post: UserPost) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      patchTimelinePost(post.id, (p) => ({
-        ...p,
-        liked: !p.liked,
-        likes: Math.max(0, p.likes + (p.liked ? -1 : 1)),
-      }));
       togglePostLike(post.id).catch((e) => {
-        patchTimelinePost(post.id, (p) => ({
-          ...p,
-          liked: !p.liked,
-          likes: Math.max(0, p.likes + (p.liked ? -1 : 1)),
-        }));
         console.log("[home] timeline like failed", e);
       });
     },
-    [patchTimelinePost, togglePostLike],
+    [togglePostLike],
   );
 
   const onTimelineRepost = useCallback(
     (post: UserPost) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      patchTimelinePost(post.id, (p) => ({
-        ...p,
-        reposted: !p.reposted,
-        reposts: Math.max(0, p.reposts + (p.reposted ? -1 : 1)),
-      }));
       togglePostRepost(post.id).catch((e) => {
-        patchTimelinePost(post.id, (p) => ({
-          ...p,
-          reposted: !p.reposted,
-          reposts: Math.max(0, p.reposts + (p.reposted ? -1 : 1)),
-        }));
         console.log("[home] timeline repost failed", e);
       });
     },
-    [patchTimelinePost, togglePostRepost],
+    [togglePostRepost],
   );
 
   const onTimelineShare = useCallback(async (post: UserPost) => {
@@ -489,15 +473,11 @@ export default function HomeFeedScreen() {
       };
       if (mode === "reply") {
         await addPostReply({ post: targetPost, content: text, ...viewer });
-        patchTimelinePost(post.id, (p) => ({ ...p, comments: p.comments + 1 }));
+        patchPostEverywhere(qc, post.id, { commentsDelta: 1 });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       } else {
         await quotePost({ post: targetPost, content: text, ...viewer });
-        patchTimelinePost(post.id, (p) => ({
-          ...p,
-          reposts: p.reposts + 1,
-          reposted: true,
-        }));
+        patchPostEverywhere(qc, post.id, { reposted: true, repostsDelta: 1 });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       }
       qc.invalidateQueries({ queryKey: ["home", "live-feed", userId ?? "guest"] });

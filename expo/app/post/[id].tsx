@@ -34,6 +34,7 @@ import Colors from "@/constants/colors";
 import { hapticMedium, hapticSelect } from "@/lib/haptics";
 import { normalizeMediaUrl } from "@/lib/media";
 import { navigateBack } from "@/lib/navigation";
+import { patchPostEverywhere } from "@/lib/post-sync";
 import { supabase } from "@/lib/supabase";
 import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
@@ -158,7 +159,7 @@ export default function PostDetailScreen() {
   const postId = (id ?? "").toString();
   const { userId, isAuthenticated } = useAuth();
   const { profile } = useApp();
-  const { usePostReplies, addPostReply, togglePostLike } = useSocial();
+  const { usePostReplies, addPostReply, togglePostLike, togglePostRepost } = useSocial();
 
   const postQ = useQuery<FullPost | null>({
     queryKey: ["post-detail", postId, userId ?? "guest"],
@@ -239,6 +240,16 @@ export default function PostDetailScreen() {
     userId,
   ]);
 
+  // Keep the post-detail query in sync with shared cache patches by re-reading
+  // any in-memory updates from the broadcast patcher.
+  React.useEffect(() => {
+    if (!post) return;
+    qc.setQueryData<FullPost | null>(
+      ["post-detail", postId, userId ?? "guest"],
+      (prev) => prev,
+    );
+  }, [post, qc, postId, userId]);
+
   const onLike = useCallback(async () => {
     if (!post) return;
     if (!isAuthenticated) {
@@ -246,23 +257,26 @@ export default function PostDetailScreen() {
       return;
     }
     hapticSelect();
-    qc.setQueryData<FullPost | null>(
-      ["post-detail", postId, userId ?? "guest"],
-      (prev) =>
-        prev
-          ? {
-              ...prev,
-              liked: !prev.liked,
-              likes: Math.max(0, prev.likes + (prev.liked ? -1 : 1)),
-            }
-          : prev,
-    );
     try {
       await togglePostLike(post.id);
     } catch (e) {
       console.log("[post-detail] like failed", e);
     }
-  }, [post, isAuthenticated, router, qc, postId, userId, togglePostLike]);
+  }, [post, isAuthenticated, router, togglePostLike]);
+
+  const onRepost = useCallback(async () => {
+    if (!post) return;
+    if (!isAuthenticated) {
+      router.push("/auth");
+      return;
+    }
+    hapticSelect();
+    try {
+      await togglePostRepost(post.id);
+    } catch (e) {
+      console.log("[post-detail] repost failed", e);
+    }
+  }, [post, isAuthenticated, router, togglePostRepost]);
 
   const onShare = useCallback(async () => {
     if (!post) return;
@@ -366,10 +380,14 @@ export default function PostDetailScreen() {
             <MessageCircle color={Colors.muted} size={18} strokeWidth={2.4} />
             <Text style={styles.actionLabel}>Reply</Text>
           </View>
-          <View style={styles.action}>
-            <Repeat2 color={Colors.muted} size={18} strokeWidth={2.4} />
-            <Text style={styles.actionLabel}>Repost</Text>
-          </View>
+          <Pressable style={styles.action} onPress={onRepost} hitSlop={6} testID="post-repost">
+            <Repeat2
+              color={post.reposted ? Colors.mint : Colors.muted}
+              size={18}
+              strokeWidth={2.4}
+            />
+            <Text style={[styles.actionLabel, post.reposted && { color: Colors.mint }]}>Repost</Text>
+          </Pressable>
           <Pressable style={styles.action} onPress={onShare} hitSlop={6} testID="post-share">
             <Share2 color={Colors.muted} size={16} strokeWidth={2.4} />
             <Text style={styles.actionLabel}>Share</Text>
@@ -384,7 +402,7 @@ export default function PostDetailScreen() {
         </View>
       </View>
     );
-  }, [post, onLike, onShare, onOpenAuthor, replies.length]);
+  }, [post, onLike, onRepost, onShare, onOpenAuthor, replies.length]);
 
   return (
     <View style={styles.root} testID="post-detail-screen">

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { setHapticsEnabled } from "@/lib/haptics";
 
 import { normalizeMediaUrl } from "@/lib/media";
+import { patchPostEverywhere } from "@/lib/post-sync";
 import { fetchOwnProfileRow, saveOwnProfilePatch, type ProfilePatch } from "@/lib/profile-db";
 import { supabase } from "@/lib/supabase";
 import { uploadPostImage, uploadReelMedia } from "@/lib/upload";
@@ -595,10 +596,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const togglePostLike = useCallback(
     async (id: string) => {
-      const next = posts.map((p) =>
-        p.id === id ? { ...p, liked: !p.liked, likes: Math.max(0, p.likes + (p.liked ? -1 : 1)) } : p,
-      );
-      qc.setQueryData(["app", "posts", userId ?? "guest"], next);
+      const prev = posts.find((p) => p.id === id);
+      const prevLiked = !!prev?.liked;
+      patchPostEverywhere(qc, id, {
+        liked: !prevLiked,
+        likesDelta: prevLiked ? -1 : 1,
+      });
       if (isAuthenticated && userId) {
         try {
           const { data, error } = await supabase.rpc("toggle_post_like", {
@@ -607,28 +610,34 @@ export const [AppProvider, useApp] = createContextHook(() => {
           if (error) throw error;
           const row = Array.isArray(data) ? (data[0] as { liked: boolean; likes_count: number } | undefined) : undefined;
           if (row) {
-            const synced = next.map((p) =>
-              p.id === id ? { ...p, liked: !!row.liked, likes: Number(row.likes_count ?? p.likes) } : p,
-            );
-            qc.setQueryData(["app", "posts", userId], synced);
-            qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
+            patchPostEverywhere(qc, id, {
+              liked: !!row.liked,
+              likes: Number(row.likes_count ?? 0),
+            });
           }
         } catch (e) {
+          patchPostEverywhere(qc, id, {
+            liked: prevLiked,
+            likesDelta: prevLiked ? 1 : -1,
+          });
           console.log("[app] post like sync failed", e);
         }
       } else {
+        const next = (qc.getQueryData<UserPost[]>(["app", "posts", userId ?? "guest"]) ?? []);
         await saveJson(POSTS_KEY, next);
       }
     },
-    [posts, qc, userId, isAuthenticated],
+    [posts, qc, userId, isAuthenticated, POSTS_KEY],
   );
 
   const togglePostRepost = useCallback(
     async (id: string) => {
-      const next = posts.map((p) =>
-        p.id === id ? { ...p, reposted: !p.reposted, reposts: Math.max(0, p.reposts + (p.reposted ? -1 : 1)) } : p,
-      );
-      qc.setQueryData(["app", "posts", userId ?? "guest"], next);
+      const prev = posts.find((p) => p.id === id);
+      const prevReposted = !!prev?.reposted;
+      patchPostEverywhere(qc, id, {
+        reposted: !prevReposted,
+        repostsDelta: prevReposted ? -1 : 1,
+      });
       if (isAuthenticated && userId) {
         try {
           const { data, error } = await supabase.rpc("toggle_post_repost", {
@@ -637,17 +646,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
           if (error) throw error;
           const row = Array.isArray(data) ? (data[0] as { reposted: boolean; reposts_count: number } | undefined) : undefined;
           if (row) {
-            const synced = next.map((p) =>
-              p.id === id ? { ...p, reposted: !!row.reposted, reposts: Number(row.reposts_count ?? p.reposts) } : p,
-            );
-            qc.setQueryData(["app", "posts", userId], synced);
-            qc.invalidateQueries({ queryKey: ["home", "live-feed"] });
-            qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
+            patchPostEverywhere(qc, id, {
+              reposted: !!row.reposted,
+              reposts: Number(row.reposts_count ?? 0),
+            });
           }
         } catch (e) {
+          patchPostEverywhere(qc, id, {
+            reposted: prevReposted,
+            repostsDelta: prevReposted ? 1 : -1,
+          });
           console.log("[app] post repost sync failed", e);
         }
       } else {
+        const next = (qc.getQueryData<UserPost[]>(["app", "posts", userId ?? "guest"]) ?? []);
         await saveJson(POSTS_KEY, next);
       }
     },

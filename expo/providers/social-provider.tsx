@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Colors from "@/constants/colors";
 import type { CommunityTokenCard } from "@/lib/community-token";
 import { normalizeMediaUrl } from "@/lib/media";
+import { patchPostEverywhere } from "@/lib/post-sync";
 import { supabase } from "@/lib/supabase";
 import { uploadPostImage } from "@/lib/upload";
 import { useAdmin } from "@/providers/admin-provider";
@@ -732,6 +733,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
 
   const patchCachedPost = useCallback(
     (id: string, update: (post: CommunityPost) => CommunityPost) => {
+      // Local helper kept for social-only flows (reply prepend, etc.). For
+      // shared counters use patchPostEverywhere via the toggle handlers.
       const all = qc.getQueriesData<CommunityPost[]>({ queryKey: ["social"] });
       for (const [key, list] of all) {
         if (!list || !Array.isArray(list)) continue;
@@ -943,11 +946,14 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       if (!isAuthenticated || !userId) {
         throw new Error("Sign in to like posts.");
       }
-      patchCachedPost(id, (p) => ({
-        ...p,
-        liked: !p.liked,
-        likes: Math.max(0, p.likes + (p.liked ? -1 : 1)),
-      }));
+      const prevLiked =
+        qc.getQueriesData<CommunityPost[]>({ queryKey: ["social"] })
+          .flatMap(([, list]) => (Array.isArray(list) ? list : []))
+          .find((p) => p.id === id)?.liked ?? false;
+      patchPostEverywhere(qc, id, {
+        liked: !prevLiked,
+        likesDelta: prevLiked ? -1 : 1,
+      });
       try {
         const { data, error } = await supabase.rpc("toggle_post_like", { target_post_id: id });
         if (error) throw error;
@@ -955,33 +961,34 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           ? (data[0] as { liked: boolean; likes_count: number } | undefined)
           : undefined;
         if (row) {
-          patchCachedPost(id, (p) => ({
-            ...p,
+          patchPostEverywhere(qc, id, {
             liked: !!row.liked,
-            likes: Number(row.likes_count ?? p.likes),
-          }));
+            likes: Number(row.likes_count ?? 0),
+          });
         }
       } catch (e) {
-        patchCachedPost(id, (p) => ({
-          ...p,
-          liked: !p.liked,
-          likes: Math.max(0, p.likes + (p.liked ? -1 : 1)),
-        }));
+        patchPostEverywhere(qc, id, {
+          liked: prevLiked,
+          likesDelta: prevLiked ? 1 : -1,
+        });
         console.log("[social] togglePostLike failed", e);
         throw e instanceof Error ? e : new Error("Could not update like.");
       }
     },
-    [isAuthenticated, patchCachedPost, userId],
+    [isAuthenticated, qc, userId],
   );
 
   const togglePostRepost = useCallback(
     async (id: string) => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to repost.");
-      patchCachedPost(id, (p) => ({
-        ...p,
-        reposted: !p.reposted,
-        reposts: Math.max(0, p.reposts + (p.reposted ? -1 : 1)),
-      }));
+      const prevReposted =
+        qc.getQueriesData<CommunityPost[]>({ queryKey: ["social"] })
+          .flatMap(([, list]) => (Array.isArray(list) ? list : []))
+          .find((p) => p.id === id)?.reposted ?? false;
+      patchPostEverywhere(qc, id, {
+        reposted: !prevReposted,
+        repostsDelta: prevReposted ? -1 : 1,
+      });
       try {
         const { data, error } = await supabase.rpc("toggle_post_repost", { target_post_id: id });
         if (error) throw error;
@@ -989,41 +996,43 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           ? (data[0] as { reposted: boolean; reposts_count: number } | undefined)
           : undefined;
         if (row) {
-          patchCachedPost(id, (p) => ({
-            ...p,
+          patchPostEverywhere(qc, id, {
             reposted: !!row.reposted,
-            reposts: Number(row.reposts_count ?? p.reposts),
-          }));
+            reposts: Number(row.reposts_count ?? 0),
+          });
         }
       } catch (e) {
-        patchCachedPost(id, (p) => ({
-          ...p,
-          reposted: !p.reposted,
-          reposts: Math.max(0, p.reposts + (p.reposted ? -1 : 1)),
-        }));
+        patchPostEverywhere(qc, id, {
+          reposted: prevReposted,
+          repostsDelta: prevReposted ? 1 : -1,
+        });
         console.log("[social] togglePostRepost failed", e);
         throw e instanceof Error ? e : new Error("Could not repost.");
       }
     },
-    [isAuthenticated, patchCachedPost, userId],
+    [isAuthenticated, qc, userId],
   );
 
   const togglePostBookmark = useCallback(
     async (id: string) => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to bookmark posts.");
-      patchCachedPost(id, (p) => ({ ...p, bookmarked: !p.bookmarked }));
+      const prevBookmarked =
+        qc.getQueriesData<CommunityPost[]>({ queryKey: ["social"] })
+          .flatMap(([, list]) => (Array.isArray(list) ? list : []))
+          .find((p) => p.id === id)?.bookmarked ?? false;
+      patchPostEverywhere(qc, id, { bookmarked: !prevBookmarked });
       try {
         const { data, error } = await supabase.rpc("toggle_post_bookmark", { target_post_id: id });
         if (error) throw error;
         const row = Array.isArray(data) ? (data[0] as { bookmarked: boolean } | undefined) : undefined;
-        if (row) patchCachedPost(id, (p) => ({ ...p, bookmarked: !!row.bookmarked }));
+        if (row) patchPostEverywhere(qc, id, { bookmarked: !!row.bookmarked });
       } catch (e) {
-        patchCachedPost(id, (p) => ({ ...p, bookmarked: !p.bookmarked }));
+        patchPostEverywhere(qc, id, { bookmarked: prevBookmarked });
         console.log("[social] togglePostBookmark failed", e);
         throw e instanceof Error ? e : new Error("Could not bookmark post.");
       }
     },
-    [isAuthenticated, patchCachedPost, userId],
+    [isAuthenticated, qc, userId],
   );
 
   const addPostReply = useCallback(
