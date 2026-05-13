@@ -13,6 +13,7 @@ import {
   Heart,
   MessageCircle,
   Play,
+  Repeat2,
   RefreshCcw,
   Sparkles,
   TrendingUp,
@@ -47,6 +48,7 @@ import {
 } from "@/lib/api/platform";
 import { hapticMedium, hapticSelect } from "@/lib/haptics";
 import { useAuth } from "@/providers/auth-provider";
+import { useSocial } from "@/providers/social-provider";
 
 interface CardPayload {
   title?: string;
@@ -62,6 +64,9 @@ interface CardPayload {
   starts_at?: string;
   likes?: number;
   comments?: number;
+  reposts?: number;
+  liked?: boolean;
+  reposted?: boolean;
   reason?: string;
 }
 
@@ -354,6 +359,7 @@ export default function ForYouScreen() {
             onHide={() => onHide(item)}
           />
         )}
+        removeClippedSubviews={false}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListEmptyComponent={
           isInitialLoading ? (
@@ -507,22 +513,6 @@ function FypCardView({
         >
           <EyeOff color={Colors.text} size={13} strokeWidth={2.6} />
         </Pressable>
-        {typeof payload.likes === "number" || typeof payload.comments === "number" ? (
-          <View style={styles.cardMetricsRow}>
-            {typeof payload.likes === "number" ? (
-              <View style={styles.metric}>
-                <Heart color={Colors.text} size={11} strokeWidth={2.6} />
-                <Text style={styles.metricText}>{payload.likes}</Text>
-              </View>
-            ) : null}
-            {typeof payload.comments === "number" ? (
-              <View style={styles.metric}>
-                <MessageCircle color={Colors.text} size={11} strokeWidth={2.6} />
-                <Text style={styles.metricText}>{payload.comments}</Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
       </View>
       <View style={styles.cardBody}>
         <Text style={styles.cardTitle} numberOfLines={2}>
@@ -532,8 +522,128 @@ function FypCardView({
           {subtitle}
           {payload.reason ? ` · ${payload.reason}` : ""}
         </Text>
+        {card.kind === "post" ? (
+          <FypPostActions card={card} payload={payload} onOpen={onPress} />
+        ) : typeof payload.likes === "number" || typeof payload.comments === "number" ? (
+          <View style={styles.inlineMetricsRow}>
+            {typeof payload.likes === "number" ? (
+              <View style={styles.metric}>
+                <Heart color={Colors.muted} size={12} strokeWidth={2.4} />
+                <Text style={styles.metricText}>{payload.likes}</Text>
+              </View>
+            ) : null}
+            {typeof payload.comments === "number" ? (
+              <View style={styles.metric}>
+                <MessageCircle color={Colors.muted} size={12} strokeWidth={2.4} />
+                <Text style={styles.metricText}>{payload.comments}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </Pressable>
+  );
+}
+
+function FypPostActions({
+  card,
+  payload,
+  onOpen,
+}: {
+  card: FypCard;
+  payload: CardPayload;
+  onOpen: () => void;
+}) {
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
+  const { togglePostLike, togglePostRepost } = useSocial();
+  const liked = !!payload.liked;
+  const reposted = !!payload.reposted;
+  const likes = typeof payload.likes === "number" ? payload.likes : 0;
+  const comments = typeof payload.comments === "number" ? payload.comments : 0;
+  const reposts = typeof payload.reposts === "number" ? payload.reposts : 0;
+
+  const requireAuth = useCallback((): boolean => {
+    if (isAuthenticated) return true;
+    Alert.alert("Sign in", "Sign in to interact with posts.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign in", onPress: () => router.push("/auth") },
+    ]);
+    return false;
+  }, [isAuthenticated, router]);
+
+  const onLike = useCallback(
+    (e: { stopPropagation?: () => void }) => {
+      e?.stopPropagation?.();
+      if (!requireAuth()) return;
+      hapticSelect();
+      togglePostLike(card.ref_id).catch((err) => {
+        console.log("[fyp] like failed", err instanceof Error ? err.message : String(err));
+      });
+    },
+    [requireAuth, togglePostLike, card.ref_id],
+  );
+
+  const onRepost = useCallback(
+    (e: { stopPropagation?: () => void }) => {
+      e?.stopPropagation?.();
+      if (!requireAuth()) return;
+      hapticMedium();
+      togglePostRepost(card.ref_id).catch((err) => {
+        console.log("[fyp] repost failed", err instanceof Error ? err.message : String(err));
+      });
+    },
+    [requireAuth, togglePostRepost, card.ref_id],
+  );
+
+  const onComment = useCallback(
+    (e: { stopPropagation?: () => void }) => {
+      e?.stopPropagation?.();
+      hapticSelect();
+      onOpen();
+    },
+    [onOpen],
+  );
+
+  return (
+    <View style={styles.actionRow}>
+      <Pressable
+        onPress={onLike}
+        hitSlop={8}
+        style={styles.actionBtn}
+        testID={`fyp-like-${card.id}`}
+      >
+        <Heart
+          color={liked ? Colors.rose : Colors.muted}
+          size={15}
+          strokeWidth={2.4}
+          fill={liked ? Colors.rose : "transparent"}
+        />
+        <Text style={[styles.actionText, liked && { color: Colors.rose }]}>{likes}</Text>
+      </Pressable>
+      <Pressable
+        onPress={onComment}
+        hitSlop={8}
+        style={styles.actionBtn}
+        testID={`fyp-comment-${card.id}`}
+      >
+        <MessageCircle color={Colors.muted} size={15} strokeWidth={2.4} />
+        <Text style={styles.actionText}>{comments}</Text>
+      </Pressable>
+      <Pressable
+        onPress={onRepost}
+        hitSlop={8}
+        style={styles.actionBtn}
+        testID={`fyp-repost-${card.id}`}
+      >
+        <Repeat2
+          color={reposted ? Colors.mint : Colors.muted}
+          size={15}
+          strokeWidth={2.4}
+        />
+        <Text style={[styles.actionText, reposted && { color: Colors.mint }]}>{reposts}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -714,6 +824,25 @@ const styles = StyleSheet.create({
   cardMetricsRow: { position: "absolute", right: 12, bottom: 12, flexDirection: "row", gap: 6 },
   metric: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: "rgba(0,0,0,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.16)" },
   metricText: { color: Colors.text, fontSize: 10, fontWeight: "900" },
+  inlineMetricsRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.06)",
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  actionText: { color: Colors.muted, fontSize: 12, fontWeight: "800" },
   cardBody: { paddingHorizontal: 14, paddingVertical: 12 },
   cardTitle: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.3, lineHeight: 19 },
   cardSubtitle: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 4 },

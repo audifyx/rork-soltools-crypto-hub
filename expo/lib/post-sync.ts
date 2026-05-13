@@ -111,6 +111,48 @@ function looksLikePost(value: unknown): value is PatchablePost {
 }
 
 /**
+ * FYP cache rows have shape { id, kind, ref_id, payload } where `payload`
+ * carries engagement state (likes/comments/reposts). The patcher needs to
+ * mutate `payload.*` when the underlying post is liked/reposted from any
+ * surface so the FYP card stays in sync.
+ */
+function looksLikeFypPostCard(
+  value: unknown,
+  postId: string,
+): value is { id: string; kind: string; ref_id: string; payload: Record<string, unknown> | null } {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (v.kind !== "post") return false;
+  if (typeof v.ref_id !== "string" || v.ref_id !== postId) return false;
+  return v.payload === null || typeof v.payload === "object";
+}
+
+function applyPatchToFypCard<
+  T extends { id: string; kind: string; ref_id: string; payload: Record<string, unknown> | null },
+>(card: T, patch: PostPatch): T {
+  const payload: Record<string, unknown> = { ...(card.payload ?? {}) };
+  if (patch.liked !== undefined) payload.liked = patch.liked;
+  if (patch.reposted !== undefined) payload.reposted = patch.reposted;
+  if (patch.bookmarked !== undefined) payload.bookmarked = patch.bookmarked;
+  if (patch.likes !== undefined) payload.likes = patch.likes;
+  if (patch.reposts !== undefined) payload.reposts = patch.reposts;
+  if (patch.comments !== undefined) payload.comments = patch.comments;
+  if (patch.likesDelta) {
+    const current = typeof payload.likes === "number" ? payload.likes : 0;
+    payload.likes = Math.max(0, current + patch.likesDelta);
+  }
+  if (patch.repostsDelta) {
+    const current = typeof payload.reposts === "number" ? payload.reposts : 0;
+    payload.reposts = Math.max(0, current + patch.repostsDelta);
+  }
+  if (patch.commentsDelta) {
+    const current = typeof payload.comments === "number" ? payload.comments : 0;
+    payload.comments = Math.max(0, current + patch.commentsDelta);
+  }
+  return { ...card, payload };
+}
+
+/**
  * Walk every cached query in the React Query client and update any object
  * whose `id` matches `postId` and that looks like a post (has likes/reposts/
  * comments/liked fields). This keeps community feeds, home feed, following
@@ -134,6 +176,10 @@ export function patchPostEverywhere(
         if (looksLikePost(item) && item.id === postId) {
           changed = true;
           return applyPatch(item, patch);
+        }
+        if (looksLikeFypPostCard(item, postId)) {
+          changed = true;
+          return applyPatchToFypCard(item, patch);
         }
         return item;
       });
