@@ -117,9 +117,30 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const signOut = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      await clearAllUserCache();
+      // Optimistically clear local auth state first so the UI reacts even if
+      // the network round-trip to Supabase is slow or fails.
+      currentUserIdRef.current = null;
+      setSession(null);
+      setUser(null);
+      try {
+        await unregisterPushToken();
+      } catch (e) {
+        console.log("[auth] unregister push token failed", e);
+      }
+      try {
+        // `scope: 'local'` clears the session in AsyncStorage without
+        // requiring a network call. This makes sign-out reliable on poor
+        // connections and when the access token is already expired.
+        const { error } = await supabase.auth.signOut({ scope: "local" });
+        if (error) console.log("[auth] signOut error (ignored)", error.message);
+      } catch (e) {
+        console.log("[auth] signOut threw (ignored)", e);
+      }
+      try {
+        await clearAllUserCache();
+      } catch (e) {
+        console.log("[auth] clearAllUserCache failed", e);
+      }
     },
     onSuccess: () => {
       clearSignedOutCache(qc).catch(() => {});
