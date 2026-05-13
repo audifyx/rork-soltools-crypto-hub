@@ -969,13 +969,42 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             likes: Number(row.likes_count ?? 0),
           });
         }
-      } catch (e) {
-        patchPostEverywhere(qc, id, {
-          liked: prevLiked,
-          likesDelta: prevLiked ? 1 : -1,
-        });
-        console.log("[social] togglePostLike failed", e);
-        throw e instanceof Error ? e : new Error("Could not update like.");
+      } catch (rpcErr) {
+        // Fallback to direct table operations if RPC is missing/failing.
+        console.log("[social] toggle_post_like RPC failed, falling back", rpcErr);
+        try {
+          if (prevLiked) {
+            const { error: delErr } = await supabase
+              .from("community_post_likes")
+              .delete()
+              .eq("post_id", id)
+              .eq("user_id", userId);
+            if (delErr) throw delErr;
+          } else {
+            const { error: insErr } = await supabase
+              .from("community_post_likes")
+              .insert({ post_id: id, user_id: userId });
+            if (insErr && insErr.code !== "23505") throw insErr;
+          }
+          const { data: countRow } = await supabase
+            .from("community_posts")
+            .select("likes_count")
+            .eq("id", id)
+            .maybeSingle();
+          if (countRow && typeof countRow.likes_count === "number") {
+            patchPostEverywhere(qc, id, {
+              liked: !prevLiked,
+              likes: Number(countRow.likes_count ?? 0),
+            });
+          }
+        } catch (e) {
+          patchPostEverywhere(qc, id, {
+            liked: prevLiked,
+            likesDelta: prevLiked ? 1 : -1,
+          });
+          console.log("[social] togglePostLike fallback failed", e);
+          throw e instanceof Error ? e : new Error("Could not update like.");
+        }
       }
     },
     [isAuthenticated, qc, userId],
