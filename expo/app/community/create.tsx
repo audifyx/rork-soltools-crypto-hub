@@ -241,6 +241,9 @@ export default function CreateCommunityScreen() {
       router.replace({ pathname: "/community/[id]", params: { id: created.id } });
     } catch (e) {
       console.log("[create-community] failed", e);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      const msg = e instanceof Error ? e.message : "Something went wrong creating your community. Please try again.";
+      Alert.alert("Couldn't launch community", msg);
       setSubmitting(false);
     }
   }, [
