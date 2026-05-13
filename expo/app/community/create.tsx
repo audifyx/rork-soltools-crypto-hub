@@ -1182,8 +1182,8 @@ const styles = StyleSheet.create({
   privateBadgeText: { color: Colors.text, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   previewUploadBadge: {
     position: "absolute",
-    left: 14,
-    bottom: 14,
+    right: 14,
+    top: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
