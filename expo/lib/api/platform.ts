@@ -288,9 +288,183 @@ export async function listFyp(userId: string): Promise<FypCard[]> {
     .limit(60);
   if (error) {
     console.log("[fyp] failed", error.message);
-    return [];
   }
-  return (data ?? []) as FypCard[];
+  const cached = (data ?? []) as FypCard[];
+  if (cached.length >= 6) return cached;
+  const live = await buildLiveFyp();
+  if (live.length === 0) return cached;
+  // Merge cache + live, dedupe by ref_id, keep cache first.
+  const seen = new Set(cached.map((c) => c.ref_id));
+  const merged = [...cached];
+  for (const card of live) {
+    if (seen.has(card.ref_id)) continue;
+    seen.add(card.ref_id);
+    merged.push(card);
+  }
+  return merged;
+}
+
+/**
+ * Build For-You cards on the fly when `fyp_cache` is sparse so the tab is
+ * never empty. Pulls recent reels, stories, events, and trending communities
+ * and scores them by recency + engagement.
+ */
+async function buildLiveFyp(): Promise<FypCard[]> {
+  const now = Date.now();
+  const since = new Date(now - 7 * 24 * 3600_000).toISOString();
+  const cards: FypCard[] = [];
+
+  const [reelsRes, storiesRes, eventsRes, commRes] = await Promise.all([
+    supabase
+      .from("reels")
+      .select("id,author_id,video_url,thumbnail_url,caption,like_count,view_count,comment_count,created_at")
+      .gte("created_at", since)
+      .order("like_count", { ascending: false })
+      .limit(18),
+    supabase
+      .from("stories")
+      .select("id,author_id,media_url,media_type,caption,created_at,expires_at,view_count")
+      .gt("expires_at", new Date().toISOString())
+      .order("view_count", { ascending: false })
+      .limit(12),
+    supabase
+      .from("events")
+      .select("id,host_id,title,description,cover_url,starts_at,rsvp_count")
+      .gte("starts_at", new Date(now - 6 * 3600_000).toISOString())
+      .order("starts_at", { ascending: true })
+      .limit(10),
+    supabase
+      .from("communities")
+      .select("id,name,description,avatar_url,members_count,trending_score")
+      .order("trending_score", { ascending: false })
+      .limit(8),
+  ]);
+
+  const reels = (reelsRes.data ?? []) as {
+    id: string; author_id: string; video_url: string; thumbnail_url: string | null;
+    caption: string | null; like_count: number; view_count: number; comment_count: number; created_at: string;
+  }[];
+  const stories = (storiesRes.data ?? []) as {
+    id: string; author_id: string; media_url: string; media_type: "image" | "video";
+    caption: string | null; created_at: string; view_count: number | null;
+  }[];
+  const events = (eventsRes.data ?? []) as {
+    id: string; host_id: string; title: string; description: string | null;
+    cover_url: string | null; starts_at: string; rsvp_count: number;
+  }[];
+  const communities = (commRes.data ?? []) as {
+    id: string; name: string; description: string | null; avatar_url: string | null;
+    members_count: number | null; trending_score: number | null;
+  }[];
+
+  const authorIds = Array.from(new Set([
+    ...reels.map((r) => r.author_id),
+    ...stories.map((s) => s.author_id),
+    ...events.map((e) => e.host_id),
+  ]));
+  const profMap = new Map<string, { username: string | null; display_name: string | null; avatar_url: string | null }>();
+  if (authorIds.length > 0) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id,username,display_name,avatar_url")
+      .in("id", authorIds);
+    for (const p of (profs ?? []) as { id: string; username: string | null; display_name: string | null; avatar_url: string | null }[]) {
+      profMap.set(p.id, p);
+    }
+  }
+
+  for (const r of reels) {
+    const ageH = Math.max(1, (now - new Date(r.created_at).getTime()) / 3600_000);
+    const score = (r.like_count * 3 + r.comment_count * 5 + r.view_count) / Math.pow(ageH + 2, 0.6);
+    const p = profMap.get(r.author_id);
+    cards.push({
+      id: `live-reel-${r.id}`,
+      kind: "reel",
+      ref_id: r.id,
+      score,
+      created_at: r.created_at,
+      payload: {
+        title: r.caption ?? "Trending reel",
+        caption: r.caption,
+        media_url: r.video_url,
+        thumbnail_url: r.thumbnail_url,
+        avatar_url: p?.avatar_url ?? null,
+        username: p?.username ?? null,
+        display_name: p?.display_name ?? null,
+        likes: r.like_count,
+        comments: r.comment_count,
+        reason: "Popular this week",
+      },
+    });
+  }
+
+  for (const s of stories) {
+    const ageH = Math.max(0.5, (now - new Date(s.created_at).getTime()) / 3600_000);
+    const score = ((s.view_count ?? 0) + 8) / Math.pow(ageH + 1, 0.5);
+    const p = profMap.get(s.author_id);
+    cards.push({
+      id: `live-story-${s.id}`,
+      kind: "story",
+      ref_id: s.id,
+      score,
+      created_at: s.created_at,
+      payload: {
+        title: s.caption ?? `${p?.display_name ?? p?.username ?? "Friend"}'s story`,
+        caption: s.caption,
+        media_url: s.media_url,
+        thumbnail_url: s.media_type === "image" ? s.media_url : null,
+        avatar_url: p?.avatar_url ?? null,
+        username: p?.username ?? null,
+        display_name: p?.display_name ?? null,
+        reason: "New story",
+      },
+    });
+  }
+
+  for (const e of events) {
+    const startMs = new Date(e.starts_at).getTime();
+    const hoursUntil = Math.max(1, (startMs - now) / 3600_000);
+    const score = (e.rsvp_count + 12) / Math.pow(hoursUntil + 2, 0.4);
+    const p = profMap.get(e.host_id);
+    cards.push({
+      id: `live-event-${e.id}`,
+      kind: "event",
+      ref_id: e.id,
+      score,
+      created_at: e.starts_at,
+      payload: {
+        title: e.title,
+        body: e.description,
+        thumbnail_url: e.cover_url,
+        avatar_url: p?.avatar_url ?? null,
+        username: p?.username ?? null,
+        display_name: p?.display_name ?? null,
+        starts_at: e.starts_at,
+        reason: "Upcoming event",
+      },
+    });
+  }
+
+  for (const c of communities) {
+    cards.push({
+      id: `live-community-${c.id}`,
+      kind: "community",
+      ref_id: c.id,
+      score: (c.trending_score ?? 0) + (c.members_count ?? 0) * 0.05,
+      created_at: new Date().toISOString(),
+      payload: {
+        title: c.name,
+        body: c.description,
+        thumbnail_url: c.avatar_url,
+        avatar_url: c.avatar_url,
+        members_count: c.members_count ?? 0,
+        reason: "Trending community",
+      },
+    });
+  }
+
+  cards.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  return cards.slice(0, 40);
 }
 
 /* =========================== HASHTAGS ================================ */
