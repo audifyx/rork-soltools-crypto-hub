@@ -80,12 +80,20 @@ function rowToToken(row: SubmissionRow): LaunchToken {
 }
 
 async function fetchSubmissionListings(): Promise<LaunchToken[]> {
-  const { data, error } = await supabase
-    .from("pump_v5_submissions")
-    .select("id,user_id,token_name,symbol,description,logo_url,banner_url,contract_address,website,twitter,telegram,discord,tags,status,is_featured,is_verified,is_hot,market_cap,liquidity_usd,volume_24h_usd,created_at")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map((row) => rowToToken(row as SubmissionRow));
+  try {
+    const { data, error } = await supabase
+      .from("pump_v5_submissions")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.log("[launchpad] submissions fetch failed", error.message);
+      return [];
+    }
+    return (data ?? []).map((row) => rowToToken(row as SubmissionRow));
+  } catch (e) {
+    console.log("[launchpad] submissions fetch threw", e instanceof Error ? e.message : e);
+    return [];
+  }
 }
 
 function mergeListings(system: LaunchToken[], submissions: LaunchToken[]): LaunchToken[] {
@@ -111,10 +119,22 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   const listingsQuery = useQuery({
     queryKey: ["launchpad", "listings"],
     queryFn: async () => {
-      const [system, submissions] = await Promise.all([fetchLivePairs(), fetchSubmissionListings()]);
+      const [systemRes, submissionsRes] = await Promise.allSettled([
+        fetchLivePairs(),
+        fetchSubmissionListings(),
+      ]);
+      const system = systemRes.status === "fulfilled" ? systemRes.value : [];
+      const submissions = submissionsRes.status === "fulfilled" ? submissionsRes.value : [];
+      if (systemRes.status === "rejected") {
+        console.log("[launchpad] live pairs failed", systemRes.reason);
+      }
+      if (submissionsRes.status === "rejected") {
+        console.log("[launchpad] submissions failed", submissionsRes.reason);
+      }
       return mergeListings(system, submissions);
     },
     staleTime: 45_000,
+    retry: 1,
   });
 
   const submitMutation = useMutation({
