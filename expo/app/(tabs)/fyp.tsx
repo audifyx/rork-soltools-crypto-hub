@@ -9,12 +9,10 @@ import {
   Compass,
   EyeOff,
   Flame,
-  Hash,
   Heart,
   MessageCircle,
   Play,
   Repeat2,
-  RefreshCcw,
   Sparkles,
   TrendingUp,
   UserPlus,
@@ -24,6 +22,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Platform,
   Pressable,
@@ -90,6 +89,11 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "event", label: "Events" },
 ];
 
+const { width: SCREEN_W } = Dimensions.get("window");
+const GUTTER = 16;
+const GRID_GAP = 10;
+const COL_WIDTH = (SCREEN_W - GUTTER * 2 - GRID_GAP) / 2;
+
 export default function ForYouScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -109,13 +113,13 @@ export default function ForYouScreen() {
       {
         queryKey: ["fyp-hashtags"],
         staleTime: 60_000,
-        queryFn: () => listTrendingHashtags(12),
+        queryFn: () => listTrendingHashtags(8),
       },
       {
         queryKey: ["fyp-suggested", userId ?? "guest"],
         enabled: !!userId,
         staleTime: 60_000,
-        queryFn: () => (userId ? listSuggestedFollows(userId, 12) : Promise.resolve([] as SuggestedFollowRow[])),
+        queryFn: () => (userId ? listSuggestedFollows(userId, 10) : Promise.resolve([] as SuggestedFollowRow[])),
       },
     ],
   });
@@ -135,6 +139,15 @@ export default function ForYouScreen() {
 
   const hero = filtered[0];
   const rest = filtered.slice(1);
+
+  // Pair rest into rows of 2 for the grid
+  const gridRows = useMemo<FypCard[][]>(() => {
+    const rows: FypCard[][] = [];
+    for (let i = 0; i < rest.length; i += 2) {
+      rows.push(rest.slice(i, i + 2));
+    }
+    return rows;
+  }, [rest]);
 
   const onRefresh = useCallback(() => {
     hapticSelect();
@@ -213,19 +226,19 @@ export default function ForYouScreen() {
       <SafeAreaView edges={["top"]} style={styles.headerWrap}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
+            <Text style={styles.title}>For you</Text>
             <View style={styles.eyebrowRow}>
-              <Sparkles color={Colors.goldBright} size={12} strokeWidth={2.6} />
-              <Text style={styles.eyebrow}>HANDPICKED FOR YOU</Text>
+              <Sparkles color={Colors.goldBright} size={11} strokeWidth={2.8} />
+              <Text style={styles.eyebrow}>Curated daily</Text>
             </View>
-            <Text style={styles.title}>For You</Text>
           </View>
-          <Pressable onPress={onRefresh} style={styles.refreshBtn} testID="fyp-refresh">
-            <RefreshCcw color={Colors.text} size={15} strokeWidth={2.6} />
-          </Pressable>
-          <Pressable onPress={() => router.push("/interest-quiz")} style={styles.tuneBtn} testID="fyp-tune">
-            <LinearGradient colors={[Colors.goldBright, Colors.mint]} style={styles.tuneGrad}>
-              <Compass color={Colors.ink} size={15} strokeWidth={2.8} />
-            </LinearGradient>
+          <Pressable
+            onPress={() => router.push("/interest-quiz")}
+            style={({ pressed }) => [styles.tuneBtn, pressed && { opacity: 0.85 }]}
+            testID="fyp-tune"
+          >
+            <Compass color={Colors.text} size={14} strokeWidth={2.6} />
+            <Text style={styles.tuneBtnText}>Tune</Text>
           </Pressable>
         </View>
 
@@ -263,8 +276,8 @@ export default function ForYouScreen() {
       </SafeAreaView>
 
       <FlatList
-        data={rest}
-        keyExtractor={(c) => c.id}
+        data={gridRows}
+        keyExtractor={(_, i) => `row-${i}`}
         contentContainerStyle={[styles.list, { paddingBottom: TAB_BAR_BLOCK + insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -277,12 +290,19 @@ export default function ForYouScreen() {
         }
         ListHeaderComponent={
           <View>
+            {hero ? (
+              <View style={styles.heroWrap}>
+                <HeroCard card={hero} onPress={() => onOpen(hero)} onLongPress={() => onLongPress(hero)} />
+              </View>
+            ) : null}
+
             {hashtags.length > 0 ? (
               <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <TrendingUp color={Colors.goldBright} size={13} strokeWidth={2.8} />
-                  <Text style={styles.sectionTitle}>Trending now</Text>
-                </View>
+                <SectionHeader
+                  Icon={TrendingUp}
+                  title="Trending"
+                  subtitle={`${hashtags.length} hashtags`}
+                />
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -292,21 +312,17 @@ export default function ForYouScreen() {
                     <Pressable
                       key={h.tag}
                       onPress={() => onHashtag(h.tag)}
-                      style={styles.hashtagChip}
+                      style={({ pressed }) => [styles.hashtagPill, pressed && { opacity: 0.75 }]}
                       testID={`fyp-hashtag-${h.tag}`}
                     >
-                      <View style={styles.hashtagRank}>
-                        <Text style={styles.hashtagRankText}>{i + 1}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.hashtagTagRow}>
-                          <Hash color={Colors.goldBright} size={11} strokeWidth={2.8} />
-                          <Text style={styles.hashtagTag} numberOfLines={1}>
-                            {h.tag}
-                          </Text>
-                        </View>
+                      <Text style={styles.hashtagRankText}>{i + 1}</Text>
+                      <View style={styles.hashtagDivider} />
+                      <View>
+                        <Text style={styles.hashtagTag} numberOfLines={1}>
+                          #{h.tag}
+                        </Text>
                         <Text style={styles.hashtagCount}>
-                          {(h.post_count ?? 0).toLocaleString()} posts
+                          {formatCount(h.post_count ?? 0)} posts
                         </Text>
                       </View>
                     </Pressable>
@@ -315,22 +331,13 @@ export default function ForYouScreen() {
               </View>
             ) : null}
 
-            {hero ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Sparkles color={Colors.goldBright} size={13} strokeWidth={2.8} />
-                  <Text style={styles.sectionTitle}>Top pick for you</Text>
-                </View>
-                <HeroCard card={hero} onPress={() => onOpen(hero)} onLongPress={() => onLongPress(hero)} />
-              </View>
-            ) : null}
-
             {suggestions.length > 0 ? (
               <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <UserPlus color={Colors.goldBright} size={13} strokeWidth={2.8} />
-                  <Text style={styles.sectionTitle}>People you may know</Text>
-                </View>
+                <SectionHeader
+                  Icon={UserPlus}
+                  title="People to follow"
+                  subtitle="Based on your activity"
+                />
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -343,24 +350,29 @@ export default function ForYouScreen() {
               </View>
             ) : null}
 
-            {rest.length > 0 ? (
-              <View style={styles.sectionHeader}>
-                <Compass color={Colors.muted} size={13} strokeWidth={2.6} />
-                <Text style={styles.sectionTitle}>More for you</Text>
+            {gridRows.length > 0 ? (
+              <View style={styles.gridHeader}>
+                <SectionHeader Icon={Sparkles} title="More for you" subtitle="" />
               </View>
             ) : null}
           </View>
         }
         renderItem={({ item }) => (
-          <FypCardView
-            card={item}
-            onPress={() => onOpen(item)}
-            onLongPress={() => onLongPress(item)}
-            onHide={() => onHide(item)}
-          />
+          <View style={styles.gridRow}>
+            {item.map((card) => (
+              <GridCard
+                key={card.id}
+                card={card}
+                onPress={() => onOpen(card)}
+                onLongPress={() => onLongPress(card)}
+                onHide={() => onHide(card)}
+              />
+            ))}
+            {item.length === 1 ? <View style={{ width: COL_WIDTH }} /> : null}
+          </View>
         )}
         removeClippedSubviews={false}
-        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
         ListEmptyComponent={
           isInitialLoading ? (
             <View style={styles.empty}>
@@ -399,6 +411,34 @@ export default function ForYouScreen() {
   );
 }
 
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function SectionHeader({
+  Icon,
+  title,
+  subtitle,
+}: {
+  Icon: typeof Sparkles;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionTitleRow}>
+        <View style={styles.sectionIcon}>
+          <Icon color={Colors.goldBright} size={12} strokeWidth={2.8} />
+        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+    </View>
+  );
+}
+
 function HeroCard({
   card,
   onPress,
@@ -422,7 +462,7 @@ function HeroCard({
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={350}
-      style={styles.heroCard}
+      style={({ pressed }) => [styles.heroCard, pressed && { opacity: 0.95 }]}
       testID={`fyp-hero-${card.id}`}
     >
       <View style={styles.heroMedia}>
@@ -432,13 +472,22 @@ function HeroCard({
           <LinearGradient colors={[meta.tint, "rgba(0,0,0,0.6)"]} style={StyleSheet.absoluteFill} />
         )}
         <LinearGradient
-          colors={["rgba(0,0,0,0.0)", "rgba(0,0,0,0.45)", "rgba(0,0,0,0.92)"]}
+          colors={["rgba(0,0,0,0.0)", "rgba(0,0,0,0.30)", "rgba(0,0,0,0.95)"]}
+          locations={[0, 0.5, 1]}
           style={StyleSheet.absoluteFill}
         />
-        <View style={[styles.cardChip, { backgroundColor: `${meta.tint}22`, borderColor: `${meta.tint}88` }]}>
-          <Icon color={meta.tint} size={11} strokeWidth={2.8} />
-          <Text style={[styles.cardChipText, { color: meta.tint }]}>{meta.label.toUpperCase()}</Text>
+
+        <View style={styles.heroTopRow}>
+          <View style={[styles.cardChip, { backgroundColor: `${meta.tint}26`, borderColor: `${meta.tint}99` }]}>
+            <Icon color={meta.tint} size={11} strokeWidth={2.8} />
+            <Text style={[styles.cardChipText, { color: meta.tint }]}>{meta.label.toUpperCase()}</Text>
+          </View>
+          <View style={styles.heroPickBadge}>
+            <Sparkles color={Colors.goldBright} size={10} strokeWidth={2.8} />
+            <Text style={styles.heroPickBadgeText}>TOP PICK</Text>
+          </View>
         </View>
+
         <View style={styles.heroBody}>
           <Text style={styles.heroTitle} numberOfLines={3}>
             {title}
@@ -450,13 +499,13 @@ function HeroCard({
             {typeof payload.likes === "number" ? (
               <View style={styles.metric}>
                 <Heart color={Colors.text} size={11} strokeWidth={2.6} />
-                <Text style={styles.metricText}>{payload.likes}</Text>
+                <Text style={styles.metricText}>{formatCount(payload.likes)}</Text>
               </View>
             ) : null}
             {typeof payload.comments === "number" ? (
               <View style={styles.metric}>
                 <MessageCircle color={Colors.text} size={11} strokeWidth={2.6} />
-                <Text style={styles.metricText}>{payload.comments}</Text>
+                <Text style={styles.metricText}>{formatCount(payload.comments)}</Text>
               </View>
             ) : null}
           </View>
@@ -466,7 +515,7 @@ function HeroCard({
   );
 }
 
-function FypCardView({
+function GridCard({
   card,
   onPress,
   onLongPress,
@@ -486,56 +535,69 @@ function FypCardView({
     ? `@${payload.username}`
     : payload.display_name ?? payload.reason ?? "Recommended";
 
+  // Vary heights for a magazine-like layout
+  const tallKinds: KindKey[] = ["reel", "story"];
+  const mediaHeight = tallKinds.includes(card.kind) ? 220 : 160;
+
   return (
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={350}
-      style={styles.card}
+      style={({ pressed }) => [styles.gridCard, { width: COL_WIDTH }, pressed && { opacity: 0.92 }]}
       testID={`fyp-card-${card.id}`}
     >
-      <View style={styles.cardMedia}>
+      <View style={[styles.gridMedia, { height: mediaHeight }]}>
         {cover ? (
           <ExpoImage source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" />
         ) : (
           <LinearGradient colors={[meta.tint, "rgba(0,0,0,0.4)"]} style={StyleSheet.absoluteFill} />
         )}
-        <LinearGradient colors={["rgba(0,0,0,0.0)", "rgba(0,0,0,0.65)"]} style={StyleSheet.absoluteFill} />
-        <View style={[styles.cardChip, { backgroundColor: `${meta.tint}22`, borderColor: `${meta.tint}88` }]}>
-          <Icon color={meta.tint} size={11} strokeWidth={2.8} />
-          <Text style={[styles.cardChipText, { color: meta.tint }]}>{meta.label.toUpperCase()}</Text>
+        <LinearGradient colors={["rgba(0,0,0,0.0)", "rgba(0,0,0,0.70)"]} style={StyleSheet.absoluteFill} />
+
+        <View style={[styles.cardChip, styles.cardChipFloat, { backgroundColor: `${meta.tint}26`, borderColor: `${meta.tint}99` }]}>
+          <Icon color={meta.tint} size={10} strokeWidth={2.8} />
+          <Text style={[styles.cardChipText, { color: meta.tint, fontSize: 9 }]}>{meta.label.toUpperCase()}</Text>
         </View>
+
         <Pressable
-          onPress={onHide}
+          onPress={(e) => {
+            e.stopPropagation?.();
+            onHide();
+          }}
           hitSlop={8}
           style={styles.hideBtn}
           testID={`fyp-hide-${card.id}`}
         >
-          <EyeOff color={Colors.text} size={13} strokeWidth={2.6} />
+          <EyeOff color={Colors.text} size={12} strokeWidth={2.6} />
         </Pressable>
+
+        {/* Footer over media for compact look */}
+        <View style={styles.gridMediaFooter}>
+          <Text style={styles.gridTitle} numberOfLines={2}>
+            {title}
+          </Text>
+        </View>
       </View>
-      <View style={styles.cardBody}>
-        <Text style={styles.cardTitle} numberOfLines={2}>
-          {title}
-        </Text>
-        <Text style={styles.cardSubtitle} numberOfLines={1}>
+
+      <View style={styles.gridBody}>
+        <Text style={styles.gridSubtitle} numberOfLines={1}>
           {subtitle}
-          {payload.reason ? ` · ${payload.reason}` : ""}
         </Text>
         {card.kind === "post" ? (
           <FypPostActions card={card} payload={payload} onOpen={onPress} />
         ) : typeof payload.likes === "number" || typeof payload.comments === "number" ? (
           <View style={styles.inlineMetricsRow}>
             {typeof payload.likes === "number" ? (
-              <View style={styles.metric}>
-                <Heart color={Colors.muted} size={12} strokeWidth={2.4} />
-                <Text style={styles.metricText}>{payload.likes}</Text>
+              <View style={styles.metricGhost}>
+                <Heart color={Colors.muted2} size={11} strokeWidth={2.4} />
+                <Text style={styles.metricGhostText}>{formatCount(payload.likes)}</Text>
               </View>
             ) : null}
             {typeof payload.comments === "number" ? (
-              <View style={styles.metric}>
-                <MessageCircle color={Colors.muted} size={12} strokeWidth={2.4} />
-                <Text style={styles.metricText}>{payload.comments}</Text>
+              <View style={styles.metricGhost}>
+                <MessageCircle color={Colors.muted2} size={11} strokeWidth={2.4} />
+                <Text style={styles.metricGhostText}>{formatCount(payload.comments)}</Text>
               </View>
             ) : null}
           </View>
@@ -607,41 +669,22 @@ function FypPostActions({
 
   return (
     <View style={styles.actionRow}>
-      <Pressable
-        onPress={onLike}
-        hitSlop={8}
-        style={styles.actionBtn}
-        testID={`fyp-like-${card.id}`}
-      >
+      <Pressable onPress={onLike} hitSlop={8} style={styles.actionBtn} testID={`fyp-like-${card.id}`}>
         <Heart
-          color={liked ? Colors.rose : Colors.muted}
-          size={15}
+          color={liked ? Colors.rose : Colors.muted2}
+          size={13}
           strokeWidth={2.4}
           fill={liked ? Colors.rose : "transparent"}
         />
-        <Text style={[styles.actionText, liked && { color: Colors.rose }]}>{likes}</Text>
+        <Text style={[styles.actionText, liked && { color: Colors.rose }]}>{formatCount(likes)}</Text>
       </Pressable>
-      <Pressable
-        onPress={onComment}
-        hitSlop={8}
-        style={styles.actionBtn}
-        testID={`fyp-comment-${card.id}`}
-      >
-        <MessageCircle color={Colors.muted} size={15} strokeWidth={2.4} />
-        <Text style={styles.actionText}>{comments}</Text>
+      <Pressable onPress={onComment} hitSlop={8} style={styles.actionBtn} testID={`fyp-comment-${card.id}`}>
+        <MessageCircle color={Colors.muted2} size={13} strokeWidth={2.4} />
+        <Text style={styles.actionText}>{formatCount(comments)}</Text>
       </Pressable>
-      <Pressable
-        onPress={onRepost}
-        hitSlop={8}
-        style={styles.actionBtn}
-        testID={`fyp-repost-${card.id}`}
-      >
-        <Repeat2
-          color={reposted ? Colors.mint : Colors.muted}
-          size={15}
-          strokeWidth={2.4}
-        />
-        <Text style={[styles.actionText, reposted && { color: Colors.mint }]}>{reposts}</Text>
+      <Pressable onPress={onRepost} hitSlop={8} style={styles.actionBtn} testID={`fyp-repost-${card.id}`}>
+        <Repeat2 color={reposted ? Colors.mint : Colors.muted2} size={13} strokeWidth={2.4} />
+        <Text style={[styles.actionText, reposted && { color: Colors.mint }]}>{formatCount(reposts)}</Text>
       </Pressable>
     </View>
   );
@@ -659,8 +702,15 @@ function SuggestionCard({ row, onPress }: { row: SuggestedFollowRow; onPress: ()
           ? "Same community"
           : "Suggested";
   return (
-    <Pressable onPress={onPress} style={styles.suggestCard} testID={`fyp-suggest-${row.suggested_user_id}`}>
-      <LinearGradient colors={["rgba(98,208,255,0.18)", "rgba(91,141,239,0.05)"]} style={StyleSheet.absoluteFill} />
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.suggestCard, pressed && { opacity: 0.9 }]}
+      testID={`fyp-suggest-${row.suggested_user_id}`}
+    >
+      <LinearGradient
+        colors={["rgba(98,208,255,0.22)", "rgba(91,141,239,0.04)"]}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={styles.suggestAvatarWrap}>
         {row.avatar_url ? (
           <ExpoImage source={{ uri: row.avatar_url }} style={styles.suggestAvatar} contentFit="cover" />
@@ -695,30 +745,40 @@ function SuggestionCard({ row, onPress }: { row: SuggestedFollowRow; onPress: ()
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink },
   headerWrap: {
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(63,169,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.32)",
+    paddingBottom: 10,
+    backgroundColor: "rgba(0,0,0,0.40)",
   },
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: GUTTER,
     paddingTop: 4,
+    paddingBottom: 4,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  eyebrow: { color: Colors.goldBright, fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
-  title: { color: Colors.text, fontSize: 28, fontWeight: "900", letterSpacing: -1.1, marginTop: 2 },
-  refreshBtn: {
-    width: 38, height: 38, borderRadius: 13,
-    backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
-    alignItems: "center", justifyContent: "center",
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
+  eyebrow: { color: Colors.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.2 },
+  title: {
+    color: Colors.text,
+    fontSize: 32,
+    fontWeight: "900",
+    letterSpacing: -1.4,
+    lineHeight: 36,
   },
-  tuneBtn: { borderRadius: 13, overflow: "hidden" },
-  tuneGrad: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
+  tuneBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  tuneBtnText: { color: Colors.text, fontSize: 12, fontWeight: "800", letterSpacing: 0.2 },
 
-  filterRow: { paddingHorizontal: 14, paddingTop: 12, gap: 8 },
+  filterRow: { paddingHorizontal: GUTTER, paddingTop: 10, gap: 8 },
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -729,128 +789,225 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   filterChipActive: {
-    backgroundColor: Colors.goldBright,
-    borderColor: Colors.goldBright,
+    backgroundColor: Colors.text,
+    borderColor: Colors.text,
   },
-  filterChipText: { color: Colors.muted, fontSize: 12, fontWeight: "900", letterSpacing: 0.3 },
-  filterChipTextActive: { color: Colors.ink },
+  filterChipText: { color: Colors.muted, fontSize: 12, fontWeight: "800", letterSpacing: 0.2 },
+  filterChipTextActive: { color: Colors.ink, fontWeight: "900" },
 
-  list: { paddingTop: 14, paddingHorizontal: 14 },
-  section: { marginBottom: 18 },
+  list: { paddingTop: 14 },
+
+  heroWrap: { paddingHorizontal: GUTTER, marginBottom: 22 },
+  heroCard: {
+    borderRadius: 26,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  heroMedia: { height: 320, position: "relative" },
+  heroTopRow: {
+    position: "absolute",
+    top: 14,
+    left: 14,
+    right: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  heroPickBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(98,208,255,0.50)",
+  },
+  heroPickBadgeText: { color: Colors.goldBright, fontSize: 9.5, fontWeight: "900", letterSpacing: 0.7 },
+  heroBody: { position: "absolute", left: 18, right: 18, bottom: 18, gap: 10 },
+  heroTitle: { color: Colors.text, fontSize: 24, fontWeight: "900", letterSpacing: -0.8, lineHeight: 28 },
+  heroMetaRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  heroSubtitle: { color: Colors.muted, fontSize: 12, fontWeight: "800", flex: 1 },
+
+  section: { marginBottom: 22 },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    marginBottom: 10,
-    paddingHorizontal: 4,
+    justifyContent: "space-between",
+    paddingHorizontal: GUTTER,
+    marginBottom: 12,
   },
-  sectionTitle: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1.4 },
+  sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 9 },
+  sectionIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    backgroundColor: "rgba(98,208,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(98,208,255,0.30)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionTitle: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.3 },
+  sectionSubtitle: { color: Colors.muted2, fontSize: 11, fontWeight: "700" },
 
-  hashtagRow: { paddingRight: 14, gap: 10 },
-  hashtagChip: {
+  hashtagRow: { paddingHorizontal: GUTTER, gap: 8 },
+  hashtagPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    marginRight: 8,
+  },
+  hashtagRankText: { color: Colors.goldBright, fontSize: 16, fontWeight: "900", letterSpacing: -0.5, minWidth: 16 },
+  hashtagDivider: { width: 1, height: 22, backgroundColor: "rgba(255,255,255,0.10)" },
+  hashtagTag: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.2 },
+  hashtagCount: { color: Colors.muted2, fontSize: 10, fontWeight: "700", marginTop: 1 },
+
+  suggestRow: { paddingHorizontal: GUTTER, gap: 10 },
+  suggestCard: {
+    width: 144,
+    padding: 14,
+    borderRadius: 20,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: "rgba(98,208,255,0.18)",
     marginRight: 10,
-    minWidth: 170,
-  },
-  hashtagRank: {
-    width: 26, height: 26, borderRadius: 9,
-    backgroundColor: "rgba(98,208,255,0.14)",
-    alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "rgba(98,208,255,0.32)",
-  },
-  hashtagRankText: { color: Colors.goldBright, fontSize: 11, fontWeight: "900" },
-  hashtagTagRow: { flexDirection: "row", alignItems: "center", gap: 3 },
-  hashtagTag: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.2 },
-  hashtagCount: { color: Colors.muted2, fontSize: 10, fontWeight: "700", marginTop: 2 },
-
-  heroCard: { borderRadius: 24, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
-  heroMedia: { height: 280, position: "relative" },
-  heroBody: { position: "absolute", left: 14, right: 14, bottom: 14, gap: 8 },
-  heroTitle: { color: Colors.text, fontSize: 20, fontWeight: "900", letterSpacing: -0.6, lineHeight: 24 },
-  heroMetaRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  heroSubtitle: { color: Colors.muted, fontSize: 12, fontWeight: "800", flex: 1 },
-
-  suggestRow: { paddingRight: 14, gap: 10 },
-  suggestCard: {
-    width: 140,
-    padding: 12,
-    borderRadius: 18,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(98,208,255,0.16)",
-    marginRight: 10,
     alignItems: "center",
     overflow: "hidden",
   },
-  suggestAvatarWrap: { width: 60, height: 60, marginBottom: 8 },
-  suggestAvatar: { width: 60, height: 60, borderRadius: 30 },
+  suggestAvatarWrap: { width: 62, height: 62, marginBottom: 10 },
+  suggestAvatar: { width: 62, height: 62, borderRadius: 31 },
   suggestAvatarText: { color: Colors.text, fontSize: 22, fontWeight: "900" },
   suggestVerified: {
-    position: "absolute", right: -2, bottom: -2,
-    backgroundColor: Colors.ink, borderRadius: 999, padding: 1,
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    backgroundColor: Colors.ink,
+    borderRadius: 999,
+    padding: 1,
   },
   suggestName: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.2 },
   suggestHandle: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
   suggestReason: {
-    marginTop: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 10,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
     backgroundColor: "rgba(98,208,255,0.14)",
     borderWidth: 1,
     borderColor: "rgba(98,208,255,0.28)",
   },
   suggestReasonText: { color: Colors.goldBright, fontSize: 9.5, fontWeight: "900", letterSpacing: 0.4 },
 
-  card: { borderRadius: 22, overflow: "hidden", backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
-  cardMedia: { height: 160 },
-  cardChip: { position: "absolute", top: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
+  gridHeader: { marginBottom: 6 },
+  gridRow: {
+    flexDirection: "row",
+    paddingHorizontal: GUTTER,
+    gap: GRID_GAP,
+  },
+
+  gridCard: {
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  gridMedia: { position: "relative" },
+  gridMediaFooter: { position: "absolute", left: 12, right: 12, bottom: 12 },
+  gridTitle: { color: Colors.text, fontSize: 13.5, fontWeight: "900", letterSpacing: -0.3, lineHeight: 17 },
+  gridBody: { paddingHorizontal: 12, paddingVertical: 10 },
+  gridSubtitle: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+
+  cardChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  cardChipFloat: { position: "absolute", top: 10, left: 10 },
   cardChipText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.7 },
   hideBtn: {
-    position: "absolute", top: 12, right: 12,
-    width: 28, height: 28, borderRadius: 10,
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 26,
+    height: 26,
+    borderRadius: 10,
     backgroundColor: "rgba(0,0,0,0.55)",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.16)",
-    alignItems: "center", justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  cardMetricsRow: { position: "absolute", right: 12, bottom: 12, flexDirection: "row", gap: 6 },
-  metric: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: "rgba(0,0,0,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.16)" },
+
+  metric: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.50)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
   metricText: { color: Colors.text, fontSize: 10, fontWeight: "900" },
-  inlineMetricsRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 },
+  metricGhost: { flexDirection: "row", alignItems: "center", gap: 4 },
+  metricGhostText: { color: Colors.muted2, fontSize: 10.5, fontWeight: "800" },
+  inlineMetricsRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8 },
+
   actionRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    marginTop: 12,
-    paddingTop: 10,
+    marginTop: 10,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.06)",
   },
-  actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-  },
-  actionText: { color: Colors.muted, fontSize: 12, fontWeight: "800" },
-  cardBody: { paddingHorizontal: 14, paddingVertical: 12 },
-  cardTitle: { color: Colors.text, fontSize: 15, fontWeight: "900", letterSpacing: -0.3, lineHeight: 19 },
-  cardSubtitle: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 4 },
+  actionBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 2 },
+  actionText: { color: Colors.muted2, fontSize: 11, fontWeight: "800" },
 
   empty: { alignItems: "center", paddingHorizontal: 30, paddingTop: 40, gap: 10 },
-  emptyIcon: { width: 64, height: 64, borderRadius: 22, backgroundColor: "rgba(63,169,255,0.14)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(63,169,255,0.32)" },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: "rgba(63,169,255,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(63,169,255,0.32)",
+  },
   emptyTitle: { color: Colors.text, fontSize: 18, fontWeight: "900" },
   emptyBody: { color: Colors.muted, fontSize: 13, fontWeight: "700", textAlign: "center", lineHeight: 19 },
-  emptyBtn: { marginTop: 12, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 14, backgroundColor: Colors.goldBright },
+  emptyBtn: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: Colors.goldBright,
+  },
   emptyBtnText: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
 });
