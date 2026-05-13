@@ -926,23 +926,6 @@ export default function CommunityDetailScreen() {
                   </View>
                 </View>
               </SafeAreaView>
-              {canEditMedia ? (
-                <Pressable
-                  onPress={() => onPickCommunityMedia("banner")}
-                  disabled={uploadingKind !== null}
-                  style={styles.editBannerBtn}
-                  testID="community-edit-banner"
-                >
-                  {uploadingKind === "banner" ? (
-                    <ActivityIndicator color={Colors.text} size="small" />
-                  ) : (
-                    <Camera color={Colors.text} size={14} strokeWidth={2.8} />
-                  )}
-                  <Text style={styles.editBannerText}>
-                    {community.bannerUrl ? "Change banner" : "Add banner"}
-                  </Text>
-                </Pressable>
-              ) : null}
             </View>
 
             <View style={styles.headInfo}>
