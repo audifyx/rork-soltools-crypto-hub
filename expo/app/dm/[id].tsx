@@ -363,33 +363,6 @@ export default function DMThreadScreen() {
     router.push("/spaces");
   }, [router]);
 
-  if (!conv) {
-    const stillLoading = !hydrated || !!peerProfile.isLoading;
-    return (
-      <View style={styles.root}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <StatusBar style="light" />
-        <SafeAreaView style={styles.safe}>
-          <View style={styles.notFound}>
-            {stillLoading ? (
-              <>
-                <ActivityIndicator color={IOS_BLUE} />
-                <Text style={[styles.notFoundTitle, { marginTop: 12 }]}>Opening chat…</Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.notFoundTitle}>Conversation not found</Text>
-                <Pressable onPress={() => navigateBack(router, "/messages")} style={styles.notFoundBtn}>
-                  <Text style={styles.notFoundBtnText}>Go back</Text>
-                </Pressable>
-              </>
-            )}
-          </View>
-        </SafeAreaView>
-      </View>
-    );
-  }
-
   const onDeleteMessage = useCallback(
     (m: DMMessage) => {
       if (m.fromHandle !== "@you") return;
@@ -423,6 +396,33 @@ export default function DMThreadScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setActionMsg(m);
   }, []);
+
+  if (!conv) {
+    const stillLoading = !hydrated || !!peerProfile.isLoading;
+    return (
+      <View style={styles.root}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar style="light" />
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.notFound}>
+            {stillLoading ? (
+              <>
+                <ActivityIndicator color={IOS_BLUE} />
+                <Text style={[styles.notFoundTitle, { marginTop: 12 }]}>Opening chat…</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.notFoundTitle}>Conversation not found</Text>
+                <Pressable onPress={() => navigateBack(router, "/messages")} style={styles.notFoundBtn}>
+                  <Text style={styles.notFoundBtnText}>Go back</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   const renderRow: ListRenderItem<ListRow> = ({ item }) => {
     if (item.kind === "day") {
