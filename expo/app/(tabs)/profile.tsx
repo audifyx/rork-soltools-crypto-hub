@@ -850,18 +850,6 @@ export default function ProfileScreen() {
             <AchievementsRow userId={userId ?? null} />
           </View>
 
-          <View style={styles.statsGrid}>
-            <StatCard label="WATCHING" value={stats.watching} accent={Colors.mint} Icon={Eye} />
-            <StatCard label="ALERTS" value={stats.alerts} accent={Colors.orange} Icon={Bell} />
-            <StatCard label="WALLETS" value={stats.wallets} accent={Colors.cyan} Icon={Wallet} />
-            <StatCard label="LISTED" value={stats.listed} accent={Colors.rose} Icon={Rocket} />
-          </View>
-
-          <Pressable onPress={() => setSearchOpen(true)} style={styles.findBtn} testID="find-traders">
-            <Users color={Colors.text} size={13} strokeWidth={2.6} />
-            <Text style={styles.findBtnText}>Find traders to follow</Text>
-          </Pressable>
-
           <Pressable onPress={() => router.push("/list-token")} style={styles.cta} testID="profile-list-token">
             <LinearGradient
               colors={[Colors.mint, Colors.cyan]}

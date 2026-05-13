@@ -239,21 +239,29 @@ export default function MessagesScreen() {
         <View style={styles.navBar}>
           <Pressable
             onPress={() => navigateBack(router, "/(tabs)/home")}
-            style={styles.navTextButton}
+            style={styles.backCircle}
+            hitSlop={10}
             testID="messages-back"
           >
             <ArrowLeft color={Colors.text} size={18} strokeWidth={2.4} />
-            <Text style={styles.navText}>Home</Text>
           </Pressable>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>Messages</Text>
+            {totalUnread > 0 ? (
+              <View style={styles.titleBadge}>
+                <Text style={styles.titleBadgeText}>{totalUnread}</Text>
+              </View>
+            ) : null}
+          </View>
           <View style={styles.navRight}>
             {tab === "inbox" && unreadCount > 0 ? (
               <Pressable
                 onPress={onMarkAllRead}
                 style={styles.markAllBtn}
+                hitSlop={6}
                 testID="mark-all-read"
               >
                 <CheckCheck color={ACCENT} size={14} strokeWidth={2.6} />
-                <Text style={styles.markAllText}>Mark all read</Text>
               </Pressable>
             ) : null}
             <Pressable
@@ -264,18 +272,9 @@ export default function MessagesScreen() {
               style={styles.circleCompose}
               testID="compose-dm"
             >
-              <Pencil color={Colors.ink} size={18} strokeWidth={2.7} />
+              <Pencil color={Colors.ink} size={17} strokeWidth={2.7} />
             </Pressable>
           </View>
-        </View>
-
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>Messages</Text>
-          {totalUnread > 0 ? (
-            <View style={styles.titleBadge}>
-              <Text style={styles.titleBadgeText}>{totalUnread}</Text>
-            </View>
-          ) : null}
         </View>
 
         <View style={styles.searchWrap}>
@@ -329,7 +328,11 @@ export default function MessagesScreen() {
         </View>
 
         {tab === "inbox" ? (
-          <View style={styles.smartRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.smartRow}
+          >
             {smartChips.map((s) => {
               const active = smart === s.id;
               const Icon = s.Icon;
@@ -347,28 +350,26 @@ export default function MessagesScreen() {
                   ]}
                   testID={`smart-${s.id}`}
                 >
-                  <View style={[styles.smartIconWrap, active && styles.smartIconWrapActive]}>
-                    <Icon
-                      color={active ? ACCENT : Colors.text}
-                      size={16}
-                      strokeWidth={2.4}
-                      fill={active && s.id === "pinned" ? ACCENT : "transparent"}
-                    />
-                    {s.count > 0 ? (
-                      <View style={[styles.smartCountBadge, active && styles.smartCountBadgeActive]}>
-                        <Text style={[styles.smartCountText, active && styles.smartCountTextActive]}>
-                          {s.count > 99 ? "99+" : s.count}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
+                  <Icon
+                    color={active ? ACCENT : Colors.muted}
+                    size={13}
+                    strokeWidth={2.6}
+                    fill={active && s.id === "pinned" ? ACCENT : "transparent"}
+                  />
                   <Text style={[styles.smartText, active && styles.smartTextActive]} numberOfLines={1}>
                     {s.label}
                   </Text>
+                  {s.count > 0 ? (
+                    <View style={[styles.smartCountBadge, active && styles.smartCountBadgeActive]}>
+                      <Text style={[styles.smartCountText, active && styles.smartCountTextActive]}>
+                        {s.count > 99 ? "99+" : s.count}
+                      </Text>
+                    </View>
+                  ) : null}
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
         ) : null}
 
         {tab === "inbox" ? (
@@ -387,25 +388,6 @@ export default function MessagesScreen() {
               <Text style={styles.selfChatBody}>Private space for alpha, links, screenshots.</Text>
             </View>
             <ChevronRight color={Colors.muted} size={15} strokeWidth={2.4} />
-          </Pressable>
-        ) : null}
-
-        {tab === "inbox" && !hintDismissed && filtered.length > 0 ? (
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
-              setHintDismissed(true);
-            }}
-            style={styles.longPressHint}
-            testID="long-press-hint"
-          >
-            <View style={styles.longPressHintIcon}>
-              <Hand color={ACCENT} size={13} strokeWidth={2.6} />
-            </View>
-            <Text style={styles.longPressHintText}>
-              <Text style={styles.longPressHintBold}>Press & hold</Text> any chat for pin, mute, archive & delete
-            </Text>
-            <X color={Colors.muted} size={12} strokeWidth={2.6} />
           </Pressable>
         ) : null}
 
@@ -927,32 +909,31 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
   navBar: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 10,
+    paddingHorizontal: 14,
+    paddingTop: 4,
+    paddingBottom: 8,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 10,
   },
-  navTextButton: { height: 40, paddingHorizontal: 12, borderRadius: 14, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.055)", borderWidth: 1, borderColor: CARD_BORDER },
-  navText: { color: Colors.text, fontSize: 14, fontWeight: "800" },
+  backCircle: {
+    width: 36, height: 36, borderRadius: 12,
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.055)", borderWidth: 1, borderColor: CARD_BORDER,
+  },
   navRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   markAllBtn: {
-    height: 36,
-    paddingHorizontal: 11,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
+    width: 36, height: 36, borderRadius: 12,
+    alignItems: "center", justifyContent: "center",
     backgroundColor: ACCENT_SOFT,
     borderWidth: 1,
     borderColor: "rgba(63,169,255,0.35)",
   },
   markAllText: { color: ACCENT, fontSize: 12, fontWeight: "900", letterSpacing: 0.2 },
   circleCompose: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: ACCENT,
@@ -961,24 +942,23 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
   },
-  titleRow: { paddingHorizontal: 18, marginTop: 4, flexDirection: "row", alignItems: "center", gap: 10 },
-  title: { color: Colors.text, fontSize: 34, fontWeight: "900", letterSpacing: -1.2 },
+  titleRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  title: { color: Colors.text, fontSize: 24, fontWeight: "900", letterSpacing: -0.8 },
   titleBadge: {
-    minWidth: 25,
-    height: 25,
-    borderRadius: 13,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: ACCENT,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 7,
-    marginTop: 5,
+    paddingHorizontal: 6,
   },
-  titleBadgeText: { color: Colors.ink, fontSize: 14, fontWeight: "900" },
+  titleBadgeText: { color: Colors.ink, fontSize: 12, fontWeight: "900" },
 
   searchWrap: {
-    marginHorizontal: 18,
-    marginTop: 14,
-    height: 46,
+    marginHorizontal: 14,
+    marginTop: 4,
+    height: 42,
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
@@ -991,8 +971,8 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: Colors.text, fontSize: 15, fontWeight: "700", padding: 0 },
 
-  filterWrap: { flexDirection: "row", gap: 8, marginTop: 12, marginHorizontal: 18, padding: 4, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, borderColor: CARD_BORDER },
-  filterChip: { flex: 1, height: 38, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 13, borderRadius: 14 },
+  filterWrap: { flexDirection: "row", gap: 6, marginTop: 10, marginHorizontal: 14, padding: 4, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, borderColor: CARD_BORDER },
+  filterChip: { flex: 1, height: 34, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 13, borderRadius: 10 },
   filterChipActive: { backgroundColor: ACCENT },
   filterText: { color: Colors.muted, fontSize: 13, fontWeight: "900" },
   filterTextActive: { color: Colors.ink },
@@ -1009,16 +989,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  smartRow: { flexDirection: "row", paddingHorizontal: 18, paddingTop: 12, paddingBottom: 6, gap: 8 },
+  smartRow: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 2, gap: 6, flexDirection: "row" },
   smartChip: {
-    flex: 1,
-    height: 72,
+    height: 30,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 6,
-    paddingHorizontal: 6,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.035)",
+    paddingHorizontal: 11,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,
     borderColor: CARD_BORDER,
   },
@@ -1027,37 +1006,23 @@ const styles = StyleSheet.create({
     borderColor: "rgba(63,169,255,0.55)",
   },
   smartChipPressed: {
-    transform: [{ scale: 0.96 }],
-    opacity: 0.92,
+    opacity: 0.85,
   },
-  smartIconWrap: {
-    width: 28,
-    height: 28,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  smartIconWrapActive: {},
   smartCountBadge: {
-    position: "absolute",
-    top: -6,
-    right: -10,
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: Colors.ink,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
   smartCountBadgeActive: {
     backgroundColor: ACCENT,
-    borderColor: ACCENT,
   },
-  smartCountText: { color: Colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 0.2 },
+  smartCountText: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 0.2 },
   smartCountTextActive: { color: Colors.ink },
-  smartText: { color: Colors.text, fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
+  smartText: { color: Colors.muted, fontSize: 12, fontWeight: "800", letterSpacing: 0.1 },
   smartTextActive: { color: ACCENT },
 
   longPressHint: {
