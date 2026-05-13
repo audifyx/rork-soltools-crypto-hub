@@ -26,6 +26,7 @@ import {
   SOL_MINT_ADDRESS,
   type OnchainSwap,
 } from "@/lib/api/kol-onchain";
+import { allSeedProfiles, KOL_SEED_PROFILES } from "@/lib/api/kol-seed";
 import { supabase } from "@/lib/supabase";
 
 export type KOLBlockchain = "solana" | "ethereum" | "base" | "bitcoin";
@@ -175,35 +176,57 @@ async function profileById(kolId: string): Promise<KOLProfile | null> {
   return PROFILE_CACHE.get(kolId) ?? null;
 }
 
+/**
+ * Merge Supabase-backed profiles with the publicly known KOL seed.
+ * Dedupes by wallet address (Supabase wins) so we never duplicate a trader.
+ */
+function mergeWithSeed(remote: KOLProfile[]): KOLProfile[] {
+  const seen = new Set(remote.map((p) => p.wallet_address.toLowerCase()));
+  const seedExtras = allSeedProfiles().filter(
+    (p) => !seen.has(p.wallet_address.toLowerCase()),
+  );
+  return [...remote, ...seedExtras];
+}
+
 export async function getKOLProfiles(limit: number = 30, offset: number = 0): Promise<KOLProfile[]> {
+  let remote: KOLProfile[] = [];
   try {
     const { data, error } = await supabase.rpc("get_kol_profiles", { p_limit: limit + offset });
     if (error) throw error;
-    const all = (data ?? []).map((r: RawProfile) => mapProfile(r));
-    cacheProfiles(all);
-    return all.slice(offset, offset + limit);
+    remote = (data ?? []).map((r: RawProfile) => mapProfile(r));
   } catch (e) {
     console.log("[kol] getKOLProfiles failed", e);
-    return [];
   }
+  const merged = mergeWithSeed(remote);
+  cacheProfiles(merged);
+  return merged.slice(offset, offset + limit);
 }
 
 export async function searchKOLProfiles(query: string, limit: number = 30): Promise<KOLProfile[]> {
   const q = query.trim();
   if (!q) return [];
+  let remote: KOLProfile[] = [];
   try {
     const { data, error } = await supabase.rpc("search_kol_profiles", {
       p_query: q,
       p_limit: limit,
     });
     if (error) throw error;
-    const out = (data ?? []).map((r: RawProfile) => mapProfile(r));
-    cacheProfiles(out);
-    return out;
+    remote = (data ?? []).map((r: RawProfile) => mapProfile(r));
   } catch (e) {
     console.log("[kol] searchKOLProfiles failed", e);
-    return [];
   }
+  const ql = q.toLowerCase();
+  const seedMatches = allSeedProfiles().filter((p) =>
+    p.name.toLowerCase().includes(ql) ||
+    (p.x_handle ?? "").toLowerCase().includes(ql) ||
+    p.wallet_address.toLowerCase().includes(ql),
+  );
+  const seen = new Set(remote.map((p) => p.wallet_address.toLowerCase()));
+  const extras = seedMatches.filter((p) => !seen.has(p.wallet_address.toLowerCase()));
+  const out = [...remote, ...extras].slice(0, limit);
+  cacheProfiles(out);
+  return out;
 }
 
 function swapToKolTx(swap: OnchainSwap, kol: KOLProfile): KOLTransaction {
@@ -279,23 +302,45 @@ export async function getKOLRecentTransactions(params: {
   }
 }
 
+// Local follow state for seed KOLs (no Supabase row to flip). Persisted only
+// for the current session — good enough for the feed UI to feel responsive.
+const SEED_FOLLOWED = new Set<string>();
+
+function isSeedKolId(id: string): boolean {
+  return id.startsWith("seed-");
+}
+
 export async function toggleFollowKOL(kolId: string): Promise<boolean> {
+  if (isSeedKolId(kolId)) {
+    const next = !SEED_FOLLOWED.has(kolId);
+    if (next) SEED_FOLLOWED.add(kolId);
+    else SEED_FOLLOWED.delete(kolId);
+    const cached = PROFILE_CACHE.get(kolId);
+    if (cached) PROFILE_CACHE.set(kolId, { ...cached, is_followed: next });
+    return next;
+  }
   const { data, error } = await supabase.rpc("toggle_follow_kol", { p_kol_id: kolId });
   if (error) throw error;
   return Boolean(data);
 }
 
 export async function getUserFollowedKOLs(): Promise<KOLProfile[]> {
+  let remote: KOLProfile[] = [];
   try {
     const { data, error } = await supabase.rpc("get_user_followed_kols");
     if (error) throw error;
-    const out = (data ?? []).map((r: RawProfile) => mapProfile(r));
-    cacheProfiles(out);
-    return out;
+    remote = (data ?? []).map((r: RawProfile) => mapProfile(r));
   } catch (e) {
     console.log("[kol] getUserFollowedKOLs failed", e);
-    return [];
   }
+  const seedFollowed = allSeedProfiles()
+    .filter((p) => SEED_FOLLOWED.has(p.id))
+    .map((p) => ({ ...p, is_followed: true }));
+  const seen = new Set(remote.map((p) => p.wallet_address.toLowerCase()));
+  const extras = seedFollowed.filter((p) => !seen.has(p.wallet_address.toLowerCase()));
+  const out = [...remote, ...extras];
+  cacheProfiles(out);
+  return out;
 }
 
 /**
