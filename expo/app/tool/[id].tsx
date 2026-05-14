@@ -1814,7 +1814,12 @@ function SniperTool({ accent }: { accent: string }) {
             const statusColor =
               l.result === "filled" ? Colors.mint : l.result === "queued" ? accent : Colors.rose;
             return (
-              <View key={l.id} style={[styles.snipeCard, { borderColor: `${statusColor}33` }]}>
+              <Pressable
+                key={l.id}
+                onPress={() => router.push({ pathname: "/tool/token-lookup", params: { ca: t.mint, q: t.symbol } })}
+                style={({ pressed }) => [styles.snipeCard, { borderColor: `${statusColor}33`, opacity: pressed ? 0.85 : 1 }]}
+                testID={`snipe-card-${l.id}`}
+              >
                 <View style={styles.snipeTopRow}>
                   <TokenAvatar uri={t.image} ticker={t.symbol} size={44} radius={14} />
                   <View style={styles.snipeIdent}>
@@ -1922,7 +1927,7 @@ function SniperTool({ accent }: { accent: string }) {
                     <Text style={styles.snipeAgo}>{timeAgo(l.at)}</Text>
                   </View>
                 )}
-              </View>
+              </Pressable>
             );
           })}
         </View>
