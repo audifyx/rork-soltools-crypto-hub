@@ -395,77 +395,75 @@ async function fetchTelegramChannelPosts(channel: string): Promise<CryptoNewsIte
   }
 }
 
+// Free, no-cost X/Twitter fetch via public Nitter RSS mirrors. We try a few
+// known instances in order and return [] if all fail. No external paid APIs.
+const NITTER_MIRRORS: readonly string[] = [
+  "https://nitter.net",
+  "https://nitter.privacydev.net",
+  "https://nitter.poast.org",
+  "https://nitter.cz",
+];
+
+async function fetchNitterRss(handle: string): Promise<string | null> {
+  for (const base of NITTER_MIRRORS) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 6_000);
+      const res = await fetch(`${base}/${handle}/rss`, {
+        signal: ctrl.signal,
+        headers: { Accept: "application/rss+xml, application/xml, text/xml" },
+      }).finally(() => clearTimeout(timer));
+      if (!res.ok) continue;
+      const xml = await res.text();
+      if (xml && xml.includes("<item")) return xml;
+    } catch {
+      // try next mirror
+    }
+  }
+  return null;
+}
+
 async function fetchXHandlePosts(handle: string): Promise<CryptoNewsItem[]> {
-  // We use Rork's Exa search proxy to surface the latest @handle posts on x.com.
-  // Direct syndication.twitter.com is rate-limited from mobile carrier IPs and
-  // Nitter mirrors are unreliable in 2026. Exa indexes x.com pages with dates.
-  const toolkitUrl = process.env.EXPO_PUBLIC_TOOLKIT_URL;
-  const secret = process.env.EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY;
-  if (!toolkitUrl || !secret) {
-    console.log("[news] x: toolkit env missing");
+  const xml = await fetchNitterRss(handle);
+  if (!xml) {
+    console.log("[news] x: no free mirror available");
     return [];
   }
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 12_000);
-    const res = await fetch(`${toolkitUrl}/v2/exa/search`, {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${secret}`,
-      },
-      body: JSON.stringify({
-        query: `latest posts from @${handle}`,
-        type: "keyword",
-        numResults: 20,
-        includeDomains: ["x.com", "twitter.com"],
-        includeText: [handle],
-        contents: {
-          text: { maxCharacters: 800 },
-          highlights: { numSentences: 2, highlightsPerUrl: 1 },
-        },
-      }),
-    }).finally(() => clearTimeout(timer));
-    if (!res.ok) {
-      console.log("[news] x exa non-ok", res.status);
-      return [];
-    }
-    const json = (await res.json()) as {
-      results?: {
-        url: string;
-        title?: string;
-        text?: string;
-        publishedDate?: string | null;
-        author?: string | null;
-        highlights?: string[];
-        image?: string | null;
-      }[];
-    };
-    const hits = json.results ?? [];
     const items: CryptoNewsItem[] = [];
     const handleLc = handle.toLowerCase();
-    for (const h of hits) {
-      if (!h.url) continue;
-      // Only keep actual status URLs from this handle.
-      const statusMatch = h.url.match(/^https?:\/\/(?:x|twitter)\.com\/([^/]+)\/status\/(\d+)/i);
+    const itemRe = /<item>([\s\S]*?)<\/item>/g;
+    let match: RegExpExecArray | null;
+    while ((match = itemRe.exec(xml)) !== null) {
+      const chunk = match[1];
+      const linkRaw = /<link>([\s\S]*?)<\/link>/.exec(chunk)?.[1]?.trim() ?? "";
+      const titleRaw = /<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/.exec(chunk)?.[1] ?? "";
+      const descRaw =
+        /<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/.exec(chunk)?.[1] ?? "";
+      const pubRaw = /<pubDate>([\s\S]*?)<\/pubDate>/.exec(chunk)?.[1]?.trim() ?? "";
+      // Nitter links look like https://nitter.xyz/<handle>/status/<id>#m
+      const statusMatch = linkRaw.match(/\/([^/]+)\/status\/(\d+)/i);
       if (!statusMatch) continue;
       if (statusMatch[1].toLowerCase() !== handleLc) continue;
-      const body = stripHtml(
-        (h.highlights?.[0] ?? h.text ?? h.title ?? "").replace(/\s+/g, " "),
-      ).trim();
+      const tweetId = statusMatch[2];
+      const sourceUrl = `https://x.com/${handle}/status/${tweetId}`;
+      const body = stripHtml(descRaw || titleRaw).replace(/\s+/g, " ").trim();
       if (!body) continue;
       const title = body.length > 140 ? `${body.slice(0, 137)}\u2026` : body;
-      const published_at = h.publishedDate
-        ? new Date(h.publishedDate).toISOString()
+      const imageMatch = /<img[^>]+src="([^"]+)"/.exec(descRaw);
+      const published_at = pubRaw
+        ? (() => {
+            const d = new Date(pubRaw);
+            return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+          })()
         : new Date().toISOString();
       items.push({
-        id: hashId(`x:${handle}:${statusMatch[2]}`),
+        id: hashId(`x:${handle}:${tweetId}`),
         source: `@${handle} on X`,
-        source_url: h.url,
+        source_url: sourceUrl,
         title,
         description: body.slice(0, 280),
-        image_url: h.image ?? null,
+        image_url: imageMatch?.[1] ?? null,
         category: "viral",
         sentiment: detectSentiment(body),
         coin_mentions: extractMentions(body),
@@ -473,11 +471,10 @@ async function fetchXHandlePosts(handle: string): Promise<CryptoNewsItem[]> {
         published_at,
       });
     }
-    // Dedupe by id.
     const seen = new Set<string>();
     return items.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)));
   } catch (e) {
-    console.log("[news] x exa failed", e instanceof Error ? e.message : e);
+    console.log("[news] x nitter parse failed", e instanceof Error ? e.message : e);
     return [];
   }
 }
