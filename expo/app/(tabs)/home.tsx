@@ -895,16 +895,6 @@ export default function HomeFeedScreen() {
           viewerAvatarColor={profile.avatarColor}
         />
 
-        <Pressable style={styles.fab} onPress={openCompose} testID="compose-fab">
-          <LinearGradient
-            colors={[Colors.mint, Colors.cyan]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.fabGradient}
-          >
-            <Feather color={Colors.ink} size={22} strokeWidth={3} />
-          </LinearGradient>
-        </Pressable>
       </SafeAreaView>
     </View>
   );
@@ -936,14 +926,14 @@ function FeedHeader({
           <OurTokenBadge />
           <TrendingTickersRail />
           <CommunitiesRail />
+          <ComposePrompt
+            displayName={displayName}
+            avatarColor={avatarColor}
+            avatarUrl={avatarUrl}
+            onPress={onCompose}
+          />
         </>
       ) : null}
-      <ComposePrompt
-        displayName={displayName}
-        avatarColor={avatarColor}
-        avatarUrl={avatarUrl}
-        onPress={onCompose}
-      />
       <View style={styles.feedTitleRow}>
         <Text style={styles.feedTitle}>
           {filter === "Following"
