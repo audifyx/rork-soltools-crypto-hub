@@ -136,11 +136,14 @@ async function fetchSolBalance(address: string): Promise<number> {
 async function fetchSignatures(
   address: string,
   limit: number,
+  before?: string,
 ): Promise<WalletTransaction[]> {
   try {
+    const opts: Record<string, unknown> = { limit };
+    if (before) opts.before = before;
     const res = await rpcCall<RpcSignaturesItem[]>(
       "getSignaturesForAddress",
-      [address, { limit }],
+      [address, opts],
     );
     return (res ?? []).map((s) => ({
       signature: s.signature,
@@ -152,6 +155,60 @@ async function fetchSignatures(
     console.log("[wallet] getSignaturesForAddress error", e);
     return [];
   }
+}
+
+/**
+ * Find the wallet's earliest signature by paginating backwards from the
+ * most recent transaction using the `before` cursor. Caps at MAX_PAGES so we
+ * don't hammer the RPC on hyper-active wallets — each page is 1000 sigs.
+ */
+async function fetchEarliestSignature(
+  address: string,
+  newestSignature: string,
+): Promise<WalletTransaction | null> {
+  const PAGE = 1000;
+  const MAX_PAGES = 25;
+  let cursor: string | undefined = newestSignature;
+  let oldest: WalletTransaction | null = null;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const batch = await fetchSignatures(address, PAGE, cursor);
+    if (batch.length === 0) break;
+    const last = batch[batch.length - 1];
+    oldest = last;
+    if (batch.length < PAGE) break;
+    cursor = last.signature;
+  }
+  return oldest;
+}
+
+/**
+ * Returns the wallet's lifetime activity summary: the very first transaction
+ * ever made, the most recent, and the total signature count derived from
+ * pagination.
+ */
+async function fetchLifetimeActivity(address: string): Promise<{
+  firstTx: WalletTransaction | null;
+  lastTx: WalletTransaction | null;
+  totalCount: number;
+}> {
+  const PAGE = 1000;
+  const MAX_PAGES = 25;
+  const newest = await fetchSignatures(address, 1);
+  const lastTx = newest[0] ?? null;
+  if (!lastTx) return { firstTx: null, lastTx: null, totalCount: 0 };
+
+  let cursor: string | undefined = lastTx.signature;
+  let firstTx: WalletTransaction = lastTx;
+  let count = 1;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const batch = await fetchSignatures(address, PAGE, cursor);
+    if (batch.length === 0) break;
+    count += batch.length;
+    firstTx = batch[batch.length - 1];
+    if (batch.length < PAGE) break;
+    cursor = firstTx.signature;
+  }
+  return { firstTx, lastTx, totalCount: count };
 }
 
 async function priceMap(mints: string[]): Promise<Record<string, number>> {
@@ -259,19 +316,28 @@ async function enrichTransactions(
   return [...enriched, ...tail];
 }
 
-function computeStats(txs: WalletTransaction[], solPrice: number): WalletStats {
-  const totalTxs = txs.length;
+function computeStats(
+  txs: WalletTransaction[],
+  solPrice: number,
+  override?: { totalTxs?: number; firstSeen?: number; lastSeen?: number },
+): WalletStats {
   const successCount = txs.filter((t) => t.status !== "failed").length;
-  const failedCount = totalTxs - successCount;
-  const successRate = totalTxs > 0 ? (successCount / totalTxs) * 100 : 0;
+  const failedCount = txs.length - successCount;
+  // If we have a real lifetime count from pagination, use it. Otherwise fall
+  // back to the recent slice length so the UI is never empty.
+  const totalTxs = override?.totalTxs ?? txs.length;
+  const sampleSize = txs.length;
+  const successRate = sampleSize > 0 ? (successCount / sampleSize) * 100 : 0;
   const totalFeesSol = txs.reduce((acc, t) => acc + (t.fee ?? 0), 0);
   const totalFeesUsd = totalFeesSol * solPrice;
   const times = txs.map((t) => t.blockTime).filter((t) => t > 0);
-  const firstSeen = times.length ? Math.min(...times) : 0;
-  const lastSeen = times.length ? Math.max(...times) : 0;
+  const sampleFirst = times.length ? Math.min(...times) : 0;
+  const sampleLast = times.length ? Math.max(...times) : 0;
+  const firstSeen = override?.firstSeen && override.firstSeen > 0 ? override.firstSeen : sampleFirst;
+  const lastSeen = override?.lastSeen && override.lastSeen > 0 ? override.lastSeen : sampleLast;
   const activeDays =
     firstSeen && lastSeen
-      ? Math.max(1, Math.ceil((lastSeen - firstSeen) / 86400))
+      ? Math.max(1, Math.round((lastSeen - firstSeen) / 86400))
       : 0;
   const avgTxPerDay = activeDays > 0 ? totalTxs / activeDays : totalTxs;
   return {
@@ -359,10 +425,11 @@ export async function fetchWalletPortfolio(
   };
   if (!isValidSolanaAddress(address)) return empty;
 
-  const [balance, baseTxs, solPriceMap] = await Promise.all([
+  const [balance, baseTxs, solPriceMap, lifetime] = await Promise.all([
     fetchWalletBalance(address),
     fetchWalletTransactions(address, 50),
     priceMap([SOL_MINT]),
+    fetchLifetimeActivity(address),
   ]);
   const solPrice = solPriceMap[SOL_MINT] ?? 0;
 
@@ -382,7 +449,11 @@ export async function fetchWalletPortfolio(
     tokens: enrichedTokens,
   };
 
-  const stats = computeStats(enrichedTxs, solPrice);
+  const stats = computeStats(enrichedTxs, solPrice, {
+    totalTxs: lifetime.totalCount || enrichedTxs.length,
+    firstSeen: lifetime.firstTx?.blockTime ?? 0,
+    lastSeen: lifetime.lastTx?.blockTime ?? 0,
+  });
 
   return {
     address,

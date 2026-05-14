@@ -1192,7 +1192,7 @@ function StatsTab({
         </View>
         <View style={styles.timelineRow}>
           <Text style={styles.timelineLabel}>ACTIVE FOR</Text>
-          <Text style={styles.timelineValue}>{stats.activeDays} days</Text>
+          <Text style={styles.timelineValue}>{stats.activeDays === 1 ? "1 day" : `${stats.activeDays} days`}</Text>
         </View>
         <View style={styles.timelineRow}>
           <Text style={styles.timelineLabel}>SOL PRICE</Text>
