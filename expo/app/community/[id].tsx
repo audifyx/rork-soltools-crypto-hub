@@ -1025,6 +1025,22 @@ export default function CommunityDetailScreen() {
     [activePost?.id, canDeletePost, canModeratePosts, closeInteraction, deleteCommunityPost, showToast, userId],
   );
 
+  const onSubmitGatePasscode = useCallback(() => {
+    if (!community) return;
+    const ok = verifyPasscode(community.id, gatePasscodeInput);
+    if (!ok) {
+      setGatePasscodeError("Incorrect passcode. Try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      return;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    if (userId) markApproved(community.id, userId);
+    if (!isJoined(community.id)) toggleJoin(community.id);
+    setGatePasscodeInput("");
+    setGatePasscodeError(null);
+    showToast("Passcode accepted — joined community");
+  }, [community, gatePasscodeInput, isJoined, markApproved, showToast, toggleJoin, userId, verifyPasscode]);
+
   const submitInteraction = useCallback(async () => {
     const text = interactionText.trim();
     if (!activePost || text.length === 0) return;
@@ -1098,21 +1114,6 @@ export default function CommunityDetailScreen() {
   // actions in the menu. Locked viewers should not be able to leak the
   // invite code or deep-link to outsiders.
   const canShareInvite = joined || canEditMedia;
-  const onSubmitGatePasscode = useCallback(() => {
-    if (!community) return;
-    const ok = verifyPasscode(community.id, gatePasscodeInput);
-    if (!ok) {
-      setGatePasscodeError("Incorrect passcode. Try again.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      return;
-    }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    if (userId) markApproved(community.id, userId);
-    if (!isJoined(community.id)) toggleJoin(community.id);
-    setGatePasscodeInput("");
-    setGatePasscodeError(null);
-    showToast("Passcode accepted — joined community");
-  }, [community, gatePasscodeInput, isJoined, markApproved, showToast, toggleJoin, userId, verifyPasscode]);
   const dataForTab: CommunityPost[] = isLocked
     ? []
     : tab === "recent"
