@@ -238,15 +238,6 @@ export default function AuthScreen() {
               <Perk Icon={AtSign} text="Public trader profile + launchpad" />
             </View>
 
-            <Pressable
-              onPress={() => router.replace("/(tabs)/home")}
-              hitSlop={8}
-              style={styles.skip}
-              testID="continue-guest"
-            >
-              <Text style={styles.skipText}>Continue as guest →</Text>
-            </Pressable>
-
             <Text style={styles.legalLine}>
               By continuing you agree to our{" "}
               <Text
