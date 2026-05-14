@@ -143,6 +143,82 @@ export function getOgMemeTokens(tokens: LaunchToken[], limit: number): LaunchTok
   return tokens.filter(isOgMemeToken).sort(compareOgMemeTokens).slice(0, limit);
 }
 
+const MEME_TERMS = new Set([
+  "meme", "doge", "shib", "shiba", "inu", "pepe", "frog", "cat", "dog",
+  "wojak", "chad", "sigma", "based", "giga", "moon", "rocket", "ape", "apes",
+  "banana", "penguin", "pengu", "pudgy", "popcat", "mew", "mog", "michi",
+  "ponke", "fwog", "fart", "fartcoin", "buttcoin", "butt", "retardio",
+  "troll", "useless", "goatseus", "goat", "mother", "boden", "mumu",
+  "wif", "dogwifhat", "bonk", "smurfcat", "chillguy", "chill", "slerf",
+  "book", "books", "nub", "giga chad", "gigachad", "hippo", "moo",
+]);
+
+const CELEBRITY_TERMS = new Set([
+  "trump", "melania", "elon", "musk", "kanye", "ye", "taylor", "swift",
+  "bieber", "drake", "kardashian", "kim", "kylie", "jenner", "rihanna",
+  "beyonce", "jayz", "snoop", "eminem", "messi", "ronaldo", "lebron",
+  "jordan", "tyson", "mrbeast", "pewdiepie", "logan", "paul", "jake",
+  "andrew", "tate", "ai16z", "vitalik", "saylor", "cz", "sbf", "hawk",
+  "haliey", "welch", "sydney", "sweeney", "sydneysweeney", "selena",
+  "shakira", "madonna", "kanyewest", "snoopdogg", "bieber", "obama",
+  "biden", "putin", "kim jong", "kimjong",
+]);
+
+function wordsOf(token: LaunchToken): string[] {
+  return [
+    normalizedTicker(token),
+    ...token.name.toLowerCase().split(/[^a-z0-9]+/),
+    ...(token.tags ?? []).map((tag) => normalizeTokenTerm(tag)),
+  ].filter(Boolean);
+}
+
+export function isMemeToken(token: LaunchToken): boolean {
+  if (!hasLiveMarket(token) || !hasSafeLiveMarket(token)) return false;
+  const words = wordsOf(token);
+  if (words.some((w) => MEME_TERMS.has(w))) return true;
+  const text = tokenHaystack(token);
+  return /\bmeme\b|memecoin|shitcoin/.test(text);
+}
+
+export function isCelebrityToken(token: LaunchToken): boolean {
+  if (!hasLiveMarket(token) || !hasSafeLiveMarket(token)) return false;
+  const words = wordsOf(token);
+  if (words.some((w) => CELEBRITY_TERMS.has(w))) return true;
+  const name = token.name.toLowerCase();
+  return [
+    "kim jong",
+    "andrew tate",
+    "taylor swift",
+    "jake paul",
+    "logan paul",
+    "haliey welch",
+    "sydney sweeney",
+  ].some((phrase) => name.includes(phrase));
+}
+
+function compareByActivity(a: LaunchToken, b: LaunchToken): number {
+  const v = (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0);
+  if (v !== 0) return v;
+  const m = (b.marketCapUsd ?? 0) - (a.marketCapUsd ?? 0);
+  if (m !== 0) return m;
+  return (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0);
+}
+
+export function getMemeTokens(tokens: LaunchToken[], limit: number): LaunchToken[] {
+  return tokens.filter(isMemeToken).sort(compareByActivity).slice(0, limit);
+}
+
+export function getCelebrityTokens(tokens: LaunchToken[], limit: number): LaunchToken[] {
+  return tokens.filter(isCelebrityToken).sort(compareByActivity).slice(0, limit);
+}
+
+export function getUtilityTokens(tokens: LaunchToken[], limit: number): LaunchToken[] {
+  return tokens
+    .filter((t) => hasLiveMarket(t) && hasSafeLiveMarket(t) && isUtilityToken(t))
+    .sort(compareByActivity)
+    .slice(0, limit);
+}
+
 /**
  * Returns true for the Solana daily-runner profile used by AI Alpha Insights:
  * $1M+ 24h volume, small-cap market cap, and no known large-cap/major names.

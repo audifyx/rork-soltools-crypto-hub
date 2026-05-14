@@ -71,7 +71,7 @@ import {
   useNewSolanaPairs,
 } from "@/lib/api/market";
 import { type DexPair, useDexTokens } from "@/lib/api/dexscreener";
-import { getOgMemeTokens } from "@/lib/alpha-runners";
+import { getOgMemeTokens, getMemeTokens, getCelebrityTokens, getUtilityTokens } from "@/lib/alpha-runners";
 import { patchPostEverywhere } from "@/lib/post-sync";
 import { isSafeToken } from "@/lib/safety";
 import { supabase } from "@/lib/supabase";
@@ -81,7 +81,7 @@ import { LaunchToken } from "@/types/launchpad";
 import { UserPost, useApp } from "@/providers/app-provider";
 import { type Community, type CommunityPost, useSocial } from "@/providers/social-provider";
 
-const FILTERS = ["For You", "Following", "Trending", "Communities", "New Pairs", "Whales", "OG Tokens"] as const;
+const FILTERS = ["For You", "Following", "Trending", "Communities", "New Pairs", "Whales", "OG Tokens", "Memes", "Utility", "Celebrity"] as const;
 type Filter = (typeof FILTERS)[number];
 
 type WhaleFeedEvent = {
@@ -190,8 +190,8 @@ export default function HomeFeedScreen() {
   const [interactionText, setInteractionText] = useState<string>("");
   const [submittingInteraction, setSubmittingInteraction] = useState<boolean>(false);
   const { listings } = useLaunchpad();
-  const { data: trendingTokens } = useTrendingTokens(40);
-  const { data: newPairsData } = useNewSolanaPairs(40);
+  const { data: trendingTokens } = useTrendingTokens(250);
+  const { data: newPairsData } = useNewSolanaPairs(120);
   const { userId, isAuthenticated } = useAuth();
   const [filter, setFilter] = useState<Filter>("For You");
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
@@ -572,7 +572,7 @@ export default function HomeFeedScreen() {
             watchers: 0,
           }))
           .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0))
-          .slice(0, 40);
+          .slice(0, 250);
       const fallback = listings
         .slice()
         .filter((t) =>
@@ -657,7 +657,7 @@ export default function HomeFeedScreen() {
       }
       return merged
         .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, 40)
+        .slice(0, 100)
         .map((t): FeedItem => ({ kind: "token", data: t }));
     }
     if (filter === "Whales") {
@@ -673,7 +673,16 @@ export default function HomeFeedScreen() {
         .map((t): FeedItem => ({ kind: "token", data: t }));
     }
     if (filter === "OG Tokens") {
-      return getOgMemeTokens(listings, 40).map((t): FeedItem => ({ kind: "token", data: t }));
+      return getOgMemeTokens(listings, 60).map((t): FeedItem => ({ kind: "token", data: t }));
+    }
+    if (filter === "Memes") {
+      return getMemeTokens(listings, 80).map((t): FeedItem => ({ kind: "token", data: t }));
+    }
+    if (filter === "Utility") {
+      return getUtilityTokens(listings, 80).map((t): FeedItem => ({ kind: "token", data: t }));
+    }
+    if (filter === "Celebrity") {
+      return getCelebrityTokens(listings, 60).map((t): FeedItem => ({ kind: "token", data: t }));
     }
     if (filter === "Communities") {
       const joinedIds = new Set(joinedCommunities.map((c) => c.id));
@@ -948,7 +957,13 @@ function FeedHeader({
                     ? "Whale activity"
                     : filter === "OG Tokens"
                       ? "OG tokens"
-                      : "Live feed"}
+                      : filter === "Memes"
+                        ? "Meme tokens"
+                        : filter === "Utility"
+                          ? "Utility tokens"
+                          : filter === "Celebrity"
+                            ? "Celebrity tokens"
+                            : "Live feed"}
         </Text>
         <View style={styles.livePill}>
           <View style={styles.liveDot} />
@@ -2028,6 +2043,9 @@ function FeedEmpty({ filter, onCompose }: { filter: Filter; onCompose: () => voi
     "New Pairs": { title: "No new pairs", body: "Newly launched Solana pairs will surface here in real time.", Icon: Zap },
     Whales: { title: "No whale moves", body: "Large holder & high-volume tokens will appear here.", Icon: Waves },
     "OG Tokens": { title: "No OG tokens yet", body: "BUTTCOIN, TROLL, WOJAK, USELESS, PENGU and other OG names will appear when live market data loads.", Icon: Award },
+    Memes: { title: "No meme tokens", body: "Fresh meme runners will show up here as soon as live volume data loads.", Icon: Flame },
+    Utility: { title: "No utility tokens", body: "DePIN, RWA, AI agents, infra and tools surface here when they catch volume.", Icon: Zap },
+    Celebrity: { title: "No celebrity tokens", body: "Trump, Elon, Kanye, Taylor, MrBeast and other celeb coins will appear once trading is live.", Icon: Award },
     Communities: { title: "No communities yet", body: "Discover tribes on Solana — join one or spin up your own.", Icon: Users },
   };
   const c = titles[filter] ?? titles["For You"];
