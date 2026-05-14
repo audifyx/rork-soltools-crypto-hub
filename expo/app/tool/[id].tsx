@@ -2093,6 +2093,7 @@ function WhaleRadarTool({ accent }: { accent: string }) {
 }
 
 function TokenStreamTool({ accent, kind }: { accent: string; kind: string }) {
+  const router = useRouter();
   const { listings } = useLaunchpad();
   const { data: trending } = useTrendingTokens(30);
   const [tf, setTf] = useState<"1h" | "24h" | "7d">("24h");
@@ -2154,35 +2155,47 @@ function TokenStreamTool({ accent, kind }: { accent: string; kind: string }) {
         />
       ) : (
         <View style={styles.list}>
-          {items.map((t, i) => (
-            <View key={t.id} style={styles.rowCard}>
-              <Text style={[styles.rowRank, { color: accent }]}>{i + 1}</Text>
-              <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
-                <Text style={[styles.rowIconText, { color: accent }]}>
-                  {t.ticker.replace("$", "").slice(0, 2)}
-                </Text>
-              </View>
-              <View style={styles.rowMid}>
-                <Text style={styles.rowTitle}>{t.name}</Text>
-                <Text style={styles.rowSub}>
-                  ${t.ticker.replace("$", "")} · {t.venue}
-                </Text>
-              </View>
-              {t.change24hPct != null ? (
-                <Text
-                  style={[
-                    styles.rowChange,
-                    { color: t.change24hPct >= 0 ? Colors.mint : Colors.rose },
-                  ]}
-                >
-                  {t.change24hPct >= 0 ? "+" : ""}
-                  {t.change24hPct.toFixed(1)}%
-                </Text>
-              ) : (
-                <Text style={styles.rowChangeMuted}>—</Text>
-              )}
-            </View>
-          ))}
+          {items.map((t, i) => {
+            const isAddress = typeof t.id === "string" && t.id.length >= 32;
+            const onOpen = () => {
+              Haptics.selectionAsync().catch(() => {});
+              if (isAddress) {
+                router.push({ pathname: "/tool/token-lookup", params: { address: t.id } });
+              } else {
+                router.push({ pathname: "/tool/token-lookup", params: { address: t.ticker.replace("$", "") } });
+              }
+            };
+            return (
+              <Pressable key={t.id} onPress={onOpen} style={({ pressed }) => [styles.rowCard, pressed && { opacity: 0.7 }]} testID={`stream-token-${t.id}`}>
+                <Text style={[styles.rowRank, { color: accent }]}>{i + 1}</Text>
+                <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
+                  <Text style={[styles.rowIconText, { color: accent }]}>
+                    {t.ticker.replace("$", "").slice(0, 2)}
+                  </Text>
+                </View>
+                <View style={styles.rowMid}>
+                  <Text style={styles.rowTitle}>{t.name}</Text>
+                  <Text style={styles.rowSub}>
+                    ${t.ticker.replace("$", "")} · {t.venue}
+                  </Text>
+                </View>
+                {t.change24hPct != null ? (
+                  <Text
+                    style={[
+                      styles.rowChange,
+                      { color: t.change24hPct >= 0 ? Colors.mint : Colors.rose },
+                    ]}
+                  >
+                    {t.change24hPct >= 0 ? "+" : ""}
+                    {t.change24hPct.toFixed(1)}%
+                  </Text>
+                ) : (
+                  <Text style={styles.rowChangeMuted}>—</Text>
+                )}
+                <ChevronRight color={Colors.muted} size={14} strokeWidth={2.4} style={{ marginLeft: 6 }} />
+              </Pressable>
+            );
+          })}
         </View>
       )}
     </View>
