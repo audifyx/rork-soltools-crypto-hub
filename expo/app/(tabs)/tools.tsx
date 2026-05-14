@@ -179,22 +179,6 @@ const TOOLS: Tool[] = [
     status: "LIVE",
     category: "analysis",
   },
-  {
-    id: "ai-chat",
-    route: "/tool/ai-chat",
-    name: "Chat with AI",
-    tagline: "Ask anything about a token or wallet",
-    description:
-      "Conversational AI with live Helius + RPC blockchain context. Ask about flows, history, narratives, and risk in plain English.",
-    Icon: MessageCircle,
-    accent: Colors.orange,
-    glow: "rgba(201,206,216,0.14)",
-    gradient: [Colors.orange, Colors.rose],
-    tags: ["GPT", "RPC", "Context"],
-    status: "BETA",
-    category: "analysis",
-  },
-
   // New AI / Whale / Alerts cards
   {
     id: "whale-tracker",
@@ -739,7 +723,6 @@ const FULL_UI_TOOL_IDS = new Set<string>([
   "token-lookup",
   "wallet-tracker",
   "ai-analysis",
-  "ai-chat",
   "ai-wallet-analyzer",
   "pnl-analyzer",
   "portfolio-cards",
