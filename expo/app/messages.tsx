@@ -1,6 +1,5 @@
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -11,9 +10,7 @@ import {
   CheckCheck,
   ChevronRight,
   Coins,
-  Hand,
   Inbox,
-  Mail,
   Pencil,
   Pin,
   PinOff,
@@ -22,6 +19,7 @@ import {
   ShieldCheck,
   Sparkles,
   UserPlus,
+  Users,
   X,
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useRef, useState } from "react";
@@ -48,7 +46,6 @@ import { navigateBack } from "@/lib/navigation";
 import { Conversation, DMUser, useMessageableUsersSearch, useMessages } from "@/providers/messages-provider";
 
 type Tab = "inbox" | "requests";
-type SmartFilter = "all" | "unread" | "verified" | "pinned";
 
 const ACCENT = Colors.mint;
 const ACCENT_SOFT = "rgba(63,169,255,0.14)";
@@ -101,7 +98,7 @@ export default function MessagesScreen() {
     inbox,
     requests,
     totalUnread,
-    suggestedUsers,
+    knownUsers,
     ensureConversationWith,
     deleteConversation,
     deleteConversationForEveryone,
@@ -110,20 +107,15 @@ export default function MessagesScreen() {
     markRead,
   } = useMessages();
   const [tab, setTab] = useState<Tab>("inbox");
-  const [smart, setSmart] = useState<SmartFilter>("all");
   const [query, setQuery] = useState<string>("");
   const [composeOpen, setComposeOpen] = useState<boolean>(false);
+  const remoteUserSearch = useMessageableUsersSearch(query);
 
   const dataSource = tab === "inbox" ? inbox : requests;
 
   const filtered = useMemo<Conversation[]>(() => {
     const q = query.trim().toLowerCase();
-    let list = dataSource;
-    if (tab === "inbox") {
-      if (smart === "unread") list = list.filter((c) => c.unread > 0);
-      else if (smart === "verified") list = list.filter((c) => c.user.verified);
-      else if (smart === "pinned") list = list.filter((c) => c.pinned);
-    }
+    const list = dataSource;
     if (q.length === 0) return list;
     return list.filter(
       (c) =>
@@ -131,11 +123,44 @@ export default function MessagesScreen() {
         c.user.name.toLowerCase().includes(q) ||
         c.lastMessage.toLowerCase().includes(q),
     );
-  }, [dataSource, query, smart, tab]);
+  }, [dataSource, query]);
+
+  /** People matching the active search who aren't already a conversation. */
+  const peopleResults = useMemo<DMUser[]>(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length === 0) return [];
+    const existingHandles = new Set(dataSource.map((c) => c.user.handle.toLowerCase()));
+    const merged: DMUser[] = [...(remoteUserSearch.data ?? []), ...knownUsers];
+    const seen = new Set<string>();
+    const out: DMUser[] = [];
+    for (const u of merged) {
+      const key = (u.userId ?? u.handle).toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (existingHandles.has(u.handle.toLowerCase())) continue;
+      if (u.handle.toLowerCase().includes(q) || u.name.toLowerCase().includes(q)) {
+        out.push(u);
+      }
+    }
+    return out.slice(0, 12);
+  }, [query, remoteUserSearch.data, knownUsers, dataSource]);
+
+  /** Compact "active now" rail — only users currently online. */
+  const onlineUsers = useMemo<DMUser[]>(() => {
+    const seen = new Set<string>();
+    const out: DMUser[] = [];
+    for (const u of knownUsers) {
+      if (!u.online) continue;
+      const key = u.userId ?? u.handle;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(u);
+      if (out.length >= 20) break;
+    }
+    return out;
+  }, [knownUsers]);
 
   const unreadCount = useMemo<number>(() => inbox.filter((c) => c.unread > 0).length, [inbox]);
-  const verifiedCount = useMemo<number>(() => inbox.filter((c) => c.user.verified).length, [inbox]);
-  const pinnedCount = useMemo<number>(() => inbox.filter((c) => c.pinned).length, [inbox]);
   const flaggedCount = useMemo<number>(() => requests.filter(isLikelyScam).length, [requests]);
 
   const openConvo = async (id: string) => {
@@ -156,7 +181,6 @@ export default function MessagesScreen() {
   }, [inbox, markRead]);
 
   const [actionSheet, setActionSheet] = useState<Conversation | null>(null);
-  const [hintDismissed, setHintDismissed] = useState<boolean>(false);
 
   const onLongPressConvo = (conv: Conversation) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -222,13 +246,6 @@ export default function MessagesScreen() {
     </View>
   );
 
-  const smartChips: { id: SmartFilter; label: string; count: number; Icon: typeof Inbox }[] = [
-    { id: "all", label: "All", count: inbox.length, Icon: Inbox },
-    { id: "unread", label: "Unread", count: unreadCount, Icon: Mail },
-    { id: "verified", label: "Verified", count: verifiedCount, Icon: BadgeCheck },
-    { id: "pinned", label: "Pinned", count: pinnedCount, Icon: Pin },
-  ];
-
   return (
     <View style={styles.root} testID="messages-screen">
       <Stack.Screen options={{ headerShown: false }} />
@@ -246,8 +263,8 @@ export default function MessagesScreen() {
             <ArrowLeft color={Colors.text} size={18} strokeWidth={2.4} />
           </Pressable>
           <View style={styles.titleRow}>
-            <Text style={styles.title}>Messages</Text>
-            {totalUnread > 0 ? (
+            <Text style={styles.title}>{tab === "requests" ? "Requests" : "Messages"}</Text>
+            {tab === "inbox" && totalUnread > 0 ? (
               <View style={styles.titleBadge}>
                 <Text style={styles.titleBadgeText}>{totalUnread}</Text>
               </View>
@@ -282,7 +299,7 @@ export default function MessagesScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search"
+            placeholder="Search people, chats…"
             placeholderTextColor={Colors.muted}
             style={styles.searchInput}
             autoCapitalize="none"
@@ -295,111 +312,6 @@ export default function MessagesScreen() {
           ) : null}
         </View>
 
-        <View style={styles.filterWrap}>
-          {(["inbox", "requests"] as Tab[]).map((t) => {
-            const active = tab === t;
-            const count = t === "inbox" ? inbox.length : requests.length;
-            return (
-              <Pressable
-                key={t}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setTab(t);
-                }}
-                style={[styles.filterChip, active && styles.filterChipActive]}
-                testID={`messages-tab-${t}`}
-              >
-                <Text style={[styles.filterText, active && styles.filterTextActive]}>
-                  {t === "inbox" ? "Inbox" : "Requests"}
-                </Text>
-                {count > 0 ? (
-                  <View style={[styles.filterCount, active && styles.filterCountActive]}>
-                    <Text style={[styles.filterCountText, active && styles.filterCountTextActive]}>{count}</Text>
-                  </View>
-                ) : null}
-                {t === "requests" && flaggedCount > 0 ? (
-                  <View style={styles.flagDot}>
-                    <ShieldAlert color={Colors.text} size={9} strokeWidth={2.8} />
-                  </View>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {tab === "inbox" ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.smartRow}
-          >
-            {smartChips.map((s) => {
-              const active = smart === s.id;
-              const Icon = s.Icon;
-              return (
-                <Pressable
-                  key={s.id}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    setSmart(s.id);
-                  }}
-                  style={({ pressed }) => [
-                    styles.smartChip,
-                    active && styles.smartChipActive,
-                    pressed && styles.smartChipPressed,
-                  ]}
-                  testID={`smart-${s.id}`}
-                >
-                  <Icon
-                    color={active ? ACCENT : Colors.muted}
-                    size={13}
-                    strokeWidth={2.6}
-                    fill={active && s.id === "pinned" ? ACCENT : "transparent"}
-                  />
-                  <Text style={[styles.smartText, active && styles.smartTextActive]} numberOfLines={1}>
-                    {s.label}
-                  </Text>
-                  {s.count > 0 ? (
-                    <View style={[styles.smartCountBadge, active && styles.smartCountBadgeActive]}>
-                      <Text style={[styles.smartCountText, active && styles.smartCountTextActive]}>
-                        {s.count > 99 ? "99+" : s.count}
-                      </Text>
-                    </View>
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        ) : null}
-
-        {tab === "inbox" ? (
-          <Pressable onPress={openSelfChat} style={styles.selfChatPin} testID="open-self-chat">
-            <LinearGradient
-              colors={["rgba(63,169,255,0.16)", "rgba(91,141,239,0.08)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.selfChatIcon}>
-              <Sparkles color={ACCENT} size={14} strokeWidth={2.6} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.selfChatTitle}>Notes to self</Text>
-              <Text style={styles.selfChatBody}>Private space for alpha, links, screenshots.</Text>
-            </View>
-            <ChevronRight color={Colors.muted} size={15} strokeWidth={2.4} />
-          </Pressable>
-        ) : null}
-
-        {tab === "requests" && flaggedCount > 0 ? (
-          <View style={styles.scamBanner}>
-            <ShieldAlert color={Colors.orange} size={13} strokeWidth={2.6} />
-            <Text style={styles.scamBannerText}>
-              {flaggedCount} request{flaggedCount === 1 ? "" : "s"} flagged as likely scam
-            </Text>
-          </View>
-        ) : null}
-
         <FlatList
           data={filtered}
           keyExtractor={(c) => c.id}
@@ -407,69 +319,171 @@ export default function MessagesScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
+          keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
-            tab === "inbox" && smart === "all" && suggestedUsers.length > 0 ? (
-              <View style={styles.suggestionsWrap}>
-                <View style={styles.suggestionsHead}>
-                  <Sparkles color={ACCENT} size={13} strokeWidth={2.6} />
-                  <Text style={styles.suggestionsTitle}>Pinned</Text>
+            <View>
+              {query.length === 0 ? (
+                <View style={styles.hubRow}>
+                  <HubTile
+                    label="Notes to self"
+                    sub="Private"
+                    Icon={Sparkles}
+                    tint={ACCENT}
+                    onPress={openSelfChat}
+                    testID="hub-notes"
+                  />
+                  <HubTile
+                    label={tab === "requests" ? "Inbox" : "Requests"}
+                    sub={
+                      tab === "requests"
+                        ? `${inbox.length} chats`
+                        : requests.length > 0
+                        ? `${requests.length} pending`
+                        : "None"
+                    }
+                    Icon={tab === "requests" ? Inbox : UserPlus}
+                    tint={Colors.violet}
+                    badge={tab === "inbox" && requests.length > 0 ? requests.length : 0}
+                    warn={tab === "inbox" && flaggedCount > 0}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      setTab(tab === "requests" ? "inbox" : "requests");
+                    }}
+                    testID="hub-requests"
+                  />
+                  <HubTile
+                    label="New chat"
+                    sub="Find people"
+                    Icon={Users}
+                    tint={Colors.cyan}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      setComposeOpen(true);
+                    }}
+                    testID="hub-new"
+                  />
                 </View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.suggestionsRow}
-                >
-                  {suggestedUsers.slice(0, 8).map((u) => (
+              ) : null}
+
+              {tab === "inbox" && query.length === 0 && onlineUsers.length > 0 ? (
+                <View style={styles.activeWrap}>
+                  <View style={styles.activeHead}>
+                    <View style={styles.activeDot} />
+                    <Text style={styles.activeTitle}>Active now</Text>
+                    <Text style={styles.activeCount}>{onlineUsers.length}</Text>
+                  </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.activeRow}
+                  >
+                    {onlineUsers.map((u) => (
+                      <Pressable
+                        key={u.userId ?? u.handle}
+                        onPress={() => onStartWith(u)}
+                        style={({ pressed }) => [styles.activeChip, pressed && styles.activeChipPressed]}
+                        testID={`active-${u.handle}`}
+                      >
+                        <View style={[styles.activeAvatar, { backgroundColor: u.color }]}>
+                          {u.avatarUrl ? (
+                            <ExpoImage source={{ uri: u.avatarUrl }} style={styles.activeAvatarImg} contentFit="cover" />
+                          ) : (
+                            <Text style={styles.activeInit}>{u.name.slice(0, 1).toUpperCase()}</Text>
+                          )}
+                          <View style={styles.activeOnlineDot} />
+                        </View>
+                        <Text style={styles.activeName} numberOfLines={1}>
+                          {u.name.split(" ")[0]}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              {query.length > 0 && peopleResults.length > 0 ? (
+                <View style={styles.peopleWrap}>
+                  <Text style={styles.sectionLabel}>People</Text>
+                  {peopleResults.map((u) => (
                     <Pressable
-                      key={u.handle}
+                      key={u.userId ?? u.handle}
                       onPress={() => onStartWith(u)}
-                      style={styles.suggestCard}
-                      testID={`suggest-${u.handle}`}
+                      style={({ pressed }) => [styles.personRow, pressed && styles.personRowPressed]}
+                      testID={`person-${u.handle}`}
                     >
-                      <LinearGradient colors={[u.color, `${u.color}99`]} style={styles.suggestAvatar}>
+                      <View style={[styles.personAvatar, { backgroundColor: u.color }]}>
                         {u.avatarUrl ? (
-                          <ExpoImage source={{ uri: u.avatarUrl }} style={styles.suggestAvatarImg} contentFit="cover" />
+                          <ExpoImage source={{ uri: u.avatarUrl }} style={styles.personAvatarImg} contentFit="cover" />
                         ) : (
-                          <Text style={styles.suggestInit}>
-                            {u.name.slice(0, 1).toUpperCase()}
-                          </Text>
+                          <Text style={styles.personInit}>{u.name.slice(0, 1).toUpperCase()}</Text>
                         )}
-                        {u.online ? <View style={styles.onlineRing} /> : null}
-                      </LinearGradient>
-                      <Text style={styles.suggestName} numberOfLines={1}>
-                        {u.name}
-                      </Text>
-                      <Text style={styles.suggestHandle} numberOfLines={1}>
-                        {u.handle}
-                      </Text>
+                        {u.online ? <View style={styles.personOnlineDot} /> : null}
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={styles.personNameRow}>
+                          <Text style={styles.personName} numberOfLines={1}>{u.name}</Text>
+                          {u.verified ? <BadgeCheck color={ACCENT} size={13} strokeWidth={2.8} /> : null}
+                        </View>
+                        <Text style={styles.personHandle} numberOfLines={1}>{u.handle}</Text>
+                      </View>
+                      <View style={styles.personCta}>
+                        <Pencil color={ACCENT} size={13} strokeWidth={2.6} />
+                      </View>
                     </Pressable>
                   ))}
-                </ScrollView>
-              </View>
-            ) : null
+                  {filtered.length > 0 ? (
+                    <Text style={[styles.sectionLabel, { marginTop: 14 }]}>Chats</Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {tab === "requests" && flaggedCount > 0 ? (
+                <View style={styles.scamBanner}>
+                  <ShieldAlert color={Colors.orange} size={13} strokeWidth={2.6} />
+                  <Text style={styles.scamBannerText}>
+                    {flaggedCount} request{flaggedCount === 1 ? "" : "s"} flagged as likely scam
+                  </Text>
+                </View>
+              ) : null}
+
+              {query.length === 0 && filtered.length > 0 ? (
+                <View style={styles.chatsHead}>
+                  <Text style={styles.sectionLabel}>{tab === "requests" ? "Requests" : "Chats"}</Text>
+                  {tab === "inbox" && unreadCount > 0 ? (
+                    <Text style={styles.chatsHeadCount}>{unreadCount} unread</Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
           }
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <View style={styles.emptyIcon}>
-                {tab === "inbox" ? (
-                  <Inbox color={ACCENT} size={28} strokeWidth={2.4} />
-                ) : (
-                  <UserPlus color={ACCENT} size={28} strokeWidth={2.4} />
-                )}
+            query.length > 0 && peopleResults.length === 0 ? (
+              <View style={styles.empty}>
+                <View style={styles.emptyIcon}>
+                  <Search color={ACCENT} size={26} strokeWidth={2.4} />
+                </View>
+                <Text style={styles.emptyTitle}>No matches</Text>
+                <Text style={styles.emptyBody}>Try a different handle or name.</Text>
               </View>
-              <Text style={styles.emptyTitle}>
-                {tab === "inbox"
-                  ? smart === "all"
-                    ? "No messages yet"
-                    : `No ${smart} messages`
-                  : "No pending requests"}
-              </Text>
-              <Text style={styles.emptyBody}>
-                {tab === "inbox"
-                  ? "Tap the compose button to message a trader, founder, or whale on Crypto Community App."
-                  : "When traders you don't follow message you, they'll land here first."}
-              </Text>
-            </View>
+            ) : query.length > 0 ? null : (
+              <View style={styles.empty}>
+                <View style={styles.emptyIcon}>
+                  {tab === "inbox" ? (
+                    <Inbox color={ACCENT} size={28} strokeWidth={2.4} />
+                  ) : (
+                    <UserPlus color={ACCENT} size={28} strokeWidth={2.4} />
+                  )}
+                </View>
+                <Text style={styles.emptyTitle}>
+                  {tab === "inbox" ? "No messages yet" : "No pending requests"}
+                </Text>
+                <Text style={styles.emptyBody}>
+                  {tab === "inbox"
+                    ? "Tap New chat to start a conversation with a trader, founder, or whale."
+                    : "When traders you don't follow message you, they'll land here first."}
+                </Text>
+              </View>
+            )
           }
         />
       </SafeAreaView>
@@ -535,6 +549,48 @@ export default function MessagesScreen() {
         }}
       />
     </View>
+  );
+}
+
+function HubTile({
+  label,
+  sub,
+  Icon,
+  tint,
+  badge,
+  warn,
+  onPress,
+  testID,
+}: {
+  label: string;
+  sub: string;
+  Icon: typeof Inbox;
+  tint: string;
+  badge?: number;
+  warn?: boolean;
+  onPress: () => void;
+  testID?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.hubTile, pressed && styles.hubTilePressed]}
+      testID={testID}
+    >
+      <View style={[styles.hubIconWrap, { backgroundColor: `${tint}22`, borderWidth: 1, borderColor: `${tint}55` }]}>
+        <Icon color={tint} size={16} strokeWidth={2.6} />
+      </View>
+      <View>
+        <Text style={styles.hubLabel} numberOfLines={1}>{label}</Text>
+        <Text style={styles.hubSub} numberOfLines={1}>{sub}</Text>
+      </View>
+      {badge && badge > 0 ? (
+        <View style={styles.hubBadge}>
+          <Text style={styles.hubBadgeText}>{badge > 99 ? "99+" : badge}</Text>
+        </View>
+      ) : null}
+      {warn ? <View style={styles.hubWarnDot} /> : null}
+    </Pressable>
   );
 }
 
@@ -971,83 +1027,134 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: Colors.text, fontSize: 15, fontWeight: "700", padding: 0 },
 
-  filterWrap: { flexDirection: "row", gap: 6, marginTop: 10, marginHorizontal: 14, padding: 4, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, borderColor: CARD_BORDER },
-  filterChip: { flex: 1, height: 34, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 13, borderRadius: 10 },
-  filterChipActive: { backgroundColor: ACCENT },
-  filterText: { color: Colors.muted, fontSize: 13, fontWeight: "900" },
-  filterTextActive: { color: Colors.ink },
-  filterCount: { minWidth: 18, height: 18, borderRadius: 9, backgroundColor: "rgba(255,255,255,0.10)", alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
-  filterCountActive: { backgroundColor: "rgba(0,0,0,0.18)" },
-  filterCountText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
-  filterCountTextActive: { color: Colors.ink },
-  flagDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Colors.orange,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  smartRow: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 2, gap: 6, flexDirection: "row" },
-  smartChip: {
-    height: 30,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 11,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.04)",
+  hubRow: { flexDirection: "row", gap: 8, paddingHorizontal: 14, marginTop: 12 },
+  hubTile: {
+    flex: 1,
+    minHeight: 86,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: CARD_FILL,
     borderWidth: 1,
     borderColor: CARD_BORDER,
+    justifyContent: "space-between",
+    overflow: "hidden",
   },
-  smartChipActive: {
-    backgroundColor: ACCENT_SOFT,
-    borderColor: "rgba(63,169,255,0.55)",
+  hubTilePressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
+  hubIconWrap: {
+    width: 32, height: 32, borderRadius: 11,
+    alignItems: "center", justifyContent: "center",
   },
-  smartChipPressed: {
-    opacity: 0.85,
-  },
-  smartCountBadge: {
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 5,
-    borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.08)",
+  hubLabel: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.2 },
+  hubSub: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  hubBadge: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
     alignItems: "center",
     justifyContent: "center",
-  },
-  smartCountBadgeActive: {
     backgroundColor: ACCENT,
   },
-  smartCountText: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 0.2 },
-  smartCountTextActive: { color: Colors.ink },
-  smartText: { color: Colors.muted, fontSize: 12, fontWeight: "800", letterSpacing: 0.1 },
-  smartTextActive: { color: ACCENT },
+  hubBadgeText: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
+  hubWarnDot: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: Colors.orange,
+  },
 
-  longPressHint: {
-    marginTop: 10,
-    marginHorizontal: 18,
+  activeWrap: { marginTop: 18 },
+  activeHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 13,
-    backgroundColor: ACCENT_SOFT,
-    borderWidth: 1,
-    borderColor: "rgba(63,169,255,0.30)",
+    gap: 7,
+    paddingHorizontal: 18,
+    marginBottom: 10,
   },
-  longPressHintIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
+  activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.mint },
+  activeTitle: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: 0.2 },
+  activeCount: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
+  activeRow: { paddingHorizontal: 14, gap: 10 },
+  activeChip: { width: 62, alignItems: "center" },
+  activeChipPressed: { opacity: 0.7 },
+  activeAvatar: {
+    width: 50, height: 50, borderRadius: 25,
+    alignItems: "center", justifyContent: "center",
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: Colors.mint,
+  },
+  activeAvatarImg: { width: "100%", height: "100%" },
+  activeInit: { color: "#FFFFFF", fontSize: 18, fontWeight: "800" },
+  activeOnlineDot: {
+    position: "absolute",
+    bottom: -1, right: -1,
+    width: 12, height: 12, borderRadius: 6,
+    backgroundColor: Colors.mint,
+    borderWidth: 2,
+    borderColor: Colors.ink,
+  },
+  activeName: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 6, maxWidth: 60 },
+
+  peopleWrap: { paddingHorizontal: 14, marginTop: 14 },
+  sectionLabel: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  personRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(63,169,255,0.18)",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    marginBottom: 6,
   },
-  longPressHintText: { flex: 1, color: Colors.text, fontSize: 12, fontWeight: "700", letterSpacing: 0.1 },
-  longPressHintBold: { color: ACCENT, fontWeight: "900" },
+  personRowPressed: { opacity: 0.8 },
+  personAvatar: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" },
+  personAvatarImg: { width: "100%", height: "100%" },
+  personInit: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
+  personOnlineDot: {
+    position: "absolute",
+    bottom: -1, right: -1,
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: Colors.mint,
+    borderWidth: 2,
+    borderColor: Colors.ink,
+  },
+  personNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  personName: { color: Colors.text, fontSize: 14, fontWeight: "800", flexShrink: 1 },
+  personHandle: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 1 },
+  personCta: {
+    width: 30, height: 30, borderRadius: 10,
+    backgroundColor: ACCENT_SOFT,
+    borderWidth: 1, borderColor: "rgba(63,169,255,0.35)",
+    alignItems: "center", justifyContent: "center",
+  },
+
+  chatsHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  chatsHeadCount: { color: ACCENT, fontSize: 11, fontWeight: "900", letterSpacing: 0.3 },
+
   scamBanner: {
     marginTop: 10,
     marginHorizontal: 18,
@@ -1066,40 +1173,8 @@ const styles = StyleSheet.create({
   listContent: { paddingTop: 12, paddingBottom: 140, flexGrow: 1 },
   sep: { height: 8 },
 
-  suggestionsWrap: { marginTop: 8, marginBottom: 10 },
-  suggestionsHead: { paddingHorizontal: 18, flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
-  suggestionsTitle: { color: Colors.muted, fontSize: 12, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase" },
-  suggestionsRow: { paddingHorizontal: 18, gap: 12 },
-  suggestCard: { width: 82, paddingVertical: 10, paddingHorizontal: 6, alignItems: "center", borderRadius: 20, backgroundColor: "rgba(255,255,255,0.045)", borderWidth: 1, borderColor: CARD_BORDER },
-  suggestAvatar: { width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  suggestAvatarImg: { width: "100%", height: "100%" },
-  suggestInit: { color: "#FFFFFF", fontSize: 22, fontWeight: "700" },
-  onlineRing: { position: "absolute", bottom: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.mint, borderWidth: 2, borderColor: Colors.ink },
-  suggestName: { color: Colors.text, fontSize: 12, fontWeight: "800", marginTop: 7, maxWidth: 70 },
-  suggestHandle: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 1, maxWidth: 70 },
-
   rowOuter: { marginHorizontal: 14 },
-  selfChatPin: {
-    marginHorizontal: 18,
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(63,169,255,0.34)",
-    backgroundColor: Colors.card,
-  },
-  selfChatIcon: {
-    width: 36, height: 36, borderRadius: 12,
-    backgroundColor: "rgba(63,169,255,0.16)", borderWidth: 1, borderColor: "rgba(63,169,255,0.42)",
-    alignItems: "center", justifyContent: "center",
-  },
-  selfChatTitle: { color: Colors.text, fontSize: 13, fontWeight: "900" },
-  selfChatBody: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  onlineRing: { position: "absolute", bottom: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.mint, borderWidth: 2, borderColor: Colors.ink },
 
   actionSheet: {
     backgroundColor: Colors.panel,
