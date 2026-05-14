@@ -31,6 +31,7 @@ import {
   X,
   TrendingDown,
   TrendingUp,
+  Users,
   Waves,
   Zap,
 } from "lucide-react-native";
