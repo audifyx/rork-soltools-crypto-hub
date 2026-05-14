@@ -8,6 +8,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import Colors from "@/constants/colors";
 import { useSocial } from "@/providers/social-provider";
+import { useCommunityAccess } from "@/providers/community-access-provider";
+import { useAuth } from "@/providers/auth-provider";
 
 function fmtCount(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -18,6 +20,8 @@ function fmtCount(n: number): string {
 export default function CommunitiesRail() {
   const router = useRouter();
   const { trendingCommunities, joinedCommunities, isJoined, toggleJoin } = useSocial();
+  const { getConfig: getAccessConfig } = useCommunityAccess();
+  const { userId } = useAuth();
 
   const featured = trendingCommunities.slice(0, 6);
 
@@ -76,6 +80,13 @@ export default function CommunitiesRail() {
 
         {featured.map((c) => {
           const joined = isJoined(c.id);
+          const accessCfg = getAccessConfig(c.id);
+          const approvedLocally = userId
+            ? accessCfg.approvedMemberIds.includes(userId)
+            : false;
+          const nonPublic =
+            !!(c.isPrivate || c.holderOnly) ||
+            (accessCfg.accessType !== "public");
           return (
             <Pressable
               key={c.id}
@@ -141,8 +152,10 @@ export default function CommunitiesRail() {
                       // Non-public communities must clear their gate on the
                       // detail screen (passcode / request / holder verify).
                       // Public communities can be joined directly here.
-                      const locked = !!(c.isPrivate || c.holderOnly);
-                      if (!joined && locked) {
+                      // Any non-public access type (private/holder/passcode/
+                      // request) must clear its gate on the detail screen. The
+                      // gate persists local approval so re-entry is instant.
+                      if (nonPublic && !approvedLocally) {
                         router.push({ pathname: "/community/[id]", params: { id: c.id } });
                         return;
                       }
@@ -163,7 +176,11 @@ export default function CommunitiesRail() {
                         { color: joined ? Colors.text : Colors.ink },
                       ]}
                     >
-                      {joined ? "JOINED" : (c.isPrivate || c.holderOnly) ? "UNLOCK" : "JOIN"}
+                      {joined && approvedLocally
+                        ? "JOINED"
+                        : nonPublic
+                          ? "UNLOCK"
+                          : "JOIN"}
                     </Text>
                   </Pressable>
                 </View>

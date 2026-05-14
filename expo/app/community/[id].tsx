@@ -180,6 +180,7 @@ export default function CommunityDetailScreen() {
     rejectRequest,
     verifyPasscode,
     isRequestPending,
+    markApproved,
   } = useCommunityAccess();
   const [tab, setTab] = useState<Tab>("recent");
   const [composer, setComposer] = useState<string>("");
@@ -660,11 +661,12 @@ export default function CommunityDetailScreen() {
       return;
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    toggleJoin(community.id);
+    if (userId) markApproved(community.id, userId);
+    if (!isJoined(community.id)) toggleJoin(community.id);
     setPasscodeOpen(false);
     setPasscodeInput("");
     showToast("Passcode accepted — joined community");
-  }, [community, passcodeInput, showToast, toggleJoin, verifyPasscode]);
+  }, [community, isJoined, markApproved, passcodeInput, showToast, toggleJoin, userId, verifyPasscode]);
 
   const onApproveRequest = useCallback(
     (uid: string) => {
@@ -702,7 +704,8 @@ export default function CommunityDetailScreen() {
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      toggleJoin(community.id);
+      if (userId) markApproved(community.id, userId);
+      if (!isJoined(community.id)) toggleJoin(community.id);
       setHolderGateOpen(false);
       showToast("Holder verified — joined community");
     } catch (e) {
@@ -711,7 +714,7 @@ export default function CommunityDetailScreen() {
     } finally {
       setHolderGateScanning(false);
     }
-  }, [community, holderGateAddress, showToast, toggleJoin]);
+  }, [community, holderGateAddress, isJoined, markApproved, showToast, toggleJoin, userId]);
 
   const onToggleNotify = useCallback(() => {
     const next = !notifyOn;
@@ -1045,7 +1048,14 @@ export default function CommunityDetailScreen() {
     />
   );
 
-  const isLocked = effectiveAccessType !== "public" && !joined && !canEditMedia;
+  // Local approval flag is the source of truth for unlocked viewers. We do NOT
+  // rely on `joined` alone because a viewer may have joined when the community
+  // was still public, or via a race outside the gate flow. Owners always pass.
+  const isApprovedLocally = userId
+    ? accessConfig?.approvedMemberIds.includes(userId) ?? false
+    : false;
+  const isLocked =
+    effectiveAccessType !== "public" && !canEditMedia && !isApprovedLocally && !isOwner;
   // Members + owner are the only ones who can see invite/share/copy-link
   // actions in the menu. Locked viewers should not be able to leak the
   // invite code or deep-link to outsiders.
@@ -1061,11 +1071,12 @@ export default function CommunityDetailScreen() {
       return;
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    toggleJoin(community.id);
+    if (userId) markApproved(community.id, userId);
+    if (!isJoined(community.id)) toggleJoin(community.id);
     setGatePasscodeInput("");
     setGatePasscodeError(null);
     showToast("Passcode accepted — joined community");
-  }, [community, gatePasscodeInput, showToast, toggleJoin, verifyPasscode]);
+  }, [community, gatePasscodeInput, isJoined, markApproved, showToast, toggleJoin, userId, verifyPasscode]);
   const dataForTab: CommunityPost[] = isLocked
     ? []
     : tab === "recent"
