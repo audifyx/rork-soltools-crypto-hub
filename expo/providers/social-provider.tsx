@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Colors from "@/constants/colors";
 import type { CommunityTokenCard } from "@/lib/community-token";
+import { loadAccessMap } from "@/lib/community-access";
 import { normalizeMediaUrl } from "@/lib/media";
 import { patchPostEverywhere } from "@/lib/post-sync";
 import { supabase } from "@/lib/supabase";
@@ -513,6 +514,29 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
   const toggleJoinMut = useMutation({
     mutationFn: async (id: string) => {
       const has = joined.includes(id);
+      // Defensive gate enforcement: if the community is non-public (private or
+      // holders-only) and the viewer has not been approved locally and is not
+      // the owner, refuse the join. This guarantees no UI surface (rail,
+      // detail, deep-links, future surfaces) can accidentally bypass the
+      // passcode / request / holder verify flow.
+      if (!has) {
+        const target = communities.find((c) => c.id === id);
+        const gated = !!target && (!!target.isPrivate || !!target.holderOnly);
+        const isOwner = !!target && !!userId && target.ownerId === userId;
+        if (gated && !isOwner) {
+          try {
+            const accessMap = await loadAccessMap();
+            const cfg = accessMap[id];
+            const approved = !!cfg && !!userId && cfg.approvedMemberIds.includes(userId);
+            if (!approved) {
+              throw new Error("This community is locked. Unlock it from the community screen to join.");
+            }
+          } catch (e) {
+            if (e instanceof Error && e.message.startsWith("This community is locked")) throw e;
+            throw new Error("This community is locked. Unlock it from the community screen to join.");
+          }
+        }
+      }
       if (isAuthenticated && userId) {
         if (has) {
           await supabase
@@ -535,6 +559,17 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
     onMutate: (id: string) => {
       const prev = joined;
       const wasJoined = prev.includes(id);
+      // Skip optimistic-add for gated communities the viewer hasn't unlocked.
+      // Otherwise the JOIN/Joined chip would flash on before the mutation
+      // rejects, giving the appearance of a successful join.
+      if (!wasJoined) {
+        const target = communities.find((c) => c.id === id);
+        const gated = !!target && (!!target.isPrivate || !!target.holderOnly);
+        const isOwner = !!target && !!userId && target.ownerId === userId;
+        if (gated && !isOwner) {
+          return { prev, wasJoined, skipped: true };
+        }
+      }
       const next = wasJoined ? prev.filter((j) => j !== id) : [id, ...prev];
       qc.setQueryData(["social", "memberships", userId ?? "guest"], next);
       qc.setQueriesData<Community[]>({ queryKey: ["social", "communities"] }, (list) =>
@@ -542,16 +577,18 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           c.id === id ? { ...c, members: Math.max(0, c.members + (wasJoined ? -1 : 1)) } : c,
         ),
       );
-      return { prev, wasJoined };
+      return { prev, wasJoined, skipped: false };
     },
     onError: (_e, id, ctx) => {
-      const prev = (ctx as { prev?: string[]; wasJoined?: boolean } | undefined)?.prev;
-      const wasJoined = (ctx as { prev?: string[]; wasJoined?: boolean } | undefined)?.wasJoined;
+      const c = ctx as { prev?: string[]; wasJoined?: boolean; skipped?: boolean } | undefined;
+      if (c?.skipped) return;
+      const prev = c?.prev;
+      const wasJoined = c?.wasJoined;
       if (prev) qc.setQueryData(["social", "memberships", userId ?? "guest"], prev);
       if (typeof wasJoined === "boolean") {
         qc.setQueriesData<Community[]>({ queryKey: ["social", "communities"] }, (list) =>
-          list?.map((c) =>
-            c.id === id ? { ...c, members: Math.max(0, c.members + (wasJoined ? 1 : -1)) } : c,
+          list?.map((c2) =>
+            c2.id === id ? { ...c2, members: Math.max(0, c2.members + (wasJoined ? 1 : -1)) } : c2,
           ),
         );
       }
