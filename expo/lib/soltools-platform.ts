@@ -110,7 +110,6 @@ export const SOLTOOLS_PLATFORM_MODULES: SolToolsModuleSpec[] = [
   { id: "wallet-profiler", name: "Wallet Profiler", category: "basic", surface: "Tools", status: "beta", route: "/tool/wallet-profiler" },
   { id: "pnl-tracker", name: "PnL Tracker", category: "premium", surface: "Premium", status: "beta", route: "/tool/pnl-analyzer" },
   { id: "portfolio-comparison", name: "Portfolio Comparison", category: "premium", surface: "Premium", status: "planned", route: "/tool/portfolio-comparison" },
-  { id: "price-alerts", name: "Price Alerts", category: "premium", surface: "Tools", status: "live", route: "/tool/price-alerts" },
   { id: "shareable-pnl-card", name: "Shareable PnL Card", category: "premium", surface: "Tools", status: "beta", route: "/tool/portfolio-cards", creditCost: SOLTOOLS_CREDIT_COSTS.generatePnLImage },
   { id: "trade-history", name: "Trade History", category: "premium", surface: "Wallet", status: "gated", route: "/wallet", gatedReason: SOLTOOLS_TRADING_DISABLED_MESSAGE },
   { id: "whale-tracker", name: "Whale Tracker", category: "premium", surface: "Tools", status: "live", route: "/tool/whale-tracker" },

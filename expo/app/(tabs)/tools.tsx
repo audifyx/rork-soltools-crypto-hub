@@ -197,21 +197,6 @@ const TOOLS: Tool[] = [
     category: "wallet",
   },
   {
-    id: "price-alerts",
-    route: "/tool/price-alerts",
-    name: "Price Alerts",
-    tagline: "Get notified when prices hit your targets",
-    description:
-      "Set price-cross conditions on any token, choose above/below targets and route notifications to push or Discord.",
-    Icon: BellRing,
-    accent: Colors.mint,
-    glow: "rgba(255,255,255,0.14)",
-    gradient: [Colors.mint, Colors.cyan],
-    tags: ["Alerts", "Discord", "Live"],
-    status: "NEW",
-    category: "trading",
-  },
-  {
     id: "pnl-analyzer",
     route: "/tool/pnl-analyzer",
     name: "Wallet P&L Analyzer",
@@ -726,7 +711,6 @@ const FULL_UI_TOOL_IDS = new Set<string>([
   "ai-wallet-analyzer",
   "pnl-analyzer",
   "portfolio-cards",
-  "price-alerts",
   "whale-tracker",
   // Core platform surfaces
   "admin-dashboard",
@@ -1251,7 +1235,6 @@ const OG_FEATURES = {
     { title: "Watchlist", body: "Watched tokens, devs, alerts and hot activity in one saved state.", route: "/tool/watchlist", Icon: Eye, accent: Colors.mint },
     { title: "Dev Wallet Intel", body: "Launch history, linked wallets, funding wallets, rugs and wallet score.", route: "/tool/dev-wallet-tracker", Icon: Network, accent: Colors.rose },
     { title: "Whales", body: "Top holders, concentration, holder distribution and whale warnings.", route: "/tool/whale-tracker", Icon: Waves, accent: Colors.cyan },
-    { title: "Alerts Center", body: "Watched dev launches, whale concentration and high-tx triggers.", route: "/tool/price-alerts", Icon: BellRing, accent: Colors.goldBright },
   ],
   more: [
     { title: "Our Coin", body: "Official OGScan CA, dev wallet and community links.", route: "/tool/token-lookup", Icon: Coins, accent: Colors.mint },
