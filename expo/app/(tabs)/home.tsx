@@ -988,16 +988,14 @@ function ComposePrompt({
         )}
       </View>
       <View style={styles.composerBody}>
-        <Text style={styles.composerHint}>Share alpha, charts, or a hot take…</Text>
-        <View style={styles.composerActions}>
-          <View style={styles.composerActionPill}>
-            <ImagePlus color={Colors.mint} size={14} strokeWidth={2.4} />
-            <Text style={styles.composerActionText}>Photos</Text>
-          </View>
-          <View style={styles.composerActionPill}>
-            <Sparkles color={Colors.cyan} size={14} strokeWidth={2.4} />
-            <Text style={styles.composerActionText}>Token</Text>
-          </View>
+        <Text style={styles.composerHint} numberOfLines={1}>Share alpha, charts, or a hot take…</Text>
+      </View>
+      <View style={styles.composerActions}>
+        <View style={styles.composerActionPill}>
+          <ImagePlus color={Colors.mint} size={15} strokeWidth={2.4} />
+        </View>
+        <View style={styles.composerActionPill}>
+          <Sparkles color={Colors.cyan} size={15} strokeWidth={2.4} />
         </View>
       </View>
     </Pressable>
@@ -2751,48 +2749,50 @@ const styles = StyleSheet.create({
 
   composer: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     marginHorizontal: 14,
     marginTop: 18,
-    padding: 15,
-    borderRadius: 22,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 999,
     backgroundColor: "rgba(4,10,24,0.90)",
     borderWidth: 1,
     borderColor: "rgba(221,227,236,0.18)",
   },
   composerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
   composerAvatarText: {
     color: Colors.ink,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "900",
   },
-  composerBody: { flex: 1, justifyContent: "center", gap: 10 },
+  composerBody: { flex: 1, justifyContent: "center" },
   composerHint: {
     color: Colors.muted,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
   },
   composerActions: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    gap: 6,
   },
   composerActionPill: {
-    flexDirection: "row",
+    width: 30,
+    height: 30,
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    justifyContent: "center",
     borderRadius: 999,
-    backgroundColor: "rgba(98,208,255,0.06)",
+    backgroundColor: "rgba(98,208,255,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(221,227,236,0.10)",
+    borderColor: "rgba(221,227,236,0.12)",
   },
   composerActionText: {
     color: Colors.text,
