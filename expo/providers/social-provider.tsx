@@ -40,6 +40,7 @@ export interface Community {
   holderOnly?: boolean;
   gateTokenMint?: string | null;
   gateMinimumBalance?: number | null;
+  accessType?: "public" | "holders" | "passcode" | "request";
 }
 
 export interface CommunityPostQuote {
@@ -151,6 +152,7 @@ type CommunityRow = {
   tags: unknown;
   is_private: boolean | null;
   holder_only: boolean | null;
+  access_type: string | null;
   gate_token_mint: string | null;
   gate_minimum_balance: number | null;
   avatar_url: string | null;
@@ -188,6 +190,12 @@ function applyPersistedCommunityRow(community: Community, row: PersistedCommunit
   if (row.banner_url !== undefined) community.bannerUrl = normalizeMediaUrl(row.banner_url);
   if (typeof row.is_private === "boolean") community.isPrivate = row.is_private;
   if (typeof row.holder_only === "boolean") community.holderOnly = row.holder_only;
+  if (typeof row.access_type === "string" && row.access_type.length > 0) {
+    const at = row.access_type as Community["accessType"];
+    if (at === "public" || at === "holders" || at === "passcode" || at === "request") {
+      community.accessType = at;
+    }
+  }
   if (typeof row.gate_token_mint === "string") community.gateTokenMint = row.gate_token_mint;
   if (typeof row.gate_minimum_balance === "number") community.gateMinimumBalance = row.gate_minimum_balance;
 }
@@ -231,6 +239,15 @@ function rowToCommunity(row: CommunityRow, ownerHandle: string): Community {
     holderOnly: !!row.holder_only,
     gateTokenMint: row.gate_token_mint ?? null,
     gateMinimumBalance: row.gate_minimum_balance ?? null,
+    accessType: ((): Community["accessType"] => {
+      const at = (row.access_type ?? "").toLowerCase();
+      if (at === "holders" || at === "passcode" || at === "request" || at === "public") {
+        return at as Community["accessType"];
+      }
+      if (row.holder_only) return "holders";
+      if (row.is_private) return "request";
+      return "public";
+    })(),
   };
 }
 
@@ -417,7 +434,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         const { data, error } = await supabase
           .from("communities")
           .select(
-            "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,holder_only,gate_token_mint,gate_minimum_balance,avatar_url,banner_url,created_at",
+            "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,holder_only,access_type,gate_token_mint,gate_minimum_balance,avatar_url,banner_url,created_at",
           )
           .or(`is_private.eq.false,owner_id.eq.${userId ?? "00000000-0000-0000-0000-000000000000"}`)
           .order("created_at", { ascending: false })
@@ -564,7 +581,11 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       // rejects, giving the appearance of a successful join.
       if (!wasJoined) {
         const target = communities.find((c) => c.id === id);
-        const gated = !!target && (!!target.isPrivate || !!target.holderOnly);
+        const gated =
+          !!target &&
+          (!!target.isPrivate ||
+            !!target.holderOnly ||
+            (!!target.accessType && target.accessType !== "public"));
         const isOwner = !!target && !!userId && target.ownerId === userId;
         if (gated && !isOwner) {
           return { prev, wasJoined, skipped: true };
@@ -1428,6 +1449,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         holderOnly: !!input.holderOnly,
         gateTokenMint: input.gateTokenMint ?? null,
         gateMinimumBalance: input.gateMinimumBalance ?? null,
+        accessType:
+          input.accessType ??
+          (input.holderOnly ? "holders" : input.isPrivate ? "request" : "public"),
       };
 
       let persistedRemotely = false;
@@ -1484,7 +1508,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
                 banner_url: normalizeMediaUrl(community.bannerUrl),
               })
               .select(
-                "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,holder_only,gate_token_mint,gate_minimum_balance,avatar_url,banner_url,created_at",
+                "id,name,slug,description,owner_id,member_count,posts_count,online_count,category,icon_emoji,accent_a,accent_b,verified,trending,pinned_ticker,rules,tags,is_private,holder_only,access_type,gate_token_mint,gate_minimum_balance,avatar_url,banner_url,created_at",
               )
               .single();
             if (insertError) throw insertError;

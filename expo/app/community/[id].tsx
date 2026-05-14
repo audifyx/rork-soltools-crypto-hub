@@ -494,6 +494,10 @@ export default function CommunityDetailScreen() {
   );
   const effectiveAccessType: CommunityAccessType = useMemo(() => {
     if (!community) return "public";
+    // Prefer server-stored access_type so passcode/request/holder gates persist
+    // across devices and cache clears. Fall back to local config + legacy flags.
+    const server = community.accessType;
+    if (server && server !== "public") return server;
     if (accessConfig && accessConfig.accessType !== "public") return accessConfig.accessType;
     if (community.holderOnly) return "holders";
     if (community.isPrivate) return "request";
