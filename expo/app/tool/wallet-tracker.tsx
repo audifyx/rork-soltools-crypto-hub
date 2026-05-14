@@ -644,39 +644,49 @@ export default function WalletTrackerScreen() {
               </LinearGradient>
 
               {/* Tabs */}
-              <View style={styles.tabsRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.tabsRow}
+                style={styles.tabsScroll}
+              >
                 <TabBtn
                   active={tab === "overview"}
                   onPress={() => setTab("overview")}
-                  icon={<Eye size={13} strokeWidth={2.8} />}
+                  icon={<Eye size={14} strokeWidth={2.8} />}
                   label="Overview"
+                  accent={Colors.mint}
                 />
                 <TabBtn
                   active={tab === "intel"}
                   onPress={() => setTab("intel")}
-                  icon={<ShieldAlert size={13} strokeWidth={2.8} />}
+                  icon={<ShieldAlert size={14} strokeWidth={2.8} />}
                   label="Intel"
+                  accent={Colors.cyan}
                 />
                 <TabBtn
                   active={tab === "holdings"}
                   onPress={() => setTab("holdings")}
-                  icon={<Coins size={13} strokeWidth={2.8} />}
+                  icon={<Coins size={14} strokeWidth={2.8} />}
                   label="Holdings"
                   badge={holdings.length.toString()}
+                  accent={Colors.orange}
                 />
                 <TabBtn
                   active={tab === "activity"}
                   onPress={() => setTab("activity")}
-                  icon={<Activity size={13} strokeWidth={2.8} />}
+                  icon={<Activity size={14} strokeWidth={2.8} />}
                   label="Activity"
+                  accent={Colors.rose}
                 />
                 <TabBtn
                   active={tab === "stats"}
                   onPress={() => setTab("stats")}
-                  icon={<BarChart3 size={13} strokeWidth={2.8} />}
+                  icon={<BarChart3 size={14} strokeWidth={2.8} />}
                   label="Stats"
+                  accent={Colors.goldBright}
                 />
-              </View>
+              </ScrollView>
 
               {portfolio.isLoading ? (
                 <View style={styles.loading}>
@@ -762,35 +772,61 @@ function TabBtn({
   icon,
   label,
   badge,
+  accent,
 }: {
   active: boolean;
   onPress: () => void;
   icon: React.ReactElement<{ color?: string }>;
   label: string;
   badge?: string;
+  accent: string;
 }) {
-  const color = active ? Colors.ink : Colors.muted;
+  const iconColor = active ? Colors.ink : accent;
   return (
     <Pressable
       onPress={() => {
         Haptics.selectionAsync().catch(() => {});
         onPress();
       }}
-      style={[styles.tabBtn, active && styles.tabBtnActive]}
+      style={[
+        styles.tabBtn,
+        active
+          ? { backgroundColor: accent, borderColor: accent, shadowColor: accent }
+          : { borderColor: `${accent}33` },
+      ]}
     >
-      {React.cloneElement(icon, { color })}
+      <View
+        style={[
+          styles.tabIconWrap,
+          active
+            ? { backgroundColor: "rgba(3,7,8,0.18)" }
+            : { backgroundColor: `${accent}1F` },
+        ]}
+      >
+        {React.cloneElement(icon, { color: iconColor })}
+      </View>
       <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>
         {label}
       </Text>
-      {badge && (
-        <View style={[styles.tabBadge, active && styles.tabBadgeActive]}>
+      {badge && Number(badge) > 0 ? (
+        <View
+          style={[
+            styles.tabBadge,
+            active
+              ? { backgroundColor: "rgba(3,7,8,0.22)" }
+              : { backgroundColor: `${accent}26` },
+          ]}
+        >
           <Text
-            style={[styles.tabBadgeText, active && styles.tabBadgeTextActive]}
+            style={[
+              styles.tabBadgeText,
+              active ? { color: Colors.ink } : { color: accent },
+            ]}
           >
             {badge}
           </Text>
         </View>
-      )}
+      ) : null}
     </Pressable>
   );
 }
@@ -1532,48 +1568,57 @@ const styles = StyleSheet.create({
   },
 
   // Tabs
+  tabsScroll: {
+    marginTop: 18,
+    marginHorizontal: -2,
+  },
   tabsRow: {
     flexDirection: "row",
-    gap: 6,
-    marginTop: 18,
-    padding: 4,
-    borderRadius: 14,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.line,
+    gap: 8,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
   },
   tabBtn: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    paddingVertical: 9,
-    borderRadius: 10,
+    gap: 8,
+    paddingLeft: 6,
+    paddingRight: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: "rgba(255,255,255,0.025)",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 0,
   },
-  tabBtnActive: { backgroundColor: Colors.mint },
+  tabIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   tabBtnText: {
-    color: Colors.muted,
-    fontSize: 11,
+    color: Colors.text,
+    fontSize: 12.5,
     fontWeight: "900",
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   tabBtnTextActive: { color: Colors.ink },
   tabBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    minWidth: 18,
+    minWidth: 20,
     alignItems: "center",
+    justifyContent: "center",
   },
-  tabBadgeActive: { backgroundColor: "rgba(3,7,8,0.25)" },
   tabBadgeText: {
-    color: Colors.muted,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
   },
-  tabBadgeTextActive: { color: Colors.ink },
 
   // Section
   sectionRow: {
