@@ -31,6 +31,7 @@ export interface CommunityAccessConfig {
   passcode?: string | null;
   pendingRequests: JoinRequest[];
   approvedMemberIds: string[];
+  bannedMemberIds: string[];
 }
 
 export type CommunityAccessMap = Record<string, CommunityAccessConfig>;
@@ -43,6 +44,7 @@ function emptyConfig(accessType: CommunityAccessType = "public"): CommunityAcces
     passcode: null,
     pendingRequests: [],
     approvedMemberIds: [],
+    bannedMemberIds: [],
   };
 }
 
@@ -72,7 +74,12 @@ export function getAccessFor(
   fallback?: Partial<CommunityAccessConfig>,
 ): CommunityAccessConfig {
   const existing = map[communityId];
-  if (existing) return existing;
+  if (existing) {
+    return {
+      ...existing,
+      bannedMemberIds: existing.bannedMemberIds ?? [],
+    };
+  }
   return { ...emptyConfig(), ...fallback } as CommunityAccessConfig;
 }
 

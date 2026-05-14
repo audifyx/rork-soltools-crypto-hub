@@ -54,6 +54,7 @@ export const [CommunityAccessProvider, useCommunityAccess] = createContextHook((
         ...patch,
         pendingRequests: patch.pendingRequests ?? current.pendingRequests,
         approvedMemberIds: patch.approvedMemberIds ?? current.approvedMemberIds,
+        bannedMemberIds: patch.bannedMemberIds ?? current.bannedMemberIds,
       };
       persist({ ...map, [communityId]: next });
     },
@@ -73,6 +74,7 @@ export const [CommunityAccessProvider, useCommunityAccess] = createContextHook((
         passcode: input.passcode ?? null,
         pendingRequests: [],
         approvedMemberIds: [],
+        bannedMemberIds: [],
       };
       persist({ ...map, [communityId]: next });
     },
@@ -146,6 +148,56 @@ export const [CommunityAccessProvider, useCommunityAccess] = createContextHook((
     [map, persist],
   );
 
+  const removeMember = useCallback(
+    (communityId: string, uid: string) => {
+      const current = getAccessFor(map, communityId);
+      const next: CommunityAccessConfig = {
+        ...current,
+        approvedMemberIds: current.approvedMemberIds.filter((id) => id !== uid),
+        pendingRequests: current.pendingRequests.filter((r) => r.userId !== uid),
+      };
+      persist({ ...map, [communityId]: next });
+    },
+    [map, persist],
+  );
+
+  const banMember = useCallback(
+    (communityId: string, uid: string) => {
+      const current = getAccessFor(map, communityId);
+      const next: CommunityAccessConfig = {
+        ...current,
+        approvedMemberIds: current.approvedMemberIds.filter((id) => id !== uid),
+        pendingRequests: current.pendingRequests.filter((r) => r.userId !== uid),
+        bannedMemberIds: current.bannedMemberIds.includes(uid)
+          ? current.bannedMemberIds
+          : [...current.bannedMemberIds, uid],
+      };
+      persist({ ...map, [communityId]: next });
+    },
+    [map, persist],
+  );
+
+  const unbanMember = useCallback(
+    (communityId: string, uid: string) => {
+      const current = getAccessFor(map, communityId);
+      const next: CommunityAccessConfig = {
+        ...current,
+        bannedMemberIds: current.bannedMemberIds.filter((id) => id !== uid),
+      };
+      persist({ ...map, [communityId]: next });
+    },
+    [map, persist],
+  );
+
+  const isBanned = useCallback(
+    (communityId: string, uid: string | null | undefined): boolean => {
+      if (!uid) return false;
+      const cfg = getAccessFor(map, communityId);
+      return cfg.bannedMemberIds.includes(uid);
+    },
+    [map],
+  );
+
   const isRequestPending = useCallback(
     (communityId: string, userId: string | null | undefined): boolean => {
       if (!userId) return false;
@@ -167,6 +219,10 @@ export const [CommunityAccessProvider, useCommunityAccess] = createContextHook((
       rejectRequest,
       markApproved,
       isRequestPending,
+      removeMember,
+      banMember,
+      unbanMember,
+      isBanned,
     }),
     [
       ready,
@@ -179,6 +235,10 @@ export const [CommunityAccessProvider, useCommunityAccess] = createContextHook((
       rejectRequest,
       markApproved,
       isRequestPending,
+      removeMember,
+      banMember,
+      unbanMember,
+      isBanned,
     ],
   );
 });

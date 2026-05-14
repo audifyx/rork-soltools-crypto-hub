@@ -13,6 +13,8 @@ import {
   Bookmark,
   Calendar,
   Trash2,
+  Ban,
+  UserMinus,
   Camera,
   ChartCandlestick,
   Copy,
@@ -173,6 +175,10 @@ export default function CommunityDetailScreen() {
     verifyPasscode,
     isRequestPending,
     markApproved,
+    removeMember: removeAccessMember,
+    banMember,
+    unbanMember,
+    isBanned,
   } = useCommunityAccess();
   const [tab, setTab] = useState<Tab>("recent");
   const [composer, setComposer] = useState<string>("");
@@ -503,6 +509,11 @@ export default function CommunityDetailScreen() {
       const c = community;
       if (!c) return;
       const alreadyJoined = isJoined(community_id);
+      if (userId && isBanned(community_id, userId)) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        Alert.alert("Banned", "You have been banned from this community by the creator.");
+        return;
+      }
       if (alreadyJoined) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         toggleJoin(community_id);
@@ -576,6 +587,78 @@ export default function CommunityDetailScreen() {
     setPasscodeInput("");
     showToast("Passcode accepted — joined community");
   }, [community, isJoined, markApproved, passcodeInput, showToast, toggleJoin, userId, verifyPasscode]);
+
+  const removeFromMembersTable = useCallback(async (uid: string) => {
+    if (!community) return;
+    try {
+      await supabase
+        .from("community_members")
+        .delete()
+        .eq("community_id", community.id)
+        .eq("user_id", uid);
+    } catch (e) {
+      console.log("[community] remove member db failed", e);
+    }
+  }, [community]);
+
+  const onKickMember = useCallback(
+    (member: CommunityMember) => {
+      if (!community || !isOwner) return;
+      Alert.alert(
+        `Remove ${member.name}?`,
+        "They will be removed from the community but can rejoin if the community is public.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: () => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+              removeAccessMember(community.id, member.id);
+              void removeFromMembersTable(member.id).then(() => {
+                featureQueryClient.invalidateQueries({ queryKey: ["community", "members", community.id] });
+              });
+              showToast(`${member.name} removed`);
+            },
+          },
+        ],
+      );
+    },
+    [community, featureQueryClient, isOwner, removeAccessMember, removeFromMembersTable, showToast],
+  );
+
+  const onBanMember = useCallback(
+    (member: CommunityMember) => {
+      if (!community || !isOwner) return;
+      const banned = isBanned(community.id, member.id);
+      if (banned) {
+        unbanMember(community.id, member.id);
+        Haptics.selectionAsync().catch(() => {});
+        showToast(`${member.name} unbanned`);
+        return;
+      }
+      Alert.alert(
+        `Ban ${member.name}?`,
+        "They will be removed and blocked from rejoining this community.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Ban",
+            style: "destructive",
+            onPress: () => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+              banMember(community.id, member.id);
+              void removeFromMembersTable(member.id).then(() => {
+                featureQueryClient.invalidateQueries({ queryKey: ["community", "members", community.id] });
+              });
+              showToast(`${member.name} banned`);
+            },
+          },
+        ],
+      );
+    },
+    [banMember, community, featureQueryClient, isBanned, isOwner, removeFromMembersTable, showToast, unbanMember],
+  );
 
   const onApproveRequest = useCallback(
     (uid: string) => {
@@ -831,8 +914,10 @@ export default function CommunityDetailScreen() {
   }, [showToast, toggleCommunityPostPin]);
 
   const canDeletePost = useCallback(
-    (post: CommunityPost): boolean => isAuthenticated && (canModeratePosts || post.authorUserId === userId),
-    [canModeratePosts, isAuthenticated, userId],
+    (post: CommunityPost): boolean =>
+      isAuthenticated &&
+      (canModeratePosts || isOwner || post.authorUserId === userId),
+    [canModeratePosts, isAuthenticated, isOwner, userId],
   );
 
   const onSharePost = useCallback(async (post: CommunityPost) => {
@@ -2027,8 +2112,12 @@ export default function CommunityDetailScreen() {
                     isSelf={item.id === userId}
                     isToggling={isToggling}
                     isFollowing={!!item.isFollowing}
+                    canModerate={isOwner && item.id !== userId}
+                    isBanned={community ? isBanned(community.id, item.id) : false}
                     onOpen={() => openMemberProfile(item)}
                     onFollow={() => void onFollowMember(item)}
+                    onKick={() => onKickMember(item)}
+                    onBan={() => onBanMember(item)}
                   />
                 )}
                 ItemSeparatorComponent={() => <View style={styles.memberDivider} />}
@@ -2458,15 +2547,23 @@ function CommunityMemberRow({
   isSelf,
   isToggling,
   isFollowing,
+  canModerate,
+  isBanned: banned,
   onOpen,
   onFollow,
+  onKick,
+  onBan,
 }: {
   member: CommunityMember;
   isSelf: boolean;
   isToggling: boolean;
   isFollowing: boolean;
+  canModerate: boolean;
+  isBanned: boolean;
   onOpen: () => void;
   onFollow: () => void;
+  onKick: () => void;
+  onBan: () => void;
 }) {
   return (
     <Pressable onPress={onOpen} style={styles.memberSheetRow} testID={`community-member-${member.id}`}>
@@ -2487,20 +2584,48 @@ function CommunityMemberRow({
         </Text>
       </View>
       {!isSelf ? (
-        <Pressable
-          onPress={(e) => {
-            e.stopPropagation();
-            onFollow();
-          }}
-          disabled={isToggling}
-          style={[styles.memberFollowBtn, isFollowing && styles.memberFollowBtnActive]}
-          testID={`community-member-follow-${member.id}`}
-        >
-          <UserPlus color={isFollowing ? Colors.mint : Colors.ink} size={13} strokeWidth={3} />
-          <Text style={[styles.memberFollowText, isFollowing && styles.memberFollowTextActive]}>
-            {isFollowing ? "Following" : "Follow"}
-          </Text>
-        </Pressable>
+        <View style={styles.memberActionRow}>
+          {canModerate ? (
+            <>
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onKick();
+                }}
+                hitSlop={6}
+                style={styles.memberModBtn}
+                testID={`community-member-kick-${member.id}`}
+              >
+                <UserMinus color={Colors.orange} size={14} strokeWidth={2.6} />
+              </Pressable>
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onBan();
+                }}
+                hitSlop={6}
+                style={[styles.memberModBtn, banned && styles.memberModBtnActive]}
+                testID={`community-member-ban-${member.id}`}
+              >
+                <Ban color={banned ? Colors.mint : Colors.rose} size={14} strokeWidth={2.6} />
+              </Pressable>
+            </>
+          ) : null}
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onFollow();
+            }}
+            disabled={isToggling}
+            style={[styles.memberFollowBtn, isFollowing && styles.memberFollowBtnActive]}
+            testID={`community-member-follow-${member.id}`}
+          >
+            <UserPlus color={isFollowing ? Colors.mint : Colors.ink} size={13} strokeWidth={3} />
+            <Text style={[styles.memberFollowText, isFollowing && styles.memberFollowTextActive]}>
+              {isFollowing ? "Following" : "Follow"}
+            </Text>
+          </Pressable>
+        </View>
       ) : (
         <Text style={styles.memberSelfText}>You</Text>
       )}
@@ -3276,6 +3401,9 @@ const styles = StyleSheet.create({
   memberFollowText: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
   memberFollowTextActive: { color: Colors.mint },
   memberSelfText: { color: Colors.muted, fontSize: 12, fontWeight: "900" },
+  memberActionRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  memberModBtn: { width: 30, height: 30, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  memberModBtnActive: { backgroundColor: "rgba(85,245,178,0.12)", borderColor: "rgba(85,245,178,0.35)" },
   memberDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.06)" },
 
   sep: { height: 1, marginHorizontal: 18, backgroundColor: "rgba(255,255,255,0.04)" },
