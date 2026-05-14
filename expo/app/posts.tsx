@@ -261,10 +261,16 @@ export default function PostsFeedScreen() {
     Haptics.selectionAsync().catch(() => {});
     const ticker = post.ticker ? `\n\n${post.ticker.replace("$", "")}` : "";
     const author = post.authorHandle || post.authorName;
+    const url = `https://rork.com/post/${post.id}`;
+    const body = `${post.text || "Crypto Community App post"}${ticker}\n\n— ${author}\n${url}`;
     try {
-      await Share.share({ message: `${post.text || "Crypto Community App post"}${ticker}\n\n— ${author}` });
+      await Share.share({ message: body, url, title: "Share post" });
     } catch (e) {
       console.log("[posts] share failed", e);
+      try {
+        await Clipboard.setStringAsync(url);
+        Alert.alert("Link copied", "Post link copied to clipboard.");
+      } catch {}
     }
   }, []);
 

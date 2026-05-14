@@ -282,14 +282,17 @@ export default function PostDetailScreen() {
   const onShare = useCallback(async () => {
     if (!post) return;
     hapticSelect();
+    const url = `https://rork.com/post/${post.id}`;
+    const author = post.authorUsername ? `@${post.authorUsername}` : post.authorName;
+    const body = `${post.content || "Check this post"}\n\n— ${author}\n${url}`;
     try {
-      await Share.share({
-        message: `${post.content || "Check this post"}\n\n— ${
-          post.authorUsername ? `@${post.authorUsername}` : post.authorName
-        }`,
-      });
+      await Share.share({ message: body, url, title: "Share post" });
     } catch (e) {
       console.log("[post-detail] share failed", e);
+      try {
+        await Clipboard.setStringAsync(url);
+        Alert.alert("Link copied", "Post link copied to clipboard.");
+      } catch {}
     }
   }, [post]);
 

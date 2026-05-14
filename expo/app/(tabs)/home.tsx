@@ -1,3 +1,4 @@
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -405,12 +406,19 @@ export default function HomeFeedScreen() {
     const author = post.authorUsername
       ? `@${post.authorUsername}`
       : post.authorDisplayName ?? "a trader";
+    const url = `https://rork.com/post/${post.id}`;
+    const body = `${post.text || "Crypto Community App post"}${ticker}\n\n— ${author}\n${url}`;
     try {
-      await Share.share({
-        message: `${post.text || "Crypto Community App post"}${ticker}\n\n— ${author}`,
-      });
+      const result = await Share.share({ message: body, url, title: "Share post" });
+      if (result.action === Share.dismissedAction) {
+        console.log("[home] share dismissed");
+      }
     } catch (e) {
       console.log("[home] share failed", e);
+      try {
+        await Clipboard.setStringAsync(url);
+        Alert.alert("Link copied", "Post link copied to clipboard.");
+      } catch {}
     }
   }, []);
 
