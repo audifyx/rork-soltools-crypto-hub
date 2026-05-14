@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Colors from "@/constants/colors";
@@ -624,9 +625,27 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
 
   const toggleJoin = useCallback(
     (id: string) => {
+      // If trying to join a gated community, route to the detail screen so the
+      // proper gate UI (passcode modal / holder verify / request to join) can
+      // collect the input. Tapping JOIN from a card alone can't satisfy the
+      // gate, so the silent server rejection would otherwise look broken.
+      const alreadyJoined = joined.includes(id);
+      if (!alreadyJoined) {
+        const target = communities.find((c) => c.id === id);
+        const isOwner = !!target && !!userId && target.ownerId === userId;
+        const gated =
+          !!target &&
+          (!!target.isPrivate ||
+            !!target.holderOnly ||
+            (!!target.accessType && target.accessType !== "public"));
+        if (gated && !isOwner) {
+          router.push({ pathname: "/community/[id]", params: { id } });
+          return;
+        }
+      }
       toggleJoinMut.mutate(id);
     },
-    [toggleJoinMut],
+    [communities, joined, toggleJoinMut, userId],
   );
 
 
