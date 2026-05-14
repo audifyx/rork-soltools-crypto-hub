@@ -165,21 +165,6 @@ export default function StoryViewerScreen() {
     setPaused(false);
   }, []);
 
-  if (!current) {
-    return (
-      <View style={styles.empty}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <StatusBar style="light" />
-        <Text style={styles.emptyText}>No stories</Text>
-        <Pressable onPress={() => router.back()} style={styles.closeBtn} testID="story-close-empty">
-          <X color={Colors.text} size={18} strokeWidth={2.5} />
-        </Pressable>
-      </View>
-    );
-  }
-
-  const isOwner = !!authUserId && authUserId === current.user_id;
-
   const deleteStoryMutation = useMutation({
     mutationFn: (id: string) => deleteOwnStory(id),
     onSuccess: async () => {
@@ -207,6 +192,23 @@ export default function StoryViewerScreen() {
       ],
     );
   }, [current, deleteStoryMutation]);
+
+  if (!current) {
+    return (
+      <View style={styles.empty}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar style="light" />
+        <Text style={styles.emptyText}>
+          {storiesQuery.isLoading ? "Loading…" : "No stories"}
+        </Text>
+        <Pressable onPress={() => router.back()} style={styles.closeBtn} testID="story-close-empty">
+          <X color={Colors.text} size={18} strokeWidth={2.5} />
+        </Pressable>
+      </View>
+    );
+  }
+
+  const isOwner = !!authUserId && authUserId === current.user_id;
 
   return (
     <View style={styles.root}>
