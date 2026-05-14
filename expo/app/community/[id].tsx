@@ -206,6 +206,8 @@ export default function CommunityDetailScreen() {
   const [passcodeInput, setPasscodeInput] = useState<string>("");
   const [passcodeError, setPasscodeError] = useState<string | null>(null);
   const [requestsOpen, setRequestsOpen] = useState<boolean>(false);
+  const [gatePasscodeInput, setGatePasscodeInput] = useState<string>("");
+  const [gatePasscodeError, setGatePasscodeError] = useState<string | null>(null);
 
   const community = useMemo(() => (id ? getCommunity(id) : undefined), [id, getCommunity]);
   const postsQuery = usePostsForCommunity(community?.id);
@@ -1060,8 +1062,6 @@ export default function CommunityDetailScreen() {
   // actions in the menu. Locked viewers should not be able to leak the
   // invite code or deep-link to outsiders.
   const canShareInvite = joined || canEditMedia;
-  const [gatePasscodeInput, setGatePasscodeInput] = useState<string>("");
-  const [gatePasscodeError, setGatePasscodeError] = useState<string | null>(null);
   const onSubmitGatePasscode = useCallback(() => {
     if (!community) return;
     const ok = verifyPasscode(community.id, gatePasscodeInput);
@@ -1099,21 +1099,219 @@ export default function CommunityDetailScreen() {
             ? "Request to join"
             : "Join community";
 
+  // ===== HARD GATE (early return) =====
+  // For non-public communities, render ONLY the gate screen. This makes it
+  // impossible to interact with the join button, member list, posts, or
+  // any other surface until the viewer unlocks via passcode / approval /
+  // holder verification. Replaces the previous Modal-based gate which could
+  // race the underlying UI on first paint and let users tap join through.
+  if (isLocked) {
+    return (
+      <View style={styles.root} testID="community-detail">
+        <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar style="light" />
+        <View style={styles.gateScreen} testID="community-gate-screen">
+          <LinearGradient
+            colors={[community.accent[0], community.accent[1]]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gateScreenBg}
+          />
+          <View style={styles.gateScreenScrim} />
+          <SafeAreaView edges={["top", "bottom"]} style={styles.gateScreenSafe}>
+            <View style={styles.gateScreenTopBar}>
+              <Pressable
+                onPress={() => navigateBack(router, "/communities")}
+                style={styles.bannerIcon}
+                testID="community-gate-back"
+              >
+                <ArrowLeft color={Colors.text} size={20} strokeWidth={2.6} />
+              </Pressable>
+              <Text style={styles.gateScreenTopText} numberOfLines={1}>
+                {community.name}
+              </Text>
+              <View style={styles.bannerIcon} />
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.gateScreenBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.gateScreenAvatar}>
+                {community.avatarUrl ? (
+                  <Image source={{ uri: community.avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                ) : (
+                  <Text style={styles.gateScreenAvatarEmoji}>{community.iconEmoji}</Text>
+                )}
+              </View>
+              <View style={styles.gateScreenLockChip}>
+                {effectiveAccessType === "holders" ? (
+                  <Coins color={Colors.cyan} size={13} strokeWidth={2.8} />
+                ) : effectiveAccessType === "passcode" ? (
+                  <KeyRound color={Colors.orange} size={13} strokeWidth={2.8} />
+                ) : (
+                  <LockIcon color={Colors.violet} size={13} strokeWidth={2.8} />
+                )}
+                <Text style={styles.gateScreenLockChipText}>
+                  {effectiveAccessType === "holders"
+                    ? "Holders only"
+                    : effectiveAccessType === "passcode"
+                      ? "Passcode locked"
+                      : "Approval required"}
+                </Text>
+              </View>
+              <Text style={styles.gateScreenTitle}>
+                {pendingForMe
+                  ? "Waiting for approval"
+                  : effectiveAccessType === "holders"
+                    ? "This community is for holders"
+                    : effectiveAccessType === "passcode"
+                      ? "Enter passcode to continue"
+                      : "Request to join this community"}
+              </Text>
+              <Text style={styles.gateScreenBody2}>
+                {pendingForMe
+                  ? `Your request to join ${community.name} is pending the owner’s approval. You’ll get instant access the moment they accept.`
+                  : effectiveAccessType === "holders"
+                    ? `Verify your wallet holds ${Math.max(1, Number(community.gateMinimumBalance ?? 1)).toLocaleString()} $OGS to unlock posts and chat.`
+                    : effectiveAccessType === "passcode"
+                      ? `Ask the creator of ${community.name} for the passcode. It’s the only way to view posts, members, and chat inside.`
+                      : `Send a request to the owner. You’ll see posts and chat the moment they approve you.`}
+              </Text>
+
+              {effectiveAccessType === "passcode" && !pendingForMe ? (
+                <View style={styles.gateScreenInputCard}>
+                  <Text style={styles.gateLabel}>Passcode</Text>
+                  <View style={styles.gateInputWrap}>
+                    <KeyRound color={Colors.orange} size={15} strokeWidth={2.6} />
+                    <TextInput
+                      value={gatePasscodeInput}
+                      onChangeText={(t) => {
+                        setGatePasscodeInput(t);
+                        if (gatePasscodeError) setGatePasscodeError(null);
+                      }}
+                      placeholder="Enter passcode"
+                      placeholderTextColor={Colors.muted}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      style={styles.gateInput}
+                      testID="community-gate-passcode-input"
+                    />
+                  </View>
+                  {gatePasscodeError ? (
+                    <View style={styles.gateError}>
+                      <Text style={styles.gateErrorText}>{gatePasscodeError}</Text>
+                    </View>
+                  ) : null}
+                  <Pressable
+                    onPress={onSubmitGatePasscode}
+                    disabled={gatePasscodeInput.trim().length === 0}
+                    style={[
+                      styles.gateVerifyBtn,
+                      { backgroundColor: Colors.orange },
+                      gatePasscodeInput.trim().length === 0 && { opacity: 0.5 },
+                    ]}
+                    testID="community-gate-passcode-submit"
+                  >
+                    <KeyRound color={Colors.ink} size={14} strokeWidth={3} />
+                    <Text style={styles.gateVerifyText}>Unlock community</Text>
+                  </Pressable>
+                  <Text style={styles.gateFootnote}>
+                    Passcodes are set by the community creator. Ask them if you do not have one.
+                  </Text>
+                </View>
+              ) : null}
+
+              {effectiveAccessType === "holders" && !pendingForMe ? (
+                <View style={styles.gateScreenInputCard}>
+                  <Text style={styles.gateLabel}>Solana wallet address</Text>
+                  <View style={styles.gateInputWrap}>
+                    <Coins color={Colors.cyan} size={15} strokeWidth={2.6} />
+                    <TextInput
+                      value={holderGateAddress}
+                      onChangeText={(t) => {
+                        setHolderGateAddress(t);
+                        if (holderGateError) setHolderGateError(null);
+                      }}
+                      placeholder="Paste your Solana wallet"
+                      placeholderTextColor={Colors.muted}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      style={styles.gateInput}
+                      testID="community-gate-holder-input"
+                    />
+                  </View>
+                  {holderGateError ? (
+                    <View style={styles.gateError}>
+                      <Text style={styles.gateErrorText}>{holderGateError}</Text>
+                    </View>
+                  ) : null}
+                  <Pressable
+                    onPress={onVerifyAndJoin}
+                    disabled={holderGateScanning || holderGateAddress.trim().length === 0}
+                    style={[
+                      styles.gateVerifyBtn,
+                      { backgroundColor: Colors.cyan },
+                      (holderGateScanning || holderGateAddress.trim().length === 0) && { opacity: 0.5 },
+                    ]}
+                    testID="community-gate-holder-submit"
+                  >
+                    {holderGateScanning ? (
+                      <ActivityIndicator color={Colors.ink} size="small" />
+                    ) : (
+                      <Text style={styles.gateVerifyText}>Scan wallet & join</Text>
+                    )}
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {effectiveAccessType === "request" || pendingForMe ? (
+                <Pressable
+                  onPress={() => requestJoin(community.id)}
+                  disabled={pendingForMe}
+                  style={[
+                    styles.gateScreenPrimary,
+                    { backgroundColor: Colors.violet },
+                    pendingForMe && { opacity: 0.5 },
+                  ]}
+                  testID="community-gate-primary"
+                >
+                  <Text style={[styles.gateVerifyText, { color: Colors.ink }]}>
+                    {pendingForMe ? "Awaiting approval" : "Request to join"}
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              <Pressable
+                onPress={() => navigateBack(router, "/communities")}
+                style={styles.gateScreenSecondary}
+                testID="community-gate-cancel"
+              >
+                <Text style={styles.gateScreenSecondaryText}>Browse other communities</Text>
+              </Pressable>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root} testID="community-detail">
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
 
-      {/* Full-screen blocking gate for non-public communities.
-          Prevents reading posts, members, banner content until the viewer
-          unlocks via passcode, request approval, or holder verification. */}
+      {/* Hard gate is now an early return above. This Modal is permanently
+          disabled but kept here so the structural diff stays small. */}
       <Modal
-        visible={isLocked}
+        visible={false}
         transparent={false}
         animationType="fade"
         onRequestClose={() => navigateBack(router, "/communities")}
       >
-        <View style={styles.gateScreen} testID="community-gate-screen">
+        <View style={styles.gateScreen} testID="community-gate-screen-legacy">
           <LinearGradient
             colors={[community.accent[0], community.accent[1]]}
             start={{ x: 0, y: 0 }}
