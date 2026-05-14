@@ -548,6 +548,12 @@ export default function CommunityDetailScreen() {
           name: profile.displayName || "Member",
           avatarColor: profile.avatarColor,
         });
+        // Server-side: insert a join request via the RPC.
+        void supabase
+          .rpc("join_community", { p_community_id: community_id, p_passcode: null })
+          .then(({ error }) => {
+            if (error) console.log("[community] request rpc failed", error.message);
+          });
         showToast("Request sent — waiting for owner approval");
         return;
       }
@@ -572,20 +578,58 @@ export default function CommunityDetailScreen() {
     ],
   );
 
-  const onSubmitPasscode = useCallback(() => {
+  const onSubmitPasscode = useCallback(async () => {
     if (!community) return;
-    const ok = verifyPasscode(community.id, passcodeInput);
-    if (!ok) {
-      setPasscodeError("Incorrect passcode. Try again.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    const code = passcodeInput.trim();
+    if (code.length === 0) {
+      setPasscodeError("Enter the community passcode.");
       return;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    if (userId) markApproved(community.id, userId);
-    if (!isJoined(community.id)) toggleJoin(community.id);
-    setPasscodeOpen(false);
-    setPasscodeInput("");
-    showToast("Passcode accepted — joined community");
+    try {
+      const { data, error } = await supabase.rpc("join_community", {
+        p_community_id: community.id,
+        p_passcode: code,
+      });
+      if (error) {
+        // Fall back to local verification when the server RPC isn't deployed.
+        if (verifyPasscode(community.id, code)) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          if (userId) markApproved(community.id, userId);
+          if (!isJoined(community.id)) toggleJoin(community.id);
+          setPasscodeOpen(false);
+          setPasscodeInput("");
+          showToast("Passcode accepted — joined community");
+          return;
+        }
+        setPasscodeError("Incorrect passcode. Try again.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        return;
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+      const status = (row?.status as string | undefined) ?? "joined";
+      if (status === "joined" || status === "already_member") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        if (userId) markApproved(community.id, userId);
+        if (!isJoined(community.id)) toggleJoin(community.id);
+        setPasscodeOpen(false);
+        setPasscodeInput("");
+        showToast("Passcode accepted — joined community");
+        return;
+      }
+      if (status === "wrong_passcode" || status === "passcode_required") {
+        setPasscodeError("Incorrect passcode. Try again.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        return;
+      }
+      if (status === "banned") {
+        setPasscodeError("You are banned from this community.");
+        return;
+      }
+      setPasscodeError("Could not join right now. Try again.");
+    } catch (e) {
+      console.log("[community] passcode join failed", e);
+      setPasscodeError("Network error. Try again.");
+    }
   }, [community, isJoined, markApproved, passcodeInput, showToast, toggleJoin, userId, verifyPasscode]);
 
   const removeFromMembersTable = useCallback(async (uid: string) => {
@@ -664,6 +708,11 @@ export default function CommunityDetailScreen() {
     (uid: string) => {
       if (!community) return;
       approveRequest(community.id, uid);
+      void supabase
+        .rpc("approve_join_request", { p_community_id: community.id, p_user_id: uid })
+        .then(({ error }) => {
+          if (error) console.log("[community] approve rpc failed", error.message);
+        });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       showToast("Request approved");
     },
@@ -674,6 +723,11 @@ export default function CommunityDetailScreen() {
     (uid: string) => {
       if (!community) return;
       rejectRequest(community.id, uid);
+      void supabase
+        .rpc("reject_join_request", { p_community_id: community.id, p_user_id: uid })
+        .then(({ error }) => {
+          if (error) console.log("[community] reject rpc failed", error.message);
+        });
       Haptics.selectionAsync().catch(() => {});
       showToast("Request declined");
     },
@@ -697,6 +751,11 @@ export default function CommunityDetailScreen() {
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       if (userId) markApproved(community.id, userId);
+      try {
+        await supabase.rpc("join_community_as_holder", { p_community_id: community.id });
+      } catch (rpcErr) {
+        console.log("[community] holder join rpc failed (will rely on local)", rpcErr);
+      }
       if (!isJoined(community.id)) toggleJoin(community.id);
       setHolderGateOpen(false);
       showToast("Holder verified — joined community");

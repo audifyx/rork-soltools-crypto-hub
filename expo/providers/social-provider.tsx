@@ -514,29 +514,6 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
   const toggleJoinMut = useMutation({
     mutationFn: async (id: string) => {
       const has = joined.includes(id);
-      // Defensive gate enforcement: if the community is non-public (private or
-      // holders-only) and the viewer has not been approved locally and is not
-      // the owner, refuse the join. This guarantees no UI surface (rail,
-      // detail, deep-links, future surfaces) can accidentally bypass the
-      // passcode / request / holder verify flow.
-      if (!has) {
-        const target = communities.find((c) => c.id === id);
-        const gated = !!target && (!!target.isPrivate || !!target.holderOnly);
-        const isOwner = !!target && !!userId && target.ownerId === userId;
-        if (gated && !isOwner) {
-          try {
-            const accessMap = await loadAccessMap();
-            const cfg = accessMap[id];
-            const approved = !!cfg && !!userId && cfg.approvedMemberIds.includes(userId);
-            if (!approved) {
-              throw new Error("This community is locked. Unlock it from the community screen to join.");
-            }
-          } catch (e) {
-            if (e instanceof Error && e.message.startsWith("This community is locked")) throw e;
-            throw new Error("This community is locked. Unlock it from the community screen to join.");
-          }
-        }
-      }
       if (isAuthenticated && userId) {
         if (has) {
           await supabase
@@ -545,9 +522,32 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             .eq("community_id", id)
             .eq("user_id", userId);
         } else {
-          await supabase
-            .from("community_members")
-            .insert({ community_id: id, user_id: userId });
+          // Server-side gate enforcement.
+          const target = communities.find((c) => c.id === id);
+          const isOwner = !!target && !!userId && target.ownerId === userId;
+          if (!isOwner && target && !id.startsWith("local-")) {
+            const { data, error } = await supabase.rpc("join_community", {
+              p_community_id: id,
+              p_passcode: null,
+            });
+            if (error) {
+              const e = new Error(error.message || "join_failed") as Error & { code?: string };
+              e.code = "join_failed";
+              throw e;
+            }
+            const row = Array.isArray(data) ? data[0] : data;
+            const status = (row?.status as string | undefined) ?? "joined";
+            if (status !== "joined" && status !== "already_member") {
+              const e = new Error(status) as Error & { code?: string };
+              e.code = status;
+              throw e;
+            }
+          } else {
+            // Owner / local-only community: fall back to direct insert.
+            await supabase
+              .from("community_members")
+              .insert({ community_id: id, user_id: userId });
+          }
         }
       } else {
         const next = has ? guestJoined.filter((j) => j !== id) : [id, ...guestJoined];
@@ -570,6 +570,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           return { prev, wasJoined, skipped: true };
         }
       }
+      void loadAccessMap;
       const next = wasJoined ? prev.filter((j) => j !== id) : [id, ...prev];
       qc.setQueryData(["social", "memberships", userId ?? "guest"], next);
       qc.setQueriesData<Community[]>({ queryKey: ["social", "communities"] }, (list) =>
@@ -1395,6 +1396,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       ownerHandle?: string;
       avatarUrl?: string | null;
       bannerUrl?: string | null;
+      accessType?: "public" | "holders" | "passcode" | "request";
+      passcode?: string | null;
     }): Promise<Community> => {
       const slug = input.handle.replace(/^@/, "").toLowerCase();
       const id = `local-${Date.now().toString(36)}-${Math.random()
@@ -1447,6 +1450,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             p_gate_minimum_balance: input.gateMinimumBalance ?? null,
             p_avatar_url: normalizeMediaUrl(community.avatarUrl),
             p_banner_url: normalizeMediaUrl(community.bannerUrl),
+            p_access_type: input.accessType ?? null,
+            p_passcode: input.passcode ?? null,
           });
           if (error) throw error;
           const row = Array.isArray(data)

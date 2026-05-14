@@ -233,6 +233,8 @@ export default function CreateCommunityScreen() {
         ownerHandle: profile.handle || "",
         avatarUrl,
         bannerUrl,
+        accessType,
+        passcode: accessType === "passcode" ? passcode.trim() : null,
       });
       initializeAccess(created.id, {
         accessType,
