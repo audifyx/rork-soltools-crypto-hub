@@ -72,7 +72,7 @@ export default function WalletScreen() {
   const onSelectWallet = useCallback(
     (w: UserWalletWithBalance) => {
       Haptics.selectionAsync().catch(() => {});
-      router.push({ pathname: "/u/[handle]", params: { handle: w.address } } as never);
+      router.push({ pathname: "/tool/wallet-tracker", params: { address: w.address } });
     },
     [router],
   );
