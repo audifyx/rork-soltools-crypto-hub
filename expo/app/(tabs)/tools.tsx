@@ -729,12 +729,39 @@ function uniqueToolsById(tools: Tool[]): Tool[] {
   });
 }
 
+/**
+ * Whitelist of tool IDs that have a fully built, dedicated UI screen.
+ * Tools not in this list fall back to a generic placeholder route, so we hide
+ * them from the Tools tab to avoid duplicate or half-built entries.
+ */
+const FULL_UI_TOOL_IDS = new Set<string>([
+  // Dedicated screens under expo/app/tool/*.tsx
+  "token-lookup",
+  "wallet-tracker",
+  "ai-analysis",
+  "ai-chat",
+  "ai-wallet-analyzer",
+  "pnl-analyzer",
+  "portfolio-cards",
+  "price-alerts",
+  "whale-tracker",
+  // Core platform surfaces
+  "admin-dashboard",
+]);
+
+function hasFullUI(tool: Tool): boolean {
+  if (FULL_UI_TOOL_IDS.has(tool.id)) return true;
+  // OGScan pages all render through the working /ogscan/[slug] embed.
+  if (tool.id.startsWith("ogscan-")) return true;
+  return false;
+}
+
 const ALL_TOOLS: Tool[] = uniqueToolsById([
   ...CORE_TOOLS,
   ...OG_WEB_TOOLS_AS_TOOLS,
   ...TOOLS,
   ...PLATFORM_MODULE_TOOLS,
-]);
+]).filter(hasFullUI);
 
 type RecentItem = { id: string; ts: number };
 type OgScanSection = "home" | "scan" | "live" | "watch" | "more";
@@ -1097,7 +1124,7 @@ export default function ToolsScreen() {
           <View style={styles.footerNote}>
             <Zap color={Colors.mint} size={14} strokeWidth={2.6} />
             <Text style={styles.footerText}>
-Full tool deck · OG Scanner pages + current tools + wallet intel + admin dashboard
+Curated tool deck · only fully built tools are shown
             </Text>
           </View>
         </ScrollView>
