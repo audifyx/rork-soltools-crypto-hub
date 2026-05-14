@@ -71,6 +71,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import AppBackground from "@/components/ui/AppBackground";
 import OGScanLiveStrip from "@/components/discover/OGScanLiveStrip";
 import Colors from "@/constants/colors";
+import { useAdmin } from "@/providers/admin-provider";
 import { fmtPrice, fmtUsd } from "@/utils/format";
 import { fetchDexToken, getNewSolanaPairs, searchSolanaPairs, type DexPair, type DexTokenSnapshot } from "@/lib/api/dexscreener";
 import { getQuote } from "@/lib/api/jupiter";
@@ -651,7 +652,6 @@ const CORE_TOOL_IDS = new Set<string>([
 
 const CORE_TOOLS: Tool[] = [
   ...TOOLS.filter((tool) => CORE_TOOL_IDS.has(tool.id)),
-  ADMIN_DASHBOARD_TOOL,
 ];
 
 const RECENT_KEY = "tools.recent.v1";
@@ -739,7 +739,7 @@ function hasFullUI(tool: Tool): boolean {
   return false;
 }
 
-const ALL_TOOLS: Tool[] = uniqueToolsById([
+const ALL_TOOLS_BASE: Tool[] = uniqueToolsById([
   ...CORE_TOOLS,
   ...OG_WEB_TOOLS_AS_TOOLS,
   ...TOOLS,
@@ -766,6 +766,11 @@ const DEFAULT_OGSCAN_STATE: OgScanAppState = {
 
 export default function ToolsScreen() {
   const router = useRouter();
+  const { isOwner } = useAdmin();
+  const ALL_TOOLS = useMemo<Tool[]>(
+    () => (isOwner ? uniqueToolsById([ADMIN_DASHBOARD_TOOL, ...ALL_TOOLS_BASE]) : ALL_TOOLS_BASE),
+    [isOwner],
+  );
   const [query, setQuery] = useState<string>("");
   const [scan, setScan] = useState<string>("");
   const [recent, setRecent] = useState<RecentItem[]>([]);
@@ -870,13 +875,13 @@ export default function ToolsScreen() {
         t.tagline.toLowerCase().includes(q) ||
         t.tags.some((tag) => tag.toLowerCase().includes(q)),
     );
-  }, [query]);
+  }, [query, ALL_TOOLS]);
 
   const recentTools = useMemo<Tool[]>(() => {
     return recent
       .map((r) => ALL_TOOLS.find((t) => t.id === r.id))
       .filter((t): t is Tool => Boolean(t));
-  }, [recent]);
+  }, [recent, ALL_TOOLS]);
 
   const featured = ALL_TOOLS[0];
 
