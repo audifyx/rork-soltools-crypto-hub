@@ -836,11 +836,12 @@ const ACCESS_OPTIONS: {
   body: string;
   icon: React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
   accent: string;
+  comingSoon?: boolean;
 }[] = [
   { id: "public", title: "Public", body: "Anyone can discover and join instantly. Shows in live feeds.", icon: Globe, accent: Colors.mint },
-  { id: "holders", title: "Holders only", body: "Members must verify they hold $OGS via a wallet scan.", icon: Coins, accent: Colors.cyan },
-  { id: "passcode", title: "Passcode locked", body: "Members must enter the passcode you set to join.", icon: KeyRound, accent: Colors.orange },
-  { id: "request", title: "Request to join", body: "You approve every member from a requests queue.", icon: UserCheck, accent: Colors.violet },
+  { id: "holders", title: "Holders only", body: "Members must verify they hold $OGS via a wallet scan.", icon: Coins, accent: Colors.cyan, comingSoon: true },
+  { id: "passcode", title: "Passcode locked", body: "Members must enter the passcode you set to join.", icon: KeyRound, accent: Colors.orange, comingSoon: true },
+  { id: "request", title: "Request to join", body: "You approve every member from a requests queue.", icon: UserCheck, accent: Colors.violet, comingSoon: true },
 ];
 
 function StepRulesTags({
@@ -957,21 +958,34 @@ function StepRulesTags({
         {ACCESS_OPTIONS.map((opt) => {
           const active = opt.id === accessType;
           const Icon = opt.icon;
+          const locked = !!opt.comingSoon;
           return (
             <Pressable
               key={opt.id}
               onPress={() => {
+                if (locked) {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+                  Alert.alert("Coming soon", `${opt.title} communities are launching soon. For now, create a public community.`);
+                  return;
+                }
                 Haptics.selectionAsync().catch(() => {});
                 onChangeAccessType(opt.id);
               }}
-              style={[styles.accessRow, active && { borderColor: opt.accent, backgroundColor: "rgba(255,255,255,0.06)" }]}
+              style={[styles.accessRow, active && { borderColor: opt.accent, backgroundColor: "rgba(255,255,255,0.06)" }, locked && { opacity: 0.55 }]}
               testID={`access-${opt.id}`}
             >
               <View style={[styles.privacyIcon, { backgroundColor: `${opt.accent}22` }]}>
                 <Icon color={opt.accent} size={16} strokeWidth={2.6} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.privacyTitle}>{opt.title}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <Text style={styles.privacyTitle}>{opt.title}</Text>
+                  {locked ? (
+                    <View style={styles.soonPill}>
+                      <Text style={styles.soonPillText}>COMING SOON</Text>
+                    </View>
+                  ) : null}
+                </View>
                 <Text style={styles.privacyBody}>{opt.body}</Text>
               </View>
               <View style={[styles.radio, active && { borderColor: opt.accent }]}>
@@ -1552,6 +1566,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   radioDot: { width: 10, height: 10, borderRadius: 999 },
+  soonPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  soonPillText: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
 
   reviewRow: {
     flexDirection: "row",
