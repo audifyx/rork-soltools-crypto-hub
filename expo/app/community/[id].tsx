@@ -1046,6 +1046,26 @@ export default function CommunityDetailScreen() {
   );
 
   const isLocked = effectiveAccessType !== "public" && !joined && !canEditMedia;
+  // Members + owner are the only ones who can see invite/share/copy-link
+  // actions in the menu. Locked viewers should not be able to leak the
+  // invite code or deep-link to outsiders.
+  const canShareInvite = joined || canEditMedia;
+  const [gatePasscodeInput, setGatePasscodeInput] = useState<string>("");
+  const [gatePasscodeError, setGatePasscodeError] = useState<string | null>(null);
+  const onSubmitGatePasscode = useCallback(() => {
+    if (!community) return;
+    const ok = verifyPasscode(community.id, gatePasscodeInput);
+    if (!ok) {
+      setGatePasscodeError("Incorrect passcode. Try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      return;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    toggleJoin(community.id);
+    setGatePasscodeInput("");
+    setGatePasscodeError(null);
+    showToast("Passcode accepted — joined community");
+  }, [community, gatePasscodeInput, showToast, toggleJoin, verifyPasscode]);
   const dataForTab: CommunityPost[] = isLocked
     ? []
     : tab === "recent"
@@ -1072,6 +1092,167 @@ export default function CommunityDetailScreen() {
     <View style={styles.root} testID="community-detail">
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
+
+      {/* Full-screen blocking gate for non-public communities.
+          Prevents reading posts, members, banner content until the viewer
+          unlocks via passcode, request approval, or holder verification. */}
+      <Modal
+        visible={isLocked}
+        transparent={false}
+        animationType="fade"
+        onRequestClose={() => navigateBack(router, "/communities")}
+      >
+        <View style={styles.gateScreen} testID="community-gate-screen">
+          <LinearGradient
+            colors={[community.accent[0], community.accent[1]]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gateScreenBg}
+          />
+          <View style={styles.gateScreenScrim} />
+          <SafeAreaView edges={["top", "bottom"]} style={styles.gateScreenSafe}>
+            <View style={styles.gateScreenTopBar}>
+              <Pressable
+                onPress={() => navigateBack(router, "/communities")}
+                style={styles.bannerIcon}
+                testID="community-gate-back"
+              >
+                <ArrowLeft color={Colors.text} size={20} strokeWidth={2.6} />
+              </Pressable>
+              <Text style={styles.gateScreenTopText} numberOfLines={1}>
+                {community.name}
+              </Text>
+              <View style={styles.bannerIcon} />
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.gateScreenBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.gateScreenAvatar}>
+                {community.avatarUrl ? (
+                  <Image source={{ uri: community.avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                ) : (
+                  <Text style={styles.gateScreenAvatarEmoji}>{community.iconEmoji}</Text>
+                )}
+              </View>
+              <View style={styles.gateScreenLockChip}>
+                {effectiveAccessType === "holders" ? (
+                  <Coins color={Colors.cyan} size={13} strokeWidth={2.8} />
+                ) : effectiveAccessType === "passcode" ? (
+                  <KeyRound color={Colors.orange} size={13} strokeWidth={2.8} />
+                ) : (
+                  <LockIcon color={Colors.violet} size={13} strokeWidth={2.8} />
+                )}
+                <Text style={styles.gateScreenLockChipText}>
+                  {effectiveAccessType === "holders"
+                    ? "Holders only"
+                    : effectiveAccessType === "passcode"
+                      ? "Passcode locked"
+                      : "Approval required"}
+                </Text>
+              </View>
+              <Text style={styles.gateScreenTitle}>
+                {pendingForMe
+                  ? "Waiting for approval"
+                  : effectiveAccessType === "holders"
+                    ? "This community is for holders"
+                    : effectiveAccessType === "passcode"
+                      ? "Enter passcode to continue"
+                      : "Request to join this community"}
+              </Text>
+              <Text style={styles.gateScreenBody2}>
+                {pendingForMe
+                  ? `Your request to join ${community.name} is pending the owner’s approval. You’ll get instant access the moment they accept.`
+                  : effectiveAccessType === "holders"
+                    ? `Verify your wallet holds ${Math.max(1, Number(community.gateMinimumBalance ?? 1)).toLocaleString()} $OGS to unlock posts and chat.`
+                    : effectiveAccessType === "passcode"
+                      ? `Ask the creator of ${community.name} for the passcode. It’s the only way to view posts, members, and chat inside.`
+                      : `Send a request to the owner. You’ll see posts and chat the moment they approve you.`}
+              </Text>
+
+              {effectiveAccessType === "passcode" && !pendingForMe ? (
+                <View style={styles.gateScreenInputCard}>
+                  <Text style={styles.gateLabel}>Passcode</Text>
+                  <View style={styles.gateInputWrap}>
+                    <KeyRound color={Colors.orange} size={15} strokeWidth={2.6} />
+                    <TextInput
+                      value={gatePasscodeInput}
+                      onChangeText={(t) => {
+                        setGatePasscodeInput(t);
+                        if (gatePasscodeError) setGatePasscodeError(null);
+                      }}
+                      placeholder="Enter passcode"
+                      placeholderTextColor={Colors.muted}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      style={styles.gateInput}
+                      testID="community-gate-passcode-input"
+                    />
+                  </View>
+                  {gatePasscodeError ? (
+                    <View style={styles.gateError}>
+                      <Text style={styles.gateErrorText}>{gatePasscodeError}</Text>
+                    </View>
+                  ) : null}
+                  <Pressable
+                    onPress={onSubmitGatePasscode}
+                    disabled={gatePasscodeInput.trim().length === 0}
+                    style={[
+                      styles.gateVerifyBtn,
+                      { backgroundColor: Colors.orange },
+                      gatePasscodeInput.trim().length === 0 && { opacity: 0.5 },
+                    ]}
+                    testID="community-gate-passcode-submit"
+                  >
+                    <KeyRound color={Colors.ink} size={14} strokeWidth={3} />
+                    <Text style={styles.gateVerifyText}>Unlock community</Text>
+                  </Pressable>
+                  <Text style={styles.gateFootnote}>
+                    Passcodes are set by the community creator. Ask them if you do not have one.
+                  </Text>
+                </View>
+              ) : null}
+
+              {effectiveAccessType !== "passcode" || pendingForMe ? (
+                <Pressable
+                  onPress={() => requestJoin(community.id)}
+                  disabled={pendingForMe}
+                  style={[
+                    styles.gateScreenPrimary,
+                    {
+                      backgroundColor:
+                        effectiveAccessType === "holders"
+                          ? Colors.cyan
+                          : Colors.violet,
+                    },
+                    pendingForMe && { opacity: 0.5 },
+                  ]}
+                  testID="community-gate-primary"
+                >
+                  <Text style={[styles.gateVerifyText, { color: Colors.ink }]}>
+                    {pendingForMe
+                      ? "Awaiting approval"
+                      : effectiveAccessType === "holders"
+                        ? "Verify wallet"
+                        : "Request to join"}
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              <Pressable
+                onPress={() => navigateBack(router, "/communities")}
+                style={styles.gateScreenSecondary}
+                testID="community-gate-cancel"
+              >
+                <Text style={styles.gateScreenSecondaryText}>Browse other communities</Text>
+              </Pressable>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      </Modal>
 
       <FlatList
         data={dataForTab}
@@ -1611,6 +1792,31 @@ export default function CommunityDetailScreen() {
         </Pressable>
         <SafeAreaView edges={["top"]} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           <View style={styles.menuCard} pointerEvents="auto">
+            {canShareInvite ? (
+              <>
+                <MenuItem
+                  label="Share via..."
+                  icon={Share2}
+                  onPress={onShareVia}
+                  testID="menu-share"
+                />
+                <View style={styles.menuDivider} />
+                <MenuItem
+                  label="Copy Link"
+                  icon={LinkIcon}
+                  onPress={onCopyLink}
+                  testID="menu-copy"
+                />
+                <View style={styles.menuDivider} />
+                <MenuItem
+                  label="Invite members"
+                  icon={UserPlus}
+                  onPress={onInvite}
+                  testID="menu-invite"
+                />
+                <View style={styles.menuDivider} />
+              </>
+            ) : null}
             {canEditMedia ? (
               <>
                 <MenuItem
@@ -1663,26 +1869,17 @@ export default function CommunityDetailScreen() {
                 <View style={styles.menuDivider} />
               </>
             ) : null}
-            <MenuItem
-              label="Share via..."
-              icon={Share2}
-              onPress={onShareVia}
-              testID="menu-share"
-            />
-            <View style={styles.menuDivider} />
-            <MenuItem
-              label="Copy Link"
-              icon={LinkIcon}
-              onPress={onCopyLink}
-              testID="menu-copy"
-            />
-            <View style={styles.menuDivider} />
-            <MenuItem
-              label="Invite members"
-              icon={UserPlus}
-              onPress={onInvite}
-              testID="menu-invite"
-            />
+            {!canShareInvite ? (
+              <MenuItem
+                label="Report community"
+                icon={Flag}
+                onPress={() => {
+                  setMenuOpen(false);
+                  Alert.alert("Reported", "Thanks for flagging this community for review.");
+                }}
+                testID="menu-report"
+              />
+            ) : null}
             {isOwner ? (
               <>
                 <View style={styles.menuDivider} />
@@ -3372,6 +3569,71 @@ const styles = StyleSheet.create({
   },
   gateVerifyText: { color: Colors.ink, fontSize: 14, fontWeight: "900" },
   gateFootnote: { color: Colors.muted, fontSize: 11, fontWeight: "700", textAlign: "center" },
+
+  gateScreen: { flex: 1, backgroundColor: Colors.ink },
+  gateScreenBg: { ...StyleSheet.absoluteFillObject, opacity: 0.35 },
+  gateScreenScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(4,3,1,0.78)" },
+  gateScreenSafe: { flex: 1 },
+  gateScreenTopBar: {
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  gateScreenTopText: { color: Colors.text, fontSize: 13, fontWeight: "900", letterSpacing: -0.2, flex: 1, textAlign: "center" },
+  gateScreenBody: { paddingHorizontal: 22, paddingTop: 36, paddingBottom: 32, gap: 14, alignItems: "center" },
+  gateScreenAvatar: {
+    width: 84,
+    height: 84,
+    borderRadius: 24,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gateScreenAvatarEmoji: { fontSize: 40 },
+  gateScreenLockChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    marginTop: 4,
+  },
+  gateScreenLockChipText: { color: Colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
+  gateScreenTitle: { color: Colors.text, fontSize: 22, fontWeight: "900", letterSpacing: -0.4, textAlign: "center", marginTop: 8 },
+  gateScreenBody2: { color: Colors.muted, fontSize: 13, fontWeight: "600", lineHeight: 19, textAlign: "center", paddingHorizontal: 6 },
+  gateScreenInputCard: {
+    width: "100%",
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    gap: 10,
+  },
+  gateScreenPrimary: {
+    marginTop: 14,
+    width: "100%",
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gateScreenSecondary: {
+    marginTop: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  gateScreenSecondaryText: { color: Colors.muted, fontSize: 12, fontWeight: "800" },
 
   lockedBanner: {
     marginHorizontal: 14,

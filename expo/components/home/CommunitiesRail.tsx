@@ -138,6 +138,14 @@ export default function CommunitiesRail() {
                     onPress={(e) => {
                       e.stopPropagation();
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      // Non-public communities must clear their gate on the
+                      // detail screen (passcode / request / holder verify).
+                      // Public communities can be joined directly here.
+                      const locked = !!(c.isPrivate || c.holderOnly);
+                      if (!joined && locked) {
+                        router.push({ pathname: "/community/[id]", params: { id: c.id } });
+                        return;
+                      }
                       toggleJoin(c.id);
                     }}
                     style={[
@@ -155,7 +163,7 @@ export default function CommunitiesRail() {
                         { color: joined ? Colors.text : Colors.ink },
                       ]}
                     >
-                      {joined ? "JOINED" : "JOIN"}
+                      {joined ? "JOINED" : (c.isPrivate || c.holderOnly) ? "UNLOCK" : "JOIN"}
                     </Text>
                   </Pressable>
                 </View>
