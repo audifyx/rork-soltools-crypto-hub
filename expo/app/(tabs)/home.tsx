@@ -78,9 +78,9 @@ import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchToken } from "@/types/launchpad";
 import { UserPost, useApp } from "@/providers/app-provider";
-import { type CommunityPost, useSocial } from "@/providers/social-provider";
+import { type Community, type CommunityPost, useSocial } from "@/providers/social-provider";
 
-const FILTERS = ["For You", "Following", "Trending", "New Pairs", "Whales", "OG Tokens"] as const;
+const FILTERS = ["For You", "Following", "Trending", "Communities", "New Pairs", "Whales", "OG Tokens"] as const;
 type Filter = (typeof FILTERS)[number];
 
 type WhaleFeedEvent = {
@@ -98,7 +98,8 @@ type WhaleFeedEvent = {
 type FeedItem =
   | { kind: "user"; data: UserPost }
   | { kind: "token"; data: LaunchToken }
-  | { kind: "whale"; data: WhaleFeedEvent };
+  | { kind: "whale"; data: WhaleFeedEvent }
+  | { kind: "community"; data: Community };
 
 type FeedPostRow = {
   id: string;
@@ -180,7 +181,7 @@ export default function HomeFeedScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const { posts: userPosts, togglePostLike, togglePostRepost, deletePost, profile } = useApp();
-  const { addPostReply, quotePost, deleteCommunityPost } = useSocial();
+  const { addPostReply, quotePost, deleteCommunityPost, communities, trendingCommunities, joinedCommunities, isJoined, toggleJoin } = useSocial();
   const [interaction, setInteraction] = useState<{
     mode: "reply" | "quote";
     post: UserPost;
@@ -666,9 +667,28 @@ export default function HomeFeedScreen() {
     if (filter === "OG Tokens") {
       return getOgMemeTokens(listings, 40).map((t): FeedItem => ({ kind: "token", data: t }));
     }
+    if (filter === "Communities") {
+      const joinedIds = new Set(joinedCommunities.map((c) => c.id));
+      const ordered = communities
+        .slice()
+        .sort((a, b) => {
+          const aScore =
+            (joinedIds.has(a.id) ? 100_000 : 0) +
+            (a.trending ? 10_000 : 0) +
+            a.online * 2 +
+            a.members * 0.05;
+          const bScore =
+            (joinedIds.has(b.id) ? 100_000 : 0) +
+            (b.trending ? 10_000 : 0) +
+            b.online * 2 +
+            b.members * 0.05;
+          return bScore - aScore;
+        });
+      return ordered.map((c): FeedItem => ({ kind: "community", data: c }));
+    }
     const remote = livePostsQ.data ?? [];
     return (remote.length > 0 ? remote : userPosts).map((p): FeedItem => ({ kind: "user", data: p }));
-  }, [filter, userPosts, livePostsQ.data, followingPostsQ.data, listings, trendingTokens, newPairsData, whalesQ.data]);
+  }, [filter, userPosts, livePostsQ.data, followingPostsQ.data, listings, trendingTokens, newPairsData, whalesQ.data, communities, joinedCommunities]);
 
   const openCompose = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -689,6 +709,19 @@ export default function HomeFeedScreen() {
       }
       if (item.kind === "whale") {
         return <WhaleEventCard event={item.data} />;
+      }
+      if (item.kind === "community") {
+        return (
+          <CommunityFeedCard
+            community={item.data}
+            joined={isJoined(item.data.id)}
+            onPress={() => router.push({ pathname: "/community/[id]", params: { id: item.data.id } })}
+            onJoin={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              toggleJoin(item.data.id);
+            }}
+          />
+        );
       }
       if (item.kind === "user") {
         return (
@@ -724,6 +757,8 @@ export default function HomeFeedScreen() {
       onDeleteReply,
       router,
       userId,
+      isJoined,
+      toggleJoin,
     ],
   );
 
@@ -897,13 +932,15 @@ function FeedHeader({
             ? "Following"
             : filter === "Trending"
               ? "Trending tokens"
-              : filter === "New Pairs"
-                ? "New pairs"
-                : filter === "Whales"
-                  ? "Whale activity"
-                  : filter === "OG Tokens"
-                    ? "OG tokens"
-                    : "Live feed"}
+              : filter === "Communities"
+                ? "Communities"
+                : filter === "New Pairs"
+                  ? "New pairs"
+                  : filter === "Whales"
+                    ? "Whale activity"
+                    : filter === "OG Tokens"
+                      ? "OG tokens"
+                      : "Live feed"}
         </Text>
         <View style={styles.livePill}>
           <View style={styles.liveDot} />
@@ -2088,6 +2125,119 @@ function WhaleEventCard({ event }: { event: WhaleFeedEvent }) {
         </Text>
       </View>
     </View>
+  );
+}
+
+function CommunityFeedCard({
+  community,
+  joined,
+  onPress,
+  onJoin,
+}: {
+  community: Community;
+  joined: boolean;
+  onPress: () => void;
+  onJoin: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={styles.commCard}
+      testID={`community-feed-${community.id}`}
+    >
+      <View style={styles.commBanner}>
+        <LinearGradient
+          colors={[community.accent[0], community.accent[1]]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        {community.bannerUrl ? (
+          <ExpoImage source={{ uri: community.bannerUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        ) : null}
+        <LinearGradient
+          colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.78)"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.commBannerTop}>
+          {community.trending ? (
+            <View style={styles.commTrendPill}>
+              <Flame color={Colors.orange} size={10} strokeWidth={3} />
+              <Text style={styles.commTrendText}>TRENDING</Text>
+            </View>
+          ) : <View />}
+          <View style={styles.commLivePill}>
+            <View style={styles.commLiveDot} />
+            <Text style={styles.commLiveText}>{community.online} online</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.commBody}>
+        <View style={styles.commAvatar}>
+          <LinearGradient
+            colors={[community.accent[0], community.accent[1]]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          {community.avatarUrl ? (
+            <ExpoImage source={{ uri: community.avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          ) : (
+            <Text style={styles.commAvatarEmoji}>{community.iconEmoji}</Text>
+          )}
+        </View>
+        <View style={styles.commMid}>
+          <View style={styles.commTitleRow}>
+            <Text style={styles.commName} numberOfLines={1}>
+              {community.name}
+            </Text>
+            {community.verified ? (
+              <BadgeCheck color={Colors.cyan} size={13} strokeWidth={2.8} />
+            ) : null}
+          </View>
+          <Text style={styles.commDesc} numberOfLines={2}>
+            {community.description || `The official community for ${community.name}.`}
+          </Text>
+          <View style={styles.commMetaRow}>
+            <View style={styles.commMetaItem}>
+              <Users color={Colors.muted} size={11} strokeWidth={2.8} />
+              <Text style={styles.commMetaText}>
+                {community.members >= 1000
+                  ? `${(community.members / 1000).toFixed(1)}K`
+                  : community.members.toString()}
+              </Text>
+            </View>
+            {community.tags.slice(0, 2).map((t) => (
+              <Text key={t} style={styles.commTag}>#{t}</Text>
+            ))}
+          </View>
+        </View>
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            onJoin();
+          }}
+          hitSlop={8}
+          style={[
+            styles.commJoinBtn,
+            joined ? styles.commJoinBtnOn : { backgroundColor: community.accent[0] },
+          ]}
+          testID={`community-feed-join-${community.id}`}
+        >
+          <Text
+            style={[
+              styles.commJoinText,
+              { color: joined ? Colors.text : Colors.ink },
+            ]}
+          >
+            {joined ? "JOINED" : "JOIN"}
+          </Text>
+        </Pressable>
+      </View>
+    </Pressable>
   );
 }
 
@@ -3392,6 +3542,103 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   tokenChangeText: { fontSize: 12, fontWeight: "900" },
+
+  commCard: {
+    marginHorizontal: 14,
+    marginVertical: 6,
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.025)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  commBanner: { height: 110, overflow: "hidden" },
+  commBannerTop: {
+    position: "absolute",
+    top: 10,
+    left: 12,
+    right: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  commTrendPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(244,134,91,0.55)",
+  },
+  commTrendText: { color: Colors.orange, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
+  commLivePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(216,183,90,0.32)",
+  },
+  commLiveDot: { width: 6, height: 6, borderRadius: 4, backgroundColor: Colors.mint },
+  commLiveText: { color: Colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
+  commBody: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: 14,
+    paddingTop: 16,
+  },
+  commAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 15,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -36,
+    borderWidth: 3,
+    borderColor: Colors.ink,
+  },
+  commAvatarEmoji: { fontSize: 26 },
+  commMid: { flex: 1, minWidth: 0 },
+  commTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  commName: {
+    color: Colors.text,
+    fontSize: 15.5,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+    flexShrink: 1,
+  },
+  commDesc: {
+    color: Colors.muted,
+    fontSize: 12.5,
+    fontWeight: "600",
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  commMetaRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },
+  commMetaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  commMetaText: { color: Colors.text, fontSize: 11, fontWeight: "800" },
+  commTag: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+  commJoinBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    alignSelf: "flex-start",
+  },
+  commJoinBtnOn: {
+    backgroundColor: "rgba(221,227,236,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(221,227,236,0.18)",
+  },
+  commJoinText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
+
   fab: {
     position: "absolute",
     right: 18,
