@@ -74,7 +74,7 @@ import {
   X,
   Zap,
 } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Platform,
@@ -89,6 +89,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
+import TokenAvatar from "@/components/TokenAvatar";
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import { getTokenOverview, getTokenSecurity, type TokenOverview } from "@/lib/api/birdeye";
@@ -1537,11 +1538,78 @@ function VoiceLobbyTool({ accent }: { accent: string }) {
   );
 }
 
+interface SniperToken {
+  name: string;
+  symbol: string;
+  image?: string;
+  mint: string;
+  price: number;
+  marketCap: number;
+  liquidity: number;
+  change5m: number;
+  ageSec: number;
+  source: "Pump.fun" | "Raydium" | "Meteora" | "Orca";
+  holders: number;
+}
+
 interface SniperLog {
   id: string;
   at: number;
   pair: string;
   result: "queued" | "filled" | "missed";
+  token: SniperToken;
+  entry: number;
+  pnlPct: number;
+}
+
+const SNIPER_NAME_POOL: { name: string; symbol: string; image: string }[] = [
+  { name: "Solana Cat", symbol: "SCAT", image: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=200&h=200&fit=crop" },
+  { name: "MoonRider", symbol: "MRIDE", image: "https://images.unsplash.com/photo-1532968961962-8a0cb3a2d4f5?w=200&h=200&fit=crop" },
+  { name: "Degen Frog", symbol: "DFROG", image: "https://images.unsplash.com/photo-1551884170-09fb70a3a2ed?w=200&h=200&fit=crop" },
+  { name: "Pixel Pup", symbol: "PPUP", image: "https://images.unsplash.com/photo-1546238232-20216dec9f72?w=200&h=200&fit=crop" },
+  { name: "Galaxy Brain", symbol: "GBRN", image: "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=200&h=200&fit=crop" },
+  { name: "Neon Shark", symbol: "NSHRK", image: "https://images.unsplash.com/photo-1564399579883-451a5d44ec08?w=200&h=200&fit=crop" },
+  { name: "Turbo Duck", symbol: "TDUCK", image: "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?w=200&h=200&fit=crop" },
+  { name: "Rocket Ape", symbol: "RAPE", image: "https://images.unsplash.com/photo-1535083783855-76ae62b2914e?w=200&h=200&fit=crop" },
+  { name: "Crystal Wolf", symbol: "CWOLF", image: "https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?w=200&h=200&fit=crop" },
+  { name: "Inferno Bird", symbol: "IBIRD", image: "https://images.unsplash.com/photo-1444464666168-49d633b86797?w=200&h=200&fit=crop" },
+];
+const SNIPER_SOURCES: SniperToken["source"][] = ["Pump.fun", "Raydium", "Meteora", "Orca"];
+
+function generateSniperToken(): SniperToken {
+  const pick = SNIPER_NAME_POOL[Math.floor(Math.random() * SNIPER_NAME_POOL.length)];
+  const mint = Array.from({ length: 8 }, () => Math.random().toString(36).slice(2, 6)).join("").slice(0, 32);
+  return {
+    name: pick.name,
+    symbol: pick.symbol,
+    image: pick.image,
+    mint,
+    price: Number((Math.random() * 0.0009 + 0.00001).toFixed(7)),
+    marketCap: Math.round(8000 + Math.random() * 280000),
+    liquidity: Math.round(3000 + Math.random() * 90000),
+    change5m: Number(((Math.random() - 0.35) * 220).toFixed(1)),
+    ageSec: Math.round(5 + Math.random() * 240),
+    source: SNIPER_SOURCES[Math.floor(Math.random() * SNIPER_SOURCES.length)],
+    holders: Math.round(8 + Math.random() * 480),
+  };
+}
+
+function fmtTokenPrice(n: number): string {
+  if (n >= 1) return `${n.toFixed(3)}`;
+  if (n >= 0.01) return `${n.toFixed(4)}`;
+  return `${n.toFixed(7)}`;
+}
+
+function fmtCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return `${Math.round(n)}`;
+}
+
+function fmtAge(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
+  return `${Math.floor(sec / 3600)}h`;
 }
 
 function SniperTool({ accent }: { accent: string }) {
@@ -1568,23 +1636,71 @@ function SniperTool({ accent }: { accent: string }) {
   }, []);
 
   const toggleArm = useCallback(() => {
-    setArmed((v) => {
-      const next = !v;
-      if (next) {
-        const log: SniperLog = {
-          id: `${Date.now()}`,
-          at: Date.now(),
-          pair: "—",
-          result: "queued",
-        };
-        setLogs((l) => [log, ...l]);
-      }
-      return next;
-    });
+    setArmed((v) => !v);
     Haptics.notificationAsync(
       armed ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success,
     ).catch(() => {});
   }, [armed]);
+
+  const streamRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const minLiqUSD = useMemo(() => {
+    const lp = parseFloat(minLiq);
+    return Number.isFinite(lp) ? lp * 150 : 0;
+  }, [minLiq]);
+  const budgetSol = useMemo(() => {
+    const b = parseFloat(budget);
+    return Number.isFinite(b) ? b : 0.5;
+  }, [budget]);
+
+  useEffect(() => {
+    if (!armed) {
+      if (streamRef.current) clearInterval(streamRef.current);
+      streamRef.current = null;
+      return;
+    }
+    const fire = () => {
+      const t = generateSniperToken();
+      const passes = t.liquidity >= minLiqUSD;
+      const filled = passes && Math.random() > 0.18;
+      const log: SniperLog = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        at: Date.now(),
+        pair: `${t.symbol}/SOL`,
+        result: filled ? "filled" : passes ? "queued" : "missed",
+        token: t,
+        entry: t.price,
+        pnlPct: 0,
+      };
+      setLogs((l) => [log, ...l].slice(0, 24));
+      Haptics.selectionAsync().catch(() => {});
+    };
+    fire();
+    streamRef.current = setInterval(fire, 4200);
+    return () => {
+      if (streamRef.current) clearInterval(streamRef.current);
+      streamRef.current = null;
+    };
+  }, [armed, minLiqUSD]);
+
+  useEffect(() => {
+    if (logs.length === 0) return;
+    if (tickRef.current) clearInterval(tickRef.current);
+    tickRef.current = setInterval(() => {
+      setLogs((prev) =>
+        prev.map((l) => {
+          if (l.result !== "filled") return l;
+          const drift = (Math.random() - 0.45) * 6;
+          const next = Math.max(-95, Math.min(900, l.pnlPct + drift));
+          return { ...l, pnlPct: Number(next.toFixed(1)) };
+        }),
+      );
+    }, 1600);
+    return () => {
+      if (tickRef.current) clearInterval(tickRef.current);
+      tickRef.current = null;
+    };
+  }, [logs.length]);
 
   return (
     <View>
@@ -1690,37 +1806,125 @@ function SniperTool({ accent }: { accent: string }) {
           body="Once armed, executions appear here in real-time."
         />
       ) : (
-        <View style={styles.list}>
-          {logs.map((l) => (
-            <View key={l.id} style={styles.rowCard}>
-              <View style={[styles.rowIcon, { backgroundColor: `${accent}1A` }]}>
-                <Crosshair color={accent} size={14} strokeWidth={2.6} />
+        <View style={styles.snipeList}>
+          {logs.map((l) => {
+            const t = l.token;
+            const up = l.pnlPct >= 0;
+            const change5mUp = t.change5m >= 0;
+            const statusColor =
+              l.result === "filled" ? Colors.mint : l.result === "queued" ? accent : Colors.rose;
+            return (
+              <View key={l.id} style={[styles.snipeCard, { borderColor: `${statusColor}33` }]}>
+                <View style={styles.snipeTopRow}>
+                  <TokenAvatar uri={t.image} ticker={t.symbol} size={44} radius={14} />
+                  <View style={styles.snipeIdent}>
+                    <View style={styles.snipeTitleRow}>
+                      <Text style={styles.snipeName} numberOfLines={1}>
+                        {t.name}
+                      </Text>
+                      <View style={[styles.snipeSourceChip, { borderColor: `${accent}55` }]}>
+                        <Text style={[styles.snipeSourceText, { color: accent }]}>{t.source}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.snipeSubRow}>
+                      <Text style={styles.snipeSymbol}>${t.symbol}</Text>
+                      <View style={styles.snipeDot} />
+                      <Clock color={Colors.muted} size={10} strokeWidth={2.6} />
+                      <Text style={styles.snipeMeta}>{fmtAge(t.ageSec)}</Text>
+                      <View style={styles.snipeDot} />
+                      <Users color={Colors.muted} size={10} strokeWidth={2.6} />
+                      <Text style={styles.snipeMeta}>{t.holders}</Text>
+                    </View>
+                  </View>
+                  <View
+                    style={[
+                      styles.snipeStatusPill,
+                      { backgroundColor: `${statusColor}22`, borderColor: `${statusColor}55` },
+                    ]}
+                  >
+                    <View style={[styles.snipeStatusDot, { backgroundColor: statusColor }]} />
+                    <Text style={[styles.snipeStatusText, { color: statusColor }]}>
+                      {l.result.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.snipeStatsRow}>
+                  <View style={styles.snipeStat}>
+                    <Text style={styles.snipeStatLabel}>Price</Text>
+                    <Text style={styles.snipeStatValue}>{fmtTokenPrice(t.price)}</Text>
+                  </View>
+                  <View style={styles.snipeStatDivider} />
+                  <View style={styles.snipeStat}>
+                    <Text style={styles.snipeStatLabel}>MC</Text>
+                    <Text style={styles.snipeStatValue}>{fmtCompact(t.marketCap)}</Text>
+                  </View>
+                  <View style={styles.snipeStatDivider} />
+                  <View style={styles.snipeStat}>
+                    <Text style={styles.snipeStatLabel}>Liq</Text>
+                    <Text style={styles.snipeStatValue}>{fmtCompact(t.liquidity)}</Text>
+                  </View>
+                  <View style={styles.snipeStatDivider} />
+                  <View style={styles.snipeStat}>
+                    <Text style={styles.snipeStatLabel}>5m</Text>
+                    <Text
+                      style={[
+                        styles.snipeStatValue,
+                        { color: change5mUp ? Colors.mint : Colors.rose },
+                      ]}
+                    >
+                      {change5mUp ? "+" : ""}
+                      {t.change5m.toFixed(1)}%
+                    </Text>
+                  </View>
+                </View>
+
+                {l.result === "filled" ? (
+                  <View style={styles.snipeFillRow}>
+                    <View style={styles.snipeFillLeft}>
+                      <View style={[styles.snipeFillIcon, { backgroundColor: `${accent}1A` }]}>
+                        <Target color={accent} size={11} strokeWidth={2.8} />
+                      </View>
+                      <View>
+                        <Text style={styles.snipeFillLabel}>Entry</Text>
+                        <Text style={styles.snipeFillValue}>
+                          {budgetSol} SOL @ {fmtTokenPrice(l.entry)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={[styles.snipePnl, { backgroundColor: up ? `${Colors.mint}1A` : `${Colors.rose}1A` }]}>
+                      {up ? (
+                        <TrendingUp color={Colors.mint} size={12} strokeWidth={2.8} />
+                      ) : (
+                        <TrendingDown color={Colors.rose} size={12} strokeWidth={2.8} />
+                      )}
+                      <Text style={[styles.snipePnlText, { color: up ? Colors.mint : Colors.rose }]}>
+                        {up ? "+" : ""}
+                        {l.pnlPct.toFixed(1)}%
+                      </Text>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.snipeFillRow}>
+                    <View style={styles.snipeFillLeft}>
+                      <View style={[styles.snipeFillIcon, { backgroundColor: `${statusColor}1A` }]}>
+                        <Crosshair color={statusColor} size={11} strokeWidth={2.8} />
+                      </View>
+                      <View>
+                        <Text style={styles.snipeFillLabel}>
+                          {l.result === "queued" ? "Routing buy" : "Skipped — failed filter"}
+                        </Text>
+                        <Text style={styles.snipeFillValue} numberOfLines={1}>
+                          {t.mint.slice(0, 6)}…{t.mint.slice(-4)}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.snipeAgo}>{timeAgo(l.at)}</Text>
+                  </View>
+                )}
               </View>
-              <View style={styles.rowMid}>
-                <Text style={styles.rowTitle}>{l.pair === "—" ? "Awaiting fill" : l.pair}</Text>
-                <Text style={styles.rowSub}>{timeAgo(l.at)}</Text>
-              </View>
-              <View
-                style={[
-                  styles.statusPill,
-                  l.result === "filled" && { backgroundColor: `${Colors.mint}26` },
-                  l.result === "queued" && { backgroundColor: `${accent}26` },
-                  l.result === "missed" && { backgroundColor: `${Colors.rose}26` },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusPillText,
-                    l.result === "filled" && { color: Colors.mint },
-                    l.result === "queued" && { color: accent },
-                    l.result === "missed" && { color: Colors.rose },
-                  ]}
-                >
-                  {l.result.toUpperCase()}
-                </Text>
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
       )}
     </View>
@@ -3699,4 +3903,76 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.mint,
   },
   backSoloText: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
+  snipeList: { gap: 10, marginTop: 8 },
+  snipeCard: {
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 12,
+    gap: 10,
+  },
+  snipeTopRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  snipeIdent: { flex: 1, minWidth: 0 },
+  snipeTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  snipeName: { color: Colors.text, fontSize: 14, fontWeight: "900", flexShrink: 1 },
+  snipeSourceChip: {
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  snipeSourceText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
+  snipeSubRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 3 },
+  snipeSymbol: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
+  snipeDot: { width: 2, height: 2, borderRadius: 1, backgroundColor: Colors.muted, opacity: 0.6 },
+  snipeMeta: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+  snipeStatusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  snipeStatusDot: { width: 5, height: 5, borderRadius: 2.5 },
+  snipeStatusText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  snipeStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+  },
+  snipeStat: { flex: 1, alignItems: "center" },
+  snipeStatDivider: { width: 1, height: 22, backgroundColor: "rgba(255,255,255,0.06)" },
+  snipeStatLabel: { color: Colors.muted, fontSize: 9, fontWeight: "800", letterSpacing: 0.8 },
+  snipeStatValue: { color: Colors.text, fontSize: 12, fontWeight: "900", marginTop: 2 },
+  snipeFillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  snipeFillLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+  snipeFillIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  snipeFillLabel: { color: Colors.muted, fontSize: 10, fontWeight: "800", letterSpacing: 0.4 },
+  snipeFillValue: { color: Colors.text, fontSize: 12, fontWeight: "900", marginTop: 1 },
+  snipePnl: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 9,
+  },
+  snipePnlText: { fontSize: 12, fontWeight: "900" },
+  snipeAgo: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
 });
