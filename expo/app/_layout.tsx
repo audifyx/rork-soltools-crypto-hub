@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
@@ -31,6 +31,32 @@ SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
   console.log("SolTools splash hold skipped during boot", error);
 });
 
+/**
+ * Returns true for transient fetch errors (offline, DNS, TLS handshake, timeout)
+ * that React Native surfaces as a bare `TypeError: Network request failed`.
+ * These are already retried by React Query and individually caught by callers,
+ * so we never want them to bubble as red console.error overlays — especially
+ * during cold start while the device is still on the lock screen and the
+ * network stack is unavailable.
+ */
+function isTransientNetworkError(error: unknown): boolean {
+  if (!error) return false;
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  if (!message) return false;
+  return (
+    message.includes("Network request failed") ||
+    message.includes("Failed to fetch") ||
+    message.includes("NetworkError") ||
+    message.includes("timeout") ||
+    message.includes("AbortError")
+  );
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -42,7 +68,57 @@ const queryClient = new QueryClient({
       refetchOnReconnect: true,
     },
   },
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      if (isTransientNetworkError(error)) {
+        console.log("[query] transient network error suppressed", query.queryHash);
+        return;
+      }
+      console.log("[query] error", query.queryHash, error instanceof Error ? error.message : error);
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      if (isTransientNetworkError(error)) {
+        console.log("[mutation] transient network error suppressed");
+        return;
+      }
+      console.log("[mutation] error", error instanceof Error ? error.message : error);
+    },
+  }),
 });
+
+// Swallow unhandled promise rejections caused by transient network failures so
+// they don't render the red LogBox while the device is still offline / locked.
+if (typeof globalThis !== "undefined") {
+  const g = globalThis as unknown as {
+    HermesInternal?: { enablePromiseRejectionTracker?: (opts: { allRejections: boolean; onUnhandled: (id: number, err: unknown) => void }) => void };
+    addEventListener?: (type: string, listener: (e: Event & { reason?: unknown; preventDefault?: () => void }) => void) => void;
+  };
+  try {
+    g.HermesInternal?.enablePromiseRejectionTracker?.({
+      allRejections: true,
+      onUnhandled: (_id, err) => {
+        if (isTransientNetworkError(err)) {
+          console.log("[unhandled] transient network rejection suppressed");
+          return;
+        }
+        console.log("[unhandled] promise rejection", err instanceof Error ? err.message : err);
+      },
+    });
+  } catch {
+    // ignore — tracker not available
+  }
+  try {
+    g.addEventListener?.("unhandledrejection", (event) => {
+      if (isTransientNetworkError(event?.reason)) {
+        event.preventDefault?.();
+      }
+    });
+  } catch {
+    // ignore
+  }
+}
 
 export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
   console.log("SolTools root error", error.message);
