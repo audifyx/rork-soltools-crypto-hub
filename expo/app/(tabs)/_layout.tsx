@@ -76,11 +76,11 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => <Compass color={color} size={size} strokeWidth={2.4} />,
         }}
       />
+      {/* For You tab hidden from the tab bar — route still accessible via /fyp if re-enabled. */}
       <Tabs.Screen
         name="fyp"
         options={{
-          title: "For You",
-          tabBarIcon: ({ color, size }) => <Sparkles color={color} size={size} strokeWidth={2.4} />,
+          href: null,
         }}
       />
       <Tabs.Screen
