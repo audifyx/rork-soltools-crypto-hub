@@ -2028,8 +2028,9 @@ function FeedEmpty({ filter, onCompose }: { filter: Filter; onCompose: () => voi
     "New Pairs": { title: "No new pairs", body: "Newly launched Solana pairs will surface here in real time.", Icon: Zap },
     Whales: { title: "No whale moves", body: "Large holder & high-volume tokens will appear here.", Icon: Waves },
     "OG Tokens": { title: "No OG tokens yet", body: "BUTTCOIN, TROLL, WOJAK, USELESS, PENGU and other OG names will appear when live market data loads.", Icon: Award },
+    Communities: { title: "No communities yet", body: "Discover tribes on Solana — join one or spin up your own.", Icon: Users },
   };
-  const c = titles[filter];
+  const c = titles[filter] ?? titles["For You"];
   return (
     <View style={styles.feedEmpty} testID="feed-empty">
       <View style={styles.feedEmptyIcon}>
