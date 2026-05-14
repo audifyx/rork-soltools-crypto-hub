@@ -69,6 +69,8 @@ export interface CommunityPost {
   authorHandle: string;
   authorName: string;
   authorColor: string;
+  authorAvatarUrl?: string | null;
+  authorUsername?: string | null;
   content: string;
   imageUrl?: string | null;
   ticker?: string;
@@ -319,6 +321,7 @@ const COMMUNITY_POST_SELECT = "id,user_id,community_id,content,image_url,ticker,
 function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): CommunityPost {
   const postId = String(row.id);
   const username = (row.username as string | null) ?? "";
+  const avatarUrl = normalizeMediaUrl(row.avatar_url) ?? null;
   const quoteUsername = (row.quote_author_username as string | null) ?? "";
   const quoteId = (row.quote_post_id as string | null) ?? null;
   const parentUsername = (row.parent_author_username as string | null) ?? "";
@@ -332,6 +335,8 @@ function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): 
     authorHandle: username ? `@${username}` : "",
     authorName: displayNameFrom(username, row.display_name),
     authorColor: (row.avatar_color as string | null) ?? Colors.mint,
+    authorAvatarUrl: avatarUrl,
+    authorUsername: username || null,
     content: (row.content as string | null) ?? "",
     imageUrl: normalizeMediaUrl(row.image_url),
     ticker: (row.ticker as string | null) ?? undefined,
@@ -705,11 +710,33 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             (mediaRows ?? []).map((r) => [String(r.id), normalizeMediaUrl(r.image_url)]),
           );
         }
+        // Enrich author avatars (the RPC doesn't return avatar_url today).
+        const authorIds = Array.from(
+          new Set(
+            rows
+              .map((r) => r.user_id)
+              .filter((v): v is string => typeof v === "string" && v.length > 0),
+          ),
+        );
+        const avatarById = new Map<string, string | null>();
+        if (authorIds.length > 0) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id,user_id,avatar_url")
+            .or(`id.in.(${authorIds.join(",")}),user_id.in.(${authorIds.join(",")})`);
+          (profs ?? []).forEach((p) => {
+            const url = normalizeMediaUrl(p.avatar_url);
+            if (p.id) avatarById.set(String(p.id), url);
+            if (p.user_id) avatarById.set(String(p.user_id), url);
+          });
+        }
         return rows.map((r): CommunityPost => {
           const post = communityPostFromRow(r, id);
+          const uid = (r.user_id as string | null) ?? post.authorUserId ?? "";
           return {
             ...post,
             imageUrl: post.imageUrl ?? imageByPost.get(post.id) ?? null,
+            authorAvatarUrl: post.authorAvatarUrl ?? (uid ? avatarById.get(uid) ?? null : null),
           };
         });
       } catch (e) {
@@ -731,7 +758,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           if (authorIds.length > 0) {
             const { data: profiles, error: profilesError } = await supabase
               .from("profiles")
-              .select("id,user_id,username,display_name,avatar_color")
+              .select("id,user_id,username,display_name,avatar_color,avatar_url")
               .or(`id.in.(${authorIds.join(",")}),user_id.in.(${authorIds.join(",")})`);
             if (profilesError) console.log("[social] post author enrich failed", profilesError.message);
             authorMap = new Map(
@@ -754,6 +781,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
               authorHandle: username ? `@${username}` : "",
               authorName: display,
               authorColor: (author.avatar_color as string | null) ?? Colors.mint,
+              authorAvatarUrl: normalizeMediaUrl(author.avatar_url) ?? null,
+              authorUsername: ((author.username as string | null) ?? "") || null,
               content: (r.content as string) ?? "",
               imageUrl: normalizeMediaUrl(r.image_url),
               ticker: (r.ticker as string) ?? undefined,
@@ -859,7 +888,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           if (authorIds.length > 0) {
             const { data: profiles, error: profilesError } = await supabase
               .from("profiles")
-              .select("id,user_id,username,display_name,avatar_color")
+              .select("id,user_id,username,display_name,avatar_color,avatar_url")
               .or(`id.in.(${authorIds.join(",")}),user_id.in.(${authorIds.join(",")})`);
             if (profilesError) console.log("[social] reply author enrich failed", profilesError.message);
             authorMap = new Map(
@@ -879,6 +908,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
                 username: author.username,
                 display_name: author.display_name,
                 avatar_color: author.avatar_color,
+                avatar_url: author.avatar_url,
                 liked: interactions.liked.has(postId),
                 reposted: interactions.reposted.has(postId),
                 bookmarked: interactions.bookmarked.has(postId),

@@ -1087,6 +1087,16 @@ export default function CommunityDetailScreen() {
 
   const joined = isJoined(community.id);
 
+  const openAuthorProfile = useCallback(
+    (post: CommunityPost) => {
+      const handle = (post.authorUsername ?? post.authorHandle ?? "").replace(/^@/, "").trim();
+      if (!handle) return;
+      Haptics.selectionAsync().catch(() => {});
+      router.push({ pathname: "/u/[handle]", params: { handle } });
+    },
+    [router],
+  );
+
   const renderPost: ListRenderItem<CommunityPost> = ({ item }) => (
     <PostRow
       post={item}
@@ -1103,6 +1113,7 @@ export default function CommunityDetailScreen() {
       canDelete={canDeletePost(item)}
       onDelete={() => onDeletePost(item)}
       onTokenChart={openTokenChart}
+      onAvatarPress={() => openAuthorProfile(item)}
     />
   );
 
@@ -1645,7 +1656,7 @@ export default function CommunityDetailScreen() {
                 testID="community-members"
               >
                 <View style={styles.memberStack}>
-                  {(members.length > 0 ? members.slice(0, 3) : placeholderMembers()).map(
+                  {(members.length > 0 ? members.slice(0, 4) : placeholderMembers()).map(
                     (m, i) => (
                       <View
                         key={`${m.id}-${i}`}
@@ -1658,9 +1669,17 @@ export default function CommunityDetailScreen() {
                           },
                         ]}
                       >
-                        <Text style={styles.stackInit}>
-                          {m.name.slice(0, 1).toUpperCase()}
-                        </Text>
+                        {m.avatarUrl ? (
+                          <Image
+                            source={{ uri: m.avatarUrl }}
+                            style={StyleSheet.absoluteFill}
+                            contentFit="cover"
+                          />
+                        ) : (
+                          <Text style={styles.stackInit}>
+                            {m.name.slice(0, 1).toUpperCase()}
+                          </Text>
+                        )}
                       </View>
                     ),
                   )}
@@ -2849,6 +2868,7 @@ function PostRow({
   canDelete = false,
   onDelete,
   onTokenChart,
+  onAvatarPress,
 }: {
   post: CommunityPost;
   compact?: boolean;
@@ -2865,6 +2885,7 @@ function PostRow({
   canDelete?: boolean;
   onDelete?: () => void;
   onTokenChart?: (token: CommunityTokenCard) => void;
+  onAvatarPress?: () => void;
 }) {
   const quote = post.quote;
   return (
@@ -2881,19 +2902,38 @@ function PostRow({
         </Text>
       ) : null}
       <View style={styles.postHead}>
-        <View style={[styles.postAvatar, { backgroundColor: post.authorColor }]}>
-          <Text style={styles.postInit}>
-            {post.authorName.slice(0, 1).toUpperCase()}
-          </Text>
-        </View>
-        <View style={{ flex: 1 }}>
+        <Pressable
+          onPress={onAvatarPress}
+          hitSlop={6}
+          disabled={!onAvatarPress}
+          style={[styles.postAvatar, { backgroundColor: post.authorColor }]}
+          testID={`post-avatar-${post.id}`}
+        >
+          {post.authorAvatarUrl ? (
+            <Image
+              source={{ uri: post.authorAvatarUrl }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+            />
+          ) : (
+            <Text style={styles.postInit}>
+              {post.authorName.slice(0, 1).toUpperCase()}
+            </Text>
+          )}
+        </Pressable>
+        <Pressable
+          onPress={onAvatarPress}
+          disabled={!onAvatarPress}
+          style={{ flex: 1 }}
+          hitSlop={4}
+        >
           <Text style={styles.postName} numberOfLines={1}>
             {post.authorName}
           </Text>
           <Text style={styles.postMeta}>
             {post.authorHandle} · {timeAgo(post.createdAt)}
           </Text>
-        </View>
+        </Pressable>
         {canPin ? (
           <Pressable
             onPress={onPin}
