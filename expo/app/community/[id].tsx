@@ -2348,6 +2348,8 @@ export default function CommunityDetailScreen() {
                 }
                 contentContainerStyle={styles.threadList}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="always"
+                keyboardDismissMode="on-drag"
               />
             ) : null}
 
@@ -3096,6 +3098,10 @@ function XCommentRow({
 }) {
   const handleText = post.authorUsername ? `@${post.authorUsername}` : post.authorHandle || "";
   const replyHandle = parentHandle ? (parentHandle.startsWith("@") ? parentHandle : `@${parentHandle}`) : null;
+  const stop = (cb: () => void) => (e: { stopPropagation?: () => void }) => {
+    e?.stopPropagation?.();
+    cb();
+  };
   return (
     <Pressable onPress={onOpen} style={styles.xRow} testID={`x-comment-${post.id}`}>
       <View style={styles.xRowLeft}>
@@ -3130,31 +3136,31 @@ function XCommentRow({
         {post.imageUrl ? (
           <Image source={{ uri: post.imageUrl }} style={styles.xRowImage} contentFit="cover" />
         ) : null}
-        <View style={styles.xRowActions}>
-          <Pressable onPress={onReply} style={styles.xRowAction} hitSlop={6} testID={`x-reply-${post.id}`}>
+        <View style={styles.xRowActions} onStartShouldSetResponder={() => true}>
+          <Pressable onPress={stop(onReply)} style={styles.xRowAction} hitSlop={10} testID={`x-reply-${post.id}`}>
             <MessageCircle color={Colors.muted} size={14} strokeWidth={2.4} />
             <Text style={styles.xRowActionText}>{fmtCount(post.comments ?? 0)}</Text>
           </Pressable>
-          <Pressable onPress={onRepost} style={styles.xRowAction} hitSlop={6} testID={`x-repost-${post.id}`}>
+          <Pressable onPress={stop(onRepost)} style={styles.xRowAction} hitSlop={10} testID={`x-repost-${post.id}`}>
             <Repeat2 color={post.reposted ? Colors.mint : Colors.muted} size={14} strokeWidth={2.4} />
             <Text style={[styles.xRowActionText, post.reposted && { color: Colors.mint }]}>{fmtCount(post.reposts ?? 0)}</Text>
           </Pressable>
-          <Pressable onPress={onLike} style={styles.xRowAction} hitSlop={6} testID={`x-like-${post.id}`}>
+          <Pressable onPress={stop(onLike)} style={styles.xRowAction} hitSlop={10} testID={`x-like-${post.id}`}>
             <Heart color={post.liked ? Colors.rose : Colors.muted} fill={post.liked ? Colors.rose : "transparent"} size={14} strokeWidth={2.4} />
             <Text style={[styles.xRowActionText, post.liked && { color: Colors.rose }]}>{fmtCount(post.likes ?? 0)}</Text>
           </Pressable>
-          <Pressable onPress={onQuote} style={styles.xRowAction} hitSlop={6} testID={`x-quote-${post.id}`}>
+          <Pressable onPress={stop(onQuote)} style={styles.xRowAction} hitSlop={10} testID={`x-quote-${post.id}`}>
             <Quote color={Colors.muted} size={13} strokeWidth={2.4} />
           </Pressable>
-          <Pressable onPress={onBookmark} style={styles.xRowAction} hitSlop={6} testID={`x-bookmark-${post.id}`}>
+          <Pressable onPress={stop(onBookmark)} style={styles.xRowAction} hitSlop={10} testID={`x-bookmark-${post.id}`}>
             <Bookmark color={post.bookmarked ? Colors.orange : Colors.muted} fill={post.bookmarked ? Colors.orange : "transparent"} size={13} strokeWidth={2.4} />
           </Pressable>
           {onReport ? (
-            <Pressable onPress={onReport} style={styles.xRowAction} hitSlop={6} testID={`x-report-${post.id}`}>
+            <Pressable onPress={stop(onReport)} style={styles.xRowAction} hitSlop={10} testID={`x-report-${post.id}`}>
               <Flag color={post.reported ? Colors.rose : Colors.muted} size={13} strokeWidth={2.4} />
             </Pressable>
           ) : null}
-          <Pressable onPress={onShare} style={styles.xRowAction} hitSlop={6} testID={`x-share-${post.id}`}>
+          <Pressable onPress={stop(onShare)} style={styles.xRowAction} hitSlop={10} testID={`x-share-${post.id}`}>
             <Share2 color={Colors.muted} size={13} strokeWidth={2.4} />
           </Pressable>
         </View>
