@@ -27,6 +27,7 @@ import { deleteMyEvent, listUpcomingEvents, rsvpEvent, type EventRow } from "@/l
 import { hapticSelect } from "@/lib/haptics";
 import { navigateBack } from "@/lib/navigation";
 import { useAuth } from "@/providers/auth-provider";
+import { supabase } from "@/lib/supabase/client";
 
 type Filter = "all" | "today" | "week" | "virtual" | "going";
 
@@ -58,6 +59,17 @@ export default function EventsScreen() {
   const queryClient = useQueryClient();
   const { isAuthenticated, userId } = useAuth();
   const [filter, setFilter] = useState<Filter>("all");
+  const [authUid, setAuthUid] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setAuthUid(data.user?.id ?? null);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  const myId = userId ?? authUid;
 
   const query = useQuery<EventRow[]>({
     queryKey: ["events", "upcoming"],
@@ -171,7 +183,8 @@ export default function EventsScreen() {
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           renderItem={({ item }) => {
             const d = formatDay(item.starts_at);
-            const isOwner = !!userId && item.host_user_id === userId;
+            const hostId = (item as EventRow & { host_id?: string | null }).host_user_id ?? (item as EventRow & { host_id?: string | null }).host_id ?? null;
+            const isOwner = !!myId && !!hostId && hostId === myId;
             return (
               <View style={styles.card} testID={`event-${item.id}`}>
                 {item.banner_url ? (
