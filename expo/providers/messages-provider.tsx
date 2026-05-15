@@ -852,30 +852,70 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
   );
 });
 
-/** Fetches profile media (avatar + banner) for a DM peer. */
+interface PeerProfileData {
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+  bio: string | null;
+  isOnline: boolean;
+  lastSeenAt: number | null;
+}
+
+/**
+ * Fetches profile media + live presence for a DM peer.
+ * Polls every 20s and subscribes to realtime updates on the peer's profile
+ * row so the header presence label refreshes as soon as they go on/offline.
+ */
 export function useDmPeerProfile(userId: string | null | undefined) {
-  return useQuery<{ avatarUrl: string | null; bannerUrl: string | null; bio: string | null } | null>({
+  const queryClient = useQueryClient();
+  const query = useQuery<PeerProfileData | null>({
     queryKey: ["messages", "peer-profile", userId ?? "none"],
     enabled: !!userId,
-    staleTime: 60_000,
+    staleTime: 10_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
       if (!userId) return null;
       const { data, error } = await supabase
         .from("profiles")
-        .select("avatar_url,banner_url,bio")
+        .select("avatar_url,banner_url,bio,is_online,last_seen_at")
         .eq("user_id", userId)
         .maybeSingle();
       if (error) {
         console.log("[messages] peer profile failed", error.message);
         return null;
       }
+      const lastSeenIso = (data?.last_seen_at as string | null) ?? null;
+      const lastSeenAt = lastSeenIso ? new Date(lastSeenIso).getTime() : null;
       return {
         avatarUrl: normalizeMediaUrl((data?.avatar_url as string | null) ?? null),
         bannerUrl: normalizeMediaUrl((data?.banner_url as string | null) ?? null),
         bio: (data?.bio as string | null) ?? null,
+        isOnline: !!data?.is_online,
+        lastSeenAt: Number.isFinite(lastSeenAt as number) ? (lastSeenAt as number) : null,
       };
     },
   });
+
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`peer-presence-${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles", filter: `user_id=eq.${userId}` },
+        () => {
+          queryClient
+            .invalidateQueries({ queryKey: ["messages", "peer-profile", userId] })
+            .catch(() => {});
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel).catch(() => {});
+    };
+  }, [queryClient, userId]);
+
+  return query;
 }
 
 /* ------------------------------- BLOCKING -------------------------------- */

@@ -171,7 +171,8 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
   });
 
   // Presence heartbeat — keep the current user marked online while the
-  // app is in the foreground.
+  // app is in the foreground. Sends a heartbeat every 30s and flips the
+  // status when the app moves to background / inactive.
   useEffect(() => {
     if (!isAuthenticated || !userId) return;
     let cancelled = false;
@@ -192,13 +193,28 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       }
     };
 
+    const markOffline = async () => {
+      try {
+        const { error } = await supabase.rpc("set_offline");
+        if (error) {
+          await supabase
+            .from("profiles")
+            .update({ is_online: false, last_seen_at: new Date().toISOString() })
+            .eq("user_id", userId);
+        }
+      } catch (e) {
+        console.log("[presence] set_offline error", e);
+      }
+    };
+
     beat("online");
     const id = setInterval(() => {
-      if (!cancelled) beat("online");
-    }, 45_000);
+      if (!cancelled && AppState.currentState === "active") beat("online");
+    }, 30_000);
 
     const onAppState = (s: AppStateStatus) => {
       if (s === "active") beat("online");
+      else if (s === "background" || s === "inactive") markOffline();
       else beat("away");
     };
     const sub = AppState.addEventListener("change", onAppState);
@@ -207,17 +223,7 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       cancelled = true;
       clearInterval(id);
       sub.remove();
-      supabase.rpc("set_offline").then(
-        ({ error }) => {
-          if (!error) return undefined;
-          return supabase
-            .from("profiles")
-            .update({ is_online: false, last_seen_at: new Date().toISOString() })
-            .eq("user_id", userId)
-            .then(() => undefined);
-        },
-        () => undefined,
-      );
+      markOffline();
     };
   }, [isAuthenticated, userId]);
 

@@ -59,6 +59,7 @@ import { navigateBack } from "@/lib/navigation";
 import { uploadDMImage } from "@/lib/upload";
 import { useAuth } from "@/providers/auth-provider";
 import { DMMessage, DMReaction, DMReplyContext, useDmPeerProfile, useDmThreadMessages, useDmTyping, useMessages } from "@/providers/messages-provider";
+import { formatLastSeen, isFreshOnline } from "@/lib/presence";
 import { useQueryClient } from "@tanstack/react-query";
 
 const QUICK_TICKERS = ["$SOL", "$BONK", "$WIF", "$JUP", "$AGNT", "$PYTH"];
@@ -98,20 +99,6 @@ function formatRelative(t: number): string {
   const day = Math.floor(hr / 24);
   if (day < 7) return `${day}d ago`;
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function formatLastSeen(online: boolean | undefined, lastSeenAt: number | null | undefined): string {
-  if (online) return "Active now";
-  if (!lastSeenAt) return "offline";
-  const diff = Math.max(0, Date.now() - lastSeenAt);
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "Active just now";
-  if (min < 60) return `Active ${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `Active ${hr}h ago`;
-  const day = Math.floor(hr / 24);
-  if (day < 7) return `Last seen ${day}d ago`;
-  return `Last seen ${new Date(lastSeenAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
 
 function formatDayLabel(t: number): string {
@@ -163,6 +150,9 @@ export default function DMThreadScreen() {
   const peerBanner = peerProfile.data?.bannerUrl ?? conv?.user.bannerUrl ?? null;
   const peerAvatar = peerProfile.data?.avatarUrl ?? conv?.user.avatarUrl ?? null;
   const peerBio = peerProfile.data?.bio ?? conv?.user.bio ?? undefined;
+  const peerOnline = peerProfile.data?.isOnline ?? conv?.user.online;
+  const peerLastSeen = peerProfile.data?.lastSeenAt ?? conv?.user.lastSeenAt ?? null;
+  const peerFreshOnline = isFreshOnline(peerOnline, peerLastSeen);
   const threadQ = useDmThreadMessages(id, conv?.user);
   const fallbackMessages = useMemo<DMMessage[]>(() => (id ? getMessages(id) : []), [id, getMessages]);
   const messages = useMemo<DMMessage[]>(() => {
@@ -551,7 +541,7 @@ export default function DMThreadScreen() {
                     </Text>
                   )}
                 </View>
-                {conv.user.online ? <View style={styles.bannerOnline} /> : null}
+                {peerFreshOnline ? <View style={styles.bannerOnline} /> : null}
               </View>
               <View style={styles.bannerTextWrap}>
                 <View style={styles.bannerNameRow}>
@@ -575,7 +565,7 @@ export default function DMThreadScreen() {
                   </View>
                 ) : (
                   <Text style={styles.bannerStatus} numberOfLines={1}>
-                    {formatLastSeen(conv.user.online, conv.user.lastSeenAt)}
+                    {formatLastSeen(peerOnline, peerLastSeen)}
                   </Text>
                 )}
               </View>

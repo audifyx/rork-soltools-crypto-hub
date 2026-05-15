@@ -38,6 +38,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
 import { navigateBack } from "@/lib/navigation";
+import { isFreshOnline, lastSeenToMs } from "@/lib/presence";
 import LeaderboardCard from "@/components/users/LeaderboardCard";
 import { useAuth } from "@/providers/auth-provider";
 import { useMessages } from "@/providers/messages-provider";
@@ -475,7 +476,7 @@ function UserRow({
             </Text>
           </LinearGradient>
         )}
-        {user.is_online ? <View style={styles.onlineDot} /> : null}
+        {isFreshOnline(user.is_online, lastSeenToMs(user.last_seen)) ? <View style={styles.onlineDot} /> : null}
       </View>
 
       <View style={styles.rowMid}>
@@ -492,9 +493,14 @@ function UserRow({
             @{user.username ?? "—"}
           </Text>
           <View style={styles.dot} />
-          <Text style={[styles.lastSeen, user.is_online && { color: Colors.mint }]}>
-            {user.is_online ? "online now" : timeAgo(user.last_seen)}
-          </Text>
+          {(() => {
+            const fresh = isFreshOnline(user.is_online, lastSeenToMs(user.last_seen));
+            return (
+              <Text style={[styles.lastSeen, fresh && { color: Colors.mint }]}>
+                {fresh ? "online now" : timeAgo(user.last_seen)}
+              </Text>
+            );
+          })()}
         </View>
         {user.bio ? (
           <Text style={styles.bio} numberOfLines={1}>
@@ -644,7 +650,7 @@ function TopTraderCard({
             </Text>
           </LinearGradient>
         )}
-        {user.is_online ? <View style={styles.topOnline} /> : null}
+        {isFreshOnline(user.is_online, lastSeenToMs(user.last_seen)) ? <View style={styles.topOnline} /> : null}
       </View>
       <Text style={styles.topName} numberOfLines={1}>
         {user.display_name ?? user.username ?? "User"}

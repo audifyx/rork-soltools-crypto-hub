@@ -43,6 +43,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
+import { isFreshOnline, presenceLabel } from "@/lib/presence";
 import { Conversation, DMUser, useMessageableUsersSearch, useMessages } from "@/providers/messages-provider";
 
 type Tab = "inbox" | "requests";
@@ -76,20 +77,6 @@ function timeAgo(t: number): string {
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}d`;
   return `${Math.floor(d / 7)}w`;
-}
-
-function presenceLabel(online: boolean | undefined, lastSeenAt: number | null | undefined): string | null {
-  if (online) return "Active now";
-  if (!lastSeenAt) return null;
-  const diff = Math.max(0, Date.now() - lastSeenAt);
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "Active just now";
-  if (min < 60) return `Active ${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `Active ${hr}h ago`;
-  const day = Math.floor(hr / 24);
-  if (day < 7) return `Last seen ${day}d ago`;
-  return null;
 }
 
 export default function MessagesScreen() {
@@ -745,6 +732,7 @@ function ConversationRow({
   onLongPress?: () => void;
 }) {
   const presence = presenceLabel(conv.user.online, conv.user.lastSeenAt);
+  const online = isFreshOnline(conv.user.online, conv.user.lastSeenAt);
   return (
     <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={320} style={styles.row} testID={`convo-${conv.id}`}>
       <View style={[styles.avatarWrap]}>
@@ -757,7 +745,7 @@ function ConversationRow({
             </Text>
           )}
         </View>
-        {conv.user.online ? <View style={styles.onlineDot} /> : null}
+        {online ? <View style={styles.onlineDot} /> : null}
         {conv.user.verified ? (
           <View style={styles.walletBadge}>
             <ShieldCheck color={ACCENT} size={10} strokeWidth={3} />
@@ -796,8 +784,8 @@ function ConversationRow({
         </View>
         {presence ? (
           <View style={styles.presenceRow}>
-            {conv.user.online ? <View style={styles.presenceDot} /> : null}
-            <Text style={[styles.presenceText, conv.user.online && styles.presenceTextOnline]}>
+            {online ? <View style={styles.presenceDot} /> : null}
+            <Text style={[styles.presenceText, online && styles.presenceTextOnline]}>
               {presence}
             </Text>
           </View>
