@@ -553,9 +553,17 @@ function CommentRow({
       testID={`comment-${reply.id}`}
     >
       <View style={[styles.commentAvatar, { backgroundColor: reply.authorColor }]}>
-        <Text style={styles.commentAvatarText}>
-          {(reply.authorName ?? "U").slice(0, 1).toUpperCase()}
-        </Text>
+        {reply.authorAvatarUrl ? (
+          <ExpoImage
+            source={{ uri: reply.authorAvatarUrl }}
+            style={styles.fillImg}
+            contentFit="cover"
+          />
+        ) : (
+          <Text style={styles.commentAvatarText}>
+            {(reply.authorName ?? "U").slice(0, 1).toUpperCase()}
+          </Text>
+        )}
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.commentHeader}>
@@ -698,6 +706,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
