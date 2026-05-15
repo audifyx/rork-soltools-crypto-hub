@@ -692,7 +692,7 @@ export default function DMThreadScreen() {
                 strokeWidth={2.6}
               />
             </Pressable>
-          </BlurView>
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
 
