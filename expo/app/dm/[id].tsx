@@ -1462,7 +1462,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: IOS_SEPARATOR,
   },
-  blurbBannerWrap: { height: 168, width: "100%", backgroundColor: IOS_CARD_SOFT, position: "relative", overflow: "hidden" },
+  blurbBannerWrap: { height: 110, width: "100%", backgroundColor: IOS_CARD_SOFT, position: "relative", overflow: "hidden" },
   blurbBannerImg: { width: "100%", height: "100%" },
   blurbInner: { paddingHorizontal: 18, paddingBottom: 18, paddingTop: 0, alignItems: "center", backgroundColor: IOS_CARD, marginTop: -42 },
   blurbAvatar: {
