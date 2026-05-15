@@ -10,6 +10,7 @@ import type { CommunityTokenCard } from "@/lib/community-token";
 import { loadAccessMap } from "@/lib/community-access";
 import { normalizeMediaUrl } from "@/lib/media";
 import { patchPostEverywhere } from "@/lib/post-sync";
+import { loadBasicProfilesByAnyId } from "@/lib/profile-lookup";
 import { supabase } from "@/lib/supabase";
 import { uploadPostImage } from "@/lib/upload";
 import { useAdmin } from "@/providers/admin-provider";
@@ -72,6 +73,7 @@ export interface CommunityPost {
   authorColor: string;
   authorAvatarUrl?: string | null;
   authorUsername?: string | null;
+  authorVerified?: boolean;
   content: string;
   imageUrl?: string | null;
   ticker?: string;
@@ -322,7 +324,7 @@ const COMMUNITY_POST_SELECT = "id,user_id,community_id,content,image_url,ticker,
 function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): CommunityPost {
   const postId = String(row.id);
   const username = (row.username as string | null) ?? "";
-  const avatarUrl = withDefaultAvatar(normalizeMediaUrl(row.avatar_url));
+  const avatarUrl = normalizeMediaUrl(row.avatar_url);
   const quoteUsername = (row.quote_author_username as string | null) ?? "";
   const quoteId = (row.quote_post_id as string | null) ?? null;
   const parentUsername = (row.parent_author_username as string | null) ?? "";
@@ -338,6 +340,7 @@ function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): 
     authorColor: (row.avatar_color as string | null) ?? Colors.mint,
     authorAvatarUrl: avatarUrl,
     authorUsername: username || null,
+    authorVerified: !!row.verified,
     content: (row.content as string | null) ?? "",
     imageUrl: normalizeMediaUrl(row.image_url),
     ticker: (row.ticker as string | null) ?? undefined,
@@ -711,7 +714,9 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
             (mediaRows ?? []).map((r) => [String(r.id), normalizeMediaUrl(r.image_url)]),
           );
         }
-        // Enrich author avatars (the RPC doesn't return avatar_url today).
+        // Enrich from the canonical profile row and prefer a real uploaded avatar
+        // over any RPC fallback. Do not inject the stock avatar into post state;
+        // renderers add it only if the profile truly has no image.
         const authorIds = Array.from(
           new Set(
             rows
@@ -719,25 +724,24 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
               .filter((v): v is string => typeof v === "string" && v.length > 0),
           ),
         );
-        const avatarById = new Map<string, string | null>();
-        if (authorIds.length > 0) {
-          const { data: profs } = await supabase
-            .from("profiles")
-            .select("id,user_id,avatar_url")
-            .or(`id.in.(${authorIds.join(",")}),user_id.in.(${authorIds.join(",")})`);
-          (profs ?? []).forEach((p) => {
-            const url = normalizeMediaUrl(p.avatar_url);
-            if (p.id) avatarById.set(String(p.id), url);
-            if (p.user_id) avatarById.set(String(p.user_id), url);
-          });
-        }
+        const profilesById = await loadBasicProfilesByAnyId(authorIds);
         return rows.map((r): CommunityPost => {
-          const post = communityPostFromRow(r, id);
-          const uid = (r.user_id as string | null) ?? post.authorUserId ?? "";
+          const uid = (r.user_id as string | null) ?? "";
+          const author = uid ? profilesById.get(uid) : undefined;
+          const post = communityPostFromRow(
+            {
+              ...r,
+              username: author?.username ?? r.username ?? null,
+              display_name: author?.display_name ?? r.display_name ?? null,
+              avatar_color: author?.avatar_color ?? r.avatar_color ?? null,
+              avatar_url: author?.avatar_url ?? normalizeMediaUrl(r.avatar_url),
+              verified: author?.verified ?? r.verified ?? null,
+            },
+            id,
+          );
           return {
             ...post,
             imageUrl: post.imageUrl ?? imageByPost.get(post.id) ?? null,
-            authorAvatarUrl: post.authorAvatarUrl ?? (uid ? avatarById.get(uid) ?? null : null),
           };
         });
       } catch (e) {
@@ -755,35 +759,23 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           const authorIds = Array.from(
             new Set(rows.map((r) => r.user_id).filter((v): v is string => typeof v === "string" && v.length > 0)),
           );
-          let authorMap = new Map<string, Record<string, unknown>>();
-          if (authorIds.length > 0) {
-            const { data: profiles, error: profilesError } = await supabase
-              .from("profiles")
-              .select("id,user_id,username,display_name,avatar_color,avatar_url")
-              .or(`id.in.(${authorIds.join(",")}),user_id.in.(${authorIds.join(",")})`);
-            if (profilesError) console.log("[social] post author enrich failed", profilesError.message);
-            authorMap = new Map(
-              (profiles ?? []).flatMap((p) => [
-                [String(p.id), p as Record<string, unknown>],
-                [String(p.user_id), p as Record<string, unknown>],
-              ]),
-            );
-          }
+          const authorMap = await loadBasicProfilesByAnyId(authorIds);
           const interactions = await loadViewerInteractions(rows.map((r) => String(r.id)));
           return rows.map((r): CommunityPost => {
             const postId = String(r.id);
-            const author = authorMap.get(String(r.user_id)) ?? {};
-            const username = (author.username as string | null) ?? "";
-            const display = ((author.display_name as string | null) ?? username) || "User";
+            const author = authorMap.get(String(r.user_id));
+            const username = author?.username ?? "";
+            const display = (author?.display_name ?? username) || "User";
             return {
               id: postId,
               communityId: (r.community_id as string) ?? id,
               authorUserId: (r.user_id as string | null) ?? null,
               authorHandle: username ? `@${username}` : "",
               authorName: display,
-              authorColor: (author.avatar_color as string | null) ?? Colors.mint,
-              authorAvatarUrl: normalizeMediaUrl(author.avatar_url) ?? null,
-              authorUsername: ((author.username as string | null) ?? "") || null,
+              authorColor: author?.avatar_color ?? Colors.mint,
+              authorAvatarUrl: author?.avatar_url ?? null,
+              authorUsername: (author?.username ?? "") || null,
+              authorVerified: !!author?.verified,
               content: (r.content as string) ?? "",
               imageUrl: normalizeMediaUrl(r.image_url),
               ticker: (r.ticker as string) ?? undefined,
@@ -877,51 +869,18 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
               .filter((v): v is string => typeof v === "string" && v.length > 0),
           ),
         );
-        const profileById = new Map<string, { avatar_url: string | null; username: string | null; display_name: string | null; avatar_color: string | null }>();
-        if (authorIds.length > 0) {
-          // Run two parallel `.in()` lookups so profiles whose primary key is
-          // either `id` (legacy) or `user_id` (current schema) both resolve.
-          // `.or(...)` with two `.in.()` filters has been observed to fail
-          // silently on some Supabase versions, leaving comment avatars empty.
-          const [byId, byUserId] = await Promise.all([
-            supabase
-              .from("profiles")
-              .select("id,user_id,username,display_name,avatar_color,avatar_url")
-              .in("id", authorIds),
-            supabase
-              .from("profiles")
-              .select("id,user_id,username,display_name,avatar_color,avatar_url")
-              .in("user_id", authorIds),
-          ]);
-          if (byId.error) console.log("[social] reply profile lookup by id failed", byId.error.message);
-          if (byUserId.error) console.log("[social] reply profile lookup by user_id failed", byUserId.error.message);
-          const profs = [...(byId.data ?? []), ...(byUserId.data ?? [])];
-          profs.forEach((p) => {
-            const entry = {
-              avatar_url: withDefaultAvatar(normalizeMediaUrl(p.avatar_url)),
-              username: (p.username as string | null) ?? null,
-              display_name: (p.display_name as string | null) ?? null,
-              avatar_color: (p.avatar_color as string | null) ?? null,
-            };
-            if (p.id) profileById.set(String(p.id), entry);
-            if (p.user_id) profileById.set(String(p.user_id), entry);
-          });
-        }
+        const profileById = await loadBasicProfilesByAnyId(authorIds);
         return rows.map((r) => {
           const uid = (r.user_id as string | null) ?? "";
           const prof = uid ? profileById.get(uid) : undefined;
-          // Prefer the canonical profile avatar over the (sometimes empty)
-          // value the RPC interpolates, so the comment row always renders the
-          // user's current profile picture instead of a coloured fallback.
-          const rpcAvatar = normalizeMediaUrl(r.avatar_url);
-          const profAvatar = prof?.avatar_url ?? null;
           const post = communityPostFromRow(
             {
               ...r,
-              avatar_url: profAvatar ?? rpcAvatar ?? null,
+              avatar_url: prof?.avatar_url ?? normalizeMediaUrl(r.avatar_url),
               username: prof?.username ?? r.username ?? null,
               display_name: prof?.display_name ?? r.display_name ?? null,
               avatar_color: prof?.avatar_color ?? r.avatar_color ?? null,
+              verified: prof?.verified ?? r.verified ?? null,
             },
             (r.community_id as string | null) ?? "",
           );
@@ -941,39 +900,19 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           const authorIds = Array.from(
             new Set(rows.map((r) => r.user_id).filter((v): v is string => typeof v === "string" && v.length > 0)),
           );
-          let authorMap = new Map<string, Record<string, unknown>>();
-          if (authorIds.length > 0) {
-            const [byId, byUserId] = await Promise.all([
-              supabase
-                .from("profiles")
-                .select("id,user_id,username,display_name,avatar_color,avatar_url")
-                .in("id", authorIds),
-              supabase
-                .from("profiles")
-                .select("id,user_id,username,display_name,avatar_color,avatar_url")
-                .in("user_id", authorIds),
-            ]);
-            if (byId.error) console.log("[social] reply author enrich by id failed", byId.error.message);
-            if (byUserId.error) console.log("[social] reply author enrich by user_id failed", byUserId.error.message);
-            const profiles = [...(byId.data ?? []), ...(byUserId.data ?? [])];
-            authorMap = new Map(
-              profiles.flatMap((p) => [
-                [String(p.id), p as Record<string, unknown>],
-                [String(p.user_id), p as Record<string, unknown>],
-              ]),
-            );
-          }
+          const authorMap = await loadBasicProfilesByAnyId(authorIds);
           const interactions = await loadViewerInteractions(rows.map((r) => String(r.id)));
           return rows.map((r): CommunityPost => {
             const postId = String(r.id);
-            const author = authorMap.get(String(r.user_id)) ?? {};
+            const author = authorMap.get(String(r.user_id));
             return communityPostFromRow(
               {
                 ...r,
-                username: author.username,
-                display_name: author.display_name,
-                avatar_color: author.avatar_color,
-                avatar_url: withDefaultAvatar(normalizeMediaUrl(author.avatar_url)),
+                username: author?.username,
+                display_name: author?.display_name,
+                avatar_color: author?.avatar_color,
+                avatar_url: author?.avatar_url ?? null,
+                verified: author?.verified ?? null,
                 liked: interactions.liked.has(postId),
                 reposted: interactions.reposted.has(postId),
                 bookmarked: interactions.bookmarked.has(postId),
@@ -1006,6 +945,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       authorHandle: string;
       authorName: string;
       authorColor: string;
+      authorAvatarUrl?: string | null;
+      authorVerified?: boolean;
       ticker?: string;
       imageUri?: string | null;
       imageBase64?: string | null;
@@ -1024,6 +965,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         authorHandle: input.authorHandle,
         authorName: input.authorName,
         authorColor: input.authorColor,
+        authorAvatarUrl: normalizeMediaUrl(input.authorAvatarUrl),
+        authorVerified: !!input.authorVerified,
         content: text,
         ticker: input.ticker ?? input.token?.symbol,
         token: input.token ?? null,
@@ -1074,6 +1017,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           authorHandle: input.authorHandle,
           authorName: input.authorName,
           authorColor: input.authorColor,
+          authorAvatarUrl: normalizeMediaUrl(input.authorAvatarUrl),
+          authorVerified: !!input.authorVerified,
           content: (data.content as string | null) ?? text,
           imageUrl: normalizeMediaUrl(data.image_url) ?? uploadedUrl,
           ticker: (data.ticker as string | null) ?? input.ticker ?? input.token?.symbol,
@@ -1248,6 +1193,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       authorHandle: string;
       authorName: string;
       authorColor: string;
+      authorAvatarUrl?: string | null;
+      authorVerified?: boolean;
     }): Promise<CommunityPost> => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to reply.");
       assertCanAct("comment");
@@ -1260,6 +1207,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         authorHandle: input.authorHandle,
         authorName: input.authorName,
         authorColor: input.authorColor,
+        authorAvatarUrl: normalizeMediaUrl(input.authorAvatarUrl),
+        authorVerified: !!input.authorVerified,
         content: text,
         createdAt: Date.now(),
         likes: 0,
@@ -1323,6 +1272,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
       authorHandle: string;
       authorName: string;
       authorColor: string;
+      authorAvatarUrl?: string | null;
+      authorVerified?: boolean;
     }): Promise<CommunityPost> => {
       if (!isAuthenticated || !userId) throw new Error("Sign in to quote posts.");
       const text = input.content.trim();
@@ -1334,6 +1285,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         authorHandle: input.authorHandle,
         authorName: input.authorName,
         authorColor: input.authorColor,
+        authorAvatarUrl: normalizeMediaUrl(input.authorAvatarUrl),
+        authorVerified: !!input.authorVerified,
         content: text,
         createdAt: Date.now(),
         likes: 0,

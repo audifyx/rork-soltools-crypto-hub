@@ -70,6 +70,7 @@ import { type DexPair, useDexTokens } from "@/lib/api/dexscreener";
 import { getOgMemeTokens, getMemeTokens, getCelebrityTokens, getUtilityTokens } from "@/lib/alpha-runners";
 import { withDefaultAvatar } from "@/lib/brand-media";
 import { patchPostEverywhere } from "@/lib/post-sync";
+import { loadBasicProfilesByAnyId } from "@/lib/profile-lookup";
 import { isSafeToken } from "@/lib/safety";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
@@ -118,21 +119,15 @@ type FeedPostRow = {
   author_verified?: boolean | null;
 };
 
-async function hydrateLikedPosts(rows: FeedPostRow[], userId: string): Promise<UserPost[]> {
-  const missingAuthorIds = Array.from(new Set(rows.filter((row) => !row.author_username && row.user_id).map((row) => row.user_id)));
-  let authors = new Map<string, Record<string, unknown>>();
-  if (missingAuthorIds.length > 0) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id,user_id,username,display_name,avatar_url,avatar_color,verified")
-      .or(`id.in.(${missingAuthorIds.join(",")}),user_id.in.(${missingAuthorIds.join(",")})`);
-    authors = new Map(
-      ((data ?? []) as Record<string, unknown>[]).flatMap((row) => [
-        [String(row.id), row],
-        [String(row.user_id), row],
-      ]),
-    );
-  }
+async function hydrateLikedPosts(rows: FeedPostRow[], userId: string | null): Promise<UserPost[]> {
+  const missingAuthorIds = Array.from(
+    new Set(
+      rows
+        .filter((row) => row.user_id && (!row.author_avatar_url || !row.author_username || !row.author_display_name))
+        .map((row) => row.user_id),
+    ),
+  );
+  const authors = await loadBasicProfilesByAnyId(missingAuthorIds);
   const posts = rows.map((row): UserPost => {
     const author = authors.get(row.user_id);
     return {
@@ -149,14 +144,14 @@ async function hydrateLikedPosts(rows: FeedPostRow[], userId: string): Promise<U
       liked: false,
       reposted: false,
       authorId: row.user_id,
-      authorUsername: row.author_username ?? (author?.username as string | null | undefined) ?? null,
-      authorDisplayName: row.author_display_name ?? (author?.display_name as string | null | undefined) ?? null,
-      authorAvatarUrl: row.author_avatar_url ?? (author?.avatar_url as string | null | undefined) ?? null,
-      authorAvatarColor: row.author_avatar_color ?? (author?.avatar_color as string | null | undefined) ?? null,
+      authorUsername: row.author_username ?? author?.username ?? null,
+      authorDisplayName: row.author_display_name ?? author?.display_name ?? null,
+      authorAvatarUrl: row.author_avatar_url ?? author?.avatar_url ?? null,
+      authorAvatarColor: row.author_avatar_color ?? author?.avatar_color ?? null,
       authorVerified: !!(row.author_verified ?? author?.verified),
     };
   });
-  if (posts.length === 0) return posts;
+  if (posts.length === 0 || !userId) return posts;
   const ids = posts.map((p) => p.id);
   const [{ data: likes }, { data: reposts }] = await Promise.all([
     supabase
@@ -215,21 +210,7 @@ export default function HomeFeedScreen() {
           .order("created_at", { ascending: false })
           .limit(100);
         if (error) throw error;
-        return userId ? hydrateLikedPosts((data ?? []) as FeedPostRow[], userId) : ((data ?? []) as FeedPostRow[]).map((row): UserPost => ({
-          id: row.id,
-          text: row.content ?? "",
-          ticker: row.ticker ?? undefined,
-          contract: row.token_address ?? undefined,
-          changePct: row.change_pct != null ? Number(row.change_pct) : undefined,
-          images: row.image_url ? [row.image_url] : undefined,
-          createdAt: new Date(row.created_at).getTime(),
-          likes: row.likes_count ?? 0,
-          reposts: row.reposts_count ?? 0,
-          comments: row.comments_count ?? 0,
-          liked: false,
-          reposted: false,
-          authorId: row.user_id,
-        }));
+        return hydrateLikedPosts((data ?? []) as FeedPostRow[], userId ?? null);
       } catch (e) {
         console.log("[home] live feed fallback", e);
         return userPosts;
@@ -448,6 +429,7 @@ export default function HomeFeedScreen() {
         authorHandle: profile.handle || "@you",
         authorName: profile.displayName || "You",
         authorColor: profile.avatarColor,
+        authorAvatarUrl: profile.avatarUrl ?? null,
       };
       const targetPost = {
         id: post.id,
@@ -456,6 +438,7 @@ export default function HomeFeedScreen() {
         authorHandle: post.authorUsername ? `@${post.authorUsername}` : "",
         authorName: post.authorDisplayName ?? post.authorUsername ?? "Trader",
         authorColor: post.authorAvatarColor ?? Colors.mint,
+        authorAvatarUrl: post.authorAvatarUrl ?? null,
         content: post.text,
         imageUrl: post.images?.[0] ?? null,
         ticker: post.ticker,
@@ -494,6 +477,7 @@ export default function HomeFeedScreen() {
     profile.handle,
     profile.displayName,
     profile.avatarColor,
+    profile.avatarUrl,
     addPostReply,
     quotePost,
     patchTimelinePost,
@@ -718,11 +702,11 @@ export default function HomeFeedScreen() {
         return (
           <UserPostCard
             post={item.data}
-            displayName={item.data.authorDisplayName ?? item.data.authorUsername ?? profile.displayName}
-            handle={item.data.authorUsername ? `@${item.data.authorUsername}` : profile.handle}
-            avatarColor={item.data.authorAvatarColor ?? profile.avatarColor}
-            avatarUrl={item.data.authorAvatarUrl ?? profile.avatarUrl}
-            verified={item.data.authorVerified ?? profile.verified}
+            displayName={item.data.authorDisplayName ?? item.data.authorUsername ?? ((!item.data.authorId || item.data.authorId === userId) ? profile.displayName : "Trader")}
+            handle={item.data.authorUsername ? `@${item.data.authorUsername}` : ((!item.data.authorId || item.data.authorId === userId) ? profile.handle : "")}
+            avatarColor={item.data.authorAvatarColor ?? ((!item.data.authorId || item.data.authorId === userId) ? profile.avatarColor : Colors.mint)}
+            avatarUrl={item.data.authorAvatarUrl ?? ((!item.data.authorId || item.data.authorId === userId) ? profile.avatarUrl : null)}
+            verified={item.data.authorVerified ?? ((!item.data.authorId || item.data.authorId === userId) ? profile.verified : false)}
             canDelete={!!userId && (!item.data.authorId || item.data.authorId === userId)}
             onLike={() => onTimelineLike(item.data)}
             onRepost={() => onTimelineRepost(item.data)}

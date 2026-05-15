@@ -1,4 +1,5 @@
 import { normalizeMediaUrl } from "@/lib/media";
+import { type BasicProfileLookup, loadBasicProfilesByAnyId } from "@/lib/profile-lookup";
 import { supabase } from "@/lib/supabase";
 
 export interface BookmarkedPost {
@@ -56,61 +57,11 @@ interface RepostRow {
   post: PostJoin | null;
 }
 
-async function loadAuthors(
-  ids: string[],
-): Promise<
-  Map<
-    string,
-    {
-      username: string | null;
-      display_name: string | null;
-      avatar_url: string | null;
-      avatar_color: string | null;
-      verified: boolean | null;
-    }
-  >
-> {
-  const map = new Map<
-    string,
-    {
-      username: string | null;
-      display_name: string | null;
-      avatar_url: string | null;
-      avatar_color: string | null;
-      verified: boolean | null;
-    }
-  >();
-  if (ids.length === 0) return map;
-  const { data } = await supabase
-    .from("profiles")
-    .select("id,username,display_name,avatar_url,avatar_color,verified")
-    .in("id", ids);
-  for (const p of (data ?? []) as {
-    id: string;
-    username: string | null;
-    display_name: string | null;
-    avatar_url: string | null;
-    avatar_color: string | null;
-    verified: boolean | null;
-  }[]) {
-    map.set(p.id, p);
-  }
-  return map;
-}
 
 function toPost(
   post: PostJoin,
   savedAt: string,
-  authorMap: Map<
-    string,
-    {
-      username: string | null;
-      display_name: string | null;
-      avatar_url: string | null;
-      avatar_color: string | null;
-      verified: boolean | null;
-    }
-  >,
+  authorMap: Map<string, BasicProfileLookup>,
   quoteText?: string | null,
 ): BookmarkedPost {
   const author = authorMap.get(post.user_id);
@@ -166,7 +117,7 @@ export async function listMyBookmarkedPosts(limit = 200): Promise<BookmarkedPost
   if (rows.length === 0) return [];
 
   const authorIds = Array.from(new Set(rows.map((r) => r.post!.user_id)));
-  const authorMap = await loadAuthors(authorIds);
+  const authorMap = await loadBasicProfilesByAnyId(authorIds);
   return rows.map((r) => toPost(r.post!, r.created_at, authorMap));
 }
 
@@ -192,7 +143,7 @@ export async function listMyLikedPosts(limit = 200): Promise<BookmarkedPost[]> {
   if (rows.length === 0) return [];
 
   const authorIds = Array.from(new Set(rows.map((r) => r.post!.user_id)));
-  const authorMap = await loadAuthors(authorIds);
+  const authorMap = await loadBasicProfilesByAnyId(authorIds);
   return rows.map((r) => toPost(r.post!, r.created_at, authorMap));
 }
 
@@ -231,7 +182,7 @@ export async function listMyQuotedPosts(limit = 200): Promise<BookmarkedPost[]> 
   if (rows.length === 0) return [];
 
   const authorIds = Array.from(new Set(rows.map((r) => r.post!.user_id)));
-  const authorMap = await loadAuthors(authorIds);
+  const authorMap = await loadBasicProfilesByAnyId(authorIds);
   return rows.map((r) => toPost(r.post!, r.created_at, authorMap, r.quote_text));
 }
 

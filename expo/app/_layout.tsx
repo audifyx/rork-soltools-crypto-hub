@@ -1,9 +1,9 @@
-import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Stack, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { enableFreeze } from "react-native-screens";
 
@@ -14,10 +14,11 @@ import { checkTeamStatus } from "@/lib/check-team-status";
 import { registerKOLSync } from "@/lib/kol-background";
 import { attachNotificationTapHandler, ensureNotificationPermission } from "@/lib/push-notifications";
 import { routeForIncomingShareUrl } from "@/lib/share-links";
+import { supabase } from "@/lib/supabase";
 import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
 import ModerationGate from "@/components/ui/ModerationGate";
-import { AuthProvider } from "@/providers/auth-provider";
+import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { ModerationProvider } from "@/providers/moderation-provider";
 import { LaunchpadProvider } from "@/providers/launchpad-provider";
 import { LobbiesProvider } from "@/providers/lobbies-provider";
@@ -27,6 +28,8 @@ import { ReportsProvider } from "@/providers/reports-provider";
 import { SocialProvider } from "@/providers/social-provider";
 import { CommunityAccessProvider } from "@/providers/community-access-provider";
 import ReportSheet from "@/components/social/ReportSheet";
+import { acceptCommunityInviteNotification } from "@/lib/api/community-invites";
+import { invalidateNotificationState } from "@/lib/social-query-keys";
 
 SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
   console.log("SolTools splash hold skipped during boot", error);
@@ -136,6 +139,28 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => voi
   );
 }
 
+interface CommunityInviteNotice {
+  notificationId: string;
+  communityId: string;
+  communityName: string;
+  actorName: string;
+  message: string;
+}
+
+function inviteFromNotificationRow(row: Record<string, unknown>): CommunityInviteNotice | null {
+  const data = typeof row.data === "object" && row.data !== null ? (row.data as Record<string, unknown>) : {};
+  const kind = String(row.kind ?? data.kind ?? "");
+  if (kind !== "community_invite") return null;
+  if (row.read_at) return null;
+  const notificationId = String(row.id ?? data.notificationId ?? "");
+  const communityId = String(row.target_id ?? data.communityId ?? data.targetId ?? "");
+  if (!notificationId || !communityId) return null;
+  const communityName = String(data.communityName ?? "this community");
+  const actorName = String(data.actorName ?? "Someone");
+  const message = String(row.message ?? row.body ?? `${actorName} invited you to join ${communityName}`);
+  return { notificationId, communityId, communityName, actorName, message };
+}
+
 function RootLayoutNav() {
   const router = useRouter();
   useEffect(() => {
@@ -173,7 +198,8 @@ function RootLayoutNav() {
     };
   }, [router]);
   return (
-    <Stack
+    <>
+      <Stack
       screenOptions={{
         headerShown: false,
         contentStyle: styles.stackContent,
@@ -245,7 +271,131 @@ function RootLayoutNav() {
       <Stack.Screen name="kol/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="faq-bot" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="+not-found" />
-    </Stack>
+      </Stack>
+      <CommunityInviteOverlay />
+    </>
+  );
+}
+
+function CommunityInviteOverlay() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { userId, isAuthenticated } = useAuth();
+  const [pendingInvite, setPendingInviteState] = useState<CommunityInviteNotice | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const dismissedIdsRef = useRef<Set<string>>(new Set<string>());
+  const pendingInviteRef = useRef<CommunityInviteNotice | null>(null);
+
+  const setPendingInvite = useCallback((invite: CommunityInviteNotice | null) => {
+    pendingInviteRef.current = invite;
+    setPendingInviteState(invite);
+  }, []);
+
+  useEffect(() => {
+    if (!userId || !isAuthenticated) {
+      setPendingInvite(null);
+      return;
+    }
+
+    let mounted = true;
+    const showInvite = (row: Record<string, unknown>) => {
+      const invite = inviteFromNotificationRow(row);
+      if (!invite) {
+        if (pendingInviteRef.current && String(row.id ?? "") === pendingInviteRef.current.notificationId) setPendingInvite(null);
+        return;
+      }
+      if (!dismissedIdsRef.current.has(invite.notificationId)) setPendingInvite(invite);
+    };
+
+    supabase
+      .from("notifications")
+      .select("id,kind,title,message,body,data,target_id,target_type,read_at,created_at")
+      .eq("user_id", userId)
+      .eq("kind", "community_invite")
+      .is("read_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (mounted && data) showInvite(data as Record<string, unknown>);
+      })
+      .catch(() => {});
+
+    const channelName = `community-invite-popup-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const row = (payload.new ?? {}) as Record<string, unknown>;
+          showInvite(row);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [isAuthenticated, setPendingInvite, userId]);
+
+  const dismissInvite = useCallback(() => {
+    if (pendingInvite) dismissedIdsRef.current.add(pendingInvite.notificationId);
+    setPendingInvite(null);
+  }, [pendingInvite]);
+
+  const acceptInvite = useCallback(async () => {
+    if (!pendingInvite || acceptingId) return;
+    setAcceptingId(pendingInvite.notificationId);
+    try {
+      const { communityId } = await acceptCommunityInviteNotification(
+        pendingInvite.notificationId,
+        pendingInvite.communityId,
+        userId,
+      );
+      setPendingInvite(null);
+      await Promise.allSettled([
+        invalidateNotificationState(queryClient),
+        queryClient.invalidateQueries({ queryKey: ["social", "memberships"] }),
+        queryClient.invalidateQueries({ queryKey: ["social", "communities"] }),
+        queryClient.invalidateQueries({ queryKey: ["community", "members", communityId] }),
+      ]);
+      router.push({ pathname: "/community/[id]", params: { id: communityId } });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Try again from notifications.";
+      Alert.alert("Could not join", msg);
+    } finally {
+      setAcceptingId(null);
+    }
+  }, [acceptingId, pendingInvite, queryClient, router, userId]);
+
+  return (
+    <Modal visible={!!pendingInvite} transparent animationType="fade" onRequestClose={dismissInvite}>
+      <View style={styles.inviteOverlay}>
+        {pendingInvite ? (
+          <View style={styles.inviteCard} testID="community-invite-popup">
+            <View style={styles.inviteGlow} />
+            <View style={styles.inviteAvatar}>
+              <Text style={styles.inviteAvatarText}>{pendingInvite.actorName.slice(0, 1).toUpperCase()}</Text>
+            </View>
+            <View style={styles.inviteCopy}>
+              <Text style={styles.inviteEyebrow}>Community invite</Text>
+              <Text style={styles.inviteTitle} numberOfLines={2}>{pendingInvite.message}</Text>
+              <Text style={styles.inviteBody} numberOfLines={1}>Tap join to enter {pendingInvite.communityName}</Text>
+            </View>
+            <View style={styles.inviteActions}>
+              <Pressable onPress={dismissInvite} style={styles.inviteLaterBtn} testID="community-invite-later">
+                <Text style={styles.inviteLaterText}>Later</Text>
+              </Pressable>
+              <Pressable onPress={acceptInvite} disabled={!!acceptingId} style={styles.inviteJoinBtn} testID="community-invite-join">
+                {acceptingId ? <ActivityIndicator color={Colors.ink} size="small" /> : <Text style={styles.inviteJoinText}>Join</Text>}
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+      </View>
+    </Modal>
   );
 }
 
@@ -348,6 +498,112 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 12,
     fontSize: 16,
+    fontWeight: "900",
+  },
+  inviteOverlay: {
+    flex: 1,
+    justifyContent: "flex-start",
+    paddingTop: 58,
+    paddingHorizontal: 14,
+    backgroundColor: "rgba(0,0,0,0.08)",
+  },
+  inviteCard: {
+    width: "100%",
+    minHeight: 112,
+    borderRadius: 28,
+    overflow: "hidden",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    backgroundColor: "rgba(6,8,15,0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(98,208,255,0.36)",
+    shadowColor: Colors.mint,
+    shadowOpacity: 0.28,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 16,
+  },
+  inviteGlow: {
+    position: "absolute",
+    top: -60,
+    right: -30,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: "rgba(63,169,255,0.18)",
+  },
+  inviteAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.mint,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+  },
+  inviteAvatarText: {
+    color: Colors.ink,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  inviteCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  inviteEyebrow: {
+    color: Colors.mint,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  inviteTitle: {
+    color: Colors.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  inviteBody: {
+    color: Colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  inviteActions: {
+    alignItems: "stretch",
+    gap: 8,
+  },
+  inviteLaterBtn: {
+    minWidth: 64,
+    borderRadius: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  inviteLaterText: {
+    color: Colors.muted,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  inviteJoinBtn: {
+    minWidth: 64,
+    minHeight: 34,
+    borderRadius: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.mint,
+  },
+  inviteJoinText: {
+    color: Colors.ink,
+    fontSize: 12,
     fontWeight: "900",
   },
 });

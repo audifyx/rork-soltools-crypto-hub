@@ -100,6 +100,8 @@ interface InvitableUser {
   avatarColor: string;
   verified: boolean;
   followersCount: number;
+  isOnline?: boolean;
+  lastSeenAt?: number | null;
 }
 
 const MEMBER_COLORS = [Colors.mint, Colors.violet, Colors.cyan, Colors.rose, Colors.orange];
@@ -365,6 +367,8 @@ export default function CommunityDetailScreen() {
           avatarColor: (row.avatar_color as string | null) ?? Colors.mint,
           verified: !!row.verified,
           followersCount: Number(row.followers_count ?? 0),
+          isOnline: !!row.is_online,
+          lastSeenAt: lastSeenToMs((row.last_seen_at as string | number | null) ?? null),
         };
       });
     },
@@ -423,8 +427,9 @@ export default function CommunityDetailScreen() {
       authorHandle: profile.handle || "@you",
       authorName: profile.displayName || "You",
       authorColor: profile.avatarColor,
+      authorAvatarUrl: profile.avatarUrl ?? null,
     }),
-    [profile.avatarColor, profile.displayName, profile.handle],
+    [profile.avatarColor, profile.avatarUrl, profile.displayName, profile.handle],
   );
 
   const detectedTokenAddress = useMemo(() => extractFirstSolanaAddress(composer), [composer]);
@@ -2834,10 +2839,13 @@ function InvitableUserRow({
   onInvite: () => void;
 }) {
   const handle = user.username ? `@${user.username}` : "@user";
+  const online = isFreshOnline(user.isOnline, user.lastSeenAt ?? null);
+  const status = presenceLabel(user.isOnline, user.lastSeenAt ?? null);
   return (
     <View style={styles.memberSheetRow} testID={`community-invite-user-${user.userId}`}>
       <View style={styles.memberSheetAvatarWrap}>
         <Image source={{ uri: withDefaultAvatar(user.avatarUrl) }} style={styles.memberSheetAvatar} contentFit="cover" />
+        {online ? <View style={styles.memberSheetOnlineDot} /> : null}
       </View>
       <View style={styles.memberSheetCopy}>
         <View style={styles.memberSheetNameRow}>
@@ -2847,6 +2855,14 @@ function InvitableUserRow({
         <Text style={styles.memberSheetHandle} numberOfLines={1}>
           {handle} · {fmtCount(user.followersCount)} followers
         </Text>
+        {status ? (
+          <Text
+            style={[styles.memberSheetPresence, online && styles.memberSheetPresenceOnline]}
+            numberOfLines={1}
+          >
+            {online ? "● " : ""}{status}
+          </Text>
+        ) : null}
       </View>
       <Pressable
         onPress={onInvite}

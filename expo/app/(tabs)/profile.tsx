@@ -433,15 +433,17 @@ export default function ProfileScreen() {
   }, []);
 
   const buildCommunityPostRef = useCallback(
-    (post: UserPost): CommunityPost => ({
+    (post: UserPost): CommunityPost => {
+      const isOwnPost = !post.authorId || post.authorId === userId;
+      return {
       id: post.id,
       communityId: post.communityId ?? "",
       authorUserId: post.authorId ?? userId ?? null,
-      authorHandle: post.authorUsername ? `@${post.authorUsername}` : (profile.handle || "@you"),
-      authorName: post.authorDisplayName ?? profile.displayName ?? "You",
-      authorColor: post.authorAvatarColor ?? profile.avatarColor,
-      authorAvatarUrl: post.authorAvatarUrl ?? profile.avatarUrl ?? null,
-      authorUsername: post.authorUsername ?? (profile.handle.replace(/^@/, "") || null),
+      authorHandle: post.authorUsername ? `@${post.authorUsername}` : (isOwnPost ? profile.handle || "@you" : ""),
+      authorName: post.authorDisplayName ?? (isOwnPost ? profile.displayName : null) ?? "User",
+      authorColor: post.authorAvatarColor ?? (isOwnPost ? profile.avatarColor : Colors.mint),
+      authorAvatarUrl: post.authorAvatarUrl ?? (isOwnPost ? profile.avatarUrl ?? null : null),
+      authorUsername: post.authorUsername ?? (isOwnPost ? profile.handle.replace(/^@/, "") || null : null),
       content: post.text,
       imageUrl: post.images?.[0] ?? null,
       ticker: post.ticker,
@@ -458,7 +460,8 @@ export default function ProfileScreen() {
       quote: null,
       replyTo: null,
       token: null,
-    }),
+      };
+    },
     [profile.avatarColor, profile.avatarUrl, profile.displayName, profile.handle, userId],
   );
 
@@ -490,6 +493,8 @@ export default function ProfileScreen() {
         authorHandle: profile.handle || "@you",
         authorName: profile.displayName || "You",
         authorColor: profile.avatarColor,
+        authorAvatarUrl: profile.avatarUrl ?? null,
+        authorVerified: profile.verified,
       };
       const target = buildCommunityPostRef(postInteraction.post);
       if (postInteraction.mode === "reply") {
@@ -508,7 +513,7 @@ export default function ProfileScreen() {
     } finally {
       setSubmittingInteraction(false);
     }
-  }, [addPostReply, buildCommunityPostRef, closePostInteraction, postInteraction, postInteractionText, profile.avatarColor, profile.displayName, profile.handle, qc, quotePost]);
+  }, [addPostReply, buildCommunityPostRef, closePostInteraction, postInteraction, postInteractionText, profile.avatarColor, profile.avatarUrl, profile.displayName, profile.handle, profile.verified, qc, quotePost]);
 
   return (
     <View style={styles.root} testID="profile-screen">

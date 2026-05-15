@@ -4,11 +4,12 @@ import { StatusBar } from "expo-status-bar";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, AtSign, Bell, BellOff, CheckCheck, Heart, MessageCircle, Repeat2, Rocket, Settings, Sparkles, TrendingUp, UserPlus, Waves, Zap } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
+import { acceptCommunityInviteNotification } from "@/lib/api/community-invites";
 import { navigateBack } from "@/lib/navigation";
 import { countUnreadNotifications, dedupeNotifications, sortNotifications } from "@/lib/notification-cache";
 import { invalidateNotificationState } from "@/lib/social-query-keys";
@@ -31,6 +32,7 @@ type NotifKind =
   | "launchpad_update"
   | "lobby_invite"
   | "lobby_event"
+  | "community_invite"
   | "moderation_update"
   | "announcement";
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
@@ -88,6 +90,7 @@ const KIND_META: Record<NotifKind, { Icon: LucideIcon; color: string; bg: string
   launchpad_update: { Icon: Rocket, color: "#FFB84C", bg: "rgba(255,184,76,0.16)" },
   lobby_invite: { Icon: Zap, color: Colors.violet, bg: "rgba(91,141,239,0.16)" },
   lobby_event: { Icon: Zap, color: Colors.violet, bg: "rgba(91,141,239,0.16)" },
+  community_invite: { Icon: UserPlus, color: Colors.mint, bg: "rgba(63,169,255,0.16)" },
   moderation_update: { Icon: Sparkles, color: "#FFB84C", bg: "rgba(255,184,76,0.16)" },
   announcement: { Icon: Sparkles, color: Colors.mint, bg: "rgba(63,169,255,0.16)" },
 };
@@ -251,7 +254,7 @@ export default function NotificationsScreen() {
 
   const filtered = useMemo(() => {
     if (tab === "mentions") return items.filter((i) => i.kind === "mention" || i.kind === "comment");
-    if (tab === "social") return items.filter((i) => ["like", "repost", "follow"].includes(i.kind));
+    if (tab === "social") return items.filter((i) => ["like", "repost", "follow", "community_invite"].includes(i.kind));
     if (tab === "trades") return items.filter((i) => i.kind === "trade" || i.kind === "alert" || i.kind === "launchpad_update");
     if (tab === "whales") return items.filter((i) => i.kind === "whale");
     return items;
@@ -267,7 +270,7 @@ export default function NotificationsScreen() {
       if (!isUnread) continue;
       counts.all += 1;
       if (i.kind === "mention" || i.kind === "comment") counts.mentions += 1;
-      if (["like", "repost", "follow"].includes(i.kind)) counts.social += 1;
+      if (["like", "repost", "follow", "community_invite"].includes(i.kind)) counts.social += 1;
       if (i.kind === "trade" || i.kind === "alert" || i.kind === "launchpad_update") counts.trades += 1;
       if (i.kind === "whale") counts.whales += 1;
     }
@@ -300,6 +303,29 @@ export default function NotificationsScreen() {
     (n: Notif) => {
       tap();
       markLocalRead(n);
+      if (n.kind === "community_invite") {
+        const joinAndOpen = async () => {
+          try {
+            let communityId = n.targetId ?? null;
+            if (n.remoteId) {
+              const accepted = await acceptCommunityInviteNotification(n.remoteId, communityId, userId);
+              communityId = accepted.communityId;
+            }
+            await Promise.allSettled([
+              invalidateNotificationState(queryClient),
+              queryClient.invalidateQueries({ queryKey: ["social", "memberships"] }),
+              queryClient.invalidateQueries({ queryKey: ["social", "communities"] }),
+              communityId ? queryClient.invalidateQueries({ queryKey: ["community", "members", communityId] }) : Promise.resolve(),
+            ]);
+            if (communityId) router.push({ pathname: "/community/[id]", params: { id: communityId } });
+          } catch (error) {
+            console.log("[notifications] accept community invite failed", error instanceof Error ? error.message : error);
+            Alert.alert("Could not join", "Try again in a moment.");
+          }
+        };
+        void joinAndOpen();
+        return;
+      }
       if (n.remoteId && n.unread) markReadMut.mutate(n.remoteId);
       if ((n.kind === "follow" || n.kind === "mention" || n.kind === "like" || n.kind === "repost" || n.kind === "comment") && n.actor) {
         router.push({ pathname: "/u/[handle]", params: { handle: n.actor.replace(/^@/, "") } });
@@ -313,7 +339,7 @@ export default function NotificationsScreen() {
         router.push("/(tabs)/discover");
       }
     },
-    [markLocalRead, markReadMut, router]
+    [markLocalRead, markReadMut, queryClient, router, userId]
   );
 
   const renderItem = useCallback(
@@ -473,7 +499,7 @@ function EmptyState({ tab }: { tab: Tab }) {
   const meta = {
     all: { Icon: Bell, title: "You're all caught up", body: "Likes, mentions, alerts, and whale moves all land here." },
     mentions: { Icon: AtSign, title: "No mentions yet", body: "When someone @s you or replies, it shows up here." },
-    social: { Icon: Heart, title: "No social activity", body: "Likes, reposts, and new followers will appear here." },
+    social: { Icon: Heart, title: "No social activity", body: "Likes, reposts, invites, and new followers will appear here." },
     trades: { Icon: TrendingUp, title: "No trade alerts", body: "Price alerts and launchpad events will land here." },
     whales: { Icon: Waves, title: "No whale moves", body: "Whale activity on tracked tokens will surface here." },
   } as const;

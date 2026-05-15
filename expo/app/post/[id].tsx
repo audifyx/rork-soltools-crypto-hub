@@ -36,6 +36,7 @@ import { withDefaultAvatar } from "@/lib/brand-media";
 import { hapticMedium, hapticSelect } from "@/lib/haptics";
 import { normalizeMediaUrl } from "@/lib/media";
 import { navigateBack } from "@/lib/navigation";
+import { loadBasicProfilesByAnyId } from "@/lib/profile-lookup";
 import { patchPostEverywhere } from "@/lib/post-sync";
 import { supabase } from "@/lib/supabase";
 import { useApp } from "@/providers/app-provider";
@@ -80,15 +81,9 @@ async function fetchPostById(postId: string, viewerId: string | null): Promise<F
   }
   if (!data) return null;
 
-  let author: Record<string, unknown> | null = null;
-  if (data.user_id) {
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("id,user_id,username,display_name,avatar_url,avatar_color,verified")
-      .or(`id.eq.${data.user_id},user_id.eq.${data.user_id}`)
-      .maybeSingle();
-    author = (prof as Record<string, unknown> | null) ?? null;
-  }
+  const author = data.user_id
+    ? (await loadBasicProfilesByAnyId([String(data.user_id)])).get(String(data.user_id)) ?? null
+    : null;
 
   let liked = false;
   let reposted = false;
@@ -120,10 +115,10 @@ async function fetchPostById(postId: string, viewerId: string | null): Promise<F
     id: data.id as string,
     communityId: (data.community_id as string | null) ?? null,
     authorUserId: (data.user_id as string | null) ?? null,
-    authorUsername: (author?.username as string | null) ?? null,
+    authorUsername: author?.username ?? null,
     authorName,
-    authorAvatarUrl: normalizeMediaUrl(author?.avatar_url),
-    authorAvatarColor: (author?.avatar_color as string | undefined) ?? Colors.mint,
+    authorAvatarUrl: author?.avatar_url ?? null,
+    authorAvatarColor: author?.avatar_color ?? Colors.mint,
     authorVerified: !!author?.verified,
     content: (data.content as string | null) ?? "",
     imageUrl: normalizeMediaUrl(data.image_url),
@@ -208,6 +203,8 @@ export default function PostDetailScreen() {
         authorHandle: post.authorUsername ? `@${post.authorUsername}` : "",
         authorName: post.authorName,
         authorColor: post.authorAvatarColor,
+        authorAvatarUrl: post.authorAvatarUrl,
+        authorVerified: post.authorVerified,
         content: post.content,
         imageUrl: post.imageUrl,
         ticker: post.ticker ?? undefined,
@@ -227,6 +224,8 @@ export default function PostDetailScreen() {
         authorHandle: profile.handle || "@you",
         authorName: profile.displayName || "You",
         authorColor: profile.avatarColor,
+        authorAvatarUrl: profile.avatarUrl ?? null,
+        authorVerified: profile.verified,
       });
       setDraft("");
       qc.setQueryData<FullPost | null>(
@@ -246,6 +245,8 @@ export default function PostDetailScreen() {
     profile.handle,
     profile.displayName,
     profile.avatarColor,
+    profile.avatarUrl,
+    profile.verified,
     router,
     qc,
     postId,
@@ -553,6 +554,8 @@ export default function PostDetailScreen() {
                         authorHandle: profile.handle || "@you",
                         authorName: profile.displayName || "You",
                         authorColor: profile.avatarColor,
+                        authorAvatarUrl: profile.avatarUrl ?? null,
+                        authorVerified: profile.verified,
                       });
                       setQuoteTarget(null);
                       setQuoteText("");

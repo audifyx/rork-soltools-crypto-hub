@@ -220,7 +220,9 @@ returns table (
   avatar_url text,
   avatar_color text,
   verified boolean,
-  followers_count integer
+  followers_count integer,
+  is_online boolean,
+  last_seen_at timestamptz
 )
 language sql
 security definer
@@ -234,7 +236,9 @@ as $$
     p.avatar_url,
     p.avatar_color,
     coalesce(p.verified, false) as verified,
-    coalesce(p.followers_count, 0)::integer as followers_count
+    coalesce(p.followers_count, 0)::integer as followers_count,
+    coalesce(p.is_online, false) as is_online,
+    p.last_seen_at
   from public.profiles p
   where coalesce(p.user_id, p.id) is not null
     and coalesce(p.user_id, p.id) <> auth.uid()
@@ -242,6 +246,14 @@ as $$
       select 1 from public.community_members cm
       where cm.community_id = p_community_id
         and cm.user_id = coalesce(p.user_id, p.id)
+    )
+    and not exists (
+      select 1 from public.notifications n
+      where n.user_id = coalesce(p.user_id, p.id)
+        and n.kind = 'community_invite'
+        and n.target_type = 'community'
+        and n.target_id = p_community_id::text
+        and n.read_at is null
     )
     and (
       p_search is null
@@ -311,6 +323,64 @@ begin
     null
   );
 
+  if exists (
+    select 1 from public.community_members cm
+    where cm.community_id = p_community_id and cm.user_id = v_target
+  ) then
+    raise exception 'already_member';
+  end if;
+
+  -- Keep only one unread invite per inviter/community/target so users are not spammed.
+  select n.id into v_notification_id
+  from public.notifications n
+  where n.user_id = v_target
+    and n.actor_id is not distinct from v_uid
+    and n.kind = 'community_invite'
+    and n.target_type = 'community'
+    and n.target_id = p_community_id::text
+    and n.read_at is null
+  order by n.created_at desc
+  limit 1;
+
+  if v_notification_id is not null then
+    update public.notifications
+       set created_at = now(),
+           title = 'Community invite',
+           message = coalesce(v_actor.name, 'Someone') || ' invited you to join ' || v_community.name,
+           body = coalesce(v_actor.name, 'Someone') || ' invited you to join ' || v_community.name,
+           data = coalesce(data, '{}'::jsonb) || jsonb_build_object(
+             'route', '/community/' || p_community_id::text,
+             'communityId', p_community_id::text,
+             'communityName', v_community.name,
+             'communitySlug', v_community.slug,
+             'inviteLink', v_link.url,
+             'appLink', v_link.app_url,
+             'action', 'join_community',
+             'actorName', coalesce(v_actor.name, 'Someone'),
+             'actorUsername', v_actor.username
+           )
+     where id = v_notification_id;
+
+    insert into public.notification_dispatch_queue (notification_id, user_id, title, body, data)
+    values (
+      v_notification_id,
+      v_target,
+      'Community invite',
+      coalesce(v_actor.name, 'Someone') || ' invited you to join ' || v_community.name,
+      jsonb_build_object(
+        'notificationId', v_notification_id::text,
+        'kind', 'community_invite',
+        'targetType', 'community',
+        'targetId', p_community_id::text,
+        'route', '/community/' || p_community_id::text,
+        'communityId', p_community_id::text,
+        'communityName', v_community.name,
+        'action', 'join_community'
+      )
+    );
+    return v_notification_id;
+  end if;
+
   insert into public.notifications (
     user_id,
     kind,
@@ -335,7 +405,10 @@ begin
       'communityName', v_community.name,
       'communitySlug', v_community.slug,
       'inviteLink', v_link.url,
-      'appLink', v_link.app_url
+      'appLink', v_link.app_url,
+      'action', 'join_community',
+      'actorName', coalesce(v_actor.name, 'Someone'),
+      'actorUsername', v_actor.username
     ),
     v_uid,
     'community',
@@ -347,3 +420,86 @@ end;
 $$;
 
 grant execute on function public.create_community_invite(uuid, uuid) to authenticated;
+
+create or replace function public.accept_community_invite(
+  p_notification_id uuid
+)
+returns table (
+  status text,
+  community_id uuid
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_notification record;
+  v_community_id uuid;
+  v_role text := 'member';
+begin
+  if v_uid is null then
+    raise exception 'auth_required';
+  end if;
+  if p_notification_id is null then
+    raise exception 'notification_required';
+  end if;
+
+  select * into v_notification
+  from public.notifications n
+  where n.id = p_notification_id
+    and n.user_id = v_uid
+    and n.kind = 'community_invite'
+  limit 1;
+
+  if v_notification.id is null then
+    raise exception 'invite_not_found';
+  end if;
+
+  begin
+    v_community_id := coalesce(
+      nullif(v_notification.target_id, '')::uuid,
+      nullif(v_notification.data->>'communityId', '')::uuid
+    );
+  exception when others then
+    raise exception 'invalid_invite_target';
+  end;
+
+  if v_community_id is null then
+    raise exception 'invalid_invite_target';
+  end if;
+
+  if not exists (select 1 from public.communities c where c.id = v_community_id) then
+    raise exception 'community_not_found';
+  end if;
+
+  if exists (
+    select 1 from public.community_bans b
+    where b.community_id = v_community_id and b.user_id = v_uid
+  ) then
+    raise exception 'banned';
+  end if;
+
+  if exists (
+    select 1 from public.communities c
+    where c.id = v_community_id and c.owner_id = v_uid
+  ) then
+    v_role := 'owner';
+  end if;
+
+  insert into public.community_members (community_id, user_id, role)
+  values (v_community_id, v_uid, v_role)
+  on conflict do nothing;
+
+  delete from public.community_join_requests
+  where community_id = v_community_id and user_id = v_uid;
+
+  update public.notifications
+     set read_at = coalesce(read_at, now())
+   where id = p_notification_id and user_id = v_uid;
+
+  return query select 'joined'::text, v_community_id;
+end;
+$$;
+
+grant execute on function public.accept_community_invite(uuid) to authenticated;
