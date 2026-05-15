@@ -465,91 +465,135 @@ export default function DMThreadScreen() {
       />
 
       <SafeAreaView edges={["top"]} style={styles.safe}>
-        <View style={styles.header}>
-          <GlassBg intensity={Platform.OS === "ios" ? 60 : 40} tint="dark" />
-          <Pressable
-            onPress={() => navigateBack(router, "/messages")}
-            style={styles.iconBtn}
-            testID="dm-back"
-          >
-            <ArrowLeft color={IOS_BLUE} size={22} strokeWidth={2.4} />
-          </Pressable>
-          <Pressable
-            onPress={() =>
-              router.push({
-                pathname: "/u/[handle]",
-                params: { handle: conv.user.handle.replace("@", "") },
-              })
-            }
-            style={styles.headInfo}
-            testID="dm-open-profile"
-          >
-            <View style={styles.headAvatarWrap}>
-              <View style={[styles.headAvatar, { backgroundColor: conv.user.color }]}>
-                {peerAvatar ? (
-                  <ExpoImage source={{ uri: peerAvatar }} style={styles.headAvatarImg} contentFit="cover" />
+        <View style={styles.bannerHeader} testID="dm-banner-header">
+          {peerBanner ? (
+            <ExpoImage
+              source={{ uri: peerBanner }}
+              style={StyleSheet.absoluteFillObject}
+              contentFit="cover"
+            />
+          ) : (
+            <LinearGradient
+              colors={[`${conv.user.color}66`, `${conv.user.color}22`, "transparent"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+          )}
+          <LinearGradient
+            colors={["rgba(5,7,13,0.55)", "rgba(5,7,13,0.25)", "rgba(5,7,13,0.92)"]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+
+          <View style={styles.bannerTopRow}>
+            <Pressable
+              onPress={() => navigateBack(router, "/messages")}
+              style={styles.bannerIconBtn}
+              testID="dm-back"
+              hitSlop={8}
+            >
+              <ArrowLeft color={"#FFFFFF"} size={20} strokeWidth={2.6} />
+            </Pressable>
+            <View style={{ flex: 1 }} />
+            <Pressable
+              onPress={onStartCall}
+              style={styles.bannerIconBtn}
+              testID="dm-start-space"
+              hitSlop={6}
+            >
+              <Phone color={"#FFFFFF"} size={16} strokeWidth={2.6} />
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setToolsOpen(true);
+              }}
+              style={styles.bannerIconBtn}
+              testID="dm-tools"
+              hitSlop={6}
+            >
+              <Sparkles color={"#FFFFFF"} size={16} strokeWidth={2.6} />
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setMenu(true);
+              }}
+              style={styles.bannerIconBtn}
+              testID="dm-menu"
+              hitSlop={6}
+            >
+              <MoreHorizontal color={"#FFFFFF"} size={18} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+
+          <View style={styles.bannerBottomRow}>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: "/u/[handle]",
+                  params: { handle: conv.user.handle.replace("@", "") },
+                })
+              }
+              style={styles.bannerIdentity}
+              testID="dm-open-profile"
+            >
+              <View style={styles.bannerAvatarWrap}>
+                <View style={[styles.bannerAvatar, { backgroundColor: conv.user.color }]}>
+                  {peerAvatar ? (
+                    <ExpoImage source={{ uri: peerAvatar }} style={styles.bannerAvatarImg} contentFit="cover" />
+                  ) : (
+                    <Text style={styles.bannerAvatarInit}>
+                      {conv.user.name.slice(0, 1).toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+                {conv.user.online ? <View style={styles.bannerOnline} /> : null}
+              </View>
+              <View style={styles.bannerTextWrap}>
+                <View style={styles.bannerNameRow}>
+                  <Text style={styles.bannerName} numberOfLines={1}>
+                    {conv.user.name}
+                  </Text>
+                  {conv.user.verified ? (
+                    <BadgeCheck color={IOS_BLUE} size={15} strokeWidth={2.8} />
+                  ) : null}
+                  {conv.muted ? (
+                    <BellOff color={"rgba(255,255,255,0.7)"} size={12} strokeWidth={2.4} />
+                  ) : null}
+                  {conv.pinned ? (
+                    <Pin color="#FF9500" size={12} strokeWidth={2.8} />
+                  ) : null}
+                </View>
+                {otherTyping ? (
+                  <View style={styles.typingHeadRow}>
+                    <TypingDots color={IOS_BLUE} />
+                    <Text style={styles.bannerStatusTyping}>typing…</Text>
+                  </View>
                 ) : (
-                  <Text style={styles.headAvatarInit}>
-                    {conv.user.name.slice(0, 1).toUpperCase()}
+                  <Text style={styles.bannerStatus} numberOfLines={1}>
+                    {formatLastSeen(conv.user.online, conv.user.lastSeenAt)}
                   </Text>
                 )}
               </View>
-              {conv.user.online ? <View style={styles.headOnline} /> : null}
-            </View>
-            <View style={styles.headTextWrap}>
-              <View style={styles.headNameRow}>
-                <Text style={styles.headName} numberOfLines={1}>
-                  {conv.user.name}
-                </Text>
-                {conv.user.verified ? (
-                  <BadgeCheck color={IOS_BLUE} size={14} strokeWidth={2.8} />
-                ) : null}
-                {conv.muted ? (
-                  <BellOff color={IOS_SECONDARY} size={11} strokeWidth={2.4} />
-                ) : null}
-                {conv.pinned ? (
-                  <Pin color="#FF9500" size={11} strokeWidth={2.8} />
-                ) : null}
-              </View>
-              {otherTyping ? (
-                <View style={styles.typingHeadRow}>
-                  <TypingDots color={IOS_BLUE} />
-                  <Text style={styles.headStatusTyping}>typing…</Text>
-                </View>
-              ) : (
-                <Text style={styles.headStatus} numberOfLines={1}>
-                  {formatLastSeen(conv.user.online, conv.user.lastSeenAt)}
-                </Text>
-              )}
-            </View>
-          </Pressable>
-          <Pressable
-            onPress={onStartCall}
-            style={styles.iconBtnGlass}
-            testID="dm-start-space"
-          >
-            <Phone color={IOS_BLUE} size={17} strokeWidth={2.4} />
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
-              setToolsOpen(true);
-            }}
-            style={styles.iconBtnGlass}
-            testID="dm-tools"
-          >
-            <Sparkles color={IOS_BLUE} size={17} strokeWidth={2.4} />
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
-              setMenu(true);
-            }}
-            style={styles.iconBtnGlass}
-            testID="dm-menu"
-          >
-            <MoreHorizontal color={IOS_BLUE} size={18} strokeWidth={2.4} />
-          </Pressable>
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: "/u/[handle]",
+                  params: { handle: conv.user.handle.replace("@", "") },
+                })
+              }
+              style={styles.bannerProfileBtn}
+              testID="dm-view-profile-btn"
+            >
+              <Text style={styles.bannerProfileBtnText}>View profile</Text>
+              <ChevronRight color={IOS_BLUE} size={12} strokeWidth={2.8} />
+            </Pressable>
+          </View>
         </View>
 
         <KeyboardAvoidingView
@@ -574,20 +618,11 @@ export default function DMThreadScreen() {
               ) : null
             }
             ListHeaderComponent={
-              <ProfileBlurb
-                name={conv.user.name}
-                handle={conv.user.handle}
-                color={conv.user.color}
-                bio={peerBio}
-                avatarUrl={peerAvatar}
-                bannerUrl={peerBanner}
-                onProfile={() =>
-                  router.push({
-                    pathname: "/u/[handle]",
-                    params: { handle: conv.user.handle.replace("@", "") },
-                  })
-                }
-              />
+              peerBio ? (
+                <View style={styles.bioBlurb}>
+                  <Text style={styles.bioBlurbText} numberOfLines={3}>{peerBio}</Text>
+                </View>
+              ) : null
             }
             ListEmptyComponent={
               <View style={styles.empty}>
@@ -1386,6 +1421,119 @@ const styles = StyleSheet.create({
     borderBottomColor: GLASS_BORDER,
     overflow: "hidden",
   },
+  bannerHeader: {
+    height: 168,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 12,
+    backgroundColor: IOS_CARD,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: GLASS_BORDER,
+    overflow: "hidden",
+    justifyContent: "space-between",
+  },
+  bannerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  bannerIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(8,11,20,0.45)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  bannerBottomRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+  },
+  bannerIdentity: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  bannerAvatarWrap: { position: "relative" },
+  bannerAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.35)",
+    overflow: "hidden",
+  },
+  bannerAvatarImg: { width: "100%", height: "100%" },
+  bannerAvatarInit: { color: "#FFFFFF", fontSize: 18, fontWeight: "800" },
+  bannerOnline: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: IOS_GREEN,
+    borderWidth: 2,
+    borderColor: "#05070D",
+  },
+  bannerTextWrap: { flex: 1, justifyContent: "center" },
+  bannerNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  bannerName: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+    flexShrink: 1,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  bannerStatus: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  bannerStatusTyping: {
+    color: IOS_BLUE,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 2,
+    letterSpacing: 0.1,
+  },
+  bannerProfileBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(63,169,255,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(63,169,255,0.5)",
+  },
+  bannerProfileBtnText: { color: IOS_BLUE, fontSize: 12, fontWeight: "800" },
+  bioBlurb: {
+    marginHorizontal: 4,
+    marginTop: 4,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: IOS_CARD,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOS_SEPARATOR,
+  },
+  bioBlurbText: { color: IOS_SECONDARY, fontSize: 12, fontWeight: "500", lineHeight: 17, textAlign: "center" },
   iconBtn: {
     width: 34,
     height: 34,
