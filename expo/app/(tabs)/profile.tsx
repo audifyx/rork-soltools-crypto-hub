@@ -5,7 +5,6 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
-import * as LocalAuthentication from "expo-local-authentication";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -20,7 +19,6 @@ import {
   Edit3,
   ExternalLink,
   Eye,
-  Fingerprint,
   Flame,
   Gem,
   Globe,
@@ -2082,38 +2080,6 @@ function SettingsModal({
     );
   }, [onResetData]);
 
-  const onToggleBiometric = useCallback(
-    async (next: boolean) => {
-      if (!next) {
-        await onUpdate({ biometric: false });
-        return;
-      }
-      try {
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const enrolled = await LocalAuthentication.isEnrolledAsync();
-        if (!hasHardware || !enrolled) {
-          Alert.alert(
-            "Biometrics unavailable",
-            "Set up Face ID, Touch ID, or a fingerprint in your device settings first.",
-          );
-          return;
-        }
-        const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: "Confirm to enable biometric unlock",
-          fallbackLabel: "Use passcode",
-          disableDeviceFallback: false,
-        });
-        if (result.success) {
-          await onUpdate({ biometric: true });
-        }
-      } catch (e) {
-        console.log("[profile] biometric enable failed", e);
-        Alert.alert("Biometric error", e instanceof Error ? e.message : "Try again.");
-      }
-    },
-    [onUpdate],
-  );
-
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -2170,7 +2136,7 @@ function SettingsModal({
                 <MenuRow
                   Icon={Lock}
                   label="Privacy"
-                  sub="Private profile & biometric unlock"
+                  sub="Private profile controls"
                   onPress={() => setSection("privacy")}
                 />
                 <MenuRow
@@ -2266,14 +2232,6 @@ function SettingsModal({
                   Icon={Lock}
                   value={prefs.privateProfile}
                   onChange={(v) => onUpdate({ privateProfile: v })}
-                />
-                <Text style={styles.settingsGroup}>BIOMETRICS</Text>
-                <SettingRow
-                  label="Biometric unlock"
-                  sub="Use Face ID / fingerprint to open the app"
-                  Icon={Fingerprint}
-                  value={prefs.biometric}
-                  onChange={onToggleBiometric}
                 />
                 <View style={{ height: 24 }} />
               </>

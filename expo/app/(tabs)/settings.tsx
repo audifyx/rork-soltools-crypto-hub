@@ -6,7 +6,6 @@ import {
   Bell,
   Bot,
   ChevronRight,
-  Fingerprint,
   Gem,
   HelpCircle,
   Languages,
@@ -26,8 +25,6 @@ import {
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-import * as LocalAuthentication from "expo-local-authentication";
 
 import AppBackground from "@/components/ui/AppBackground";
 import GlassCard from "@/components/ui/GlassCard";
@@ -67,39 +64,6 @@ export default function SettingsScreen() {
     async (patch: Partial<UserPrefs>) => {
       haptic();
       await updatePrefs(patch);
-    },
-    [updatePrefs],
-  );
-
-  const onToggleBiometric = useCallback(
-    async (next: boolean) => {
-      haptic();
-      if (!next) {
-        await updatePrefs({ biometric: false });
-        return;
-      }
-      try {
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const enrolled = await LocalAuthentication.isEnrolledAsync();
-        if (!hasHardware || !enrolled) {
-          Alert.alert(
-            "Biometrics unavailable",
-            "Set up Face ID, Touch ID, or a fingerprint in your device settings first.",
-          );
-          return;
-        }
-        const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: "Confirm to enable biometric unlock",
-          fallbackLabel: "Use passcode",
-          disableDeviceFallback: false,
-        });
-        if (result.success) {
-          await updatePrefs({ biometric: true });
-        }
-      } catch (e) {
-        console.log("[settings] biometric enable failed", e);
-        Alert.alert("Biometric error", e instanceof Error ? e.message : "Try again.");
-      }
     },
     [updatePrefs],
   );
@@ -221,7 +185,7 @@ export default function SettingsScreen() {
 
               <Group title="SETTINGS">
                 <MenuRow Icon={Bell} label="Notifications" sub="Push, whales, haptics" onPress={() => openSection("notifications")} />
-                <MenuRow Icon={Shield} label="Privacy" sub="Private profile and biometric unlock" onPress={() => openSection("privacy")} />
+                <MenuRow Icon={Shield} label="Privacy" sub="Private profile and follow requests" onPress={() => openSection("privacy")} />
                 <MenuRow Icon={Palette} label="Appearance" sub={`${prefs.theme} · ${prefs.currency} · ${prefs.language.toUpperCase()}`} onPress={() => openSection("appearance")} />
                 <MenuRow Icon={UserRound} label="Account" sub="Connected accounts, auth, data controls" onPress={() => openSection("account")} />
                 <MenuRow Icon={HelpCircle} label="Support & legal" sub="Help, terms, privacy, licenses" onPress={() => openSection("support")} />
@@ -241,7 +205,6 @@ export default function SettingsScreen() {
             <Group title="PRIVACY">
               <ToggleRow Icon={Lock} label="Private profile" sub="Only followers can see your posts, reels and activity" value={prefs.privateProfile} onChange={(privateProfile) => setPrefs({ privateProfile })} />
               <MenuRow Icon={UserPlus} label="Follow requests" sub="Approve or reject who can follow you" onPress={() => router.push("/follow-requests")} />
-              <ToggleRow Icon={Fingerprint} label="Biometric unlock" sub="Use Face ID or fingerprint to open the app" value={prefs.biometric} onChange={onToggleBiometric} />
             </Group>
           ) : null}
 

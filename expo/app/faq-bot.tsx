@@ -132,9 +132,9 @@ const RULES: Rule[] = [
   },
   {
     id: "privacy",
-    keywords: [["private"], ["privacy"], ["hide", "balance"], ["two", "factor"], ["2fa"], ["biometric"], ["face", "id"]],
+    keywords: [["private"], ["privacy"], ["hide", "balance"], ["two", "factor"], ["2fa"]],
     answer:
-      "Privacy controls (private profile, hide balances, 2FA, biometric unlock) live in Settings > Privacy & security.",
+      "Privacy controls (private profile, follow requests) live in Settings > Privacy.",
   },
   {
     id: "delete",
