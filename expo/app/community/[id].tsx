@@ -218,6 +218,16 @@ export default function CommunityDetailScreen() {
     () => postsQuery.data ?? (community?.id ? postsByCommunity(community.id) : []),
     [community?.id, postsByCommunity, postsQuery.data],
   );
+  // Keep activePost in sync with live React Query data so like/repost/bookmark
+  // toggles re-render the hero card with updated counts and fill states.
+  const liveActivePost = useMemo<CommunityPost | null>(() => {
+    if (!activePost) return null;
+    const fromPosts = posts.find((p) => p.id === activePost.id);
+    if (fromPosts) return fromPosts;
+    const fromReplies = replies.find((p) => p.id === activePost.id);
+    if (fromReplies) return fromReplies;
+    return activePost;
+  }, [activePost, posts, replies]);
   const mediaPosts = useMemo(
     () => posts.filter((p) => p.imageUrl || p.token || p.ticker || p.pinned),
     [posts],
@@ -2305,18 +2315,18 @@ export default function CommunityDetailScreen() {
                 ListHeaderComponent={
                   <View>
                     <XHeroPost
-                      post={activePost}
-                      onLike={() => void onToggleLike(activePost)}
-                      onReply={() => openReply(activePost)}
-                      onRepost={() => void onToggleRepost(activePost)}
-                      onQuote={() => openQuote(activePost)}
-                      onBookmark={() => void onToggleBookmark(activePost)}
-                      onShare={() => void onSharePost(activePost)}
-                      onReport={() => onReportPost(activePost)}
+                      post={liveActivePost ?? activePost}
+                      onLike={() => void onToggleLike(liveActivePost ?? activePost)}
+                      onReply={() => openReply(liveActivePost ?? activePost)}
+                      onRepost={() => void onToggleRepost(liveActivePost ?? activePost)}
+                      onQuote={() => openQuote(liveActivePost ?? activePost)}
+                      onBookmark={() => void onToggleBookmark(liveActivePost ?? activePost)}
+                      onShare={() => void onSharePost(liveActivePost ?? activePost)}
+                      onReport={() => onReportPost(liveActivePost ?? activePost)}
                       canPin={canModeratePosts}
-                      onPin={() => void onTogglePin(activePost)}
-                      canDelete={canDeletePost(activePost)}
-                      onDelete={() => onDeletePost(activePost)}
+                      onPin={() => void onTogglePin(liveActivePost ?? activePost)}
+                      canDelete={canDeletePost(liveActivePost ?? activePost)}
+                      onDelete={() => onDeletePost(liveActivePost ?? activePost)}
                       onTokenChart={openTokenChart}
                     />
                     {interactionMode === "quote" ? (
