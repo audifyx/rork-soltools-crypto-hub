@@ -20,7 +20,6 @@ import {
   Settings,
   Shield,
   Sparkles,
-  Trophy,
   Users,
   UserPlus,
   Wallet,
@@ -148,7 +147,6 @@ export default function QuickAccessScreen() {
           { key: "news", category: "discover", label: "Crypto news", description: "Headlines and mentions", Icon: Newspaper, color: Colors.mint, path: "/crypto-news" },
           { key: "bookmarks", category: "discover", label: "Bookmarks", description: "Saved posts", Icon: Bookmark, color: Colors.goldBright, path: "/bookmarks" },
           { key: "invites", category: "discover", label: "Invite friends", description: "Codes and leaderboard", Icon: UserPlus, color: Colors.cyan, path: "/invites" },
-          { key: "achievements", category: "discover", label: "Achievements", description: "Badges & streaks", Icon: Trophy, color: Colors.orange, path: "/(tabs)/profile" },
         ],
       },
       {

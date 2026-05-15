@@ -73,8 +73,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
 import PortfolioCard from "@/components/profile/PortfolioCard";
-import StreakCard from "@/components/profile/StreakCard";
-import AchievementsRow from "@/components/profile/AchievementsRow";
 import RecapCard from "@/components/profile/RecapCard";
 import BadgeRow from "@/components/social/BadgeRow";
 import { DEFAULT_BADGES, getHolderBadge, sortBadges, type UserBadge } from "@/lib/badge-system";
@@ -851,9 +849,7 @@ export default function ProfileScreen() {
           <PortfolioCard />
 
           <View style={profileBlockStyles.gap}>
-            <StreakCard userId={userId ?? null} />
             <RecapCard userId={userId ?? null} />
-            <AchievementsRow userId={userId ?? null} />
           </View>
 
           <Pressable onPress={() => router.push("/list-token")} style={styles.cta} testID="profile-list-token">
