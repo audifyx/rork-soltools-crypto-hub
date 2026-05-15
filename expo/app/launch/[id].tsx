@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
@@ -58,7 +57,6 @@ import AppBackground from "@/components/ui/AppBackground";
 import { useDexToken, type DexPair } from "@/lib/api/dexscreener";
 import { useTokenOverview } from "@/lib/api/market";
 import { getTokenSecurity } from "@/lib/api/birdeye";
-import { fetchTokenAth } from "@/lib/api/token-ath";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { supabase } from "@/lib/supabase";
@@ -87,16 +85,6 @@ const TIMEFRAMES: { key: "5m" | "1h" | "6h" | "24h"; label: string }[] = [
   { key: "24h", label: "24H" },
 ];
 
-const ATH_STORE_KEY = "soltools.tokenAth.v1";
-
-type TokenAthRecord = {
-  priceUsd: number;
-  marketCapUsd: number | null;
-  recordedAt: number;
-};
-
-type TokenAthStore = Record<string, TokenAthRecord>;
-
 function ageString(ts?: number | null): string {
   if (!ts) return "—";
   const ms = Date.now() - ts;
@@ -109,24 +97,6 @@ function ageString(ts?: number | null): string {
   return `${d}d ${h % 24}h`;
 }
 
-function athAgeLabel(ts?: number | null): string {
-  if (!ts) return "—";
-  const age = ageString(ts);
-  return age === "now" ? "just now" : `${age} ago`;
-}
-
-async function readAthStore(): Promise<TokenAthStore> {
-  try {
-    const raw = await AsyncStorage.getItem(ATH_STORE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as TokenAthStore;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (e) {
-    console.log("[token-ath] read failed", e instanceof Error ? e.message : e);
-    return {};
-  }
-}
-
 export default function LaunchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -134,7 +104,6 @@ export default function LaunchDetailScreen() {
   const { userId } = useAuth();
   const [copied, setCopied] = useState<boolean>(false);
   const [watching, setWatching] = useState<boolean>(false);
-  const [ath, setAth] = useState<TokenAthRecord | null>(null);
   const [tab, setTab] = useState<TabKey>("overview");
   const [tf, setTf] = useState<"5m" | "1h" | "6h" | "24h">("24h");
 
@@ -260,36 +229,6 @@ export default function LaunchDetailScreen() {
     return synth;
   }, [resolved, lookupAddress, dex]);
 
-  // Fetch the real historical all-time-high from GeckoTerminal OHLCV so the
-  // tracker is accurate even if the user is opening this token for the first
-  // time. We merge this with the locally observed high so the value never
-  // regresses if upstream is briefly unavailable.
-  const athQuery = useQuery<{ priceUsd: number; recordedAt: number } | null>({
-    queryKey: ["token-ath", lookupAddress ?? ""],
-    enabled: !!lookupAddress,
-    queryFn: async () => {
-      try {
-        // Try every known pair so the tracker captures peaks on any pool.
-        const pairs = (dex?.pairs ?? []).map((p) => p.pairAddress).filter(Boolean);
-        const primary = dex?.pairAddress ?? null;
-        const candidates = Array.from(new Set([primary, ...pairs].filter(Boolean))) as string[];
-        if (candidates.length === 0) return null;
-        const results = await Promise.all(candidates.slice(0, 4).map((p) => fetchTokenAth(p)));
-        let best: { priceUsd: number; recordedAt: number } | null = null;
-        for (const r of results) {
-          if (!r) continue;
-          if (!best || r.priceUsd > best.priceUsd) best = { priceUsd: r.priceUsd, recordedAt: r.recordedAt };
-        }
-        return best;
-      } catch (e) {
-        console.log("[token-ath] query failed", e instanceof Error ? e.message : e);
-        return null;
-      }
-    },
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
-  });
-
   const livePrice = dex?.priceUsd ?? overview?.price ?? token?.price ?? null;
   const changeByTf: Record<string, number | null> = {
     "5m": dex?.priceChange5mPct ?? null,
@@ -311,73 +250,11 @@ export default function LaunchDetailScreen() {
   const liveHolders = overview?.holder ?? token?.holders ?? null;
   const pairAddress = dex?.pairAddress ?? null;
   const pairCreated = dex?.pairCreatedAt ?? null;
-  const athDropPct = ath?.priceUsd && livePrice != null && livePrice > 0
-    ? ((livePrice - ath.priceUsd) / ath.priceUsd) * 100
-    : null;
   const dexId = dex?.dexId ?? null;
   const txns24 = dex?.txns24h;
   const txns1h = dex?.txns1h;
   const totalTx = (txns24?.buys ?? 0) + (txns24?.sells ?? 0);
   const buyPressure = totalTx > 0 ? (txns24!.buys / totalTx) * 100 : 50;
-
-  useEffect(() => {
-    let cancelled = false;
-    const key = lookupAddress?.trim();
-    if (!key) {
-      setAth(null);
-      return;
-    }
-    readAthStore().then((store) => {
-      if (!cancelled) setAth(store[key] ?? null);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupAddress]);
-
-  // Merge the historical ATH (from GeckoTerminal) into local state/storage as
-  // soon as it resolves. This is what fixes the "tracker not working" bug —
-  // previously the ATH only reflected prices observed while the screen was
-  // open, which usually meant the very first live price became the recorded
-  // peak.
-  useEffect(() => {
-    const key = lookupAddress?.trim();
-    const remote = athQuery.data;
-    if (!key || !remote || !remote.priceUsd || remote.priceUsd <= 0) return;
-    setAth((current) => {
-      if (current && current.priceUsd >= remote.priceUsd) return current;
-      const next: TokenAthRecord = {
-        priceUsd: remote.priceUsd,
-        marketCapUsd: null,
-        recordedAt: remote.recordedAt || Date.now(),
-      };
-      readAthStore()
-        .then(async (store) => {
-          const existing = store[key];
-          if (existing && existing.priceUsd >= remote.priceUsd) return;
-          await AsyncStorage.setItem(ATH_STORE_KEY, JSON.stringify({ ...store, [key]: next }));
-        })
-        .catch((e) => console.log("[token-ath] persist remote failed", e instanceof Error ? e.message : e));
-      return next;
-    });
-  }, [lookupAddress, athQuery.data]);
-
-  useEffect(() => {
-    const key = lookupAddress?.trim();
-    if (!key || livePrice == null || livePrice <= 0) return;
-    setAth((current) => {
-      if (current && current.priceUsd >= livePrice) return current;
-      const next: TokenAthRecord = { priceUsd: livePrice, marketCapUsd: liveMc ?? null, recordedAt: Date.now() };
-      readAthStore()
-        .then(async (store) => {
-          const existing = store[key];
-          if (existing && existing.priceUsd >= livePrice) return;
-          await AsyncStorage.setItem(ATH_STORE_KEY, JSON.stringify({ ...store, [key]: next }));
-        })
-        .catch((e) => console.log("[token-ath] persist failed", e instanceof Error ? e.message : e));
-      return next;
-    });
-  }, [lookupAddress, livePrice, liveMc]);
 
   // Live price flash animation
   const flash = useRef(new Animated.Value(0)).current;
@@ -565,12 +442,6 @@ export default function LaunchDetailScreen() {
               </View>
               <Text style={styles.heroStampTitle}>Token command center</Text>
               <Text style={styles.heroStampSub}>Live routing · chart · risk · pools</Text>
-              <View style={styles.athBannerPill}>
-                <TrendingUp color={Colors.goldBright} size={12} strokeWidth={3} />
-                <Text style={styles.athBannerLabel}>Recorded ATH</Text>
-                <Text style={styles.athBannerValue}>{ath?.priceUsd ? fmtPrice(ath.priceUsd) : "Recording…"}</Text>
-                {athDropPct != null ? <Text style={styles.athBannerDrop}>{fmtPct(athDropPct, 1)} from ATH</Text> : null}
-              </View>
             </View>
             <View style={styles.headerBar}>
               <Pressable onPress={() => navigateBack(router, "/(tabs)/discover")} style={styles.iconBtn} hitSlop={8} testID="back-btn">
@@ -651,7 +522,6 @@ export default function LaunchDetailScreen() {
           <View style={styles.commandDock}>
             <MarketMini Icon={Droplet} label="Liquidity" value={fmtUsd(liveLiq)} color={Colors.cyan} />
             <MarketMini Icon={Activity} label={`Vol ${tf.toUpperCase()}`} value={fmtUsd(liveVol)} color={Colors.mint} />
-            <MarketMini Icon={TrendingUp} label="ATH" value={ath?.priceUsd ? fmtPrice(ath.priceUsd) : "—"} color={Colors.goldBright} />
             <MarketMini Icon={ShieldCheck} label="Score" value={`${commandScore}`} color={accent} />
           </View>
 
@@ -673,9 +543,7 @@ export default function LaunchDetailScreen() {
                   <Text style={styles.priceValue}>
                     {livePrice != null && livePrice > 0 ? fmtPrice(livePrice) : "—"}
                   </Text>
-                  <Text style={styles.priceCaption}>
-                    DEX-indexed route · ATH {ath?.priceUsd ? `${fmtPrice(ath.priceUsd)} (${athAgeLabel(ath.recordedAt)})` : "recording now"}
-                  </Text>
+                  <Text style={styles.priceCaption}>DEX-indexed route · Live market data</Text>
                 </View>
                 {liveChange != null ? (
                   <View
