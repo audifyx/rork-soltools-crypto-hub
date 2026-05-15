@@ -5,6 +5,7 @@ import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
   ArrowLeft,
+  BadgeCheck,
   Calendar,
   CalendarCheck,
   Clock,
@@ -445,7 +446,12 @@ export default function EventsScreen() {
                         </View>
                       )}
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.sheetName} numberOfLines={1}>{name}</Text>
+                        <View style={styles.sheetNameRow}>
+                          <Text style={styles.sheetName} numberOfLines={1}>{name}</Text>
+                          {u.verified ? (
+                            <BadgeCheck color={Colors.goldBright} size={14} strokeWidth={2.8} fill={Colors.ink} />
+                          ) : null}
+                        </View>
                         {handle ? <Text style={styles.sheetHandle} numberOfLines={1}>{handle}</Text> : null}
                       </View>
                     </Pressable>
@@ -547,6 +553,7 @@ const styles = StyleSheet.create({
   sheetAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.08)" },
   sheetAvatarInitial: { color: Colors.text, fontSize: 16, fontWeight: "900" },
   sheetName: { color: Colors.text, fontSize: 14, fontWeight: "800" },
+  sheetNameRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   sheetHandle: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 1 },
   sheetEmpty: { alignItems: "center", paddingVertical: 40, gap: 6 },
   sheetEmptyTitle: { color: Colors.text, fontSize: 16, fontWeight: "900" },
