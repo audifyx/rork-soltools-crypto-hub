@@ -3,16 +3,19 @@ import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as Clipboard from "expo-clipboard";
 import {
   ArrowLeft,
   BadgeCheck,
   Heart,
   MessageCircle,
+  Quote,
   Repeat2,
   Send,
   Share2,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -160,7 +163,14 @@ export default function PostDetailScreen() {
   const postId = (id ?? "").toString();
   const { userId, isAuthenticated } = useAuth();
   const { profile } = useApp();
-  const { usePostReplies, addPostReply, togglePostLike, togglePostRepost, deleteCommunityPost } = useSocial();
+  const {
+    usePostReplies,
+    addPostReply,
+    togglePostLike,
+    togglePostRepost,
+    quotePost,
+    deleteCommunityPost,
+  } = useSocial();
 
   const postQ = useQuery<FullPost | null>({
     queryKey: ["post-detail", postId, userId ?? "guest"],
@@ -174,6 +184,9 @@ export default function PostDetailScreen() {
 
   const [draft, setDraft] = useState<string>("");
   const [sending, setSending] = useState<boolean>(false);
+  const [quoteTarget, setQuoteTarget] = useState<CommunityPost | null>(null);
+  const [quoteText, setQuoteText] = useState<string>("");
+  const [quoting, setQuoting] = useState<boolean>(false);
 
   const post = postQ.data ?? null;
 
@@ -452,6 +465,55 @@ export default function PostDetailScreen() {
                 <CommentRow
                   reply={item}
                   canDelete={!!userId && item.authorUserId === userId}
+                  onLike={async () => {
+                    if (!isAuthenticated) {
+                      router.push("/auth");
+                      return;
+                    }
+                    hapticSelect();
+                    try {
+                      await togglePostLike(item.id);
+                    } catch (e) {
+                      console.log("[post-detail] comment like failed", e);
+                    }
+                  }}
+                  onRepost={async () => {
+                    if (!isAuthenticated) {
+                      router.push("/auth");
+                      return;
+                    }
+                    hapticSelect();
+                    try {
+                      await togglePostRepost(item.id);
+                    } catch (e) {
+                      console.log("[post-detail] comment repost failed", e);
+                    }
+                  }}
+                  onQuote={() => {
+                    if (!isAuthenticated) {
+                      router.push("/auth");
+                      return;
+                    }
+                    hapticSelect();
+                    setQuoteTarget(item);
+                    setQuoteText("");
+                  }}
+                  onShare={async () => {
+                    hapticSelect();
+                    const url = `https://rork.com/post/${item.id}`;
+                    const body = `${item.content || "Check this reply"}\n\n— ${item.authorHandle || item.authorName}\n${url}`;
+                    try {
+                      await Share.share({ message: body, url, title: "Share reply" });
+                    } catch {
+                      try {
+                        await Clipboard.setStringAsync(url);
+                        Alert.alert("Link copied", "Reply link copied to clipboard.");
+                      } catch {}
+                    }
+                  }}
+                  onReply={() => {
+                    router.push({ pathname: "/post/[id]", params: { id: item.id } });
+                  }}
                   onDelete={async () => {
                     try {
                       await deleteCommunityPost(item);
@@ -477,6 +539,82 @@ export default function PostDetailScreen() {
               }
             />
           )}
+
+          {quoteTarget ? (
+            <View style={styles.quoteOverlay}>
+              <View style={styles.quoteSheet}>
+                <View style={styles.quoteSheetHeader}>
+                  <View style={styles.quoteSheetTitleRow}>
+                    <Quote color={Colors.goldBright} size={14} strokeWidth={2.8} />
+                    <Text style={styles.quoteSheetTitle}>Quote reply</Text>
+                  </View>
+                  <Pressable
+                    onPress={() => {
+                      setQuoteTarget(null);
+                      setQuoteText("");
+                    }}
+                    hitSlop={10}
+                    style={styles.quoteCloseBtn}
+                    testID="quote-close"
+                  >
+                    <X color={Colors.text} size={16} strokeWidth={2.6} />
+                  </Pressable>
+                </View>
+                <TextInput
+                  value={quoteText}
+                  onChangeText={setQuoteText}
+                  placeholder="Add a comment…"
+                  placeholderTextColor={Colors.muted}
+                  style={styles.quoteInput}
+                  multiline
+                  maxLength={500}
+                  testID="quote-input"
+                  autoFocus
+                />
+                <View style={styles.quotePreview}>
+                  <Text style={styles.quotePreviewName} numberOfLines={1}>
+                    {quoteTarget.authorName}{" "}
+                    <Text style={styles.quotePreviewHandle}>{quoteTarget.authorHandle}</Text>
+                  </Text>
+                  <Text style={styles.quotePreviewText} numberOfLines={3}>
+                    {quoteTarget.content || ""}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={async () => {
+                    const text = quoteText.trim();
+                    if (!quoteTarget || quoting) return;
+                    setQuoting(true);
+                    hapticMedium();
+                    try {
+                      await quotePost({
+                        post: quoteTarget,
+                        content: text,
+                        authorHandle: profile.handle || "@you",
+                        authorName: profile.displayName || "You",
+                        authorColor: profile.avatarColor,
+                      });
+                      setQuoteTarget(null);
+                      setQuoteText("");
+                    } catch (e) {
+                      Alert.alert("Quote failed", e instanceof Error ? e.message : "Try again.");
+                    } finally {
+                      setQuoting(false);
+                    }
+                  }}
+                  disabled={quoting}
+                  style={[styles.quotePostBtn, quoting && { opacity: 0.5 }]}
+                  testID="quote-submit"
+                >
+                  <LinearGradient
+                    colors={[Colors.goldBright, Colors.mint]}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <Text style={styles.quotePostBtnText}>{quoting ? "Posting…" : "Post quote"}</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.composerBar}>
             <View style={[styles.composerAvatar, { backgroundColor: profile.avatarColor }]}>
@@ -528,10 +666,20 @@ export default function PostDetailScreen() {
 function CommentRow({
   reply,
   canDelete,
+  onLike,
+  onRepost,
+  onQuote,
+  onShare,
+  onReply,
   onDelete,
 }: {
   reply: CommunityPost;
   canDelete: boolean;
+  onLike: () => void;
+  onRepost: () => void;
+  onQuote: () => void;
+  onShare: () => void;
+  onReply: () => void;
   onDelete: () => void;
 }) {
   const router = useRouter();
@@ -546,25 +694,30 @@ function CommentRow({
   return (
     <Pressable
       style={styles.comment}
-      onPress={() => {
-        if (handle) router.push({ pathname: "/u/[handle]", params: { handle } });
-      }}
+      onPress={() => router.push({ pathname: "/post/[id]", params: { id: reply.id } })}
       onLongPress={canDelete ? confirmDelete : undefined}
       testID={`comment-${reply.id}`}
     >
-      <View style={[styles.commentAvatar, { backgroundColor: reply.authorColor }]}>
-        {reply.authorAvatarUrl ? (
-          <ExpoImage
-            source={{ uri: reply.authorAvatarUrl }}
-            style={styles.fillImg}
-            contentFit="cover"
-          />
-        ) : (
-          <Text style={styles.commentAvatarText}>
-            {(reply.authorName ?? "U").slice(0, 1).toUpperCase()}
-          </Text>
-        )}
-      </View>
+      <Pressable
+        onPress={() => {
+          if (handle) router.push({ pathname: "/u/[handle]", params: { handle } });
+        }}
+        hitSlop={6}
+      >
+        <View style={[styles.commentAvatar, { backgroundColor: reply.authorColor }]}>
+          {reply.authorAvatarUrl ? (
+            <ExpoImage
+              source={{ uri: reply.authorAvatarUrl }}
+              style={styles.fillImg}
+              contentFit="cover"
+            />
+          ) : (
+            <Text style={styles.commentAvatarText}>
+              {(reply.authorName ?? "U").slice(0, 1).toUpperCase()}
+            </Text>
+          )}
+        </View>
+      </Pressable>
       <View style={{ flex: 1 }}>
         <View style={styles.commentHeader}>
           <Text style={styles.commentName} numberOfLines={1}>
@@ -579,6 +732,96 @@ function CommentRow({
           <Text style={styles.commentTime}>{timeAgo(reply.createdAt)}</Text>
         </View>
         {reply.content ? <Text style={styles.commentText}>{reply.content}</Text> : null}
+
+        <View style={styles.commentActions}>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onReply();
+            }}
+            hitSlop={8}
+            style={styles.commentAction}
+            testID={`comment-reply-${reply.id}`}
+          >
+            <MessageCircle color={Colors.muted} size={14} strokeWidth={2.4} />
+            {reply.comments > 0 ? (
+              <Text style={styles.commentActionLabel}>{fmt(reply.comments)}</Text>
+            ) : null}
+          </Pressable>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onRepost();
+            }}
+            hitSlop={8}
+            style={styles.commentAction}
+            testID={`comment-repost-${reply.id}`}
+          >
+            <Repeat2
+              color={reply.reposted ? Colors.mint : Colors.muted}
+              size={14}
+              strokeWidth={2.4}
+            />
+            {reply.reposts > 0 ? (
+              <Text
+                style={[
+                  styles.commentActionLabel,
+                  reply.reposted && { color: Colors.mint },
+                ]}
+              >
+                {fmt(reply.reposts)}
+              </Text>
+            ) : null}
+          </Pressable>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onQuote();
+            }}
+            hitSlop={8}
+            style={styles.commentAction}
+            testID={`comment-quote-${reply.id}`}
+          >
+            <Quote color={Colors.muted} size={14} strokeWidth={2.4} />
+          </Pressable>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onLike();
+            }}
+            hitSlop={8}
+            style={styles.commentAction}
+            testID={`comment-like-${reply.id}`}
+          >
+            <Heart
+              color={reply.liked ? Colors.rose : Colors.muted}
+              size={14}
+              strokeWidth={2.4}
+              fill={reply.liked ? Colors.rose : "transparent"}
+            />
+            {reply.likes > 0 ? (
+              <Text
+                style={[
+                  styles.commentActionLabel,
+                  reply.liked && { color: Colors.rose },
+                ]}
+              >
+                {fmt(reply.likes)}
+              </Text>
+            ) : null}
+          </Pressable>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onShare();
+            }}
+            hitSlop={8}
+            style={styles.commentAction}
+            testID={`comment-share-${reply.id}`}
+          >
+            <Share2 color={Colors.muted} size={13} strokeWidth={2.4} />
+          </Pressable>
+        </View>
       </View>
       {canDelete ? (
         <Pressable
@@ -717,6 +960,85 @@ const styles = StyleSheet.create({
   commentDot: { color: Colors.muted, fontSize: 11 },
   commentTime: { color: Colors.muted, fontSize: 11, fontWeight: "600" },
   commentText: { color: Colors.text, fontSize: 14, lineHeight: 19, fontWeight: "500", marginTop: 3 },
+  commentActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+    marginTop: 8,
+    paddingRight: 6,
+  },
+  commentAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 2,
+  },
+  commentActionLabel: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+  quoteOverlay: {
+    position: "absolute",
+    inset: 0,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  quoteSheet: {
+    backgroundColor: Colors.ink,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: Platform.OS === "ios" ? 24 : 18,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    gap: 12,
+  },
+  quoteSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  quoteSheetTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  quoteSheetTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2 },
+  quoteCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quoteInput: {
+    minHeight: 60,
+    maxHeight: 140,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  quotePreview: {
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.02)",
+    gap: 4,
+  },
+  quotePreviewName: { color: Colors.text, fontSize: 12, fontWeight: "900" },
+  quotePreviewHandle: { color: Colors.muted, fontSize: 11, fontWeight: "600" },
+  quotePreviewText: { color: Colors.muted, fontSize: 12, fontWeight: "500", lineHeight: 17 },
+  quotePostBtn: {
+    height: 44,
+    borderRadius: 14,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quotePostBtnText: { color: Colors.ink, fontSize: 14, fontWeight: "900", letterSpacing: 0.2 },
   commentDeleteBtn: {
     width: 30,
     height: 30,
