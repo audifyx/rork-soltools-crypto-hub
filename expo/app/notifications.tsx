@@ -13,7 +13,6 @@ import { navigateBack } from "@/lib/navigation";
 import { countUnreadNotifications, dedupeNotifications, sortNotifications } from "@/lib/notification-cache";
 import { invalidateNotificationState } from "@/lib/social-query-keys";
 import { supabase } from "@/lib/supabase";
-import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 
 type Tab = "all" | "mentions" | "social" | "trades" | "whales";
@@ -119,7 +118,6 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId, isAuthenticated } = useAuth();
-  const { alerts, watchlist, posts } = useApp();
   const [tab, setTab] = useState<Tab>("all");
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -185,52 +183,9 @@ export default function NotificationsScreen() {
     };
   }, [queryClient, userId]);
 
-  const whalesQ = useQuery({
-    queryKey: ["notifications", "whales"],
-    queryFn: async () => {
-      try {
-        const { data, error } = await supabase.from("whale_events").select("id,wallet_address,symbol,side,amount_usd,created_at").order("created_at", { ascending: false }).limit(15);
-        if (error) throw error;
-        return data ?? [];
-      } catch {
-        return [];
-      }
-    },
-    staleTime: 30_000,
-  });
-
   const remoteItems = useMemo(() => dedupeNotifications((remoteQ.data?.pages ?? []).flat().map(rowToNotif)), [remoteQ.data]);
 
-  const localItems = useMemo<Notif[]>(() => {
-    const list: Notif[] = [];
-    (whalesQ.data ?? []).forEach((w) => {
-      const wallet = String(w.wallet_address ?? "");
-      list.push({
-        id: `whale-${w.id}`,
-        kind: "whale",
-        title: `${String(w.side ?? "MOVE").toUpperCase()} · $${String(w.symbol ?? "?")}`,
-        body: `Whale ${wallet.slice(0, 4)}…${wallet.slice(-4)} moved ${formatUsd(Number(w.amount_usd ?? 0))}`,
-        ts: new Date(String(w.created_at)).getTime(),
-        unread: false,
-        symbol: String(w.symbol ?? ""),
-      });
-    });
-    alerts.forEach((a) => list.push({ id: `alert-${a.id}`, kind: "alert", title: `Alert · $${a.ticker}`, body: `${a.type.replace("-", " ")} target ${a.value}`, ts: a.createdAt, unread: a.enabled }));
-    posts.forEach((p) => {
-      if (p.likes > 0) list.push({ id: `like-${p.id}`, kind: "like", title: `${p.likes} like${p.likes === 1 ? "" : "s"}`, body: p.text.slice(0, 70) || "Your post", ts: p.createdAt, unread: false });
-      if (p.reposts > 0) list.push({ id: `repost-${p.id}`, kind: "repost", title: `${p.reposts} repost${p.reposts === 1 ? "" : "s"}`, body: p.text.slice(0, 70) || "Your post", ts: p.createdAt, unread: false });
-    });
-    watchlist.slice(0, 5).forEach((w) => list.push({ id: `move-${w.id}`, kind: "trade", title: `$${w.ticker} moved`, body: "Watchlist token had significant activity", ts: w.addedAt, unread: false }));
-    return list;
-  }, [alerts, posts, watchlist, whalesQ.data]);
-
-  const items = useMemo(() => {
-    const merged = sortNotifications(dedupeNotifications([...remoteItems, ...localItems]));
-    if (merged.length === 0 && isAuthenticated) {
-      return [{ id: "welcome", kind: "system", title: "Welcome to Crypto Community App", body: "Likes, mentions, alerts, and whale moves will land here.", ts: Date.now(), unread: false }] as Notif[];
-    }
-    return merged;
-  }, [isAuthenticated, localItems, remoteItems]);
+  const items = useMemo(() => sortNotifications(remoteItems), [remoteItems]);
 
   const filtered = useMemo(() => {
     if (tab === "mentions") return items.filter((i) => i.kind === "mention" || i.kind === "comment");
