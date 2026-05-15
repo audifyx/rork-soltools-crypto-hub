@@ -1977,14 +1977,31 @@ function TeamSection({ isOwner }: { isOwner: boolean }) {
 
   const updatePermsMutation = useMutation({
     mutationFn: async (input: { row: TeamMemberRow; perms: Record<string, boolean> }) => {
+      console.log("[admin/team] save perms", input.row.user_id, input.perms);
       const { error } = await supabase.rpc("update_team_permissions", {
         p_user_id: input.row.user_id,
         p_permissions: input.perms,
       });
-      if (error) throw error;
+      if (error) {
+        console.log("[admin/team] update_team_permissions RPC failed, falling back to direct update", error.message);
+        const { error: directError } = await supabase
+          .from("admin_roles")
+          .update({ permissions: input.perms, updated_at: new Date().toISOString() })
+          .eq("user_id", input.row.user_id);
+        if (directError) throw directError;
+      }
       await logAction("update_team_permissions", "user", input.row.user_id, input.row.permissions, input.perms);
+      return input.row.user_id;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "team-members"] }),
+    onSuccess: (userId) => {
+      setPermsDraft((prev) => {
+        const next = { ...prev };
+        if (userId) delete next[userId];
+        return next;
+      });
+      qc.invalidateQueries({ queryKey: ["admin", "team-members"] });
+      Alert.alert("Saved", "Team permissions updated.");
+    },
     onError: (e: Error) => Alert.alert("Update failed", e.message),
   });
 
@@ -2077,8 +2094,9 @@ function TeamSection({ isOwner }: { isOwner: boolean }) {
             ))}
             <View style={styles.actionGrid}>
               <ActionButton
-                label="Save permissions"
+                label={updatePermsMutation.isPending && updatePermsMutation.variables?.row.user_id === row.user_id ? "Saving…" : "Save permissions"}
                 Icon={Check}
+                disabled={updatePermsMutation.isPending}
                 onPress={() => updatePermsMutation.mutate({ row, perms: draft })}
               />
               <ActionButton
