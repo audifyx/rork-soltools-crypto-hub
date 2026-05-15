@@ -1976,7 +1976,16 @@ function CommentRow({
       testID={`comment-${reply.id}`}
     >
       <View style={[styles.commentAvatar, { backgroundColor: reply.authorColor || Colors.mint }]}>
-        <Text style={styles.commentAvatarText}>{initial}</Text>
+        {reply.authorAvatarUrl ? (
+          <ExpoImage
+            source={{ uri: reply.authorAvatarUrl }}
+            style={styles.commentAvatarImg}
+            contentFit="cover"
+            transition={120}
+          />
+        ) : (
+          <Text style={styles.commentAvatarText}>{initial}</Text>
+        )}
       </View>
       <View style={styles.commentBody}>
         <View style={styles.commentHeaderRow}>
@@ -3374,6 +3383,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  commentAvatarImg: {
+    width: "100%",
+    height: "100%",
   },
   commentAvatarText: {
     color: Colors.ink,
