@@ -1,3 +1,4 @@
+import { BlurView } from "expo-blur";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
@@ -61,18 +62,20 @@ import { useQueryClient } from "@tanstack/react-query";
 
 const QUICK_TICKERS = ["$SOL", "$BONK", "$WIF", "$JUP", "$AGNT", "$PYTH"];
 const QUICK_REACTIONS = ["❤️", "😂", "🔥", "🚀", "💯", "😮", "👀", "💎"] as const;
-// Dark room palette. Names kept for minimal diff.
+// Glass dark palette. Names kept for minimal diff.
 const IOS_BLUE = "#3FA9FF";
 const IOS_BG = "#05070D";
-const IOS_CARD = "#111827";
-const IOS_CARD_SOFT = "#1A2236";
+const IOS_CARD = "rgba(255,255,255,0.06)";
+const IOS_CARD_SOFT = "rgba(255,255,255,0.08)";
 const IOS_TEXT = "#FFFFFF";
 const IOS_SECONDARY = "#94A3B8";
 const IOS_SEPARATOR = "rgba(255,255,255,0.08)";
 const IOS_GREEN = "#34D399";
 const IOS_RED = "#FF453A";
-const HEADER_BG = "rgba(8,11,20,0.92)";
-const COMPOSER_BG = "rgba(8,11,20,0.96)";
+const GLASS_BORDER = "rgba(255,255,255,0.12)";
+const GLASS_HIGHLIGHT = "rgba(255,255,255,0.08)";
+const HEADER_BG = "rgba(8,11,20,0.55)";
+const COMPOSER_BG = "rgba(8,11,20,0.55)";
 
 function formatTime(t: number): string {
   const d = new Date(t);
@@ -452,8 +455,16 @@ export default function DMThreadScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
 
+      <LinearGradient
+        colors={[`${conv.user.color}24`, "transparent", "rgba(63,169,255,0.10)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
       <SafeAreaView edges={["top"]} style={styles.safe}>
-        <View style={styles.header}>
+        <BlurView intensity={Platform.OS === "ios" ? 60 : 40} tint="dark" style={styles.header}>
           <Pressable
             onPress={() => navigateBack(router, "/messages")}
             style={styles.iconBtn}
@@ -483,7 +494,7 @@ export default function DMThreadScreen() {
               </View>
               {conv.user.online ? <View style={styles.headOnline} /> : null}
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={styles.headTextWrap}>
               <View style={styles.headNameRow}>
                 <Text style={styles.headName} numberOfLines={1}>
                   {conv.user.name}
@@ -512,32 +523,32 @@ export default function DMThreadScreen() {
           </Pressable>
           <Pressable
             onPress={onStartCall}
-            style={styles.iconBtn}
+            style={styles.iconBtnGlass}
             testID="dm-start-space"
           >
-            <Phone color={IOS_BLUE} size={18} strokeWidth={2.4} />
+            <Phone color={IOS_BLUE} size={17} strokeWidth={2.4} />
           </Pressable>
           <Pressable
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
               setToolsOpen(true);
             }}
-            style={styles.iconBtn}
+            style={styles.iconBtnGlass}
             testID="dm-tools"
           >
-            <Sparkles color={IOS_BLUE} size={18} strokeWidth={2.4} />
+            <Sparkles color={IOS_BLUE} size={17} strokeWidth={2.4} />
           </Pressable>
           <Pressable
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
               setMenu(true);
             }}
-            style={styles.iconBtn}
+            style={styles.iconBtnGlass}
             testID="dm-menu"
           >
-            <MoreHorizontal color={IOS_BLUE} size={20} strokeWidth={2.4} />
+            <MoreHorizontal color={IOS_BLUE} size={18} strokeWidth={2.4} />
           </Pressable>
-        </View>
+        </BlurView>
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -607,7 +618,7 @@ export default function DMThreadScreen() {
           ) : null}
 
           {picker ? (
-            <View style={styles.tickerStrip}>
+            <BlurView intensity={Platform.OS === "ios" ? 50 : 30} tint="dark" style={styles.tickerStrip}>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -629,10 +640,10 @@ export default function DMThreadScreen() {
                   </Pressable>
                 ))}
               </ScrollView>
-            </View>
+            </BlurView>
           ) : null}
 
-          <View style={styles.composer}>
+          <BlurView intensity={Platform.OS === "ios" ? 70 : 40} tint="dark" style={styles.composer}>
             <Pressable
               onPress={() => {
                 Haptics.selectionAsync().catch(() => {});
@@ -677,7 +688,7 @@ export default function DMThreadScreen() {
                 strokeWidth={2.6}
               />
             </Pressable>
-          </View>
+          </BlurView>
         </KeyboardAvoidingView>
       </SafeAreaView>
 
@@ -1360,29 +1371,42 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: IOS_BG },
   safe: { flex: 1 },
   header: {
-    paddingHorizontal: 10,
-    paddingTop: 4,
-    paddingBottom: 7,
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 10,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
     backgroundColor: HEADER_BG,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: IOS_SEPARATOR,
+    borderBottomColor: GLASS_BORDER,
+    overflow: "hidden",
   },
   iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
   },
+  iconBtnGlass: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: GLASS_BORDER,
+  },
   headInfo: {
     flex: 1,
+    flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 9,
     paddingHorizontal: 4,
   },
+  headTextWrap: { flex: 1, justifyContent: "center" },
   headAvatarWrap: { position: "relative" },
   headAvatar: {
     width: 34,
@@ -1404,18 +1428,20 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: IOS_BG,
   },
-  headNameRow: { flexDirection: "row", alignItems: "center", gap: 4, maxWidth: 190 },
-  headName: { color: IOS_TEXT, fontSize: 12, fontWeight: "700", letterSpacing: -0.1, flexShrink: 1 },
-  headStatus: { color: IOS_SECONDARY, fontSize: 10, fontWeight: "500", marginTop: -1 },
-  headStatusTyping: { color: IOS_BLUE, fontSize: 10, fontWeight: "700", marginTop: -1, letterSpacing: 0.1 },
+  headNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  headName: { color: IOS_TEXT, fontSize: 15, fontWeight: "700", letterSpacing: -0.2, flexShrink: 1 },
+  headStatus: { color: IOS_SECONDARY, fontSize: 11, fontWeight: "500", marginTop: 1 },
+  headStatusTyping: { color: IOS_BLUE, fontSize: 11, fontWeight: "700", marginTop: 1, letterSpacing: 0.1 },
   typingHeadRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 1 },
   typingBubbleWrap: { alignSelf: "flex-start", marginTop: 2, marginBottom: 6, marginLeft: 2 },
   typingBubble: {
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 18,
+    borderRadius: 20,
     borderBottomLeftRadius: 6,
     backgroundColor: IOS_CARD_SOFT,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: GLASS_BORDER,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -1485,9 +1511,12 @@ const styles = StyleSheet.create({
   bubbleLeft: { alignSelf: "flex-start", alignItems: "flex-start" },
   bubbleRight: { alignSelf: "flex-end", alignItems: "flex-end" },
   bubble: {
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    borderRadius: 19,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: GLASS_BORDER,
+    overflow: "hidden",
   },
   bubbleText: { fontSize: 16, lineHeight: 21, fontWeight: "400" },
   bubbleTime: { color: IOS_SECONDARY, fontSize: 10, fontWeight: "500", marginHorizontal: 6 },
@@ -1573,8 +1602,9 @@ const styles = StyleSheet.create({
   tickerStrip: {
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: IOS_SEPARATOR,
+    borderTopColor: GLASS_BORDER,
     backgroundColor: COMPOSER_BG,
+    overflow: "hidden",
   },
   tickerRow: { paddingHorizontal: 14, gap: 6 },
   tickerChip: {
@@ -1594,12 +1624,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingTop: 10,
     paddingBottom: Platform.OS === "ios" ? 18 : 14,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: IOS_SEPARATOR,
+    borderTopColor: GLASS_BORDER,
     backgroundColor: COMPOSER_BG,
+    overflow: "hidden",
   },
   composerBtn: {
     width: 38,
@@ -1611,13 +1642,13 @@ const styles = StyleSheet.create({
   },
   inputWrap: {
     flex: 1,
-    backgroundColor: IOS_CARD_SOFT,
-    borderRadius: 19,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: IOS_SEPARATOR,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "ios" ? 10 : 6,
-    minHeight: 38,
+    borderColor: GLASS_BORDER,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === "ios" ? 11 : 7,
+    minHeight: 40,
     maxHeight: 110,
     justifyContent: "center",
   },
@@ -1630,11 +1661,15 @@ const styles = StyleSheet.create({
     maxHeight: 90,
   },
   sendBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: IOS_BLUE,
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
 
   notFound: { flex: 1, justifyContent: "center", alignItems: "center", padding: 32 },
