@@ -30,6 +30,7 @@ import Colors from "@/constants/colors";
 import type { Currency, Language, ThemeMode, UserPrefs } from "@/providers/app-provider";
 import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
+import { useAdmin } from "@/providers/admin-provider";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
 type Section = "overview" | "notifications" | "appearance" | "account" | "support";
@@ -56,6 +57,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { prefs, updatePrefs, resetAllData, profile, watchlist, alerts, wallets } = useApp();
   const { isAuthenticated, signOut, deleteAccount, isDeletingAccount } = useAuth();
+  const { isOwner } = useAdmin();
   const [section, setSection] = useState<Section>("overview");
 
   const setPrefs = useCallback(
@@ -208,7 +210,7 @@ export default function SettingsScreen() {
 
           {section === "account" ? (
             <Group title="ACCOUNT">
-              <MenuRow Icon={Wrench} label="Admin dashboard" sub="Open platform admin tools" onPress={() => router.push("/admin")} />
+              {isOwner ? <MenuRow Icon={Wrench} label="Admin dashboard" sub="Open platform admin tools" onPress={() => router.push("/admin")} /> : null}
               <MenuRow Icon={Trash2} label="Reset local data" sub="Clear device cache and local saved data" danger onPress={resetLocalData} />
               <MenuRow Icon={LogOut} label={isAuthenticated ? "Sign out" : "Sign in / Create account"} sub={isAuthenticated ? accountLabel : "Sync profile and settings"} danger={isAuthenticated} onPress={confirmSignOut} />
               {isAuthenticated ? <MenuRow Icon={Trash2} label={isDeletingAccount ? "Deleting account…" : "Delete account"} sub="Permanently erase account and synced data" danger onPress={confirmDelete} /> : null}

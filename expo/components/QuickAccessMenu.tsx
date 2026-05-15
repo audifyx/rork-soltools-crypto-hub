@@ -78,7 +78,7 @@ interface MenuCategory {
 export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuProps) {
   const router = useRouter();
   const { signOut, isSigningOut } = useAuth();
-  const { isTeam, isAdmin, role, refetch } = useAdmin();
+  const { isTeam, isOwner, role, refetch } = useAdmin();
   const sheetTranslate = useRef(new Animated.Value(40)).current;
   const sheetOpacity = useRef(new Animated.Value(0)).current;
   const [expanded, setExpanded] = useState<string | null>("trading");
@@ -183,15 +183,15 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
     ];
 
     const staffRole = role === "owner" || role === "superadmin" || role === "admin" || role === "moderator" || role === "team" || role === "support";
-    if (isTeam || isAdmin || staffRole) {
+    if (isTeam || staffRole) {
       base.push({
         key: "staff",
-        label: isAdmin ? "Admin & Team" : "Team tools",
-        caption: isAdmin ? "Platform admin and moderation" : "Moderation and reports",
+        label: isOwner ? "Admin & Team" : "Team tools",
+        caption: isOwner ? "Platform admin and moderation" : "Moderation and reports",
         Icon: Shield,
         color: Colors.rose,
         items: [
-          ...(isAdmin
+          ...(isOwner
             ? [{ key: "admin", label: "Admin dashboard", description: "Full platform controls", Icon: Wrench, color: Colors.goldBright, path: "/admin" } as MenuItem]
             : []),
           { key: "team", label: "Team dashboard", description: "Reports, online, analytics", Icon: Shield, color: Colors.rose, path: "/team" },
@@ -200,7 +200,7 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
     }
 
     return base;
-  }, [isAdmin, isTeam, role]);
+  }, [isOwner, isTeam, role]);
 
   return (
     <Modal

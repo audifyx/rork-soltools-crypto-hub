@@ -41,41 +41,71 @@ Deno.serve(async (req) => {
 
     // Best-effort cleanup of user-owned rows. We swallow errors here so a
     // failure on a single table never blocks the auth user deletion below.
-    const tables = [
+    const safeDelete = async (table: string, column: string) => {
+      try {
+        await admin.from(table).delete().eq(column, userId);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const ownedByUserId = [
       "posts",
       "comments",
       "post_likes",
       "post_reposts",
-      "follows",
+      "community_posts",
+      "community_post_likes",
+      "community_post_reposts",
+      "post_bookmarks",
       "notifications",
       "dm_participants",
       "community_members",
       "watchlist",
       "alerts",
       "tracked_wallets",
+      "trading_wallets",
+      "wallet_trades",
+      "wallet_security_events",
       "user_badges",
+      "credits",
+      "credit_logs",
+      "reels",
+      "reel_likes",
+      "reel_views",
+      "reel_comments",
+      "reel_shares",
+      "story_comments",
+      "story_likes",
+      "story_comment_likes",
+      "event_rsvps",
+      "user_interests",
+      "user_achievements",
+      "user_streaks",
+      "weekly_recaps",
+      "fyp_cache",
+      "feed_signals",
+      "read_later",
+      "feed_position",
+      "pump_v5_submissions",
       "profiles",
+      "admin_roles",
     ];
-    await Promise.all(
-      tables.map(async (t) => {
-        try {
-          // Common ownership column names
-          await admin.from(t).delete().eq("user_id", userId);
-        } catch {
-          /* ignore */
-        }
-      }),
-    );
-    try {
-      await admin.from("follows").delete().eq("follower_id", userId);
-    } catch {
-      /* ignore */
-    }
-    try {
-      await admin.from("follows").delete().eq("following_id", userId);
-    } catch {
-      /* ignore */
-    }
+
+    await Promise.all([
+      ...ownedByUserId.map((table) => safeDelete(table, "user_id")),
+      safeDelete("stories", "author_id"),
+      safeDelete("stories", "user_id"),
+      safeDelete("communities", "owner_id"),
+      safeDelete("events", "host_user_id"),
+      safeDelete("events", "creator_id"),
+      safeDelete("followers", "follower_id"),
+      safeDelete("followers", "followee_id"),
+      safeDelete("follows", "follower_id"),
+      safeDelete("follows", "following_id"),
+      safeDelete("post_reports", "reporter_id"),
+      safeDelete("profiles", "id"),
+    ]);
 
     const { error: delErr } = await admin.auth.admin.deleteUser(userId);
     if (delErr) {

@@ -264,7 +264,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const qc = useQueryClient();
   const { userId, email, isAuthenticated } = useAuth();
-  const { isAdmin, isOwner, role, isLoading } = useAdmin();
+  const { isOwner, role, isLoading } = useAdmin();
   const [section, setSection] = useState<Section>("overview");
 
   useEffect(() => {
@@ -289,7 +289,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!isAuthenticated || !isAdmin) {
+  if (!isAuthenticated || !isOwner) {
     return (
       <SafeAreaView style={styles.gateRoot} edges={["top", "bottom"]}>
         <Stack.Screen options={{ headerShown: false }} />
@@ -298,7 +298,7 @@ export default function AdminDashboard() {
         <Text style={styles.gateBody}>
           {isAuthenticated
             ? `${email ?? "This account"} is not authorized for SolTools admin access.`
-            : "Sign in with the owner or admin account to continue."}
+            : "Sign in with the owner account to continue."}
         </Text>
         <Pressable onPress={() => router.replace("/")} style={({ pressed }) => [styles.primarySolid, pressed && styles.pressedDeep]}>
           <Text style={styles.primarySolidText}>Return home</Text>

@@ -8,18 +8,14 @@ import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
-  Award,
   Bell,
-  Bookmark,
   Camera,
   Check,
   ChevronRight,
   Copy,
-  Crown,
   Edit3,
   ExternalLink,
   Eye,
-  Flame,
   Gem,
   Globe,
   Heart,
@@ -40,23 +36,18 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
-  Target,
   Trash2,
   TrendingDown,
   TrendingUp,
-  Trophy,
   Twitter,
   Users,
   Vibrate,
   Wallet,
   X,
-  Zap,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Animated,
-  Easing,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -78,7 +69,7 @@ import AppBackground from "@/components/ui/AppBackground";
 import PortfolioCard from "@/components/profile/PortfolioCard";
 import RecapCard from "@/components/profile/RecapCard";
 import BadgeRow from "@/components/social/BadgeRow";
-import { DEFAULT_BADGES, getHolderBadge, sortBadges, type UserBadge } from "@/lib/badge-system";
+import { DEFAULT_BADGES, sortBadges, type UserBadge } from "@/lib/badge-system";
 import { useAdmin } from "@/providers/admin-provider";
 import { useApp, type Currency, type Language, type ThemeMode, type UserPost, type UserPrefs } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
@@ -104,149 +95,6 @@ const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
   { id: "activity", label: "Activity", Icon: Sparkles },
   { id: "communities", label: "Communities", Icon: Users },
 ];
-
-interface AchievementDef {
-  id: string;
-  title: string;
-  desc: string;
-  Icon: LucideIcon;
-  color: string;
-  unlocked: boolean;
-  progress: number;
-  goal: number;
-}
-
-interface RankInfo {
-  name: string;
-  next: string;
-  Icon: LucideIcon;
-  color: string;
-  level: number;
-  progress: number;
-  xpInLevel: number;
-  xpForNext: number;
-}
-
-function computeRank(xp: number): RankInfo {
-  const tiers: { min: number; name: string; Icon: LucideIcon; color: string }[] = [
-    { min: 0, name: "Recruit", Icon: Sparkles, color: Colors.muted },
-    { min: 100, name: "Scout", Icon: Eye, color: Colors.cyan },
-    { min: 300, name: "Trader", Icon: TrendingUp, color: Colors.mint },
-    { min: 700, name: "Sniper", Icon: Target, color: Colors.orange },
-    { min: 1500, name: "Whale", Icon: Gem, color: Colors.rose },
-    { min: 3000, name: "Legend", Icon: Crown, color: "#F4F4F5" },
-  ];
-  let idx = 0;
-  for (let i = 0; i < tiers.length; i++) {
-    if (xp >= tiers[i].min) idx = i;
-  }
-  const cur = tiers[idx];
-  const nxt = tiers[Math.min(idx + 1, tiers.length - 1)];
-  const xpInLevel = xp - cur.min;
-  const xpForNext = Math.max(1, nxt.min - cur.min);
-  return {
-    name: cur.name,
-    next: nxt.name,
-    Icon: cur.Icon,
-    color: cur.color,
-    level: idx + 1,
-    progress: idx === tiers.length - 1 ? 1 : Math.min(1, xpInLevel / xpForNext),
-    xpInLevel,
-    xpForNext,
-  };
-}
-
-function buildAchievements(state: {
-  watching: number;
-  walletsCount: number;
-  alertsCount: number;
-  postsCount: number;
-  listedCount: number;
-  xp: number;
-}): AchievementDef[] {
-  return [
-    {
-      id: "first-watch",
-      title: "Eagle Eye",
-      desc: "Watch your first token",
-      Icon: Eye,
-      color: Colors.mint,
-      unlocked: state.watching >= 1,
-      progress: Math.min(1, state.watching),
-      goal: 1,
-    },
-    {
-      id: "watch-10",
-      title: "Pair Hunter",
-      desc: "Watch 10 tokens",
-      Icon: Target,
-      color: Colors.cyan,
-      unlocked: state.watching >= 10,
-      progress: state.watching,
-      goal: 10,
-    },
-    {
-      id: "first-wallet",
-      title: "Wallet Stalker",
-      desc: "Track a wallet",
-      Icon: Wallet,
-      color: Colors.cyan,
-      unlocked: state.walletsCount >= 1,
-      progress: Math.min(1, state.walletsCount),
-      goal: 1,
-    },
-    {
-      id: "alert-5",
-      title: "Trigger Happy",
-      desc: "Set 5 alerts",
-      Icon: Bell,
-      color: Colors.orange,
-      unlocked: state.alertsCount >= 5,
-      progress: state.alertsCount,
-      goal: 5,
-    },
-    {
-      id: "first-post",
-      title: "Loud & Proud",
-      desc: "Drop your first post",
-      Icon: Pencil,
-      color: Colors.rose,
-      unlocked: state.postsCount >= 1,
-      progress: Math.min(1, state.postsCount),
-      goal: 1,
-    },
-    {
-      id: "listed",
-      title: "Launch Ready",
-      desc: "List a token in Discover",
-      Icon: Rocket,
-      color: "#B8BEC8",
-      unlocked: state.listedCount >= 1,
-      progress: Math.min(1, state.listedCount),
-      goal: 1,
-    },
-    {
-      id: "xp-500",
-      title: "On Fire",
-      desc: "Reach 500 XP",
-      Icon: Flame,
-      color: Colors.orange,
-      unlocked: state.xp >= 500,
-      progress: state.xp,
-      goal: 500,
-    },
-    {
-      id: "xp-1500",
-      title: "Whale Mode",
-      desc: "Reach 1500 XP",
-      Icon: Crown,
-      color: "#F4F4F5",
-      unlocked: state.xp >= 1500,
-      progress: state.xp,
-      goal: 1500,
-    },
-  ];
-}
 
 function tap() {
   if (Platform.OS !== "web") {
@@ -313,7 +161,7 @@ export default function ProfileScreen() {
   } = useApp();
   const { listings } = useLaunchpad();
   const { isAuthenticated, signOut, userId } = useAuth();
-  const { isAdmin, isTeam, role: adminRole } = useAdmin();
+  const { isAdmin, role: adminRole } = useAdmin();
   const { uploadMedia, isUploading } = useProfileProvider();
   const { communities, joinedCommunities, addPostReply, quotePost } = useSocial();
   const qc = useQueryClient();
@@ -353,32 +201,6 @@ export default function ProfileScreen() {
     }
   }, [qc]);
 
-  // Animated XP fill + subtle ring shimmer for premium feel.
-  const xpAnim = useRef(new Animated.Value(0)).current;
-  const shimmer = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmer, {
-          toValue: 1,
-          duration: 2400,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: false,
-        }),
-        Animated.timing(shimmer, {
-          toValue: 0,
-          duration: 2400,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: false,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [shimmer]);
-
-  const ringOpacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] });
   const [tab, setTab] = useState<Tab>("posts");
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
@@ -404,7 +226,6 @@ export default function ProfileScreen() {
     return map;
   }, [communities]);
 
-  const computedXp = useMemo(() => profile.xp, [profile.xp]);
 
   const stackedBadges = useMemo<UserBadge[]>(() => {
     const out: UserBadge[] = [];
@@ -414,9 +235,6 @@ export default function ProfileScreen() {
       else if (r === "moderator") out.push(DEFAULT_BADGES.mod);
       else if (r === "support") out.push({ ...DEFAULT_BADGES.team, id: "support", label: "SUPPORT" });
     }
-    // Holder/whale badge derived from XP as a graceful proxy until wallet balance lands.
-    const holder = getHolderBadge(profile.xp * 100);
-    if (holder) out.push(holder);
     profile.customBadges.forEach((b) => {
       out.push({
         id: b.id,
@@ -434,23 +252,7 @@ export default function ProfileScreen() {
       return true;
     });
     return sortBadges(deduped);
-  }, [profile.customBadges, profile.xp, isAdmin, adminRole]);
-
-  const rank = useMemo(() => computeRank(computedXp), [computedXp]);
-
-  useEffect(() => {
-    Animated.timing(xpAnim, {
-      toValue: rank.progress,
-      duration: 900,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [rank.progress, xpAnim]);
-
-  const xpFillWidth = xpAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "100%"],
-  });
+  }, [profile.customBadges, isAdmin, adminRole]);
 
   const stats = useMemo(
     () => ({
@@ -463,20 +265,6 @@ export default function ProfileScreen() {
     [watchlist, alerts, wallets, myListings, posts],
   );
 
-  const achievements = useMemo(
-    () =>
-      buildAchievements({
-        watching: stats.watching,
-        walletsCount: stats.wallets,
-        alertsCount: alerts.length,
-        postsCount: stats.posts,
-        listedCount: stats.listed,
-        xp: computedXp,
-      }),
-    [stats, alerts.length, computedXp],
-  );
-
-  const unlockedCount = useMemo(() => achievements.filter((a) => a.unlocked).length, [achievements]);
 
   const activity = useMemo(() => {
     const items: { id: string; ts: number; title: string; sub: string; Icon: LucideIcon; color: string }[] = [];
@@ -899,7 +687,7 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* UNIFIED STATS + LEVEL CARD */}
+          {/* PROFILE STATS */}
           <View style={styles.unifiedCard}>
             <View style={styles.statsGridRowInner}>
               <Pressable
@@ -929,35 +717,6 @@ export default function ProfileScreen() {
                 <Text style={styles.statGridNum}>{stats.watching}</Text>
                 <Text style={styles.statGridKey}>Watching</Text>
               </View>
-            </View>
-
-            <View style={styles.unifiedDivider} />
-
-            <View style={styles.levelHeader}>
-              <View style={styles.levelTitleRow}>
-                <View style={[styles.levelIcon, { backgroundColor: `${rank.color}22`, borderColor: `${rank.color}55` }]}>
-                  <rank.Icon color={rank.color} size={14} strokeWidth={2.8} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.levelEyebrow}>LEVEL {rank.level} · {rank.name.toUpperCase()}</Text>
-                  <Text style={styles.levelTitle} numberOfLines={1}>
-                    Next: {rank.next}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.levelXP}>
-                {rank.xpInLevel}/{rank.xpForNext} XP
-              </Text>
-            </View>
-            <View style={styles.xpTrack}>
-              <Animated.View style={[styles.xpFillWrap, { width: xpFillWidth }]}>
-                <LinearGradient
-                  colors={[Colors.mint, Colors.cyan, Colors.neon]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={StyleSheet.absoluteFillObject}
-                />
-              </Animated.View>
             </View>
           </View>
 
@@ -989,125 +748,6 @@ export default function ProfileScreen() {
               })}
             </ScrollView>
           </View>
-
-          {false && tab === ("overview" as unknown as Tab) && (
-            <View style={styles.section}>
-              <View style={styles.perfCard}>
-                <View style={styles.perfHeader}>
-                  <Text style={styles.sectionTitle}>Trader Performance</Text>
-                  <View style={styles.perfBadge}>
-                    <Zap color={Colors.orange} size={10} strokeWidth={3} />
-                    <Text style={styles.perfBadgeText}>LIVE</Text>
-                  </View>
-                </View>
-                <View style={styles.perfGrid}>
-                  <PerfCell
-                    label="PnL 30D"
-                    value={`${profile.pnlPct >= 0 ? "+" : ""}${profile.pnlPct.toFixed(1)}%`}
-                    Icon={profile.pnlPct >= 0 ? TrendingUp : TrendingDown}
-                    color={profile.pnlPct >= 0 ? Colors.mint : Colors.rose}
-                  />
-                  <PerfCell label="Win Rate" value={`${profile.winRate}%`} Icon={Target} color={Colors.cyan} />
-                  <PerfCell label="Trades" value={`${profile.trades}`} Icon={Activity} color={Colors.orange} />
-                  <PerfCell label="Rank" value={rank.name} Icon={Trophy} color={rank.color} />
-                </View>
-              </View>
-
-              <View style={styles.achievCard}>
-                <View style={styles.perfHeader}>
-                  <Text style={styles.sectionTitle}>Achievements</Text>
-                  <Text style={styles.achievCount}>
-                    {unlockedCount}/{achievements.length}
-                  </Text>
-                </View>
-                <View style={styles.achievGrid}>
-                  {achievements.map((a) => (
-                    <View
-                      key={a.id}
-                      style={[
-                        styles.achievItem,
-                        { borderColor: a.unlocked ? `${a.color}55` : "rgba(255,255,255,0.06)" },
-                        !a.unlocked && styles.achievLocked,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.achievIcon,
-                          { backgroundColor: a.unlocked ? `${a.color}1F` : "rgba(255,255,255,0.04)" },
-                        ]}
-                      >
-                        <a.Icon
-                          color={a.unlocked ? a.color : Colors.muted}
-                          size={16}
-                          strokeWidth={2.6}
-                        />
-                      </View>
-                      <Text
-                        style={[styles.achievTitle, !a.unlocked && { color: Colors.muted }]}
-                        numberOfLines={1}
-                      >
-                        {a.title}
-                      </Text>
-                      <Text style={styles.achievDesc} numberOfLines={2}>
-                        {a.desc}
-                      </Text>
-                      {!a.unlocked ? (
-                        <View style={styles.achievBar}>
-                          <View
-                            style={[
-                              styles.achievBarFill,
-                              {
-                                width: `${Math.min(100, Math.round((a.progress / a.goal) * 100))}%`,
-                                backgroundColor: a.color,
-                              },
-                            ]}
-                          />
-                        </View>
-                      ) : (
-                        <View style={styles.achievUnlocked}>
-                          <Check color={a.color} size={10} strokeWidth={3} />
-                          <Text style={[styles.achievUnlockedText, { color: a.color }]}>UNLOCKED</Text>
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.menuSection}>
-                {isAdmin ? (
-                  <MenuRow
-                    Icon={Shield}
-                    label="Admin Console"
-                    sub={`Logged in as ${adminRole ?? "admin"}`}
-                    rightLabel="OPEN"
-                    onPress={() => router.push("/admin")}
-                  />
-                ) : null}
-                {isTeam ? (
-                  <MenuRow
-                    Icon={Shield}
-                    label="Team Dashboard"
-                    sub={`Moderator console · ${adminRole ?? "team"}`}
-                    rightLabel="OPEN"
-                    onPress={() => router.push("/team")}
-                  />
-                ) : null}
-                <MenuRow
-                  Icon={Bookmark}
-                  label="Saved tokens"
-                  sub={`${stats.watching} on watchlist`}
-                  onPress={() => setTab("watchlist")}
-                />
-                <MenuRow
-                  Icon={Award}
-                  label={`${unlockedCount} achievements unlocked`}
-                  sub={`${achievements.length - unlockedCount} more to earn`}
-                  onPress={() => Alert.alert("Achievements", `You've unlocked ${unlockedCount}/${achievements.length}`)}
-                />
-              </View>
-            </View>
-          )}
 
           {tab === "holdings" && (
             <View style={styles.section}>
@@ -1608,83 +1248,6 @@ function alertLabel(type: "price-above" | "price-below" | "volume-spike" | "whal
     case "whale-buy":
       return "Whale buy";
   }
-}
-
-function HighlightBubble({
-  label,
-  value,
-  accent,
-  Icon,
-  onPress,
-}: {
-  label: string;
-  value: number;
-  accent: string;
-  Icon: LucideIcon;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.highlightBubble} testID={`profile-highlight-${label.toLowerCase()}`}>
-      <LinearGradient
-        colors={[accent, "rgba(255,255,255,0.88)", accent]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.highlightRing}
-      >
-        <View style={styles.highlightInner}>
-          <Icon color={accent} size={18} strokeWidth={2.8} />
-          <Text style={styles.highlightValue}>{value}</Text>
-        </View>
-      </LinearGradient>
-      <Text style={styles.highlightLabel} numberOfLines={1}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  accent,
-  Icon,
-}: {
-  label: string;
-  value: number;
-  accent: string;
-  Icon: LucideIcon;
-}) {
-  return (
-    <View style={[styles.statCard, { borderColor: `${accent}33` }]}>
-      <View style={[styles.statIconBox, { backgroundColor: `${accent}1A` }]}>
-        <Icon color={accent} size={14} strokeWidth={2.6} />
-      </View>
-      <Text style={styles.statNum}>{value}</Text>
-      <Text style={styles.statKey}>{label}</Text>
-    </View>
-  );
-}
-
-function PerfCell({
-  label,
-  value,
-  Icon,
-  color,
-}: {
-  label: string;
-  value: string;
-  Icon: LucideIcon;
-  color: string;
-}) {
-  return (
-    <View style={[styles.perfCell, { borderColor: `${color}33` }]}>
-      <View style={[styles.perfIcon, { backgroundColor: `${color}1A` }]}>
-        <Icon color={color} size={13} strokeWidth={2.6} />
-      </View>
-      <Text style={styles.perfLabel}>{label}</Text>
-      <Text style={[styles.perfValue, { color }]} numberOfLines={1}>
-        {value}
-      </Text>
-    </View>
-  );
 }
 
 function EmptyTab({

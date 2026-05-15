@@ -79,7 +79,7 @@ function rowToToken(row: SubmissionRow): LaunchToken {
   };
 }
 
-async function fetchSubmissionListings(): Promise<LaunchToken[]> {
+async function fetchSubmissionListings(viewerId: string | null): Promise<LaunchToken[]> {
   try {
     const { data, error } = await supabase
       .from("pump_v5_submissions")
@@ -89,7 +89,14 @@ async function fetchSubmissionListings(): Promise<LaunchToken[]> {
       console.log("[launchpad] submissions fetch failed", error.message);
       return [];
     }
-    return (data ?? []).map((row) => rowToToken(row as SubmissionRow));
+    return (data ?? [])
+      .filter((row) => {
+        const r = row as SubmissionRow;
+        const status = String(r.status ?? "approved").toLowerCase();
+        const ownerId = (r.user_id as string | null) ?? null;
+        return status === "approved" || status === "live" || (!!viewerId && ownerId === viewerId);
+      })
+      .map((row) => rowToToken(row as SubmissionRow));
   } catch (e) {
     console.log("[launchpad] submissions fetch threw", e instanceof Error ? e.message : e);
     return [];
@@ -117,11 +124,11 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
   const [upvoted, setUpvoted] = useState<Record<string, boolean>>({});
 
   const listingsQuery = useQuery({
-    queryKey: ["launchpad", "listings"],
+    queryKey: ["launchpad", "listings", userId ?? "guest"],
     queryFn: async () => {
       const [systemRes, submissionsRes] = await Promise.allSettled([
         fetchLivePairs(),
-        fetchSubmissionListings(),
+        fetchSubmissionListings(userId),
       ]);
       const system = systemRes.status === "fulfilled" ? systemRes.value : [];
       const submissions = submissionsRes.status === "fulfilled" ? submissionsRes.value : [];
@@ -139,6 +146,7 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
 
   const submitMutation = useMutation({
     mutationFn: async (input: SubmitInput) => {
+      if (!userId) throw new Error("Sign in to submit a token listing.");
       const { data, error } = await supabase
         .from("pump_v5_submissions")
         .insert({
@@ -170,7 +178,8 @@ export const [LaunchpadProvider, useLaunchpad] = createContextHook(() => {
 
   const removeMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("pump_v5_submissions").delete().eq("id", id);
+      if (!userId) throw new Error("Sign in to remove a listing.");
+      const { error } = await supabase.from("pump_v5_submissions").delete().eq("id", id).eq("user_id", userId);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["launchpad", "listings"] }),

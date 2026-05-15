@@ -69,7 +69,7 @@ interface QuickSection {
 export default function QuickAccessScreen() {
   const router = useRouter();
   const { signOut, isSigningOut } = useAuth();
-  const { isTeam, isAdmin, role, refetch } = useAdmin();
+  const { isTeam, isOwner, role, refetch } = useAdmin();
   const [query, setQuery] = useState<string>("");
 
   // Subtle ambient pulse for the hero badge
@@ -165,16 +165,16 @@ export default function QuickAccessScreen() {
 
     const staffRole =
       role === "owner" || role === "superadmin" || role === "admin" || role === "moderator" || role === "team" || role === "support";
-    if (isTeam || isAdmin || staffRole) {
+    if (isTeam || staffRole) {
       base.push({
         key: "staff",
-        label: isAdmin ? "Admin & Team" : "Team tools",
-        caption: isAdmin ? "Platform admin and moderation" : "Moderation and reports",
+        label: isOwner ? "Admin & Team" : "Team tools",
+        caption: isOwner ? "Platform admin and moderation" : "Moderation and reports",
         Icon: Shield,
         color: Colors.rose,
         gradient: ["rgba(230,242,255,0.18)", "rgba(230,242,255,0.02)"] as const,
         items: [
-          ...(isAdmin
+          ...(isOwner
             ? [{ key: "admin", category: "staff", label: "Admin dashboard", description: "Full platform controls", Icon: Wrench, color: Colors.goldBright, path: "/admin" } as QuickItem]
             : []),
           { key: "team", category: "staff", label: "Team dashboard", description: "Reports, analytics", Icon: Shield, color: Colors.rose, path: "/team" },
@@ -182,7 +182,7 @@ export default function QuickAccessScreen() {
       });
     }
     return base;
-  }, [isAdmin, isTeam, role]);
+  }, [isOwner, isTeam, role]);
 
   const allItems = useMemo<QuickItem[]>(() => sections.flatMap((s) => s.items), [sections]);
 

@@ -35,7 +35,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
+import { uploadPostImage } from "@/lib/upload";
 import { useTokenAutolink } from "@/lib/use-token-autolink";
+import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
 import { LaunchVenue } from "@/types/launchpad";
 import { SOLTOOLS_DEFAULT_BANNER } from "@/utils/token-art";
@@ -53,6 +55,7 @@ const VENUES: { key: LaunchVenue; label: string }[] = [
 
 export default function ListTokenScreen() {
   const router = useRouter();
+  const { userId } = useAuth();
   const { submit, isSubmitting } = useLaunchpad();
 
   const [name, setName] = useState<string>("");
@@ -67,7 +70,9 @@ export default function ListTokenScreen() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState<string>("");
   const [logoUri, setLogoUri] = useState<string | null>(null);
+  const [logoBase64, setLogoBase64] = useState<string | null>(null);
   const [bannerUri, setBannerUri] = useState<string | null>(null);
+  const [bannerBase64, setBannerBase64] = useState<string | null>(null);
   const [boost, setBoost] = useState<boolean>(false);
   const [agree, setAgree] = useState<boolean>(false);
 
@@ -90,9 +95,11 @@ export default function ListTokenScreen() {
         quality: 0.85,
         allowsEditing: true,
         aspect: [1, 1],
+        base64: true,
       });
       if (!res.canceled && res.assets[0]?.uri) {
         setLogoUri(res.assets[0].uri);
+        setLogoBase64(res.assets[0].base64 ?? null);
       }
     } catch (e) {
       console.log("[list-token] logo pick failed", e);
@@ -106,9 +113,11 @@ export default function ListTokenScreen() {
         quality: 0.85,
         allowsEditing: true,
         aspect: [16, 9],
+        base64: true,
       });
       if (!res.canceled && res.assets[0]?.uri) {
         setBannerUri(res.assets[0].uri);
+        setBannerBase64(res.assets[0].base64 ?? null);
       }
     } catch (e) {
       console.log("[list-token] banner pick failed", e);
@@ -131,7 +140,18 @@ export default function ListTokenScreen() {
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
+    if (!userId) {
+      Alert.alert("Sign in required", "Create an account or sign in before submitting a token listing.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign in", onPress: () => router.push("/auth") },
+      ]);
+      return;
+    }
     try {
+      const isRemoteUrl = (uri: string | null): boolean => !!uri && /^https?:\/\//i.test(uri);
+      const finalLogoUrl = logoUri && !isRemoteUrl(logoUri) ? await uploadPostImage(userId, logoUri, logoBase64) : logoUri;
+      const finalBannerUrl = bannerUri && !isRemoteUrl(bannerUri) ? await uploadPostImage(userId, bannerUri, bannerBase64) : bannerUri;
+
       await submit({
         name: name.trim(),
         ticker: ticker.trim().replace("$", "").toUpperCase(),
@@ -139,8 +159,8 @@ export default function ListTokenScreen() {
         description: description.trim(),
         venue,
         status: "pending",
-        logoUrl: logoUri,
-        bannerUrl: bannerUri,
+        logoUrl: finalLogoUrl,
+        bannerUrl: finalBannerUrl,
         website: website.trim() || undefined,
         twitter: twitter.trim() || undefined,
         telegram: telegram.trim() || undefined,
@@ -169,7 +189,9 @@ export default function ListTokenScreen() {
     description,
     venue,
     logoUri,
+    logoBase64,
     bannerUri,
+    bannerBase64,
     website,
     twitter,
     telegram,
@@ -177,6 +199,7 @@ export default function ListTokenScreen() {
     tags,
     boost,
     router,
+    userId,
   ]);
 
   const venueLabel = useMemo(() => VENUES.find((v) => v.key === venue)?.label ?? "Select", [venue]);
@@ -188,11 +211,17 @@ export default function ListTokenScreen() {
       if (via === "ca") {
         if (!ticker.trim() && data.ticker) setTicker(data.ticker);
         if (!name.trim() && data.name) setName(data.name);
-        if (!logoUri && data.logoUrl) setLogoUri(data.logoUrl);
+        if (!logoUri && data.logoUrl) {
+          setLogoUri(data.logoUrl);
+          setLogoBase64(null);
+        }
       } else {
         if (data.address && !contract.trim()) setContract(data.address);
         if (!name.trim() && data.name) setName(data.name);
-        if (!logoUri && data.logoUrl) setLogoUri(data.logoUrl);
+        if (!logoUri && data.logoUrl) {
+          setLogoUri(data.logoUrl);
+          setLogoBase64(null);
+        }
       }
     }, [ticker, name, logoUri, contract]),
   });
