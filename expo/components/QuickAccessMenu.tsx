@@ -11,6 +11,7 @@ import {
   Film,
   Flame,
   Headphones,
+  Info,
   Layers,
   LineChart,
   LogOut,
@@ -176,6 +177,7 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
         items: [
           { key: "settings", label: "Settings", description: "Privacy, notifications, account", Icon: Settings, color: Colors.text, path: "/(tabs)/settings" },
           { key: "profile", label: "My profile", description: "Themes, badges, identity", Icon: Layers, color: Colors.violet, path: "/(tabs)/profile" },
+          { key: "about", label: "About & links", description: "Team, socials, Discord, Telegram, X", Icon: Info, color: Colors.mint, path: "/about" },
         ],
       },
     ];
