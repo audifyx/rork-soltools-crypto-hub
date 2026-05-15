@@ -878,11 +878,24 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         );
         const profileById = new Map<string, { avatar_url: string | null; username: string | null; display_name: string | null; avatar_color: string | null }>();
         if (authorIds.length > 0) {
-          const { data: profs } = await supabase
-            .from("profiles")
-            .select("id,user_id,username,display_name,avatar_color,avatar_url")
-            .or(`id.in.(${authorIds.join(",")}),user_id.in.(${authorIds.join(",")})`);
-          (profs ?? []).forEach((p) => {
+          // Run two parallel `.in()` lookups so profiles whose primary key is
+          // either `id` (legacy) or `user_id` (current schema) both resolve.
+          // `.or(...)` with two `.in.()` filters has been observed to fail
+          // silently on some Supabase versions, leaving comment avatars empty.
+          const [byId, byUserId] = await Promise.all([
+            supabase
+              .from("profiles")
+              .select("id,user_id,username,display_name,avatar_color,avatar_url")
+              .in("id", authorIds),
+            supabase
+              .from("profiles")
+              .select("id,user_id,username,display_name,avatar_color,avatar_url")
+              .in("user_id", authorIds),
+          ]);
+          if (byId.error) console.log("[social] reply profile lookup by id failed", byId.error.message);
+          if (byUserId.error) console.log("[social] reply profile lookup by user_id failed", byUserId.error.message);
+          const profs = [...(byId.data ?? []), ...(byUserId.data ?? [])];
+          profs.forEach((p) => {
             const entry = {
               avatar_url: normalizeMediaUrl(p.avatar_url) ?? null,
               username: (p.username as string | null) ?? null,
@@ -896,13 +909,18 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         return rows.map((r) => {
           const uid = (r.user_id as string | null) ?? "";
           const prof = uid ? profileById.get(uid) : undefined;
+          // Prefer the canonical profile avatar over the (sometimes empty)
+          // value the RPC interpolates, so the comment row always renders the
+          // user's current profile picture instead of a coloured fallback.
+          const rpcAvatar = normalizeMediaUrl(r.avatar_url);
+          const profAvatar = prof?.avatar_url ?? null;
           const post = communityPostFromRow(
             {
               ...r,
-              avatar_url: r.avatar_url ?? prof?.avatar_url ?? null,
-              username: r.username ?? prof?.username ?? null,
-              display_name: r.display_name ?? prof?.display_name ?? null,
-              avatar_color: r.avatar_color ?? prof?.avatar_color ?? null,
+              avatar_url: profAvatar ?? rpcAvatar ?? null,
+              username: prof?.username ?? r.username ?? null,
+              display_name: prof?.display_name ?? r.display_name ?? null,
+              avatar_color: prof?.avatar_color ?? r.avatar_color ?? null,
             },
             (r.community_id as string | null) ?? "",
           );
@@ -924,13 +942,21 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           );
           let authorMap = new Map<string, Record<string, unknown>>();
           if (authorIds.length > 0) {
-            const { data: profiles, error: profilesError } = await supabase
-              .from("profiles")
-              .select("id,user_id,username,display_name,avatar_color,avatar_url")
-              .or(`id.in.(${authorIds.join(",")}),user_id.in.(${authorIds.join(",")})`);
-            if (profilesError) console.log("[social] reply author enrich failed", profilesError.message);
+            const [byId, byUserId] = await Promise.all([
+              supabase
+                .from("profiles")
+                .select("id,user_id,username,display_name,avatar_color,avatar_url")
+                .in("id", authorIds),
+              supabase
+                .from("profiles")
+                .select("id,user_id,username,display_name,avatar_color,avatar_url")
+                .in("user_id", authorIds),
+            ]);
+            if (byId.error) console.log("[social] reply author enrich by id failed", byId.error.message);
+            if (byUserId.error) console.log("[social] reply author enrich by user_id failed", byUserId.error.message);
+            const profiles = [...(byId.data ?? []), ...(byUserId.data ?? [])];
             authorMap = new Map(
-              (profiles ?? []).flatMap((p) => [
+              profiles.flatMap((p) => [
                 [String(p.id), p as Record<string, unknown>],
                 [String(p.user_id), p as Record<string, unknown>],
               ]),
@@ -946,7 +972,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
                 username: author.username,
                 display_name: author.display_name,
                 avatar_color: author.avatar_color,
-                avatar_url: author.avatar_url,
+                avatar_url: normalizeMediaUrl(author.avatar_url) ?? null,
                 liked: interactions.liked.has(postId),
                 reposted: interactions.reposted.has(postId),
                 bookmarked: interactions.bookmarked.has(postId),
