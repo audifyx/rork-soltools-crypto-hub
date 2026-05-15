@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 
 import Colors from '@/constants/colors';
+import GlassCard from '@/components/ui/GlassCard';
 
 interface Props {
   value: string;
@@ -10,22 +11,23 @@ interface Props {
 
 export default function ProfileStatCard({ value, label }: Props) {
   return (
-    <View style={styles.card}>
+    <GlassCard
+      style={styles.card}
+      radius={20}
+      padding={14}
+      borderColor="rgba(255,255,255,0.10)"
+      gradient={["rgba(63,169,255,0.10)", "rgba(255,255,255,0.02)"]}
+    >
       <Text style={styles.value}>{value}</Text>
       <Text style={styles.label}>{label}</Text>
-    </View>
+    </GlassCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    borderRadius: 18,
-    paddingVertical: 16,
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
   },
   value: {
     color: Colors.text,

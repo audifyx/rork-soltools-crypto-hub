@@ -2,6 +2,7 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Colors from "@/constants/colors";
+import GlassCard from "@/components/ui/GlassCard";
 
 interface Props {
   title: string;
@@ -19,7 +20,14 @@ export default function HoldersOnlyCard({
   onPress,
 }: Props) {
   return (
-    <Pressable style={styles.card} onPress={onPress}>
+    <Pressable onPress={onPress}>
+      <GlassCard
+        radius={24}
+        padding={18}
+        borderColor="rgba(63,169,255,0.24)"
+        gradient={["rgba(63,169,255,0.14)", "rgba(255,255,255,0.02)"]}
+        glowColor={Colors.mint}
+      >
       <View style={styles.topRow}>
         <View style={styles.lockPill}>
           <View style={styles.lockDot} />
@@ -52,26 +60,12 @@ export default function HoldersOnlyCard({
           </Text>
         </View>
       </View>
+      </GlassCard>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 24,
-    padding: 18,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(85,245,178,0.16)",
-    shadowColor: Colors.mint,
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    elevation: 6,
-  },
   topRow: {
     flexDirection: "row",
     alignItems: "center",

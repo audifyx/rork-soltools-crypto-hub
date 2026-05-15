@@ -4,6 +4,7 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import Colors from "@/constants/colors";
 import type { UserBadge } from "@/lib/badge-system";
 import GlowingBadge from "@/components/social/GlowingBadge";
+import GlassCard from "@/components/ui/GlassCard";
 
 interface Props {
   username: string;
@@ -71,24 +72,20 @@ export default function ProfileHero({
         </View>
 
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>
-              {followers.toLocaleString()}
-            </Text>
+          <GlassCard style={styles.statCard} radius={20} padding={14} borderColor="rgba(255,255,255,0.10)" gradient={["rgba(63,169,255,0.10)", "rgba(255,255,255,0.02)"]}>
+            <Text style={styles.statValue}>{followers.toLocaleString()}</Text>
             <Text style={styles.statLabel}>Followers</Text>
-          </View>
+          </GlassCard>
 
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>
-              {following.toLocaleString()}
-            </Text>
+          <GlassCard style={styles.statCard} radius={20} padding={14} borderColor="rgba(255,255,255,0.10)" gradient={["rgba(63,169,255,0.10)", "rgba(255,255,255,0.02)"]}>
+            <Text style={styles.statValue}>{following.toLocaleString()}</Text>
             <Text style={styles.statLabel}>Following</Text>
-          </View>
+          </GlassCard>
 
-          <View style={styles.statCard}>
+          <GlassCard style={styles.statCard} radius={20} padding={14} borderColor="rgba(255,255,255,0.10)" gradient={["rgba(63,169,255,0.10)", "rgba(255,255,255,0.02)"]}>
             <Text style={styles.statValue}>{reputation}</Text>
             <Text style={styles.statLabel}>Reputation</Text>
-          </View>
+          </GlassCard>
         </View>
       </View>
     </View>
@@ -196,12 +193,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    borderRadius: 18,
-    paddingVertical: 16,
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
   },
   statValue: {
     color: Colors.text,

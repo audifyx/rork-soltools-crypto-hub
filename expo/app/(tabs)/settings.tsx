@@ -30,6 +30,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as LocalAuthentication from "expo-local-authentication";
 
 import AppBackground from "@/components/ui/AppBackground";
+import GlassCard from "@/components/ui/GlassCard";
 import Colors from "@/constants/colors";
 import type { Currency, Language, ThemeMode, UserPrefs } from "@/providers/app-provider";
 import { useApp } from "@/providers/app-provider";
@@ -192,9 +193,17 @@ export default function SettingsScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {section === "overview" ? (
             <>
-              <LinearGradient colors={["rgba(63,169,255,0.26)", "rgba(255,255,255,0.05)"]} style={styles.heroCard}>
+              <GlassCard
+                radius={28}
+                padding={18}
+                borderColor="rgba(98,208,255,0.30)"
+                gradient={["rgba(63,169,255,0.22)", "rgba(255,255,255,0.03)"]}
+                glowColor={Colors.goldBright}
+              >
                 <View style={styles.heroTop}>
-                  <View style={styles.avatar}><UserRound color={Colors.ink} size={22} strokeWidth={3} /></View>
+                  <LinearGradient colors={[Colors.goldBright, Colors.gold]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
+                    <UserRound color={Colors.ink} size={22} strokeWidth={3} />
+                  </LinearGradient>
                   <View style={styles.heroCopy}>
                     <Text style={styles.heroName}>{profile.displayName || profile.handle || "$OGS user"}</Text>
                     <Text style={styles.heroSub}>{isAuthenticated ? accountLabel : "Sign in to sync settings across devices"}</Text>
@@ -202,7 +211,7 @@ export default function SettingsScreen() {
                 </View>
                 <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${completion}%` }]} /></View>
                 <Text style={styles.progressText}>Profile setup {completion}% complete</Text>
-              </LinearGradient>
+              </GlassCard>
 
               <View style={styles.quickGrid}>
                 <Stat label="Watchlist" value={String(watchlist.length)} Icon={Gem} />
@@ -271,11 +280,35 @@ export default function SettingsScreen() {
 }
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
-  return <View style={styles.group}><Text style={styles.groupTitle}>{title}</Text><View style={styles.groupCard}>{children}</View></View>;
+  return (
+    <View style={styles.group}>
+      <Text style={styles.groupTitle}>{title}</Text>
+      <GlassCard
+        radius={24}
+        padding={0}
+        borderColor="rgba(255,255,255,0.10)"
+        gradient={["rgba(63,169,255,0.06)", "rgba(255,255,255,0.015)"]}
+      >
+        {children}
+      </GlassCard>
+    </View>
+  );
 }
 
 function Stat({ label, value, Icon }: { label: string; value: string; Icon: LucideIcon }) {
-  return <View style={styles.stat}><Icon color={Colors.goldBright} size={16} strokeWidth={2.6} /><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>;
+  return (
+    <GlassCard
+      style={styles.stat}
+      radius={20}
+      padding={12}
+      borderColor="rgba(255,255,255,0.10)"
+      gradient={["rgba(63,169,255,0.10)", "rgba(255,255,255,0.02)"]}
+    >
+      <Icon color={Colors.goldBright} size={16} strokeWidth={2.6} />
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </GlassCard>
+  );
 }
 
 function MenuRow({ Icon, label, sub, onPress, danger = false }: { Icon: LucideIcon; label: string; sub: string; onPress: () => void; danger?: boolean }) {
@@ -309,7 +342,6 @@ const styles = StyleSheet.create({
   dotOff: { backgroundColor: Colors.muted2 },
   statusText: { color: Colors.text, fontSize: 11, fontWeight: "900" },
   scroll: { paddingHorizontal: 20, paddingBottom: 120 },
-  heroCard: { borderRadius: 28, padding: 18, borderWidth: 1, borderColor: "rgba(98,208,255,0.25)", overflow: "hidden" },
   heroTop: { flexDirection: "row", alignItems: "center", gap: 13 },
   avatar: { width: 48, height: 48, borderRadius: 18, backgroundColor: Colors.goldBright, alignItems: "center", justifyContent: "center" },
   heroCopy: { flex: 1, minWidth: 0 },
@@ -319,12 +351,11 @@ const styles = StyleSheet.create({
   progressFill: { height: 8, borderRadius: 8, backgroundColor: Colors.goldBright },
   progressText: { color: Colors.muted, fontSize: 11, fontWeight: "800", marginTop: 9 },
   quickGrid: { flexDirection: "row", gap: 10, marginTop: 12 },
-  stat: { flex: 1, minHeight: 78, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.055)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", padding: 12 },
+  stat: { flex: 1, minHeight: 78 },
   statValue: { color: Colors.text, fontSize: 20, fontWeight: "900", marginTop: 7 },
   statLabel: { color: Colors.muted, fontSize: 10, fontWeight: "800", marginTop: 1 },
   group: { marginTop: 22 },
   groupTitle: { color: Colors.muted2, fontSize: 11, fontWeight: "900", letterSpacing: 1.4, marginBottom: 9, marginLeft: 4 },
-  groupCard: { borderRadius: 24, backgroundColor: "rgba(8,12,22,0.84)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", overflow: "hidden" },
   row: { minHeight: 70, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.07)", gap: 12 },
   pressed: { backgroundColor: "rgba(255,255,255,0.06)" },
   rowIcon: { width: 36, height: 36, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(63,169,255,0.12)", borderWidth: 1, borderColor: "rgba(98,208,255,0.18)" },
