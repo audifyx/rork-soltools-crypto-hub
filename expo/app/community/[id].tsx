@@ -22,7 +22,6 @@ import {
   Hash,
   Heart,
   Image as ImageIcon,
-  Link as LinkIcon,
   MessageCircle,
   MoreVertical,
   Pin,
@@ -30,7 +29,6 @@ import {
   Repeat2,
   Search,
   Send,
-  Share2,
   Sparkles,
   UserPlus,
   Users,
@@ -47,7 +45,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -69,7 +66,6 @@ import { SOLTOOLS_TOKEN_MINT } from "@/lib/badge-system";
 import { deleteOwnCommunity } from "@/lib/api/platform";
 import { supabase } from "@/lib/supabase";
 import { isFreshOnline, lastSeenToMs, presenceLabel } from "@/lib/presence";
-import { createShareLink } from "@/lib/share-links";
 import { kickPushDispatch } from "@/lib/push-notifications";
 import { withDefaultAvatar, withDefaultBanner } from "@/lib/brand-media";
 import { uploadCommunityMedia } from "@/lib/upload";
@@ -483,44 +479,6 @@ export default function CommunityDetailScreen() {
       Alert.alert("Failed to post", e instanceof Error ? e.message : "Try again.");
     }
   }, [composer, community, composerImage, detectedTokenAddress, ensureSignedIn, addCommunityPost, tokenPreview, viewer]);
-
-  const getCommunityShare = useCallback(async () => {
-    if (!community) return null;
-    return createShareLink("community", community.id, {
-      name: community.name,
-      slug: community.handle,
-      kind: "community_invite",
-    });
-  }, [community]);
-
-  const onShareVia = useCallback(async () => {
-    setMenuOpen(false);
-    if (!community) return;
-    Haptics.selectionAsync().catch(() => {});
-    try {
-      const link = await getCommunityShare();
-      const url = link?.url ?? `https://ogscan.fun/community/${community.id}`;
-      await Share.share({
-        message: `Join the ${community.name} community on SolTools — ${url}`,
-        url,
-      });
-    } catch (e) {
-      console.log("[community] share failed", e);
-    }
-  }, [community, getCommunityShare]);
-
-  const onCopyLink = useCallback(async () => {
-    setMenuOpen(false);
-    if (!community) return;
-    try {
-      const link = await getCommunityShare();
-      await Clipboard.setStringAsync(link?.url ?? `https://ogscan.fun/community/${community.id}`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      showToast("Deep link copied");
-    } catch (e) {
-      console.log("[community] copy failed", e);
-    }
-  }, [community, getCommunityShare, showToast]);
 
   const onInvite = useCallback(() => {
     setMenuOpen(false);
@@ -1113,23 +1071,6 @@ export default function CommunityDetailScreen() {
     [canModeratePosts, isAuthenticated, isOwner, userId],
   );
 
-  const onSharePost = useCallback(async (post: CommunityPost) => {
-    try {
-      Haptics.selectionAsync().catch(() => {});
-      const link = await createShareLink("post", post.id, {
-        communityId: post.communityId,
-        communityName: community?.name ?? null,
-        authorName: post.authorName,
-      });
-      await Share.share({
-        message: `${post.authorName} in ${community?.name ?? "SolTools"}: ${post.content || "Shared a post"}\n${link.url}`,
-        url: link.url,
-      });
-    } catch (e) {
-      console.log("[community] post share failed", e);
-    }
-  }, [community?.name]);
-
   const onDeletePost = useCallback(
     (post: CommunityPost) => {
       if (!canDeletePost(post)) {
@@ -1242,7 +1183,6 @@ export default function CommunityDetailScreen() {
       onRepost={() => void onToggleRepost(item)}
       onQuote={() => openQuote(item)}
       onBookmark={() => void onToggleBookmark(item)}
-      onShare={() => void onSharePost(item)}
       onReport={() => onReportPost(item)}
       canPin={canModeratePosts}
       onPin={() => void onTogglePin(item)}
@@ -1261,10 +1201,9 @@ export default function CommunityDetailScreen() {
     : false;
   const isLocked =
     effectiveAccessType !== "public" && !canEditMedia && !isApprovedLocally && !isOwner;
-  // Members + owner are the only ones who can see invite/share/copy-link
-  // actions in the menu. Locked viewers should not be able to leak the
-  // invite code or deep-link to outsiders.
-  const canShareInvite = joined || canEditMedia;
+  // Members + owner are the only ones who can invite others.
+  // Locked viewers should not be able to invite outsiders.
+  const canInviteMembers = joined || canEditMedia;
   const dataForTab: CommunityPost[] = isLocked
     ? []
     : tab === "recent"
@@ -2155,22 +2094,8 @@ export default function CommunityDetailScreen() {
         </Pressable>
         <SafeAreaView edges={["top"]} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           <View style={styles.menuCard} pointerEvents="auto">
-            {canShareInvite ? (
+            {canInviteMembers ? (
               <>
-                <MenuItem
-                  label="Share via..."
-                  icon={Share2}
-                  onPress={onShareVia}
-                  testID="menu-share"
-                />
-                <View style={styles.menuDivider} />
-                <MenuItem
-                  label="Copy Link"
-                  icon={LinkIcon}
-                  onPress={onCopyLink}
-                  testID="menu-copy"
-                />
-                <View style={styles.menuDivider} />
                 <MenuItem
                   label="Invite members"
                   icon={UserPlus}
@@ -2232,7 +2157,7 @@ export default function CommunityDetailScreen() {
                 <View style={styles.menuDivider} />
               </>
             ) : null}
-            {!canShareInvite ? (
+            {!canInviteMembers ? (
               <MenuItem
                 label="Report community"
                 icon={Flag}
@@ -2408,7 +2333,6 @@ export default function CommunityDetailScreen() {
                     onRepost={() => void onToggleRepost(item)}
                     onQuote={() => openQuote(item)}
                     onBookmark={() => void onToggleBookmark(item)}
-                    onShare={() => void onSharePost(item)}
                     onReport={() => onReportPost(item)}
                     canDelete={canDeletePost(item)}
                     onDelete={() => onDeletePost(item)}
@@ -2424,7 +2348,6 @@ export default function CommunityDetailScreen() {
                       onRepost={() => void onToggleRepost(liveActivePost ?? activePost)}
                       onQuote={() => openQuote(liveActivePost ?? activePost)}
                       onBookmark={() => void onToggleBookmark(liveActivePost ?? activePost)}
-                      onShare={() => void onSharePost(liveActivePost ?? activePost)}
                       onReport={() => onReportPost(liveActivePost ?? activePost)}
                       canPin={canModeratePosts}
                       onPin={() => void onTogglePin(liveActivePost ?? activePost)}
@@ -3087,7 +3010,6 @@ function XHeroPost({
   onRepost,
   onQuote,
   onBookmark,
-  onShare,
   onReport,
   canPin,
   onPin,
@@ -3101,7 +3023,6 @@ function XHeroPost({
   onRepost: () => void;
   onQuote: () => void;
   onBookmark: () => void;
-  onShare: () => void;
   onReport?: () => void;
   canPin?: boolean;
   onPin?: () => void;
@@ -3196,9 +3117,6 @@ function XHeroPost({
         <Pressable onPress={onBookmark} style={styles.xHeroActionBtn} hitSlop={6} testID={`hero-bookmark-${post.id}`}>
           <Bookmark color={post.bookmarked ? Colors.orange : Colors.muted} fill={post.bookmarked ? Colors.orange : "transparent"} size={17} strokeWidth={2.4} />
         </Pressable>
-        <Pressable onPress={onShare} style={styles.xHeroActionBtn} hitSlop={6} testID={`hero-share-${post.id}`}>
-          <Share2 color={Colors.muted} size={17} strokeWidth={2.4} />
-        </Pressable>
         {onReport ? (
           <Pressable onPress={onReport} style={styles.xHeroActionBtn} hitSlop={6} testID={`hero-report-${post.id}`}>
             <Flag color={post.reported ? Colors.rose : Colors.muted} size={17} strokeWidth={2.4} />
@@ -3218,7 +3136,6 @@ function XCommentRow({
   onRepost,
   onQuote,
   onBookmark,
-  onShare,
   onReport,
   canDelete,
   onDelete,
@@ -3232,7 +3149,6 @@ function XCommentRow({
   onRepost: () => void;
   onQuote: () => void;
   onBookmark: () => void;
-  onShare: () => void;
   onReport?: () => void;
   canDelete?: boolean;
   onDelete?: () => void;
@@ -3298,9 +3214,6 @@ function XCommentRow({
               <Flag color={post.reported ? Colors.rose : Colors.muted} size={13} strokeWidth={2.4} />
             </Pressable>
           ) : null}
-          <Pressable onPress={stop(onShare)} style={styles.xRowAction} hitSlop={10} testID={`x-share-${post.id}`}>
-            <Share2 color={Colors.muted} size={13} strokeWidth={2.4} />
-          </Pressable>
         </View>
       </View>
     </Pressable>
@@ -3316,7 +3229,6 @@ function PostRow({
   onRepost,
   onQuote,
   onBookmark,
-  onShare,
   onReport,
   canPin = false,
   onPin,
@@ -3333,7 +3245,6 @@ function PostRow({
   onRepost: () => void;
   onQuote: () => void;
   onBookmark: () => void;
-  onShare: () => void;
   onReport?: () => void;
   canPin?: boolean;
   onPin?: () => void;
@@ -3499,9 +3410,6 @@ function PostRow({
             <Flag color={post.reported ? Colors.rose : Colors.muted} size={14} strokeWidth={2.5} />
           </Pressable>
         ) : null}
-        <Pressable onPress={onShare} style={styles.iconAction} hitSlop={6} testID={`share-post-${post.id}`}>
-          <Share2 color={Colors.muted} size={14} strokeWidth={2.5} />
-        </Pressable>
       </View>
     </View>
   );

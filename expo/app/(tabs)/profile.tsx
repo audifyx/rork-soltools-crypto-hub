@@ -510,20 +510,6 @@ export default function ProfileScreen() {
     }
   }, [addPostReply, buildCommunityPostRef, closePostInteraction, postInteraction, postInteractionText, profile.avatarColor, profile.displayName, profile.handle, qc, quotePost]);
 
-  const onSharePost = useCallback(async (post: UserPost) => {
-    tap();
-    const author = post.authorUsername ? `@${post.authorUsername}` : profile.handle || profile.displayName;
-    const ticker = post.ticker ? `\n\n${post.ticker.replace("$", "")}` : "";
-    const link = await createShareLink("post", post.id, { author, ticker: post.ticker ?? null });
-    const url = link.url;
-    try {
-      await Share.share({ message: `${post.text || "SolTools post"}${ticker}\n\n— ${author}\n${url}`, url });
-    } catch (e) {
-      console.log("[profile] share post failed", e);
-      await Clipboard.setStringAsync(url).catch(() => {});
-    }
-  }, [profile.displayName, profile.handle]);
-
   return (
     <View style={styles.root} testID="profile-screen">
       <AppBackground variant="social" />
@@ -933,7 +919,6 @@ export default function ProfileScreen() {
                       }}
                       onQuote={() => openPostInteraction("quote", p)}
                       onComment={() => openPostInteraction("reply", p)}
-                      onShare={() => onSharePost(p)}
                       onDelete={() => onConfirmDelete("post", () => deletePost(p.id))}
                     />
                   ))}
@@ -2047,7 +2032,6 @@ function ProfileFeedPostCard({
   onRepost,
   onQuote,
   onComment,
-  onShare,
   onDelete,
 }: {
   post: UserPost;
@@ -2062,7 +2046,6 @@ function ProfileFeedPostCard({
   onRepost: () => void;
   onQuote: () => void;
   onComment: () => void;
-  onShare: () => void;
   onDelete: () => void;
 }) {
   const shownHandle = handle.startsWith("@") ? handle : `@${handle}`;
@@ -2110,9 +2093,6 @@ function ProfileFeedPostCard({
           <Pressable onPress={onLike} style={styles.feedActionBtn} hitSlop={8} testID={`like-profile-${post.id}`}>
             <Heart color={post.liked ? Colors.rose : Colors.muted} fill={post.liked ? Colors.rose : "transparent"} size={16} strokeWidth={2.3} />
             <Text style={[styles.feedActionText, post.liked && { color: Colors.rose }]}>{formatCount(post.likes)}</Text>
-          </Pressable>
-          <Pressable onPress={onShare} style={styles.feedActionBtn} hitSlop={8} testID={`share-profile-post-${post.id}`}>
-            <Share2 color={Colors.muted} size={15} strokeWidth={2.3} />
           </Pressable>
         </View>
       </View>

@@ -3,7 +3,6 @@ import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import * as Clipboard from "expo-clipboard";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -12,7 +11,6 @@ import {
   Quote,
   Repeat2,
   Send,
-  Share2,
   Sparkles,
   Trash2,
   X,
@@ -25,7 +23,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -40,7 +37,6 @@ import { hapticMedium, hapticSelect } from "@/lib/haptics";
 import { normalizeMediaUrl } from "@/lib/media";
 import { navigateBack } from "@/lib/navigation";
 import { patchPostEverywhere } from "@/lib/post-sync";
-import { createShareLink } from "@/lib/share-links";
 import { supabase } from "@/lib/supabase";
 import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
@@ -294,24 +290,6 @@ export default function PostDetailScreen() {
     }
   }, [post, isAuthenticated, router, togglePostRepost]);
 
-  const onShare = useCallback(async () => {
-    if (!post) return;
-    hapticSelect();
-    const author = post.authorUsername ? `@${post.authorUsername}` : post.authorName;
-    const link = await createShareLink("post", post.id, { author, communityId: post.communityId });
-    const url = link.url;
-    const body = `${post.content || "Check this post"}\n\n— ${author}\n${url}`;
-    try {
-      await Share.share({ message: body, url, title: "Share post" });
-    } catch (e) {
-      console.log("[post-detail] share failed", e);
-      try {
-        await Clipboard.setStringAsync(url);
-        Alert.alert("Link copied", "Post link copied to clipboard.");
-      } catch {}
-    }
-  }, [post]);
-
   const onOpenAuthor = useCallback(() => {
     if (!post?.authorUsername) return;
     router.push({ pathname: "/u/[handle]", params: { handle: post.authorUsername } });
@@ -404,10 +382,6 @@ export default function PostDetailScreen() {
             />
             <Text style={[styles.actionLabel, post.reposted && { color: Colors.mint }]}>Repost</Text>
           </Pressable>
-          <Pressable style={styles.action} onPress={onShare} hitSlop={6} testID="post-share">
-            <Share2 color={Colors.muted} size={16} strokeWidth={2.4} />
-            <Text style={styles.actionLabel}>Share</Text>
-          </Pressable>
         </View>
 
         <View style={styles.commentsHeader}>
@@ -418,7 +392,7 @@ export default function PostDetailScreen() {
         </View>
       </View>
     );
-  }, [post, onLike, onRepost, onShare, onOpenAuthor, replies.length]);
+  }, [post, onLike, onRepost, onOpenAuthor, replies.length]);
 
   return (
     <View style={styles.root} testID="post-detail-screen">
@@ -496,20 +470,6 @@ export default function PostDetailScreen() {
                     hapticSelect();
                     setQuoteTarget(item);
                     setQuoteText("");
-                  }}
-                  onShare={async () => {
-                    hapticSelect();
-                    const link = await createShareLink("post", item.id, { author: item.authorHandle || item.authorName, parentPostId: post.id });
-                    const url = link.url;
-                    const body = `${item.content || "Check this reply"}\n\n— ${item.authorHandle || item.authorName}\n${url}`;
-                    try {
-                      await Share.share({ message: body, url, title: "Share reply" });
-                    } catch {
-                      try {
-                        await Clipboard.setStringAsync(url);
-                        Alert.alert("Link copied", "Reply link copied to clipboard.");
-                      } catch {}
-                    }
                   }}
                   onReply={() => {
                     router.push({ pathname: "/post/[id]", params: { id: item.id } });
@@ -663,7 +623,6 @@ function CommentRow({
   onLike,
   onRepost,
   onQuote,
-  onShare,
   onReply,
   onDelete,
 }: {
@@ -672,7 +631,6 @@ function CommentRow({
   onLike: () => void;
   onRepost: () => void;
   onQuote: () => void;
-  onShare: () => void;
   onReply: () => void;
   onDelete: () => void;
 }) {
@@ -797,17 +755,6 @@ function CommentRow({
                 {fmt(reply.likes)}
               </Text>
             ) : null}
-          </Pressable>
-          <Pressable
-            onPress={(e) => {
-              e.stopPropagation?.();
-              onShare();
-            }}
-            hitSlop={8}
-            style={styles.commentAction}
-            testID={`comment-share-${reply.id}`}
-          >
-            <Share2 color={Colors.muted} size={13} strokeWidth={2.4} />
           </Pressable>
         </View>
       </View>

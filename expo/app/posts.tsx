@@ -14,7 +14,6 @@ import {
   Image as ImageIcon,
   MessageCircle,
   Repeat2,
-  Share2,
   Sparkles,
   TrendingDown,
   TrendingUp,
@@ -28,7 +27,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -39,7 +37,6 @@ import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
 import { withDefaultAvatar } from "@/lib/brand-media";
 import { navigateBack } from "@/lib/navigation";
-import { createShareLink } from "@/lib/share-links";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useApp } from "@/providers/app-provider";
@@ -259,24 +256,6 @@ export default function PostsFeedScreen() {
     [qc, userId, isAuthenticated, router],
   );
 
-  const onSharePost = useCallback(async (post: FeedPost) => {
-    Haptics.selectionAsync().catch(() => {});
-    const ticker = post.ticker ? `\n\n${post.ticker.replace("$", "")}` : "";
-    const author = post.authorHandle || post.authorName;
-    const link = await createShareLink("post", post.id, { author, ticker: post.ticker ?? null });
-    const url = link.url;
-    const body = `${post.text || "SolTools post"}${ticker}\n\n— ${author}\n${url}`;
-    try {
-      await Share.share({ message: body, url, title: "Share post" });
-    } catch (e) {
-      console.log("[posts] share failed", e);
-      try {
-        await Clipboard.setStringAsync(url);
-        Alert.alert("Link copied", "Post link copied to clipboard.");
-      } catch {}
-    }
-  }, []);
-
   const renderItem: ListRenderItem<FeedPost> = useCallback(
     ({ item, index }) => (
       <PostRow
@@ -300,10 +279,9 @@ export default function PostsFeedScreen() {
             });
           }
         }}
-        onShare={() => onSharePost(item)}
       />
     ),
-    [sort, onLike, onSharePost, router],
+    [sort, onLike, router],
   );
 
   return (
@@ -493,7 +471,6 @@ function PostRow({
   onLike,
   onOpenAuthor,
   onOpenTicker,
-  onShare,
 }: {
   post: FeedPost;
   rank: number;
@@ -501,7 +478,6 @@ function PostRow({
   onLike: () => void;
   onOpenAuthor: () => void;
   onOpenTicker: () => void;
-  onShare: () => void;
 }) {
   const time = useMemo(() => {
     const diff = Date.now() - post.createdAt;
@@ -637,9 +613,6 @@ function PostRow({
             icon={<Bookmark color={Colors.muted} size={14} strokeWidth={2.2} />}
             label=""
           />
-          <Pressable style={styles.action} onPress={onShare} hitSlop={6}>
-            <Share2 color={Colors.muted} size={14} strokeWidth={2.2} />
-          </Pressable>
         </View>
       </View>
     </View>

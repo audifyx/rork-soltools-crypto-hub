@@ -1,6 +1,5 @@
 import { BlurView } from "expo-blur";
 import GlassBg from "@/components/ui/GlassBg";
-import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,7 +22,6 @@ import {
   Repeat2,
   Rocket,
   Send,
-  Share2,
   Award,
   Sparkles,
   Trash2,
@@ -44,7 +42,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -74,7 +71,6 @@ import { getOgMemeTokens, getMemeTokens, getCelebrityTokens, getUtilityTokens } 
 import { withDefaultAvatar } from "@/lib/brand-media";
 import { patchPostEverywhere } from "@/lib/post-sync";
 import { isSafeToken } from "@/lib/safety";
-import { createShareLink } from "@/lib/share-links";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
@@ -399,29 +395,6 @@ export default function HomeFeedScreen() {
     },
     [togglePostRepost],
   );
-
-  const onTimelineShare = useCallback(async (post: UserPost) => {
-    Haptics.selectionAsync().catch(() => {});
-    const ticker = post.ticker ? `\n\n${post.ticker.replace("$", "")}` : "";
-    const author = post.authorUsername
-      ? `@${post.authorUsername}`
-      : post.authorDisplayName ?? "a trader";
-    const link = await createShareLink("post", post.id, { author, ticker: post.ticker ?? null });
-    const url = link.url;
-    const body = `${post.text || "SolTools post"}${ticker}\n\n— ${author}\n${url}`;
-    try {
-      const result = await Share.share({ message: body, url, title: "Share post" });
-      if (result.action === Share.dismissedAction) {
-        console.log("[home] share dismissed");
-      }
-    } catch (e) {
-      console.log("[home] share failed", e);
-      try {
-        await Clipboard.setStringAsync(url);
-        Alert.alert("Link copied", "Post link copied to clipboard.");
-      } catch {}
-    }
-  }, []);
 
   const onDeleteReply = useCallback(
     (reply: CommunityPost) => {
@@ -755,7 +728,6 @@ export default function HomeFeedScreen() {
             onRepost={() => onTimelineRepost(item.data)}
             onQuote={() => openQuote(item.data)}
             onComment={() => openReply(item.data)}
-            onShare={() => void onTimelineShare(item.data)}
             onDelete={() => onTimelineDelete(item.data)}
             viewerUserId={userId ?? null}
             onDeleteReply={onDeleteReply}
@@ -768,7 +740,6 @@ export default function HomeFeedScreen() {
       profile,
       onTimelineLike,
       onTimelineRepost,
-      onTimelineShare,
       openReply,
       openQuote,
       onTimelineDelete,
@@ -1751,7 +1722,6 @@ function UserPostCard({
   onRepost,
   onQuote,
   onComment,
-  onShare,
   onDelete,
   canDelete,
   viewerUserId,
@@ -1767,7 +1737,6 @@ function UserPostCard({
   onRepost: () => void;
   onQuote: () => void;
   onComment: () => void;
-  onShare: () => void;
   onDelete: () => void;
   canDelete: boolean;
   viewerUserId: string | null;
@@ -1883,14 +1852,6 @@ function UserPostCard({
             <Text style={[styles.actionLabel, post.liked ? { color: Colors.rose } : null]}>
               {formatCount(post.likes)}
             </Text>
-          </Pressable>
-          <Pressable
-            style={styles.actionBtn}
-            onPress={onShare}
-            hitSlop={6}
-            testID={`share-user-${post.id}`}
-          >
-            <Share2 color={Colors.muted} size={15} strokeWidth={2.2} />
           </Pressable>
         </View>
         {post.comments > 0 && !commentsOpen ? (
