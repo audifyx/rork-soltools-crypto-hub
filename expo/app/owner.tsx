@@ -135,7 +135,7 @@ interface Feature {
 }
 
 /**
- * Owner-only 250-feature catalog. Each entry surfaces an actionable owner tool.
+ * Owner-only 400-feature catalog. Each entry surfaces an actionable owner tool.
  * Tap a tile to open a detail sheet — live tiles execute real reads/writes,
  * beta tiles are wired but throttled to owner accounts, and soon tiles are
  * staged for the next release with the owner can preview specs.
@@ -412,6 +412,179 @@ const FEATURES: Feature[] = [
   { id: "ai-cost", title: "AI cost monitor", sub: "Token spend / day", category: "ai", Icon: DollarSign, flag: "beta" },
   { id: "ai-test", title: "Prompt playground", sub: "Owner-only sandbox", category: "ai", Icon: FlaskConical, flag: "beta" },
   { id: "ai-bot", title: "Bot orchestrator", sub: "Scheduled AI tasks", category: "ai", Icon: Bot, flag: "soon" },
+
+  // 251-400 Expansion pack — 150 additional owner controls
+  // Analytics (251-270)
+  { id: "anlx-funnel-2", title: "Multi-step funnels", sub: "Custom drop-off charts", category: "analytics", Icon: Filter, flag: "beta" },
+  { id: "anlx-segments", title: "Live user segments", sub: "Build cohorts on the fly", category: "analytics", Icon: Layers, flag: "beta" },
+  { id: "anlx-retention-grid", title: "Retention grid", sub: "Triangle retention chart", category: "analytics", Icon: ChartBar, flag: "beta" },
+  { id: "anlx-feature-adopt", title: "Feature adoption", sub: "% users using each feature", category: "analytics", Icon: Gauge, flag: "beta" },
+  { id: "anlx-acq-mix", title: "Acquisition mix", sub: "Organic vs paid blend", category: "analytics", Icon: PieChart, flag: "beta" },
+  { id: "anlx-time-to-value", title: "Time to value", sub: "First aha moment timing", category: "analytics", Icon: Timer, flag: "beta" },
+  { id: "anlx-net-promoter", title: "NPS pulse", sub: "Promoter / detractor mix", category: "analytics", Icon: HeartPulse, flag: "soon" },
+  { id: "anlx-task-success", title: "Task success rate", sub: "% completed flows", category: "analytics", Icon: CheckCircle2, flag: "beta" },
+  { id: "anlx-app-rating", title: "App store ratings", sub: "iOS / Android avg star", category: "analytics", Icon: Star, flag: "soon" },
+  { id: "anlx-review-feed", title: "Review firehose", sub: "Latest store reviews", category: "analytics", Icon: MessageSquare, flag: "soon" },
+  { id: "anlx-deep-link", title: "Deep link clicks", sub: "Inbound link analytics", category: "analytics", Icon: Share2, flag: "beta" },
+  { id: "anlx-funnel-paywall", title: "Paywall funnel", sub: "View → start → buy", category: "analytics", Icon: Lock, flag: "beta" },
+  { id: "anlx-token-views", title: "Token page views", sub: "Top tokens viewed", category: "analytics", Icon: Coins, flag: "live" },
+  { id: "anlx-wallet-conn", title: "Wallet connect rate", sub: "Connections per signup", category: "analytics", Icon: Wallet, flag: "beta" },
+  { id: "anlx-launch-vol", title: "Launchpad volume", sub: "Launches per day", category: "analytics", Icon: Rocket, flag: "live" },
+  { id: "anlx-kol-watch", title: "KOL watch hits", sub: "Most followed wallets", category: "analytics", Icon: Eye, flag: "beta" },
+  { id: "anlx-scan-vol", title: "OG scan volume", sub: "Daily scans run", category: "analytics", Icon: Search, flag: "beta" },
+  { id: "anlx-quest-finish", title: "Quest completion", sub: "% finishing each quest", category: "analytics", Icon: Target, flag: "beta" },
+  { id: "anlx-streak-hist", title: "Streak distribution", sub: "Histogram of streak days", category: "analytics", Icon: BarChart3, flag: "beta" },
+  { id: "anlx-cost-active", title: "Cost per active", sub: "Infra $ ÷ DAU", category: "analytics", Icon: DollarSign, flag: "beta" },
+
+  // Demographics (271-285)
+  { id: "demo-onb-source", title: "Onboarding source mix", sub: "How they found us", category: "demographics", Icon: Globe2, flag: "beta" },
+  { id: "demo-region", title: "Region performance", sub: "Engagement per region", category: "demographics", Icon: MapIcon, flag: "beta" },
+  { id: "demo-carrier", title: "Carrier split", sub: "WiFi vs cellular", category: "demographics", Icon: Network, flag: "soon" },
+  { id: "demo-screen-size", title: "Screen size mix", sub: "Phone form factors", category: "demographics", Icon: Cpu, flag: "soon" },
+  { id: "demo-dark-mode", title: "Dark mode usage", sub: "% on dark theme", category: "demographics", Icon: ImageIcon, flag: "soon" },
+  { id: "demo-accessibility", title: "Accessibility users", sub: "VoiceOver / large text", category: "demographics", Icon: Eye, flag: "soon" },
+  { id: "demo-active-com", title: "Active communities", sub: "Communities user joins", category: "demographics", Icon: Users, flag: "beta" },
+  { id: "demo-multi-wallet", title: "Multi-wallet users", sub: ">1 wallet linked", category: "demographics", Icon: Wallet, flag: "beta" },
+  { id: "demo-creator-mix", title: "Creator vs lurker", sub: "Producers vs consumers", category: "demographics", Icon: PieChart, flag: "beta" },
+  { id: "demo-pro-mix", title: "Pro vs free split", sub: "Subscription mix", category: "demographics", Icon: Crown, flag: "beta" },
+  { id: "demo-host-rep", title: "Top space hosts", sub: "Most listened-to hosts", category: "demographics", Icon: Radio, flag: "beta" },
+  { id: "demo-poll-makers", title: "Poll creators", sub: "Most engaged poll authors", category: "demographics", Icon: PieChart, flag: "beta" },
+  { id: "demo-reel-creators", title: "Reel creators", sub: "Top reel uploaders", category: "demographics", Icon: Activity, flag: "beta" },
+  { id: "demo-story-creators", title: "Story creators", sub: "Daily story posters", category: "demographics", Icon: Eye, flag: "beta" },
+  { id: "demo-event-hosts", title: "Event hosts", sub: "Power organizers", category: "demographics", Icon: Calendar, flag: "beta" },
+
+  // Moderation (286-305)
+  { id: "mod-keyword-watch", title: "Keyword watchlist", sub: "Track risky terms", category: "moderation", Icon: Eye, flag: "beta" },
+  { id: "mod-coord", title: "Coordination detector", sub: "Find boost rings", category: "moderation", Icon: Network, flag: "beta" },
+  { id: "mod-burst", title: "Burst posting alert", sub: "Sudden volume spikes", category: "moderation", Icon: AlertTriangle, flag: "beta" },
+  { id: "mod-followfarm", title: "Follow-farm detector", sub: "Mass-follow patterns", category: "moderation", Icon: UserMinus, flag: "beta" },
+  { id: "mod-fake-pfp", title: "Fake PFP scanner", sub: "Stolen avatar matcher", category: "moderation", Icon: ImageIcon, flag: "soon" },
+  { id: "mod-doxx", title: "Doxx guard", sub: "PII leak detector", category: "moderation", Icon: ShieldX, flag: "soon" },
+  { id: "mod-csam-scan", title: "CSAM auto-scan", sub: "Hash-list matching", category: "moderation", Icon: ShieldAlert, flag: "soon" },
+  { id: "mod-violence", title: "Violence classifier", sub: "Graphic content alerts", category: "moderation", Icon: AlertTriangle, flag: "soon" },
+  { id: "mod-impersonate", title: "Impersonation reports", sub: "Look-alike accounts", category: "moderation", Icon: UserMinus, flag: "beta" },
+  { id: "mod-mass-report", title: "Mass-report defense", sub: "Detect brigading", category: "moderation", Icon: ShieldCheck, flag: "beta" },
+  { id: "mod-cool", title: "Cool-down timer", sub: "Auto throttle hot users", category: "moderation", Icon: Timer, flag: "beta" },
+  { id: "mod-comm-mod", title: "Community mod board", sub: "Per-community queues", category: "moderation", Icon: Users, flag: "beta" },
+  { id: "mod-rugbroadcast", title: "Rug broadcast block", sub: "Halt scam token shares", category: "moderation", Icon: AlertTriangle, flag: "beta" },
+  { id: "mod-pump-block", title: "Pump signal block", sub: "Stop signal spam", category: "moderation", Icon: ShieldX, flag: "beta" },
+  { id: "mod-link-ban", title: "Domain ban list", sub: "Block referral domains", category: "moderation", Icon: Lock, flag: "beta" },
+  { id: "mod-handle-imp", title: "Handle squat sweep", sub: "Reclaim inactive handles", category: "moderation", Icon: KeyRound, flag: "beta" },
+  { id: "mod-bio-scan", title: "Bio link scanner", sub: "Flag scam profile links", category: "moderation", Icon: ShieldAlert, flag: "beta" },
+  { id: "mod-mass-dm", title: "Mass-DM throttle", sub: "Prevent DM spam", category: "moderation", Icon: MessageSquare, flag: "beta" },
+  { id: "mod-stream-mod", title: "Live mod controls", sub: "Kick / mute / hand", category: "moderation", Icon: Radio, flag: "beta" },
+  { id: "mod-export-rep", title: "Export reports", sub: "CSV / JSON dump", category: "moderation", Icon: Database, flag: "beta" },
+
+  // Content health (306-320)
+  { id: "cnt-hashtag-spam", title: "Hashtag spam audit", sub: "Over-tagged posts", category: "content", Icon: Hash, flag: "beta" },
+  { id: "cnt-low-effort", title: "Low-effort filter", sub: "GM-only posts", category: "content", Icon: FileWarning, flag: "beta" },
+  { id: "cnt-engage-bait", title: "Engagement bait", sub: "Like-farming detector", category: "content", Icon: AlertTriangle, flag: "beta" },
+  { id: "cnt-fact-check", title: "Fact-check queue", sub: "Disputed posts", category: "content", Icon: ShieldCheck, flag: "soon" },
+  { id: "cnt-token-mentions", title: "Top token mentions", sub: "Most-shilled tickers", category: "content", Icon: Coins, flag: "live" },
+  { id: "cnt-link-domains", title: "Top linked domains", sub: "Outbound link map", category: "content", Icon: Share2, flag: "beta" },
+  { id: "cnt-thread-health", title: "Thread health", sub: "Healthy replies / hostility", category: "content", Icon: MessageSquare, flag: "beta" },
+  { id: "cnt-poll-skew", title: "Poll skew alerts", sub: "Suspiciously one-sided", category: "content", Icon: PieChart, flag: "beta" },
+  { id: "cnt-quality-score", title: "Quality score", sub: "AI rated content", category: "content", Icon: Sparkles, flag: "beta" },
+  { id: "cnt-attach-types", title: "Attachment mix", sub: "Photo / video / link split", category: "content", Icon: ImageIcon, flag: "beta" },
+  { id: "cnt-event-quality", title: "Event quality audit", sub: "Spam events review", category: "content", Icon: Calendar, flag: "beta" },
+  { id: "cnt-comm-health", title: "Community health score", sub: "Per-community vitality", category: "content", Icon: HeartPulse, flag: "beta" },
+  { id: "cnt-anon-mod", title: "Anon post audit", sub: "Review anonymous stream", category: "content", Icon: Eye, flag: "beta" },
+  { id: "cnt-archive", title: "Auto-archive", sub: "Stale post cleanup", category: "content", Icon: Database, flag: "soon" },
+  { id: "cnt-feat-rotate", title: "Featured rotator", sub: "Auto-pin best posts", category: "content", Icon: Pin, flag: "beta" },
+
+  // Growth (321-335)
+  { id: "grw-streak-boost", title: "Streak booster", sub: "Grant bonus streak day", category: "growth", Icon: Zap, flag: "beta" },
+  { id: "grw-comeback", title: "Comeback reward", sub: "Return after 14d bonus", category: "growth", Icon: Gift, flag: "beta" },
+  { id: "grw-quest-builder", title: "Quest builder", sub: "Create custom quests", category: "growth", Icon: Target, flag: "beta" },
+  { id: "grw-badge-drop", title: "Badge airdrop", sub: "Mass grant achievement", category: "growth", Icon: Star, flag: "beta" },
+  { id: "grw-invite-bonus", title: "Invite bonus tuner", sub: "Adjust referral rewards", category: "growth", Icon: Gift, flag: "beta" },
+  { id: "grw-onb-skip", title: "Onboarding skip audit", sub: "Where users skip steps", category: "growth", Icon: Filter, flag: "beta" },
+  { id: "grw-friend-rec", title: "Friend reconnect blast", sub: "Surface dormant friends", category: "growth", Icon: UserPlus, flag: "beta" },
+  { id: "grw-fyp-refresh", title: "FYP forced refresh", sub: "Rebuild user's FYP", category: "growth", Icon: RefreshCw, flag: "live" },
+  { id: "grw-hashtag-pin", title: "Hashtag promotion", sub: "Pin trending tag", category: "growth", Icon: Hash, flag: "beta" },
+  { id: "grw-discover-pin", title: "Discover featured pin", sub: "Manual feature rail", category: "growth", Icon: Pin, flag: "live" },
+  { id: "grw-event-spot", title: "Event spotlight", sub: "Force-feature event", category: "growth", Icon: Calendar, flag: "beta" },
+  { id: "grw-space-spot", title: "Space spotlight", sub: "Promote audio room", category: "growth", Icon: Radio, flag: "beta" },
+  { id: "grw-cohort-push", title: "Cohort push test", sub: "Try wording on subset", category: "growth", Icon: Bell, flag: "beta" },
+  { id: "grw-recap-style", title: "Recap style picker", sub: "Cards vs reel format", category: "growth", Icon: Sparkles, flag: "beta" },
+  { id: "grw-pro-trial", title: "Pro trial blast", sub: "Grant temporary pro", category: "growth", Icon: Crown, flag: "beta" },
+
+  // Revenue (336-350)
+  { id: "rev-iap-health", title: "IAP health", sub: "Apple / Google success %", category: "revenue", Icon: HeartPulse, flag: "beta" },
+  { id: "rev-trial-conv", title: "Trial conversion", sub: "Trial → paid %", category: "revenue", Icon: TrendingUp, flag: "beta" },
+  { id: "rev-renew", title: "Renewal rate", sub: "Monthly renew %", category: "revenue", Icon: Repeat, flag: "beta" },
+  { id: "rev-cancel", title: "Cancellation reasons", sub: "Why users churn", category: "revenue", Icon: FileWarning, flag: "beta" },
+  { id: "rev-listing-fee", title: "Listing fee tuner", sub: "Adjust token list fee", category: "revenue", Icon: DollarSign, flag: "beta" },
+  { id: "rev-handle-mkt", title: "Handle marketplace fees", sub: "Edit % cut", category: "revenue", Icon: KeyRound, flag: "beta" },
+  { id: "rev-tip-fees", title: "Tip fees", sub: "Creator tip cut", category: "revenue", Icon: Gift, flag: "beta" },
+  { id: "rev-boost", title: "Boost pricing", sub: "Promoted post rates", category: "revenue", Icon: Rocket, flag: "beta" },
+  { id: "rev-ad-slots", title: "Ad slot manager", sub: "Native ad placements", category: "revenue", Icon: Megaphone, flag: "soon" },
+  { id: "rev-creator-cut", title: "Creator revenue share", sub: "% to top creators", category: "revenue", Icon: Crown, flag: "beta" },
+  { id: "rev-sol-fee", title: "Solana fee budget", sub: "Daily SOL spend cap", category: "revenue", Icon: Coins, flag: "beta" },
+  { id: "rev-prox-cost", title: "Proxy cost monitor", sub: "AI/RPC vendor spend", category: "revenue", Icon: Database, flag: "beta" },
+  { id: "rev-refund-rate", title: "Refund rate", sub: "% transactions refunded", category: "revenue", Icon: TrendingDown, flag: "beta" },
+  { id: "rev-payout-q", title: "Payout queue", sub: "Pending creator payouts", category: "revenue", Icon: Wallet, flag: "beta" },
+  { id: "rev-tax-region", title: "Tax by region", sub: "Regional tax breakdown", category: "revenue", Icon: Globe2, flag: "soon" },
+
+  // Security (351-360)
+  { id: "sec-session-list", title: "Active sessions", sub: "Per-user device list", category: "security", Icon: Eye, flag: "beta" },
+  { id: "sec-force-logout", title: "Force logout", sub: "Kill a user's sessions", category: "security", Icon: KeyRound, flag: "beta" },
+  { id: "sec-2fa-audit", title: "2FA coverage", sub: "% admins with 2FA", category: "security", Icon: ShieldCheck, flag: "beta" },
+  { id: "sec-fn-perms", title: "Function permissions", sub: "Edge fn invoke roles", category: "security", Icon: Server, flag: "beta" },
+  { id: "sec-rls-test", title: "RLS policy tester", sub: "Dry-run as user", category: "security", Icon: Database, flag: "beta" },
+  { id: "sec-secret-audit", title: "Secret audit", sub: "Last rotation log", category: "security", Icon: Lock, flag: "soon" },
+  { id: "sec-malware", title: "Malware upload scan", sub: "Scan media uploads", category: "security", Icon: ShieldAlert, flag: "soon" },
+  { id: "sec-fp", title: "Device fingerprinting", sub: "Detect alt accounts", category: "security", Icon: Network, flag: "soon" },
+  { id: "sec-policy-diff", title: "Policy diff viewer", sub: "What changed when", category: "security", Icon: ShieldCheck, flag: "beta" },
+  { id: "sec-bug-bounty", title: "Bug bounty inbox", sub: "Researcher submissions", category: "security", Icon: ShieldCheck, flag: "soon" },
+
+  // System ops (361-380)
+  { id: "ops-supabase", title: "Supabase status", sub: "DB / Auth / Storage", category: "ops", Icon: Database, flag: "beta" },
+  { id: "ops-rpc-pool", title: "RPC pool health", sub: "Alchemy / Helius status", category: "ops", Icon: Network, flag: "beta" },
+  { id: "ops-jupiter", title: "Jupiter API status", sub: "Quote / swap uptime", category: "ops", Icon: Coins, flag: "beta" },
+  { id: "ops-livekit", title: "LiveKit health", sub: "Audio room infra", category: "ops", Icon: Radio, flag: "beta" },
+  { id: "ops-toolkit", title: "Toolkit proxy", sub: "AI proxy latency", category: "ops", Icon: Bot, flag: "beta" },
+  { id: "ops-error-budget", title: "Error budget", sub: "SLO burn rate", category: "ops", Icon: AlertTriangle, flag: "beta" },
+  { id: "ops-fn-cost", title: "Edge fn cost", sub: "Invocations × price", category: "ops", Icon: DollarSign, flag: "beta" },
+  { id: "ops-storage-grow", title: "Storage growth", sub: "GB per day", category: "ops", Icon: TrendingUp, flag: "beta" },
+  { id: "ops-db-size", title: "DB size monitor", sub: "Per-table footprint", category: "ops", Icon: Database, flag: "beta" },
+  { id: "ops-slow-query", title: "Slow query log", sub: "Top SQL by p95", category: "ops", Icon: Gauge, flag: "beta" },
+  { id: "ops-deadlock", title: "Deadlock watch", sub: "DB lock alerts", category: "ops", Icon: AlertTriangle, flag: "soon" },
+  { id: "ops-realtime", title: "Realtime channels", sub: "Active subscriptions", category: "ops", Icon: Radio, flag: "beta" },
+  { id: "ops-presence", title: "Presence load", sub: "Live presence pings", category: "ops", Icon: Activity, flag: "beta" },
+  { id: "ops-push-rate", title: "Push send rate", sub: "Per-minute throughput", category: "ops", Icon: Bell, flag: "beta" },
+  { id: "ops-deploy", title: "Deploy controller", sub: "OTA update push", category: "ops", Icon: Rocket, flag: "soon" },
+  { id: "ops-rollback", title: "Rollback button", sub: "Revert last deploy", category: "ops", Icon: RefreshCw, flag: "soon" },
+  { id: "ops-incident", title: "Incident timeline", sub: "Past outages", category: "ops", Icon: AlertTriangle, flag: "beta" },
+  { id: "ops-status-page", title: "Public status page", sub: "User-facing uptime", category: "ops", Icon: Globe2, flag: "soon" },
+  { id: "ops-runbook", title: "Runbook library", sub: "Incident playbooks", category: "ops", Icon: FileWarning, flag: "soon" },
+  { id: "ops-onstack", title: "On-call schedule", sub: "Rotation calendar", category: "ops", Icon: Calendar, flag: "soon" },
+
+  // Comms (381-390)
+  { id: "comm-priority", title: "Priority push", sub: "Bypass quiet hours", category: "comms", Icon: Megaphone, flag: "beta" },
+  { id: "comm-rich", title: "Rich push composer", sub: "Image / action buttons", category: "comms", Icon: ImageIcon, flag: "beta" },
+  { id: "comm-schedule", title: "Scheduled blasts", sub: "Send at chosen time", category: "comms", Icon: Clock, flag: "beta" },
+  { id: "comm-recur", title: "Recurring digest", sub: "Weekly recap blast", category: "comms", Icon: Repeat, flag: "beta" },
+  { id: "comm-ab-push", title: "Push A/B copy", sub: "Variant open-rate", category: "comms", Icon: FlaskConical, flag: "beta" },
+  { id: "comm-inapp-mod", title: "In-app modal builder", sub: "Drag & drop modals", category: "comms", Icon: MessageSquare, flag: "soon" },
+  { id: "comm-changelog", title: "Changelog editor", sub: "Edit in-app what's new", category: "comms", Icon: FileWarning, flag: "beta" },
+  { id: "comm-tos", title: "Terms publisher", sub: "Roll new ToS to users", category: "comms", Icon: ShieldCheck, flag: "beta" },
+  { id: "comm-survey", title: "In-app survey", sub: "Run NPS / CSAT poll", category: "comms", Icon: PieChart, flag: "soon" },
+  { id: "comm-targeted", title: "Targeted DM bot", sub: "Send onboarding DM", category: "comms", Icon: Bot, flag: "beta" },
+
+  // Experiments (391-395)
+  { id: "ex-launch-spec", title: "Launch spec doc", sub: "Variant specifications", category: "experiments", Icon: FileWarning, flag: "beta" },
+  { id: "ex-significance", title: "Significance calc", sub: "P-value helper", category: "experiments", Icon: ChartBar, flag: "beta" },
+  { id: "ex-ship", title: "Ship winner button", sub: "Promote winning variant", category: "experiments", Icon: Rocket, flag: "beta" },
+  { id: "ex-archive", title: "Experiment archive", sub: "Past tests + outcomes", category: "experiments", Icon: Database, flag: "beta" },
+  { id: "ex-holdout", title: "Holdout group", sub: "Permanent control %", category: "experiments", Icon: ShieldCheck, flag: "soon" },
+
+  // AI & automation (396-400)
+  { id: "ai-summary-quality", title: "Summary quality audit", sub: "Rate AI feed summaries", category: "ai", Icon: Sparkles, flag: "beta" },
+  { id: "ai-token-budget", title: "AI token budget", sub: "Daily token cap", category: "ai", Icon: Gauge, flag: "beta" },
+  { id: "ai-model-routing", title: "Model routing", sub: "Choose model per task", category: "ai", Icon: Network, flag: "beta" },
+  { id: "ai-vision-mod", title: "Vision moderation", sub: "AI on every image", category: "ai", Icon: Eye, flag: "soon" },
+  { id: "ai-translate-q", title: "Translation quality", sub: "Rate auto-translate", category: "ai", Icon: Globe2, flag: "beta" },
 ];
 
 interface MetricCardProps {
@@ -589,7 +762,7 @@ export default function OwnerCommandCenter() {
               <Crown color={Colors.goldBright} size={18} strokeWidth={2.4} />
               <Text style={styles.headerTitle}>Command Center</Text>
             </View>
-            <Text style={styles.headerSub}>250 owner-only controls · live data</Text>
+            <Text style={styles.headerSub}>400 owner-only controls · live data</Text>
           </View>
           <Pressable
             onPress={() => overviewQuery.refetch()}
@@ -622,7 +795,7 @@ export default function OwnerCommandCenter() {
                   <Text style={styles.heroEyebrow}>OWNER CONSOLE</Text>
                   <Text style={styles.heroTitle}>Everything, in one place.</Text>
                   <Text style={styles.heroBody}>
-                    A 250-tool suite for deeper analytics, user demographics, moderation, growth, security and AI ops.
+                    A 400-tool suite for deeper analytics, user demographics, moderation, growth, security and AI ops.
                     Every tile below is gated to the owner account.
                   </Text>
                 </View>
@@ -678,7 +851,7 @@ export default function OwnerCommandCenter() {
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search 250 owner tools…"
+                placeholder="Search 400 owner tools…"
                 placeholderTextColor={Colors.muted2}
                 style={styles.searchInput}
                 testID="owner-search"
