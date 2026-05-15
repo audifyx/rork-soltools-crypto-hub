@@ -9,7 +9,7 @@ The SQL foundation for all 41 features lives in
 ### 💬 Messages tab (1–15)
 
 - [x] 1. Voice notes — `dm_messages.audio_url/duration/waveform` (UI: recorder pending)
-- [x] 2. Disappearing messages — `dm_conversation_settings.disappearing_seconds` + `expire_dm_messages()`
+- [x] 2. ~~Disappearing messages~~ — removed from UI per user request (SQL retained)
 - [x] 3. Message reactions — `dm_message_reactions` (UI already shipped)
 - [x] 4. Reply threads — `dm_messages.reply_to` (UI already shipped)
 - [x] 5. Read receipts toggle — `dm_participants.read_receipts_enabled` + `set_dm_read_receipts()`
@@ -60,9 +60,9 @@ The SQL foundation for all 41 features lives in
 
 ## UI passes shipped
 
-1. [x] **Messages UI wiring** — `ChatToolsSheet` (in-chat search, pinned list,
-   disappearing-timer) wired into the DM header. Notes-to-self pin on the
-   messages inbox via `get_self_chat()`.
+1. [x] **Messages UI wiring** — `ChatToolsSheet` (in-chat search, pinned list)
+   wired into the DM header. Notes-to-self pin via `get_self_chat()`.
+   Disappearing messages removed from UI.
 2. [x] **Stories rail** — `components/home/StoriesRail.tsx` on home tab,
    `app/story/[id].tsx` viewer with progress bars + `view_story()` tracking,
    `app/story/create.tsx` for posting.

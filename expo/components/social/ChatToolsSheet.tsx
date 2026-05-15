@@ -1,18 +1,14 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   Bookmark,
-  Clock,
-  Hourglass,
   Pin,
   Search as SearchIcon,
-  Timer,
   X,
 } from "lucide-react-native";
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -26,22 +22,12 @@ import Colors from "@/constants/colors";
 import {
   listPinnedMessages,
   searchDmMessages,
-  setDisappearing,
   type DmSearchHit,
   type PinnedMessageRow,
 } from "@/lib/api/platform";
 import { hapticSelect } from "@/lib/haptics";
 
-type Pane = "menu" | "search" | "pinned" | "disappear";
-
-const TIMER_OPTIONS: { seconds: number; label: string }[] = [
-  { seconds: 0, label: "Off" },
-  { seconds: 60, label: "1 minute" },
-  { seconds: 5 * 60, label: "5 minutes" },
-  { seconds: 3600, label: "1 hour" },
-  { seconds: 24 * 3600, label: "24 hours" },
-  { seconds: 7 * 24 * 3600, label: "7 days" },
-];
+type Pane = "menu" | "search" | "pinned";
 
 interface Props {
   open: boolean;
@@ -52,8 +38,6 @@ interface Props {
 export default function ChatToolsSheet({ open, conversationId, onClose }: Props) {
   const [pane, setPane] = useState<Pane>("menu");
   const [query, setQuery] = useState<string>("");
-
-  const queryClient = useQueryClient();
 
   const pinnedQuery = useQuery<PinnedMessageRow[]>({
     queryKey: ["dm", "pinned", conversationId ?? "none"],
@@ -76,28 +60,9 @@ export default function ChatToolsSheet({ open, conversationId, onClose }: Props)
     onClose();
   };
 
-  const setTimer = async (seconds: number) => {
-    if (!conversationId) return;
-    hapticSelect();
-    try {
-      await setDisappearing(conversationId, seconds);
-      queryClient.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
-      Alert.alert(
-        "Disappearing messages",
-        seconds === 0
-          ? "Disappearing is off."
-          : `New messages will disappear after ${humanSeconds(seconds)}.`,
-      );
-      setPane("menu");
-    } catch (e) {
-      Alert.alert("Couldn't update", e instanceof Error ? e.message : "Try again.");
-    }
-  };
-
   const menuItems: { id: Pane; label: string; sub: string; Icon: typeof Pin; tint: string }[] = [
     { id: "search", label: "Search in chat", sub: "Find any past message", Icon: SearchIcon, tint: Colors.mint },
     { id: "pinned", label: "Pinned messages", sub: "Quick-access alpha & links", Icon: Pin, tint: "#FF8C28" },
-    { id: "disappear", label: "Disappearing messages", sub: "Auto-delete on a timer", Icon: Hourglass, tint: Colors.violet },
   ];
 
   return (
@@ -118,9 +83,7 @@ export default function ChatToolsSheet({ open, conversationId, onClose }: Props)
                 ? "Search in chat"
                 : pane === "pinned"
                   ? "Pinned messages"
-                  : pane === "disappear"
-                    ? "Disappearing messages"
-                    : "Chat tools"}
+                  : "Chat tools"}
             </Text>
             <Pressable onPress={close} style={styles.iconBtn} testID="chat-tools-close">
               <X color={Colors.text} size={16} strokeWidth={2.6} />
@@ -234,36 +197,6 @@ export default function ChatToolsSheet({ open, conversationId, onClose }: Props)
             </View>
           ) : null}
 
-          {pane === "disappear" ? (
-            <View style={styles.paneBody}>
-              <Text style={styles.disappearHint}>
-                Once a message is read, the countdown starts. Off keeps everything in this chat.
-              </Text>
-              <View style={styles.timerList}>
-                {TIMER_OPTIONS.map((t) => (
-                  <Pressable
-                    key={t.seconds}
-                    onPress={() => setTimer(t.seconds)}
-                    style={styles.timerRow}
-                    testID={`disappear-${t.seconds}`}
-                  >
-                    <View style={styles.timerIcon}>
-                      {t.seconds === 0 ? (
-                        <X color={Colors.muted} size={15} strokeWidth={2.6} />
-                      ) : (
-                        <Timer color={Colors.violet} size={15} strokeWidth={2.6} />
-                      )}
-                    </View>
-                    <Text style={styles.timerLabel}>{t.label}</Text>
-                    <View style={styles.timerArrow}>
-                      <Text style={styles.chevron}>›</Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          ) : null}
-
           <Pressable onPress={close} style={styles.cancel} testID="chat-tools-cancel">
             <LinearGradient
               colors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.02)"]}
@@ -275,13 +208,6 @@ export default function ChatToolsSheet({ open, conversationId, onClose }: Props)
       </Pressable>
     </Modal>
   );
-}
-
-function humanSeconds(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-  if (seconds < 24 * 3600) return `${Math.round(seconds / 3600)}h`;
-  return `${Math.round(seconds / 86400)}d`;
 }
 
 const styles = StyleSheet.create({
@@ -317,12 +243,6 @@ const styles = StyleSheet.create({
   pinIcon: { width: 28, height: 28, borderRadius: 9, backgroundColor: "rgba(255,140,40,0.18)", borderWidth: 1, borderColor: "rgba(255,140,40,0.4)", alignItems: "center", justifyContent: "center" },
   emptyPane: { paddingVertical: 36, alignItems: "center" },
   emptyText: { color: Colors.muted, fontSize: 12, fontWeight: "700", textAlign: "center", paddingHorizontal: 20, lineHeight: 18 },
-  disappearHint: { color: Colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 17, paddingHorizontal: 4, paddingBottom: 10 },
-  timerList: { gap: 6 },
-  timerRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 14, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
-  timerIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: "rgba(91,141,239,0.14)", borderWidth: 1, borderColor: "rgba(91,141,239,0.36)", alignItems: "center", justifyContent: "center" },
-  timerLabel: { color: Colors.text, fontSize: 14, fontWeight: "800", flex: 1 },
-  timerArrow: { width: 22, alignItems: "flex-end" },
   cancel: { margin: 14, height: 50, borderRadius: 16, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
   cancelText: { color: Colors.text, fontSize: 14, fontWeight: "900" },
 });
