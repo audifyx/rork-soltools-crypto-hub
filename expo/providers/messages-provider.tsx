@@ -265,9 +265,9 @@ export function useDmThreadMessages(conversationId: string | undefined, peer?: D
   const query = useQuery<DMMessage[]>({
     queryKey: ["messages", "thread", conversationId ?? "none", userId ?? "guest"],
     enabled: !!conversationId && isAuthenticated && !!userId,
-    staleTime: 2_000,
+    staleTime: 1_500,
     refetchOnMount: "always",
-    refetchInterval: 8_000,
+    refetchInterval: 4_000,
     queryFn: async () => {
       if (!conversationId) return [];
       const { data, error } = await supabase.rpc("list_dm_messages", {
@@ -285,19 +285,27 @@ export function useDmThreadMessages(conversationId: string | undefined, peer?: D
 
   useEffect(() => {
     if (!conversationId || !isAuthenticated || !userId) return;
+    const onChange = () => {
+      queryClient
+        .invalidateQueries({ queryKey: ["messages", "thread", conversationId, userId] })
+        .catch(() => {});
+      queryClient
+        .invalidateQueries({ queryKey: ["messages", "conversations", userId] })
+        .catch(() => {});
+    };
     const channel = supabase
       .channel(`dm-thread-${conversationId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "dm_messages", filter: `conversation_id=eq.${conversationId}` },
-        () => {
-          queryClient
-            .invalidateQueries({ queryKey: ["messages", "thread", conversationId, userId] })
-            .catch(() => {});
-          queryClient
-            .invalidateQueries({ queryKey: ["messages", "conversations", userId] })
-            .catch(() => {});
-        },
+        onChange,
+      )
+      // Read receipts: peer marking the convo read updates dm_participants.last_read_at,
+      // so we must also refetch the thread when participants rows change.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dm_participants", filter: `conversation_id=eq.${conversationId}` },
+        onChange,
       )
       .subscribe();
     return () => {

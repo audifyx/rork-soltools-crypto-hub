@@ -611,8 +611,23 @@ export default function DMThreadScreen() {
             ListFooterComponent={
               otherTyping ? (
                 <View style={styles.typingBubbleWrap} testID="dm-typing-bubble">
+                  <View style={styles.typingAvatar}>
+                    {peerAvatar ? (
+                      <ExpoImage source={{ uri: peerAvatar }} style={styles.typingAvatarImg} contentFit="cover" />
+                    ) : (
+                      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: conv.user.color, alignItems: "center", justifyContent: "center" }]}>
+                        <Text style={styles.typingAvatarInit}>{conv.user.name.slice(0, 1).toUpperCase()}</Text>
+                      </View>
+                    )}
+                  </View>
                   <View style={styles.typingBubble}>
-                    <TypingDots color={IOS_SECONDARY} />
+                    <LinearGradient
+                      colors={[`${conv.user.color}33`, "rgba(255,255,255,0.04)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <TypingDots color={conv.user.color} />
                   </View>
                 </View>
               ) : null
@@ -863,24 +878,27 @@ function TypingDots({ color }: { color: string }) {
     const make = (val: Animated.Value, delay: number) =>
       Animated.loop(
         Animated.sequence([
-          Animated.timing(val, { toValue: 1, duration: 380, delay, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.timing(val, { toValue: 0, duration: 380, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-          Animated.delay(220),
+          Animated.timing(val, { toValue: 1, duration: 420, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+          Animated.timing(val, { toValue: 0, duration: 420, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+          Animated.delay(180),
         ]),
       );
-    const anims = [make(a, 0), make(b, 140), make(c, 280)];
+    const anims = [make(a, 0), make(b, 160), make(c, 320)];
     anims.forEach((x) => x.start());
     return () => anims.forEach((x) => x.stop());
   }, [a, b, c]);
   const dotStyle = (val: Animated.Value) => ({
-    opacity: val.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }),
-    transform: [{ translateY: val.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) }],
+    opacity: val.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
+    transform: [
+      { translateY: val.interpolate({ inputRange: [0, 1], outputRange: [0, -5] }) },
+      { scale: val.interpolate({ inputRange: [0, 1], outputRange: [0.75, 1.15] }) },
+    ],
   });
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <Animated.View style={[styles.typingDot, { backgroundColor: color }, dotStyle(a)]} />
-      <Animated.View style={[styles.typingDot, { backgroundColor: color }, dotStyle(b)]} />
-      <Animated.View style={[styles.typingDot, { backgroundColor: color }, dotStyle(c)]} />
+      <Animated.View style={[styles.typingDot, { backgroundColor: color, shadowColor: color, shadowOpacity: 0.9, shadowRadius: 5 }, dotStyle(a)]} />
+      <Animated.View style={[styles.typingDot, { backgroundColor: color, shadowColor: color, shadowOpacity: 0.9, shadowRadius: 5 }, dotStyle(b)]} />
+      <Animated.View style={[styles.typingDot, { backgroundColor: color, shadowColor: color, shadowOpacity: 0.9, shadowRadius: 5 }, dotStyle(c)]} />
     </View>
   );
 }
@@ -1585,19 +1603,43 @@ const styles = StyleSheet.create({
   headStatus: { color: IOS_SECONDARY, fontSize: 11, fontWeight: "500", marginTop: 1 },
   headStatusTyping: { color: IOS_BLUE, fontSize: 11, fontWeight: "700", marginTop: 1, letterSpacing: 0.1 },
   typingHeadRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 1 },
-  typingBubbleWrap: { alignSelf: "flex-start", marginTop: 2, marginBottom: 6, marginLeft: 2 },
+  typingBubbleWrap: {
+    alignSelf: "flex-start",
+    marginTop: 4,
+    marginBottom: 8,
+    marginLeft: 4,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  typingAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: IOS_CARD_SOFT,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: GLASS_BORDER,
+  },
+  typingAvatarImg: { width: "100%", height: "100%" },
+  typingAvatarInit: { color: "#FFFFFF", fontSize: 10, fontWeight: "800" },
   typingBubble: {
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderBottomLeftRadius: 6,
-    backgroundColor: IOS_CARD_SOFT,
+    paddingVertical: 11,
+    borderRadius: 22,
+    borderBottomLeftRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: GLASS_BORDER,
     flexDirection: "row",
     alignItems: "center",
+    overflow: "hidden",
+    shadowColor: "#3FA9FF",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
-  typingDot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: 2 },
+  typingDot: { width: 7, height: 7, borderRadius: 3.5, marginHorizontal: 2.5 },
 
   listContent: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 14 },
 
