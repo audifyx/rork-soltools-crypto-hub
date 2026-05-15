@@ -1,3 +1,4 @@
+import { BlurView } from "expo-blur";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
@@ -1270,37 +1271,43 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
   const price = pair.price;
   return (
     <Pressable
-      style={[styles.pairCard, { shadowColor: ringColor }]}
+      style={({ pressed }) => [styles.pairCard, pressed && styles.pairCardPressed]}
       onPress={onPress}
       testID={`pair-${pair.id}`}
     >
-      <View
-        style={[styles.pairHalo, { borderColor: ringColor, shadowColor: ringColor }]}
-        pointerEvents="none"
-      />
       <View style={styles.pairInner}>
+        {Platform.OS === "ios" ? (
+          <BlurView intensity={42} tint="dark" style={StyleSheet.absoluteFill} />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, styles.pairAndroidBase]} />
+        )}
         <LinearGradient
-          colors={[`${ringColor}22`, "rgba(0,0,0,0)", `${ringColor}11`]}
+          colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0.02)", "rgba(0,0,0,0.18)"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
+          pointerEvents="none"
         />
-        <View style={[styles.pairGlowBlob, { backgroundColor: `${ringColor}33` }]} />
+        <View style={[styles.pairGlowBlob, { backgroundColor: `${ringColor}26` }]} pointerEvents="none" />
+        <View style={styles.pairHairline} pointerEvents="none" />
 
         <View style={styles.pairTopRow}>
-          <TokenAvatar uri={pair.logoUrl} ticker={pair.ticker} size={40} radius={14} />
-          <View style={styles.agePill}>
-            <Text style={styles.ageText}>{ageLabel}</Text>
-          </View>
-          {pair.hot ? (
-            <View style={styles.hotBadge}>
-              <Flame color={Colors.orange} size={10} strokeWidth={3} />
-              <Text style={styles.hotText}>NEW</Text>
+          <TokenAvatar uri={pair.logoUrl} ticker={pair.ticker} size={32} radius={11} />
+          <View style={styles.pairTopRight}>
+            <View style={styles.agePill}>
+              <Text style={styles.ageText}>{ageLabel}</Text>
             </View>
-          ) : null}
+            {pair.hot ? (
+              <View style={styles.hotBadge}>
+                <Flame color={Colors.orange} size={9} strokeWidth={3} />
+                <Text style={styles.hotText}>NEW</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
+
         <Text
-          style={[styles.pairTicker, { color: ringColor, textShadowColor: `${ringColor}AA` }]}
+          style={[styles.pairTicker, { color: ringColor }]}
           numberOfLines={1}
         >
           ${pair.ticker.replace("$", "")}
@@ -1313,15 +1320,15 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
         </Text>
 
         <View style={styles.pairStatsRow}>
-          <View style={[styles.pairStatBox, styles.pairStatLiq]}>
+          <View style={styles.pairStatBox}>
             <Text style={styles.pairStatLabel}>LIQ</Text>
-            <Text style={[styles.pairStatValue, { color: Colors.cyan }]}>
+            <Text style={[styles.pairStatValue, { color: Colors.cyan }]} numberOfLines={1}>
               {formatCompactUsd(pair.liquidityUsd ?? undefined)}
             </Text>
           </View>
-          <View style={[styles.pairStatBox, styles.pairStatPrice]}>
+          <View style={styles.pairStatBox}>
             <Text style={styles.pairStatLabel}>PRICE</Text>
-            <Text style={[styles.pairStatValue, { color: Colors.neon }]}>
+            <Text style={[styles.pairStatValue, { color: Colors.neon }]} numberOfLines={1}>
               {price != null && price > 0 ? fmtPrice(price) : "—"}
             </Text>
           </View>
@@ -1331,16 +1338,15 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
           style={[
             styles.pairChangePill,
             {
-              borderColor: `${accent}88`,
-              backgroundColor: `${accent}1A`,
-              shadowColor: accent,
+              borderColor: `${accent}55`,
+              backgroundColor: `${accent}14`,
             },
           ]}
         >
           {positive ? (
-            <TrendingUp color={accent} size={12} strokeWidth={3} />
+            <TrendingUp color={accent} size={11} strokeWidth={3} />
           ) : (
-            <TrendingDown color={accent} size={12} strokeWidth={3} />
+            <TrendingDown color={accent} size={11} strokeWidth={3} />
           )}
           <Text style={[styles.pairChangeText, { color: accent }]}>
             {positive ? "+" : ""}
@@ -2883,121 +2889,124 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   pairCard: {
-    width: 178,
-    borderRadius: 24,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 18,
-    elevation: 8,
+    width: 152,
+    borderRadius: 20,
   },
-  pairHalo: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
-    borderWidth: 1.4,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.85,
-    shadowRadius: 14,
-    elevation: 6,
+  pairCardPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.98 }],
   },
   pairInner: {
-    padding: 14,
-    borderRadius: 24,
-    backgroundColor: "rgba(10, 8, 4, 0.88)",
+    padding: 11,
+    borderRadius: 20,
+    backgroundColor: "rgba(18,18,22,0.55)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.14)",
     overflow: "hidden",
+  },
+  pairAndroidBase: {
+    backgroundColor: "rgba(20,20,24,0.92)",
+  },
+  pairHairline: {
+    position: "absolute",
+    top: 0,
+    left: 14,
+    right: 14,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.22)",
   },
   pairGlowBlob: {
     position: "absolute",
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    top: -50,
-    right: -50,
-    opacity: 0.55,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    top: -40,
+    right: -40,
   },
   pairTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 6,
+  },
+  pairTopRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 1,
   },
   hotBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(201,206,216,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(201,206,216,0.34)",
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.22)",
   },
   hotText: {
     color: Colors.orange,
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "900",
     letterSpacing: 0.6,
   },
   agePill: {
-    paddingHorizontal: 7,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(221,227,236,0.10)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   ageText: {
     color: Colors.muted,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
   },
   pairTicker: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "900",
-    marginTop: 12,
-    letterSpacing: -0.4,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 12,
+    marginTop: 10,
+    letterSpacing: -0.3,
   },
   pairName: {
     color: Colors.muted,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
-    marginTop: 2,
+    marginTop: 1,
   },
   pairPrice: {
     color: Colors.text,
-    fontSize: 13,
-    fontWeight: "900",
-    marginTop: 6,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 5,
     letterSpacing: -0.2,
   },
   pairStatsRow: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 12,
+    gap: 6,
+    marginTop: 10,
   },
   pairStatBox: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 9,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  pairStatLiq: {
-    backgroundColor: "rgba(229,231,235,0.12)",
-    borderColor: "rgba(229,231,235,0.28)",
-  },
-  pairStatPrice: {
-    backgroundColor: "rgba(241,241,242,0.10)",
-    borderColor: "rgba(241,241,242,0.26)",
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    minWidth: 0,
   },
   pairStatLabel: {
     color: Colors.muted,
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
   pairStatValue: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "900",
-    marginTop: 3,
+    marginTop: 2,
     letterSpacing: -0.2,
   },
   pairChangePill: {
@@ -3005,17 +3014,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    marginTop: 12,
-    paddingVertical: 9,
+    marginTop: 10,
+    paddingVertical: 7,
     borderRadius: 999,
-    borderWidth: 1.2,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 10,
-    elevation: 4,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   pairChangeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "900",
   },
 
