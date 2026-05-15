@@ -89,20 +89,10 @@ import {
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
 
-type Tab =
-  | "posts"
-  | "replies"
-  | "likes"
-  | "reposts"
-  | "holdings"
-  | "activity"
-  | "communities";
+type Tab = "posts" | "holdings" | "activity" | "communities";
 
 const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
   { id: "posts", label: "Posts", Icon: Pencil },
-  { id: "replies", label: "Replies", Icon: Activity },
-  { id: "likes", label: "Likes", Icon: Star },
-  { id: "reposts", label: "Reposts", Icon: TrendingUp },
   { id: "holdings", label: "Holdings", Icon: Gem },
   { id: "activity", label: "Activity", Icon: Sparkles },
   { id: "communities", label: "Communities", Icon: Users },
@@ -671,12 +661,7 @@ export default function ProfileScreen() {
                 pointerEvents="none"
               />
               <View style={styles.bannerTopRow}>
-                <View style={[styles.rankBadge, { borderColor: `${rank.color}66`, backgroundColor: "rgba(6,8,15,0.7)" }]}>
-                  <rank.Icon color={rank.color} size={11} strokeWidth={3} />
-                  <Text style={[styles.rankBadgeText, { color: rank.color }]}>
-                    LVL {rank.level} · {rank.name.toUpperCase()}
-                  </Text>
-                </View>
+                <View style={{ flex: 1 }} />
                 <View style={styles.bannerEditBtn}>
                   <Camera color={Colors.text} size={11} strokeWidth={2.8} />
                 </View>
@@ -790,48 +775,49 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* STATS GRID */}
-          <View style={styles.statsGridRow}>
-            <Pressable
-              style={styles.statGridCell}
-              onPress={() => setFollowersOpen("following")}
-              testID="open-following"
-            >
-              <Text style={styles.statGridNum}>{followingCount}</Text>
-              <Text style={styles.statGridKey}>Following</Text>
-            </Pressable>
-            <View style={styles.statGridDiv} />
-            <Pressable
-              style={styles.statGridCell}
-              onPress={() => setFollowersOpen("followers")}
-              testID="open-followers"
-            >
-              <Text style={styles.statGridNum}>{followersCount}</Text>
-              <Text style={styles.statGridKey}>Followers</Text>
-            </Pressable>
-            <View style={styles.statGridDiv} />
-            <View style={styles.statGridCell}>
-              <Text style={styles.statGridNum}>{stats.posts}</Text>
-              <Text style={styles.statGridKey}>Posts</Text>
+          {/* UNIFIED STATS + LEVEL CARD */}
+          <View style={styles.unifiedCard}>
+            <View style={styles.statsGridRowInner}>
+              <Pressable
+                style={styles.statGridCell}
+                onPress={() => setFollowersOpen("following")}
+                testID="open-following"
+              >
+                <Text style={styles.statGridNum}>{followingCount}</Text>
+                <Text style={styles.statGridKey}>Following</Text>
+              </Pressable>
+              <View style={styles.statGridDiv} />
+              <Pressable
+                style={styles.statGridCell}
+                onPress={() => setFollowersOpen("followers")}
+                testID="open-followers"
+              >
+                <Text style={styles.statGridNum}>{followersCount}</Text>
+                <Text style={styles.statGridKey}>Followers</Text>
+              </Pressable>
+              <View style={styles.statGridDiv} />
+              <View style={styles.statGridCell}>
+                <Text style={styles.statGridNum}>{stats.posts}</Text>
+                <Text style={styles.statGridKey}>Posts</Text>
+              </View>
+              <View style={styles.statGridDiv} />
+              <View style={styles.statGridCell}>
+                <Text style={styles.statGridNum}>{stats.watching}</Text>
+                <Text style={styles.statGridKey}>Watching</Text>
+              </View>
             </View>
-            <View style={styles.statGridDiv} />
-            <View style={styles.statGridCell}>
-              <Text style={styles.statGridNum}>{stats.watching}</Text>
-              <Text style={styles.statGridKey}>Watching</Text>
-            </View>
-          </View>
 
-          {/* LEVEL CARD */}
-          <View style={styles.levelCard}>
+            <View style={styles.unifiedDivider} />
+
             <View style={styles.levelHeader}>
               <View style={styles.levelTitleRow}>
                 <View style={[styles.levelIcon, { backgroundColor: `${rank.color}22`, borderColor: `${rank.color}55` }]}>
                   <rank.Icon color={rank.color} size={14} strokeWidth={2.8} />
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.levelEyebrow}>RANK PROGRESS</Text>
+                  <Text style={styles.levelEyebrow}>LEVEL {rank.level} · {rank.name.toUpperCase()}</Text>
                   <Text style={styles.levelTitle} numberOfLines={1}>
-                    {rank.name} → {rank.next}
+                    Next: {rank.next}
                   </Text>
                 </View>
               </View>
@@ -849,12 +835,6 @@ export default function ProfileScreen() {
                 />
               </Animated.View>
             </View>
-          </View>
-
-          <PortfolioCard />
-
-          <View style={profileBlockStyles.gap}>
-            <RecapCard userId={userId ?? null} />
           </View>
 
           {/* TABS — underline segmented */}
@@ -1007,6 +987,7 @@ export default function ProfileScreen() {
 
           {tab === "holdings" && (
             <View style={styles.section}>
+              <PortfolioCard />
               {watchlist.length === 0 ? (
                 <EmptyTab
                   Icon={Gem}
@@ -1037,42 +1018,6 @@ export default function ProfileScreen() {
                   </View>
                 ))
               )}
-            </View>
-          )}
-
-          {tab === "replies" && (
-            <View style={styles.section}>
-              <EmptyTab
-                Icon={Activity}
-                title="No replies yet"
-                body="Your replies to community posts will appear here."
-                ctaLabel="Open feed"
-                onCta={() => router.push("/posts")}
-              />
-            </View>
-          )}
-
-          {tab === "likes" && (
-            <View style={styles.section}>
-              <EmptyTab
-                Icon={Star}
-                title="No likes yet"
-                body="Posts you like will be saved here for easy access."
-                ctaLabel="Open feed"
-                onCta={() => router.push("/posts")}
-              />
-            </View>
-          )}
-
-          {tab === "reposts" && (
-            <View style={styles.section}>
-              <EmptyTab
-                Icon={TrendingUp}
-                title="No reposts yet"
-                body="Reposts of alpha you share with your followers will show up here."
-                ctaLabel="Compose post"
-                onCta={() => router.push("/compose")}
-              />
             </View>
           )}
 
@@ -1242,6 +1187,9 @@ export default function ProfileScreen() {
 
           {tab === "activity" && (
             <View style={styles.section}>
+              <View style={profileBlockStyles.gap}>
+                <RecapCard userId={userId ?? null} />
+              </View>
               {activity.length === 0 ? (
                 <EmptyTab
                   Icon={Activity}
@@ -2751,6 +2699,25 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
+  },
+  unifiedCard: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  statsGridRowInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 2,
+    paddingHorizontal: 0,
+  },
+  unifiedDivider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    marginVertical: 14,
   },
   statGridCell: { flex: 1, alignItems: "center", paddingHorizontal: 4 },
   statGridDiv: { width: 1, height: 26, backgroundColor: "rgba(255,255,255,0.08)" },
