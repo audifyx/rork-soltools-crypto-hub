@@ -352,7 +352,7 @@ export default function AdminDashboard() {
         </ScrollView>
 
         <View style={styles.content}>
-          {section === "overview" && <OverviewSection onJump={setSection} />}
+          {section === "overview" && <OverviewSection onJump={setSection} onOpenOwner={() => router.push("/owner")} isOwner={isOwner} />}
           {section === "users" && <UsersSection />}
           {section === "badges" && <BadgesSection />}
           {section === "submissions" && <SubmissionsSection />}
@@ -395,7 +395,7 @@ function useAuditLogger() {
 
 /* -------------------------------- OVERVIEW ------------------------------- */
 
-function OverviewSection({ onJump }: { onJump: (s: Section) => void }) {
+function OverviewSection({ onJump, onOpenOwner, isOwner }: { onJump: (s: Section) => void; onOpenOwner: () => void; isOwner: boolean }) {
   const statsQuery = useQuery<OverviewStats>({
     queryKey: ["admin", "overview"],
     refetchInterval: 30_000,
@@ -449,6 +449,29 @@ function OverviewSection({ onJump }: { onJump: (s: Section) => void }) {
         <StatCard label="ACTIVE LOBBIES" value={s?.activeLobbies} Icon={Volume2} accent={Colors.silver} />
         <StatCard label="CREDITS USED · 24H" value={s?.creditUsage24h} Icon={Coins} accent={Colors.goldBright} />
       </View>
+
+      {isOwner ? (
+        <Pressable
+          onPress={onOpenOwner}
+          style={({ pressed }) => [styles.ownerCta, pressed && { opacity: 0.85 }]}
+          testID="admin-open-owner-cc"
+        >
+          <LinearGradient
+            colors={["rgba(98,208,255,0.22)", "rgba(63,169,255,0.08)", "rgba(0,0,0,0)"]}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          />
+          <View style={styles.ownerCtaIcon}>
+            <Crown color={Colors.goldBright} size={20} strokeWidth={2.4} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ownerCtaTitle}>Open Owner Command Center</Text>
+            <Text style={styles.ownerCtaSub}>250 owner-only tools · deeper analytics · demographics · moderation · ops</Text>
+          </View>
+          <Text style={styles.ownerCtaArrow}>›</Text>
+        </Pressable>
+      ) : null}
 
       <Text style={styles.sectionLabel}>FAST LANES</Text>
       <View style={styles.quickGrid}>
@@ -2388,6 +2411,31 @@ const styles = StyleSheet.create({
   empty: { color: Colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 30, paddingHorizontal: 20 },
   errorText: { color: Colors.platinum, fontSize: 12, lineHeight: 18 },
   sectionLabel: { color: Colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.6, marginTop: 6 },
+  ownerCta: {
+    overflow: "hidden",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(98,208,255,0.35)",
+    backgroundColor: Colors.card,
+    marginTop: 14,
+  },
+  ownerCtaIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(98,208,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(98,208,255,0.45)",
+  },
+  ownerCtaTitle: { color: Colors.text, fontSize: 14, fontWeight: "800" as const },
+  ownerCtaSub: { color: Colors.muted, fontSize: 11.5, marginTop: 3, lineHeight: 16 },
+  ownerCtaArrow: { color: Colors.goldBright, fontSize: 22, fontWeight: "800" as const, marginLeft: 6 },
 
   heroCard: { borderRadius: 24, padding: 20, gap: 9, borderWidth: 1, borderColor: Colors.lineStrong },
   heroBadge: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", backgroundColor: "rgba(2,2,2,0.16)", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
