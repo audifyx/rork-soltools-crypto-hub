@@ -1317,11 +1317,6 @@ function ActionMenu({
             label={muted ? "Unmute" : "Mute notifications"}
             onPress={onMute}
           />
-          <MenuItem
-            icon={<Video color={IOS_TEXT} size={16} strokeWidth={2.4} />}
-            label="Schedule a Space"
-            onPress={onClose}
-          />
           <View style={styles.menuSep} />
           <MenuItem
             icon={<UserX color={IOS_RED} size={16} strokeWidth={2.4} />}
