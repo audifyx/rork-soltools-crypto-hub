@@ -867,9 +867,47 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           max_rows: 100,
         });
         if (error) throw error;
-        return ((data ?? []) as PostRowRecord[]).map((r) =>
-          communityPostFromRow(r, (r.community_id as string | null) ?? ""),
+        const rows = (data ?? []) as PostRowRecord[];
+        // Enrich author avatars/usernames (the RPC doesn't return avatar_url today).
+        const authorIds = Array.from(
+          new Set(
+            rows
+              .map((r) => r.user_id)
+              .filter((v): v is string => typeof v === "string" && v.length > 0),
+          ),
         );
+        const profileById = new Map<string, { avatar_url: string | null; username: string | null; display_name: string | null; avatar_color: string | null }>();
+        if (authorIds.length > 0) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id,user_id,username,display_name,avatar_color,avatar_url")
+            .or(`id.in.(${authorIds.join(",")}),user_id.in.(${authorIds.join(",")})`);
+          (profs ?? []).forEach((p) => {
+            const entry = {
+              avatar_url: normalizeMediaUrl(p.avatar_url) ?? null,
+              username: (p.username as string | null) ?? null,
+              display_name: (p.display_name as string | null) ?? null,
+              avatar_color: (p.avatar_color as string | null) ?? null,
+            };
+            if (p.id) profileById.set(String(p.id), entry);
+            if (p.user_id) profileById.set(String(p.user_id), entry);
+          });
+        }
+        return rows.map((r) => {
+          const uid = (r.user_id as string | null) ?? "";
+          const prof = uid ? profileById.get(uid) : undefined;
+          const post = communityPostFromRow(
+            {
+              ...r,
+              avatar_url: r.avatar_url ?? prof?.avatar_url ?? null,
+              username: r.username ?? prof?.username ?? null,
+              display_name: r.display_name ?? prof?.display_name ?? null,
+              avatar_color: r.avatar_color ?? prof?.avatar_color ?? null,
+            },
+            (r.community_id as string | null) ?? "",
+          );
+          return post;
+        });
       } catch (e) {
         console.log("[social] listPostReplies RPC failed, trying direct", e);
         try {
