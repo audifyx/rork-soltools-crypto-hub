@@ -14,7 +14,6 @@ import { registerKOLSync } from "@/lib/kol-background";
 import { attachNotificationTapHandler, ensureNotificationPermission } from "@/lib/push-notifications";
 import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
-import BiometricGate from "@/components/ui/BiometricGate";
 import ModerationGate from "@/components/ui/ModerationGate";
 import { AuthProvider } from "@/providers/auth-provider";
 import { ModerationProvider } from "@/providers/moderation-provider";
@@ -266,12 +265,10 @@ export default function RootLayout() {
                       <LobbiesProvider>
                         <ReportsProvider>
                           <GestureHandlerRootView style={styles.gestureRoot}>
-                            <BiometricGate>
-                              <ModerationGate>
-                                <RootLayoutNav />
-                                <ReportSheet />
-                              </ModerationGate>
-                            </BiometricGate>
+                            <ModerationGate>
+                              <RootLayoutNav />
+                              <ReportSheet />
+                            </ModerationGate>
                           </GestureHandlerRootView>
                         </ReportsProvider>
                       </LobbiesProvider>
