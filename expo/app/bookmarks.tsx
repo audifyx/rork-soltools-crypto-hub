@@ -9,7 +9,9 @@ import {
   Bookmark,
   BookmarkMinus,
   Heart,
+  HeartOff,
   MessageCircle,
+  Quote,
   Repeat2,
   Search,
   Sparkles,
@@ -30,17 +32,32 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
-import { listMyBookmarkedPosts, removeBookmark, type BookmarkedPost } from "@/lib/api/bookmarks";
+import {
+  listMyBookmarkedPosts,
+  listMyLikedPosts,
+  listMyQuotedPosts,
+  removeBookmark,
+  removeLike,
+  removeQuote,
+  type BookmarkedPost,
+} from "@/lib/api/bookmarks";
 import { hapticSelect } from "@/lib/haptics";
 import { navigateBack } from "@/lib/navigation";
 import { useAuth } from "@/providers/auth-provider";
 
+type Tab = "bookmarks" | "quotes" | "likes";
 type Filter = "all" | "media" | "tickers";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "media", label: "Media" },
   { id: "tickers", label: "Tickers" },
+];
+
+const TABS: { id: Tab; label: string; Icon: typeof Bookmark }[] = [
+  { id: "bookmarks", label: "Bookmarks", Icon: Bookmark },
+  { id: "quotes", label: "Quotes", Icon: Quote },
+  { id: "likes", label: "Likes", Icon: Heart },
 ];
 
 function timeAgo(iso: string): string {
@@ -69,15 +86,39 @@ export default function BookmarksScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const { isAuthenticated } = useAuth();
+  const [tab, setTab] = useState<Tab>("bookmarks");
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState<string>("");
 
-  const query = useQuery<BookmarkedPost[]>({
+  const bookmarksQuery = useQuery<BookmarkedPost[]>({
     queryKey: ["bookmarks", "mine"],
     queryFn: () => listMyBookmarkedPosts(),
     enabled: isAuthenticated,
     staleTime: 15_000,
   });
+
+  const quotesQuery = useQuery<BookmarkedPost[]>({
+    queryKey: ["bookmarks", "quotes"],
+    queryFn: () => listMyQuotedPosts(),
+    enabled: isAuthenticated && tab === "quotes",
+    staleTime: 15_000,
+  });
+
+  const likesQuery = useQuery<BookmarkedPost[]>({
+    queryKey: ["bookmarks", "likes"],
+    queryFn: () => listMyLikedPosts(),
+    enabled: isAuthenticated && tab === "likes",
+    staleTime: 15_000,
+  });
+
+  const query =
+    tab === "bookmarks" ? bookmarksQuery : tab === "quotes" ? quotesQuery : likesQuery;
+  const queryKey: [string, string] =
+    tab === "bookmarks"
+      ? ["bookmarks", "mine"]
+      : tab === "quotes"
+      ? ["bookmarks", "quotes"]
+      : ["bookmarks", "likes"];
 
   const items = query.data ?? [];
 
@@ -98,18 +139,20 @@ export default function BookmarksScreen() {
 
   const remove = useMutation({
     mutationFn: async (postId: string) => {
-      await removeBookmark(postId);
+      if (tab === "bookmarks") await removeBookmark(postId);
+      else if (tab === "likes") await removeLike(postId);
+      else await removeQuote(postId);
     },
     onMutate: async (postId: string) => {
-      await qc.cancelQueries({ queryKey: ["bookmarks", "mine"] });
-      const prev = qc.getQueryData<BookmarkedPost[]>(["bookmarks", "mine"]);
-      qc.setQueryData<BookmarkedPost[]>(["bookmarks", "mine"], (curr) =>
+      await qc.cancelQueries({ queryKey });
+      const prev = qc.getQueryData<BookmarkedPost[]>(queryKey);
+      qc.setQueryData<BookmarkedPost[]>(queryKey, (curr) =>
         (curr ?? []).filter((p) => p.id !== postId),
       );
       return { prev };
     },
     onError: (e: unknown, _postId, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["bookmarks", "mine"], ctx.prev);
+      if (ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
       Alert.alert("Couldn't remove", e instanceof Error ? e.message : "Try again.");
     },
     onSuccess: () => {
@@ -123,11 +166,44 @@ export default function BookmarksScreen() {
   };
 
   const askRemove = (p: BookmarkedPost) => {
-    Alert.alert("Remove bookmark?", "You can bookmark it again later.", [
+    const title =
+      tab === "bookmarks"
+        ? "Remove bookmark?"
+        : tab === "likes"
+        ? "Remove like?"
+        : "Remove quote?";
+    const body =
+      tab === "bookmarks"
+        ? "You can bookmark it again later."
+        : tab === "likes"
+        ? "You can like it again later."
+        : "This will undo your quoted repost.";
+    Alert.alert(title, body, [
       { text: "Cancel", style: "cancel" },
       { text: "Remove", style: "destructive", onPress: () => remove.mutate(p.id) },
     ]);
   };
+
+  const eyebrowText =
+    tab === "bookmarks" ? "SAVED FOR LATER" : tab === "quotes" ? "YOUR REMIXES" : "YOUR HEARTS";
+  const titleText = tab === "bookmarks" ? "Bookmarks" : tab === "quotes" ? "Quotes" : "Likes";
+  const HeaderIcon = tab === "bookmarks" ? Bookmark : tab === "quotes" ? Quote : Heart;
+  const emptyTitle =
+    search.trim().length > 0 || filter !== "all"
+      ? "No matches"
+      : tab === "bookmarks"
+      ? "No bookmarks yet"
+      : tab === "quotes"
+      ? "No quoted posts yet"
+      : "No liked posts yet";
+  const emptyBody =
+    search.trim().length > 0 || filter !== "all"
+      ? "Try clearing the filter or search."
+      : tab === "bookmarks"
+      ? "Tap the bookmark icon on any post to save it here."
+      : tab === "quotes"
+      ? "Add your take when you repost something."
+      : "Double-tap or hit the heart on any post.";
 
   return (
     <View style={styles.root}>
@@ -147,14 +223,40 @@ export default function BookmarksScreen() {
           <View style={{ flex: 1 }}>
             <View style={styles.eyebrowRow}>
               <Sparkles color={Colors.goldBright} size={12} strokeWidth={2.6} />
-              <Text style={styles.eyebrow}>SAVED FOR LATER</Text>
+              <Text style={styles.eyebrow}>{eyebrowText}</Text>
             </View>
-            <Text style={styles.title}>Bookmarks</Text>
+            <Text style={styles.title}>{titleText}</Text>
           </View>
           <View style={styles.countPill}>
-            <Bookmark color={Colors.goldBright} size={12} strokeWidth={2.8} />
+            <HeaderIcon color={Colors.goldBright} size={12} strokeWidth={2.8} />
             <Text style={styles.countText}>{items.length}</Text>
           </View>
+        </View>
+
+        <View style={styles.tabRow}>
+          {TABS.map((t) => {
+            const active = tab === t.id;
+            const TabIcon = t.Icon;
+            return (
+              <Pressable
+                key={t.id}
+                onPress={() => {
+                  hapticSelect();
+                  setTab(t.id);
+                }}
+                style={[styles.tabChip, active && styles.tabChipActive]}
+                testID={`bookmark-tab-${t.id}`}
+              >
+                <TabIcon
+                  color={active ? Colors.goldBright : Colors.muted}
+                  size={14}
+                  strokeWidth={2.6}
+                  fill={active && t.id === "likes" ? Colors.goldBright : "transparent"}
+                />
+                <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         <View style={styles.searchWrap}>
@@ -199,10 +301,12 @@ export default function BookmarksScreen() {
         {!isAuthenticated ? (
           <View style={styles.emptyWrap}>
             <View style={styles.emptyIcon}>
-              <Bookmark color={Colors.goldBright} size={28} strokeWidth={2.2} />
+              <HeaderIcon color={Colors.goldBright} size={28} strokeWidth={2.2} />
             </View>
-            <Text style={styles.emptyTitle}>Sign in to view bookmarks</Text>
-            <Text style={styles.emptyBody}>Save posts you want to read again later.</Text>
+            <Text style={styles.emptyTitle}>Sign in to view your library</Text>
+            <Text style={styles.emptyBody}>
+              Save, quote and like posts to keep them at your fingertips.
+            </Text>
           </View>
         ) : (
           <FlatList
@@ -221,29 +325,22 @@ export default function BookmarksScreen() {
             ListEmptyComponent={
               query.isLoading ? (
                 <View style={styles.emptyWrap}>
-                  <Text style={styles.emptyBody}>Loading bookmarks…</Text>
+                  <Text style={styles.emptyBody}>Loading…</Text>
                 </View>
               ) : (
                 <View style={styles.emptyWrap}>
                   <View style={styles.emptyIcon}>
-                    <Bookmark color={Colors.goldBright} size={28} strokeWidth={2.2} />
+                    <HeaderIcon color={Colors.goldBright} size={28} strokeWidth={2.2} />
                   </View>
-                  <Text style={styles.emptyTitle}>
-                    {search.trim().length > 0 || filter !== "all"
-                      ? "No matches"
-                      : "No bookmarks yet"}
-                  </Text>
-                  <Text style={styles.emptyBody}>
-                    {search.trim().length > 0 || filter !== "all"
-                      ? "Try clearing the filter or search."
-                      : "Tap the bookmark icon on any post to save it here."}
-                  </Text>
+                  <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+                  <Text style={styles.emptyBody}>{emptyBody}</Text>
                 </View>
               )
             }
             renderItem={({ item }) => (
               <BookmarkCard
                 post={item}
+                tab={tab}
                 onPress={() => openPost(item)}
                 onRemove={() => askRemove(item)}
               />
@@ -257,13 +354,17 @@ export default function BookmarksScreen() {
 
 interface BookmarkCardProps {
   post: BookmarkedPost;
+  tab: Tab;
   onPress: () => void;
   onRemove: () => void;
 }
 
-function BookmarkCard({ post, onPress, onRemove }: BookmarkCardProps) {
+function BookmarkCard({ post, tab, onPress, onRemove }: BookmarkCardProps) {
   const initial = (post.authorDisplayName ?? post.authorUsername ?? "?").slice(0, 1).toUpperCase();
   const handle = post.authorUsername ? `@${post.authorUsername}` : "";
+  const savedLabel =
+    tab === "bookmarks" ? "Saved" : tab === "quotes" ? "Quoted" : "Liked";
+  const RemoveIcon = tab === "bookmarks" ? BookmarkMinus : tab === "likes" ? HeartOff : X;
 
   return (
     <Pressable onPress={onPress} style={styles.card} testID={`bookmark-${post.id}`}>
@@ -291,7 +392,7 @@ function BookmarkCard({ post, onPress, onRemove }: BookmarkCardProps) {
             <Text style={styles.dot}>·</Text>
             <Text style={styles.timeText}>{timeAgo(post.createdAt)}</Text>
           </View>
-          <Text style={styles.savedAt}>Saved {timeAgo(post.bookmarkedAt)} ago</Text>
+          <Text style={styles.savedAt}>{savedLabel} {timeAgo(post.bookmarkedAt)} ago</Text>
         </View>
         <Pressable
           onPress={onRemove}
@@ -299,9 +400,18 @@ function BookmarkCard({ post, onPress, onRemove }: BookmarkCardProps) {
           style={styles.removeBtn}
           testID={`bookmark-remove-${post.id}`}
         >
-          <BookmarkMinus color={Colors.goldBright} size={16} strokeWidth={2.5} />
+          <RemoveIcon color={Colors.goldBright} size={16} strokeWidth={2.5} />
         </Pressable>
       </View>
+
+      {tab === "quotes" && post.quoteText ? (
+        <View style={styles.quoteWrap}>
+          <Quote color={Colors.goldBright} size={12} strokeWidth={2.6} />
+          <Text style={styles.quoteText} numberOfLines={4}>
+            {post.quoteText}
+          </Text>
+        </View>
+      ) : null}
 
       {post.content.length > 0 ? (
         <Text style={styles.body} numberOfLines={6}>
@@ -408,6 +518,41 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     paddingVertical: 0,
   },
+
+  tabRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+  },
+  tabChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  tabChipActive: {
+    backgroundColor: "rgba(244,198,91,0.14)",
+    borderColor: "rgba(244,198,91,0.4)",
+  },
+  tabText: { color: Colors.muted, fontSize: 13, fontWeight: "800" },
+  tabTextActive: { color: Colors.goldBright },
+  quoteWrap: {
+    flexDirection: "row",
+    gap: 8,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(244,198,91,0.08)",
+    borderLeftWidth: 2,
+    borderLeftColor: "rgba(244,198,91,0.6)",
+  },
+  quoteText: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: "700", lineHeight: 18 },
 
   filterRow: {
     flexDirection: "row",
