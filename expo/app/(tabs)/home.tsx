@@ -1969,33 +1969,58 @@ function CommentRow({
     return `${Math.floor(h / 24)}d`;
   }, [reply.createdAt]);
   const initial = (reply.authorName || reply.authorHandle || "?").replace("@", "").slice(0, 1).toUpperCase();
+  const handleSlug = useMemo(() => {
+    const raw = reply.authorUsername ?? reply.authorHandle ?? "";
+    return raw.replace(/^@/, "").trim();
+  }, [reply.authorUsername, reply.authorHandle]);
+  const openProfile = useCallback(() => {
+    if (!handleSlug) return;
+    Haptics.selectionAsync().catch(() => {});
+    try {
+      router.push({ pathname: "/u/[handle]", params: { handle: handleSlug } });
+    } catch (e) {
+      console.log("[home] open profile failed", e);
+    }
+  }, [handleSlug]);
   return (
     <Pressable
       style={styles.commentRow}
       onLongPress={canDelete ? confirmDelete : undefined}
       testID={`comment-${reply.id}`}
     >
-      <View style={[styles.commentAvatar, { backgroundColor: reply.authorColor || Colors.mint }]}>
+      <Pressable
+        onPress={openProfile}
+        hitSlop={6}
+        disabled={!handleSlug}
+        style={[styles.commentAvatar, { backgroundColor: reply.authorColor || Colors.mint }]}
+        testID={`comment-avatar-${reply.id}`}
+      >
         {reply.authorAvatarUrl ? (
           <ExpoImage
             source={{ uri: reply.authorAvatarUrl }}
             style={styles.commentAvatarImg}
             contentFit="cover"
             transition={120}
+            cachePolicy="memory-disk"
+            recyclingKey={reply.authorAvatarUrl}
           />
         ) : (
           <Text style={styles.commentAvatarText}>{initial}</Text>
         )}
-      </View>
+      </Pressable>
       <View style={styles.commentBody}>
         <View style={styles.commentHeaderRow}>
-          <Text style={styles.commentName} numberOfLines={1}>
-            {reply.authorName || "Trader"}
-          </Text>
-          {reply.authorHandle ? (
-            <Text style={styles.commentHandle} numberOfLines={1}>
-              {reply.authorHandle}
+          <Pressable onPress={openProfile} disabled={!handleSlug} hitSlop={4}>
+            <Text style={styles.commentName} numberOfLines={1}>
+              {reply.authorName || "Trader"}
             </Text>
+          </Pressable>
+          {reply.authorHandle ? (
+            <Pressable onPress={openProfile} disabled={!handleSlug} hitSlop={4}>
+              <Text style={styles.commentHandle} numberOfLines={1}>
+                {reply.authorHandle}
+              </Text>
+            </Pressable>
           ) : null}
           <Text style={styles.commentDot}>·</Text>
           <Text style={styles.commentTime}>{time}</Text>
