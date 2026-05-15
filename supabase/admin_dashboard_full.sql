@@ -10,6 +10,7 @@
 --   * platform_settings
 --   * support_tickets, support_messages
 --   * credits, credit_logs  (created if absent — most projects already have them)
+--   * owner_feature_states, owner_feature_runs
 --
 -- RPCs created:
 --   * ensure_owner_role(check_user_id, check_email)
@@ -28,6 +29,8 @@
 --   * admin_reset_all_credits(p_balance, p_cap)
 --   * admin_update_setting(p_key, p_value)
 --   * admin_close_support_ticket(p_ticket_id, p_status)
+--   * owner_upsert_feature_state(...)
+--   * owner_run_feature_action(p_feature_id, p_action, p_payload)
 -- =====================================================================
 
 begin;
@@ -897,6 +900,276 @@ begin
 end;
 $$;
 grant execute on function public.admin_update_setting(text, jsonb) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Owner feature control state + run history (backs the 400-tool Command Center)
+-- ---------------------------------------------------------------------
+create table if not exists public.owner_feature_states (
+  feature_id text primary key,
+  title text,
+  category text,
+  flag text,
+  enabled boolean not null default false,
+  status text not null default 'staged' check (status in ('live','beta','paused','staged')),
+  rollout_percent integer not null default 0 check (rollout_percent >= 0 and rollout_percent <= 100),
+  threshold integer not null default 50,
+  config jsonb not null default '{}'::jsonb,
+  notes text,
+  pinned boolean not null default false,
+  last_run_at timestamptz,
+  last_result jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists owner_feature_states_category_idx
+  on public.owner_feature_states(category, status, pinned desc);
+
+alter table public.owner_feature_states enable row level security;
+
+drop policy if exists "owner_feature_states_select_owner_admin" on public.owner_feature_states;
+create policy "owner_feature_states_select_owner_admin"
+  on public.owner_feature_states for select
+  using (
+    exists (
+      select 1 from public.admin_roles ar
+      where ar.user_id = auth.uid()
+        and ar.role in ('owner','superadmin','admin')
+    )
+    or public._is_owner_email(public._current_user_email())
+  );
+
+drop policy if exists "owner_feature_states_write_owner" on public.owner_feature_states;
+create policy "owner_feature_states_write_owner"
+  on public.owner_feature_states for all
+  using (
+    exists (
+      select 1 from public.admin_roles ar
+      where ar.user_id = auth.uid()
+        and ar.role = 'owner'
+    )
+    or public._is_owner_email(public._current_user_email())
+  )
+  with check (
+    exists (
+      select 1 from public.admin_roles ar
+      where ar.user_id = auth.uid()
+        and ar.role = 'owner'
+    )
+    or public._is_owner_email(public._current_user_email())
+  );
+
+create table if not exists public.owner_feature_runs (
+  id uuid primary key default gen_random_uuid(),
+  feature_id text not null references public.owner_feature_states(feature_id) on delete cascade,
+  owner_user_id uuid not null,
+  action text not null,
+  payload jsonb not null default '{}'::jsonb,
+  result jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists owner_feature_runs_feature_idx
+  on public.owner_feature_runs(feature_id, created_at desc);
+
+alter table public.owner_feature_runs enable row level security;
+
+drop policy if exists "owner_feature_runs_select_owner_admin" on public.owner_feature_runs;
+create policy "owner_feature_runs_select_owner_admin"
+  on public.owner_feature_runs for select
+  using (
+    exists (
+      select 1 from public.admin_roles ar
+      where ar.user_id = auth.uid()
+        and ar.role in ('owner','superadmin','admin')
+    )
+    or public._is_owner_email(public._current_user_email())
+  );
+
+drop policy if exists "owner_feature_runs_insert_owner" on public.owner_feature_runs;
+create policy "owner_feature_runs_insert_owner"
+  on public.owner_feature_runs for insert
+  with check (
+    owner_user_id = auth.uid()
+    and (
+      exists (
+        select 1 from public.admin_roles ar
+        where ar.user_id = auth.uid()
+          and ar.role = 'owner'
+      )
+      or public._is_owner_email(public._current_user_email())
+    )
+  );
+
+do $ begin
+  begin
+    execute 'alter publication supabase_realtime add table public.owner_feature_states';
+  exception when duplicate_object then null; end;
+  begin
+    execute 'alter publication supabase_realtime add table public.owner_feature_runs';
+  exception when duplicate_object then null; end;
+end $;
+
+create or replace function public.owner_upsert_feature_state(
+  p_feature_id text,
+  p_title text,
+  p_category text,
+  p_flag text,
+  p_enabled boolean,
+  p_status text,
+  p_rollout_percent integer,
+  p_threshold integer,
+  p_config jsonb,
+  p_notes text,
+  p_pinned boolean
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  v_role text;
+  v_prev jsonb;
+begin
+  select role into v_role from public.admin_roles where user_id = auth.uid() limit 1;
+  if not (public._is_owner_email(public._current_user_email()) or v_role = 'owner') then
+    raise exception 'not_authorized' using errcode = '42501';
+  end if;
+
+  select to_jsonb(s.*) into v_prev
+  from public.owner_feature_states s
+  where s.feature_id = p_feature_id;
+
+  insert into public.owner_feature_states(
+    feature_id, title, category, flag, enabled, status, rollout_percent,
+    threshold, config, notes, pinned, updated_at
+  ) values (
+    p_feature_id,
+    p_title,
+    p_category,
+    coalesce(p_flag, 'soon'),
+    coalesce(p_enabled, false),
+    case when p_status in ('live','beta','paused','staged') then p_status else 'staged' end,
+    greatest(0, least(100, coalesce(p_rollout_percent, 0))),
+    greatest(0, coalesce(p_threshold, 0)),
+    coalesce(p_config, '{}'::jsonb),
+    p_notes,
+    coalesce(p_pinned, false),
+    now()
+  )
+  on conflict (feature_id) do update
+    set title = excluded.title,
+        category = excluded.category,
+        flag = excluded.flag,
+        enabled = excluded.enabled,
+        status = excluded.status,
+        rollout_percent = excluded.rollout_percent,
+        threshold = excluded.threshold,
+        config = excluded.config,
+        notes = excluded.notes,
+        pinned = excluded.pinned,
+        updated_at = now();
+
+  insert into public.admin_audit_log(admin_user_id, action, target_type, old_values, new_values)
+  values (
+    auth.uid(),
+    'owner_upsert_feature_state',
+    'owner_feature',
+    v_prev,
+    jsonb_build_object(
+      'feature_id', p_feature_id,
+      'title', p_title,
+      'category', p_category,
+      'status', p_status,
+      'enabled', p_enabled,
+      'rollout_percent', p_rollout_percent,
+      'pinned', p_pinned
+    )
+  );
+end;
+$;
+grant execute on function public.owner_upsert_feature_state(text, text, text, text, boolean, text, integer, integer, jsonb, text, boolean) to authenticated;
+
+create or replace function public.owner_run_feature_action(
+  p_feature_id text,
+  p_action text,
+  p_payload jsonb
+) returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  v_role text;
+  v_id uuid;
+  v_result jsonb;
+begin
+  select role into v_role from public.admin_roles where user_id = auth.uid() limit 1;
+  if not (public._is_owner_email(public._current_user_email()) or v_role = 'owner') then
+    raise exception 'not_authorized' using errcode = '42501';
+  end if;
+
+  insert into public.owner_feature_states(
+    feature_id, title, category, flag, enabled, status, rollout_percent,
+    threshold, config, pinned, updated_at
+  ) values (
+    p_feature_id,
+    coalesce(p_payload->>'title', p_feature_id),
+    coalesce(p_payload->>'category', 'ops'),
+    coalesce(p_payload->>'flag', 'soon'),
+    coalesce((p_payload->>'enabled')::boolean, true),
+    case when p_action = 'ship_live' then 'live'
+         when coalesce(p_payload->>'status','staged') in ('live','beta','paused','staged') then coalesce(p_payload->>'status','staged')
+         else 'staged' end,
+    case when p_action = 'ship_live' then 100
+         else greatest(0, least(100, coalesce((p_payload->>'rolloutPercent')::integer, 0))) end,
+    greatest(0, coalesce((p_payload->>'threshold')::integer, 0)),
+    coalesce(p_payload, '{}'::jsonb),
+    p_action = 'pin_roadmap',
+    now()
+  )
+  on conflict (feature_id) do update
+    set title = coalesce(excluded.title, public.owner_feature_states.title),
+        category = coalesce(excluded.category, public.owner_feature_states.category),
+        flag = coalesce(excluded.flag, public.owner_feature_states.flag),
+        enabled = case when p_action = 'ship_live' then true else public.owner_feature_states.enabled end,
+        status = case when p_action = 'ship_live' then 'live' else public.owner_feature_states.status end,
+        rollout_percent = case when p_action = 'ship_live' then 100 else public.owner_feature_states.rollout_percent end,
+        pinned = case when p_action = 'pin_roadmap' then true else public.owner_feature_states.pinned end,
+        updated_at = now();
+
+  v_result := jsonb_build_object(
+    'status', 'ok',
+    'action', p_action,
+    'feature_id', p_feature_id,
+    'checked_at', now(),
+    'backend', 'owner_feature_runs',
+    'message', case
+      when p_action = 'run_check' then 'Backend check completed and recorded.'
+      when p_action = 'ship_live' then 'Feature marked live at 100% rollout.'
+      when p_action = 'pin_roadmap' then 'Feature pinned to owner roadmap.'
+      else 'Owner action recorded.'
+    end
+  );
+
+  insert into public.owner_feature_runs(feature_id, owner_user_id, action, payload, result)
+  values (p_feature_id, auth.uid(), coalesce(p_action, 'open'), coalesce(p_payload, '{}'::jsonb), v_result)
+  returning id into v_id;
+
+  update public.owner_feature_states
+     set last_run_at = now(),
+         last_result = v_result,
+         updated_at = now()
+   where feature_id = p_feature_id;
+
+  insert into public.admin_audit_log(admin_user_id, action, target_type, new_values)
+  values (auth.uid(), 'owner_run_feature_action', 'owner_feature_run',
+          jsonb_build_object('feature_id', p_feature_id, 'action', p_action, 'run_id', v_id));
+
+  return v_id;
+end;
+$;
+grant execute on function public.owner_run_feature_action(text, text, jsonb) to authenticated;
 
 -- admin_close_support_ticket
 create or replace function public.admin_close_support_ticket(

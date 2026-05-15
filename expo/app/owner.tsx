@@ -66,7 +66,7 @@ import {
   Wand2,
   Zap,
 } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -75,12 +75,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
@@ -132,6 +133,60 @@ interface Feature {
   category: CategoryKey;
   Icon: IconComponent;
   flag?: "live" | "beta" | "soon";
+}
+
+type OwnerFeatureStatus = "live" | "beta" | "paused" | "staged";
+type OwnerFeatureAction = "open" | "save_config" | "run_check" | "pin_roadmap" | "ship_live";
+
+interface OwnerFeatureState {
+  feature_id: string;
+  title: string | null;
+  category: string | null;
+  flag: string | null;
+  enabled: boolean;
+  status: OwnerFeatureStatus | string;
+  rollout_percent: number | null;
+  threshold: number | null;
+  config: Record<string, unknown> | null;
+  notes: string | null;
+  pinned: boolean;
+  last_run_at: string | null;
+  last_result: Record<string, unknown> | null;
+  updated_at: string | null;
+}
+
+interface OwnerFeatureRun {
+  id: string;
+  feature_id: string;
+  action: OwnerFeatureAction | string;
+  result: Record<string, unknown> | null;
+  created_at: string;
+}
+
+interface FeatureControlDraft {
+  enabled: boolean;
+  status: OwnerFeatureStatus;
+  rolloutPercent: string;
+  threshold: string;
+  notes: string;
+  configText: string;
+  pinned: boolean;
+}
+
+interface FeatureDataSource {
+  label: string;
+  table: string;
+  detail: string;
+}
+
+interface FeatureSpec {
+  headline: string;
+  primaryMetric: string;
+  guardrail: string;
+  actionCopy: string;
+  dataSources: FeatureDataSource[];
+  controls: string[];
+  automations: string[];
 }
 
 /**
@@ -614,14 +669,165 @@ interface GeoRow {
   count: number;
 }
 
-function flagPill(flag: Feature["flag"]) {
+function flagPill(flag: Feature["flag"] | OwnerFeatureStatus) {
   if (flag === "live") return { label: "LIVE", color: "#34D399", bg: "rgba(52,211,153,0.14)" };
   if (flag === "beta") return { label: "BETA", color: "#62D0FF", bg: "rgba(98,208,255,0.14)" };
+  if (flag === "paused") return { label: "PAUSED", color: "#FF6B6B", bg: "rgba(255,107,107,0.14)" };
+  if (flag === "staged") return { label: "STAGED", color: "#FBBF24", bg: "rgba(251,191,36,0.14)" };
   return { label: "SOON", color: "#FBBF24", bg: "rgba(251,191,36,0.14)" };
+}
+
+function defaultStatus(feature: Feature): OwnerFeatureStatus {
+  if (feature.flag === "live") return "live";
+  if (feature.flag === "beta") return "beta";
+  return "staged";
+}
+
+function categoryMeta(category: CategoryKey): Category {
+  return CATEGORIES.find((c) => c.key === category) ?? CATEGORIES[0];
+}
+
+function getFeatureSpec(feature: Feature): FeatureSpec {
+  const title = feature.title.toLowerCase();
+  const category = feature.category;
+  const baseSources: FeatureDataSource[] = [
+    { label: "Feature state", table: "owner_feature_states", detail: "Rollout, config, thresholds, notes, and status." },
+    { label: "Action history", table: "owner_feature_runs", detail: "Every owner action and check result is stored here." },
+    { label: "Audit trail", table: "admin_audit_log", detail: "Mirrors owner actions for security review." },
+  ];
+  const categorySources: Record<CategoryKey, FeatureDataSource[]> = {
+    analytics: [
+      { label: "Profiles", table: "profiles", detail: "Active users, cohorts, onboarding and wallet coverage." },
+      { label: "Feed + DMs", table: "posts / dm_messages", detail: "Engagement volume and funnel steps." },
+    ],
+    demographics: [
+      { label: "Profiles", table: "profiles", detail: "Location, creator mix, wallet status, account traits." },
+      { label: "Communities", table: "community_members", detail: "Membership and host power-user segments." },
+    ],
+    moderation: [
+      { label: "Reports", table: "reports", detail: "Reported posts, users, DMs and moderation outcomes." },
+      { label: "Profiles + content", table: "profiles / posts", detail: "Ban, limit, keyword and spam enforcement." },
+    ],
+    content: [
+      { label: "Content graph", table: "posts / story_comments / reels", detail: "Creation, media, replies, saves and tags." },
+      { label: "Discovery", table: "hashtags / link_unfurls", detail: "Trend, link, mention and quality signals." },
+    ],
+    growth: [
+      { label: "Growth loops", table: "referrals / user_streaks", detail: "Invite, streak, recap and achievement performance." },
+      { label: "Notifications", table: "notifications", detail: "Campaign sends, cohorts and push experiments." },
+    ],
+    revenue: [
+      { label: "Credits", table: "credits / credit_logs", detail: "Spend, grants, caps, refunds and internal ledger events." },
+      { label: "Settings", table: "platform_settings", detail: "Pricing, fee, cap and budget controls." },
+    ],
+    security: [
+      { label: "Roles", table: "admin_roles", detail: "Owner, admin, team and support permission surface." },
+      { label: "Audit", table: "admin_audit_log", detail: "Sensitive actions, policy checks and data access jobs." },
+    ],
+    ops: [
+      { label: "Platform settings", table: "platform_settings", detail: "Maintenance, kill switches, version and quota controls." },
+      { label: "Backend runs", table: "owner_feature_runs", detail: "Health checks and incident runbook executions." },
+    ],
+    comms: [
+      { label: "Notifications", table: "notifications", detail: "Global, cohort, scheduled and rich push sends." },
+      { label: "Settings", table: "platform_settings", detail: "Banners, quiet hours, templates and archive pointers." },
+    ],
+    experiments: [
+      { label: "Experiment config", table: "owner_feature_states", detail: "Variants, rollout percent, holdouts and winner state." },
+      { label: "Runs", table: "owner_feature_runs", detail: "Significance checks and ship-winner history." },
+    ],
+    ai: [
+      { label: "AI outputs", table: "ai_feed_summaries / dm_smart_reply_cache", detail: "Quality, budget, model routing and prompt evaluation." },
+      { label: "Settings", table: "platform_settings", detail: "Model, threshold, budget and automation toggles." },
+    ],
+  };
+
+  const controls = [
+    "Enable/disable feature globally",
+    "Rollout percentage gate",
+    "Risk or quality threshold",
+    "Owner notes and JSON config",
+    "Run a live backend check",
+  ];
+  const automations = [
+    `When ${feature.title} is enabled, write a state snapshot to owner_feature_states.`,
+    `When an owner runs or ships the tool, append an immutable owner_feature_runs entry.`,
+    "Mirror sensitive changes into admin_audit_log for accountability.",
+  ];
+
+  return {
+    headline: `${feature.title} command surface`,
+    primaryMetric: title.includes("rate") || title.includes("ratio") || title.includes("conversion") ? "Conversion / ratio" : title.includes("budget") || title.includes("cost") || title.includes("revenue") || title.includes("mrr") ? "Spend / revenue" : title.includes("queue") || title.includes("inbox") ? "Queue depth" : title.includes("health") || title.includes("status") ? "Health score" : "Live count",
+    guardrail: feature.flag === "soon" ? "Staged controls are owner-configurable but not user-facing until shipped live." : "Owner-gated, audited, and reversible through the status control.",
+    actionCopy: feature.flag === "soon" ? "Pin roadmap or ship live when ready" : "Open, tune, check, and ship from this panel",
+    dataSources: [...categorySources[category], ...baseSources],
+    controls,
+    automations,
+  };
+}
+
+function defaultFeatureConfig(feature: Feature): Record<string, unknown> {
+  return {
+    mode: feature.flag === "soon" ? "roadmap" : "active",
+    ownerOnly: true,
+    category: feature.category,
+    alertThreshold: feature.category === "security" || feature.category === "moderation" ? 70 : 50,
+    dataRefreshMinutes: feature.flag === "live" ? 5 : 30,
+  };
+}
+
+function jsonString(value: unknown): string {
+  try {
+    return JSON.stringify(value ?? {}, null, 2);
+  } catch {
+    return "{}";
+  }
+}
+
+function safeJsonObject(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+    return { value: parsed };
+  } catch {
+    return { raw: value };
+  }
+}
+
+function draftFromState(feature: Feature, state?: OwnerFeatureState): FeatureControlDraft {
+  const config = state?.config ?? defaultFeatureConfig(feature);
+  return {
+    enabled: state?.enabled ?? feature.flag !== "soon",
+    status: (state?.status as OwnerFeatureStatus | undefined) ?? defaultStatus(feature),
+    rolloutPercent: String(state?.rollout_percent ?? (feature.flag === "live" ? 100 : feature.flag === "beta" ? 25 : 0)),
+    threshold: String(state?.threshold ?? Number(config.alertThreshold ?? 50)),
+    notes: state?.notes ?? "",
+    configText: jsonString(config),
+    pinned: state?.pinned ?? false,
+  };
+}
+
+function clampPercent(value: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function numericThreshold(value: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.round(n));
+}
+
+function stateMapFromRows(rows?: OwnerFeatureState[]): Map<string, OwnerFeatureState> {
+  const map = new Map<string, OwnerFeatureState>();
+  (rows ?? []).forEach((row) => map.set(row.feature_id, row));
+  return map;
 }
 
 export default function OwnerCommandCenter() {
   const router = useRouter();
+  const qc = useQueryClient();
   const { isAuthenticated } = useAuth();
   const { isOwner, isLoading } = useAdmin();
   const [activeCategory, setActiveCategory] = useState<CategoryKey | "all">("all");
@@ -660,6 +866,23 @@ export default function OwnerCommandCenter() {
         posts24h: postsRes.count ?? 0,
         dm24h: dmRes.count ?? 0,
       };
+    },
+  });
+
+  const featureStatesQuery = useQuery<OwnerFeatureState[]>({
+    queryKey: ["owner", "feature-states"],
+    enabled: isOwner,
+    staleTime: 20_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("owner_feature_states")
+        .select("feature_id,title,category,flag,enabled,status,rollout_percent,threshold,config,notes,pinned,last_run_at,last_result,updated_at")
+        .order("updated_at", { ascending: false });
+      if (error) {
+        console.log("[owner] feature states unavailable", error.message);
+        return [];
+      }
+      return (data ?? []) as OwnerFeatureState[];
     },
   });
 
@@ -705,6 +928,10 @@ export default function OwnerCommandCenter() {
     FEATURES.forEach((f) => map.set(f.category, (map.get(f.category) ?? 0) + 1));
     return map;
   }, []);
+
+  const featureStateMap = useMemo(() => stateMapFromRows(featureStatesQuery.data), [featureStatesQuery.data]);
+  const configuredCount = featureStatesQuery.data?.length ?? 0;
+  const liveStateCount = (featureStatesQuery.data ?? []).filter((row) => row.enabled && row.status === "live").length;
 
   const openFeature = useCallback((f: Feature) => {
     setSelected(f);
@@ -765,7 +992,11 @@ export default function OwnerCommandCenter() {
             <Text style={styles.headerSub}>400 owner-only controls · live data</Text>
           </View>
           <Pressable
-            onPress={() => overviewQuery.refetch()}
+            onPress={() => {
+              overviewQuery.refetch();
+              featureStatesQuery.refetch();
+              qc.invalidateQueries({ queryKey: ["owner"] });
+            }}
             style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
             testID="owner-refresh"
           >
@@ -814,6 +1045,8 @@ export default function OwnerCommandCenter() {
                 <MetricCard label="Posts 24h" value={fmtNum(o?.posts24h ?? null)} Icon={Layers} tint="#F472B6" />
                 <MetricCard label="DMs 24h" value={fmtNum(o?.dm24h ?? null)} Icon={MessageSquare} tint="#FDE68A" />
                 <MetricCard label="Banned" value={fmtNum(o?.banned ?? null)} Icon={ShieldX} tint="#FF6B6B" />
+                <MetricCard label="Configured" value={fmtNum(configuredCount)} Icon={SettingsIcon} tint="#C4B5FD" />
+                <MetricCard label="Live controls" value={fmtNum(liveStateCount)} Icon={CheckCircle2} tint="#34D399" />
               </View>
             </View>
 
@@ -888,7 +1121,7 @@ export default function OwnerCommandCenter() {
           </View>
         }
         renderItem={({ item }) => (
-          <FeatureTile feature={item} onPress={() => openFeature(item)} />
+          <FeatureTile feature={item} state={featureStateMap.get(item.id)} onPress={() => openFeature(item)} />
         )}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
@@ -897,7 +1130,7 @@ export default function OwnerCommandCenter() {
         }
       />
 
-      <FeatureDetailModal feature={selected} onClose={() => setSelected(null)} />
+      <FeatureDetailModal feature={selected} state={selected ? featureStateMap.get(selected.id) : undefined} onClose={() => setSelected(null)} />
     </View>
   );
 }
@@ -929,30 +1162,41 @@ const CategoryChip = React.memo(function CategoryChip({ label, active, onPress, 
 
 interface FeatureTileProps {
   feature: Feature;
+  state?: OwnerFeatureState;
   onPress: () => void;
 }
 
-const FeatureTile = React.memo(function FeatureTile({ feature, onPress }: FeatureTileProps) {
-  const cat = CATEGORIES.find((c) => c.key === feature.category);
-  const tint = cat?.tint ?? Colors.goldBright;
-  const pill = flagPill(feature.flag ?? "soon");
+const FeatureTile = React.memo(function FeatureTile({ feature, state, onPress }: FeatureTileProps) {
+  const cat = categoryMeta(feature.category);
+  const tint = cat.tint;
+  const status = (state?.status as OwnerFeatureStatus | undefined) ?? defaultStatus(feature);
+  const pill = flagPill(status);
+  const rollout = state?.rollout_percent ?? (feature.flag === "live" ? 100 : feature.flag === "beta" ? 25 : 0);
+  const enabled = state?.enabled ?? feature.flag !== "soon";
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.tile, state?.pinned && styles.tilePinned, !enabled && styles.tileDisabled, pressed && styles.pressed]}
       testID={`owner-tile-${feature.id}`}
     >
-      <View style={[styles.tileIcon, { backgroundColor: `${tint}1A`, borderColor: `${tint}44` }]}>
-        <feature.Icon color={tint} size={18} strokeWidth={2.2} />
+      <View style={styles.tileTopRow}>
+        <View style={[styles.tileIcon, { backgroundColor: `${tint}1A`, borderColor: `${tint}44` }]}>
+          <feature.Icon color={tint} size={18} strokeWidth={2.2} />
+        </View>
+        {state?.pinned ? <Pin color={Colors.goldBright} size={13} strokeWidth={2.6} /> : null}
       </View>
       <View style={styles.tileBody}>
         <Text style={styles.tileTitle} numberOfLines={1}>{feature.title}</Text>
         <Text style={styles.tileSub} numberOfLines={2}>{feature.sub}</Text>
       </View>
+      <View style={styles.rolloutTrack}>
+        <View style={[styles.rolloutFill, { width: `${Math.max(4, Math.min(100, rollout))}%`, backgroundColor: enabled ? tint : Colors.muted2 }]} />
+      </View>
       <View style={styles.tileFoot}>
         <View style={[styles.flagPill, { backgroundColor: pill.bg, borderColor: `${pill.color}55` }]}>
-          <Text style={[styles.flagText, { color: pill.color }]}>{pill.label}</Text>
+          <Text style={[styles.flagText, { color: pill.color }]}>{enabled ? pill.label : "OFF"}</Text>
         </View>
+        <Text style={styles.tilePercent}>{rollout}%</Text>
         <ChevronRight color={Colors.muted2} size={14} />
       </View>
     </Pressable>
@@ -961,65 +1205,264 @@ const FeatureTile = React.memo(function FeatureTile({ feature, onPress }: Featur
 
 interface FeatureDetailModalProps {
   feature: Feature | null;
+  state?: OwnerFeatureState;
   onClose: () => void;
 }
 
-function FeatureDetailModal({ feature, onClose }: FeatureDetailModalProps) {
+function FeatureDetailModal({ feature, state, onClose }: FeatureDetailModalProps) {
+  const qc = useQueryClient();
   const visible = !!feature;
-  const cat = feature ? CATEGORIES.find((c) => c.key === feature.category) : null;
+  const cat = feature ? categoryMeta(feature.category) : null;
   const tint = cat?.tint ?? Colors.goldBright;
-  const pill = flagPill(feature?.flag ?? "soon");
+  const spec = feature ? getFeatureSpec(feature) : null;
+  const [draft, setDraft] = useState<FeatureControlDraft>(() => (feature ? draftFromState(feature, state) : draftFromState(FEATURES[0])));
+
+  useEffect(() => {
+    if (feature) setDraft(draftFromState(feature, state));
+  }, [feature, state]);
+
+  const runsQuery = useQuery<OwnerFeatureRun[]>({
+    queryKey: ["owner", "feature-runs", feature?.id ?? "none"],
+    enabled: visible && !!feature,
+    queryFn: async () => {
+      if (!feature) return [];
+      const { data, error } = await supabase
+        .from("owner_feature_runs")
+        .select("id,feature_id,action,result,created_at")
+        .eq("feature_id", feature.id)
+        .order("created_at", { ascending: false })
+        .limit(8);
+      if (error) {
+        console.log("[owner] feature runs unavailable", error.message);
+        return [];
+      }
+      return (data ?? []) as OwnerFeatureRun[];
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!feature) return;
+      const { error } = await supabase.rpc("owner_upsert_feature_state", {
+        p_feature_id: feature.id,
+        p_title: feature.title,
+        p_category: feature.category,
+        p_flag: feature.flag ?? "soon",
+        p_enabled: draft.enabled,
+        p_status: draft.enabled ? draft.status : "paused",
+        p_rollout_percent: clampPercent(draft.rolloutPercent),
+        p_threshold: numericThreshold(draft.threshold),
+        p_config: safeJsonObject(draft.configText),
+        p_notes: draft.notes.trim() || null,
+        p_pinned: draft.pinned,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["owner", "feature-states"] });
+      qc.invalidateQueries({ queryKey: ["owner", "feature-runs", feature?.id ?? "none"] });
+      Alert.alert("Saved", "Owner control state was saved to the backend.");
+    },
+    onError: (e: Error) => Alert.alert("Save failed", e.message),
+  });
+
+  const runMutation = useMutation({
+    mutationFn: async (action: OwnerFeatureAction) => {
+      if (!feature) return;
+      const { error } = await supabase.rpc("owner_run_feature_action", {
+        p_feature_id: feature.id,
+        p_action: action,
+        p_payload: {
+          title: feature.title,
+          category: feature.category,
+          flag: feature.flag ?? "soon",
+          enabled: draft.enabled,
+          status: action === "ship_live" ? "live" : draft.status,
+          rolloutPercent: action === "ship_live" ? 100 : clampPercent(draft.rolloutPercent),
+          threshold: numericThreshold(draft.threshold),
+        },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["owner", "feature-states"] });
+      qc.invalidateQueries({ queryKey: ["owner", "feature-runs", feature?.id ?? "none"] });
+      qc.invalidateQueries({ queryKey: ["owner", "overview"] });
+    },
+    onError: (e: Error) => Alert.alert("Action failed", e.message),
+  });
+
+  if (!feature || !spec) {
+    return <Modal visible={false} transparent />;
+  }
+
+  const statusPill = flagPill(draft.enabled ? draft.status : "paused");
+  const lastRun = state?.last_run_at ? new Date(state.last_run_at).toLocaleString() : "Never";
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-          {feature ? (
-            <>
-              <View style={styles.modalHeader}>
-                <View style={[styles.modalIcon, { backgroundColor: `${tint}1A`, borderColor: `${tint}55` }]}>
-                  <feature.Icon color={tint} size={22} strokeWidth={2.2} />
-                </View>
+        <Pressable style={styles.modalCardWide} onPress={(e) => e.stopPropagation()}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScrollContent}>
+            <View style={styles.modalHeader}>
+              <View style={[styles.modalIcon, { backgroundColor: `${tint}1A`, borderColor: `${tint}55` }]}> 
+                <feature.Icon color={tint} size={22} strokeWidth={2.2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>{feature.title}</Text>
+                <Text style={styles.modalSub}>{cat?.label ?? "Owner tool"} · {feature.id}</Text>
+              </View>
+              <View style={[styles.flagPill, { backgroundColor: statusPill.bg, borderColor: `${statusPill.color}55` }]}>
+                <Text style={[styles.flagText, { color: statusPill.color }]}>{draft.enabled ? statusPill.label : "OFF"}</Text>
+              </View>
+            </View>
+
+            <Text style={styles.modalBody}>{spec.headline}</Text>
+            <Text style={styles.modalNote}>{feature.sub}. {spec.guardrail}</Text>
+
+            <View style={styles.modalMetricRow}>
+              <MiniMetric label="Primary" value={spec.primaryMetric} />
+              <MiniMetric label="Rollout" value={`${clampPercent(draft.rolloutPercent)}%`} />
+              <MiniMetric label="Last run" value={lastRun} />
+            </View>
+
+            <View style={styles.controlPanel}>
+              <View style={styles.switchLine}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.modalTitle}>{feature.title}</Text>
-                  <Text style={styles.modalSub}>{cat?.label ?? "Owner tool"}</Text>
+                  <Text style={styles.controlTitle}>Enabled</Text>
+                  <Text style={styles.controlSub}>Turns this owner feature on/off without removing its config.</Text>
                 </View>
-                <View style={[styles.flagPill, { backgroundColor: pill.bg, borderColor: `${pill.color}55` }]}>
-                  <Text style={[styles.flagText, { color: pill.color }]}>{pill.label}</Text>
+                <Switch value={draft.enabled} onValueChange={(enabled) => setDraft((prev) => ({ ...prev, enabled }))} trackColor={{ true: tint, false: Colors.line }} thumbColor={Colors.text} />
+              </View>
+              <Text style={styles.controlLabel}>STATUS</Text>
+              <View style={styles.statusRow}>
+                {(["staged", "beta", "live", "paused"] as OwnerFeatureStatus[]).map((status) => {
+                  const active = draft.status === status;
+                  return (
+                    <Pressable key={status} onPress={() => setDraft((prev) => ({ ...prev, status }))} style={[styles.statusChip, active && { backgroundColor: `${tint}22`, borderColor: tint }]}>
+                      <Text style={[styles.statusChipText, active && { color: tint }]}>{status.toUpperCase()}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={styles.doubleInputRow}>
+                <LabeledInput label="ROLLOUT %" value={draft.rolloutPercent} onChangeText={(rolloutPercent) => setDraft((prev) => ({ ...prev, rolloutPercent }))} keyboardType="numeric" />
+                <LabeledInput label="THRESHOLD" value={draft.threshold} onChangeText={(threshold) => setDraft((prev) => ({ ...prev, threshold }))} keyboardType="numeric" />
+              </View>
+              <Text style={styles.controlLabel}>OWNER NOTES</Text>
+              <TextInput value={draft.notes} onChangeText={(notes) => setDraft((prev) => ({ ...prev, notes }))} style={styles.ownerTextArea} placeholder="Runbook notes, launch checklist, risk context…" placeholderTextColor={Colors.muted2} multiline />
+              <Text style={styles.controlLabel}>JSON CONFIG</Text>
+              <TextInput value={draft.configText} onChangeText={(configText) => setDraft((prev) => ({ ...prev, configText }))} style={styles.jsonArea} placeholder="{}" placeholderTextColor={Colors.muted2} multiline autoCapitalize="none" autoCorrect={false} />
+              <View style={styles.switchLineCompact}>
+                <Pin color={Colors.goldBright} size={15} />
+                <Text style={styles.controlTitle}>Pin in command center</Text>
+                <Switch value={draft.pinned} onValueChange={(pinned) => setDraft((prev) => ({ ...prev, pinned }))} trackColor={{ true: Colors.goldBright, false: Colors.line }} thumbColor={Colors.text} />
+              </View>
+            </View>
+
+            <Text style={styles.panelTitle}>Backend wiring</Text>
+            <View style={styles.sourceList}>
+              {spec.dataSources.map((source) => (
+                <View key={`${source.table}-${source.label}`} style={styles.sourceRow}>
+                  <Database color={tint} size={14} strokeWidth={2.4} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sourceTitle}>{source.label}</Text>
+                    <Text style={styles.sourceSub}>{source.table} · {source.detail}</Text>
+                  </View>
                 </View>
+              ))}
+            </View>
+
+            <Text style={styles.panelTitle}>Controls included</Text>
+            <View style={styles.bulletGrid}>
+              {spec.controls.map((control) => <Bullet key={control} text={control} tint={tint} />)}
+              {spec.automations.map((automation) => <Bullet key={automation} text={automation} tint={Colors.goldBright} />)}
+            </View>
+
+            <Text style={styles.panelTitle}>Recent backend runs</Text>
+            {(runsQuery.data ?? []).length > 0 ? (runsQuery.data ?? []).map((run) => (
+              <View key={run.id} style={styles.runRow}>
+                <Activity color={Colors.goldBright} size={14} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sourceTitle}>{String(run.action).replace(/_/g, " ")}</Text>
+                  <Text style={styles.sourceSub}>{new Date(run.created_at).toLocaleString()}</Text>
+                </View>
+                <Text style={styles.runStatus}>{String(run.result?.status ?? "ok").toUpperCase()}</Text>
               </View>
-              <Text style={styles.modalBody}>{feature.sub}</Text>
-              <Text style={styles.modalNote}>
-                {feature.flag === "live"
-                  ? "This tool is wired to live data and acts immediately on the platform."
-                  : feature.flag === "beta"
-                    ? "Beta tool — gated to the owner account while we tune thresholds. All actions are logged in the audit trail."
-                    : "Staged for the next release. The owner can lock specs and reorder priority from this sheet."}
-              </Text>
-              <View style={styles.modalActions}>
-                <Pressable
-                  style={({ pressed }) => [styles.modalBtnPrimary, pressed && styles.pressed]}
-                  onPress={() => {
-                    Alert.alert(feature.title, feature.flag === "soon" ? "Queued for the next release. We’ll notify the owner when it ships." : "Action acknowledged. Live execution UI is paged in for this tool.");
-                    onClose();
-                  }}
-                  testID={`owner-modal-open-${feature.id}`}
-                >
-                  <Text style={styles.modalBtnPrimaryText}>{feature.flag === "soon" ? "Pin to roadmap" : "Open tool"}</Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.modalBtnGhost, pressed && styles.pressed]}
-                  onPress={onClose}
-                  testID="owner-modal-close"
-                >
-                  <Text style={styles.modalBtnGhostText}>Close</Text>
-                </Pressable>
-              </View>
-            </>
-          ) : null}
+            )) : <Text style={styles.emptyText}>No runs yet. Tap “Run check” to create the first backend entry.</Text>}
+
+            <View style={styles.modalActionsWrap}>
+              <Pressable
+                style={({ pressed }) => [styles.modalBtnPrimary, saveMutation.isPending && styles.disabledBtn, pressed && styles.pressed]}
+                onPress={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+                testID={`owner-modal-save-${feature.id}`}
+              >
+                <Text style={styles.modalBtnPrimaryText}>{saveMutation.isPending ? "Saving…" : "Save controls"}</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.modalBtnGhost, runMutation.isPending && styles.disabledBtn, pressed && styles.pressed]}
+                onPress={() => runMutation.mutate("run_check")}
+                disabled={runMutation.isPending}
+                testID={`owner-modal-run-${feature.id}`}
+              >
+                <Text style={styles.modalBtnGhostText}>{runMutation.isPending ? "Running…" : "Run check"}</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.modalBtnGhost, runMutation.isPending && styles.disabledBtn, pressed && styles.pressed]}
+                onPress={() => runMutation.mutate(feature.flag === "soon" ? "pin_roadmap" : "open")}
+                disabled={runMutation.isPending}
+                testID={`owner-modal-open-${feature.id}`}
+              >
+                <Text style={styles.modalBtnGhostText}>{feature.flag === "soon" ? "Pin roadmap" : "Open tool"}</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.modalBtnGhost, runMutation.isPending && styles.disabledBtn, pressed && styles.pressed]}
+                onPress={() => runMutation.mutate("ship_live")}
+                disabled={runMutation.isPending}
+                testID={`owner-modal-ship-${feature.id}`}
+              >
+                <Text style={styles.modalBtnGhostText}>Ship live</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.modalBtnGhost, pressed && styles.pressed]}
+                onPress={onClose}
+                testID="owner-modal-close"
+              >
+                <Text style={styles.modalBtnGhostText}>Close</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.miniMetric}>
+      <Text style={styles.miniMetricLabel}>{label}</Text>
+      <Text style={styles.miniMetricValue} numberOfLines={1}>{value}</Text>
+    </View>
+  );
+}
+
+function LabeledInput({ label, value, onChangeText, keyboardType }: { label: string; value: string; onChangeText: (value: string) => void; keyboardType?: "default" | "numeric" }) {
+  return (
+    <View style={styles.labeledInputWrap}>
+      <Text style={styles.controlLabel}>{label}</Text>
+      <TextInput value={value} onChangeText={onChangeText} keyboardType={keyboardType} style={styles.ownerInput} placeholderTextColor={Colors.muted2} />
+    </View>
+  );
+}
+
+function Bullet({ text, tint }: { text: string; tint: string }) {
+  return (
+    <View style={styles.bulletRow}>
+      <CheckCircle2 color={tint} size={14} strokeWidth={2.4} />
+      <Text style={styles.bulletText}>{text}</Text>
+    </View>
   );
 }
 
@@ -1178,9 +1621,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.line,
-    minHeight: 130,
+    minHeight: 144,
     justifyContent: "space-between",
   },
+  tilePinned: { borderColor: "rgba(98,208,255,0.65)", backgroundColor: "rgba(98,208,255,0.08)" },
+  tileDisabled: { opacity: 0.62 },
+  tileTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
   tileIcon: {
     width: 36,
     height: 36,
@@ -1190,10 +1636,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 8,
   },
+  rolloutTrack: { height: 5, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden", marginTop: 8 },
+  rolloutFill: { height: "100%", borderRadius: 999 },
   tileBody: { gap: 4, flex: 1 },
   tileTitle: { color: Colors.text, fontSize: 13, fontWeight: "700" as const },
   tileSub: { color: Colors.muted, fontSize: 11, lineHeight: 15 },
-  tileFoot: { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  tileFoot: { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 },
+  tilePercent: { color: Colors.muted2, fontSize: 10, fontWeight: "800" as const, flex: 1, textAlign: "right" },
   flagPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1 },
   flagText: { fontSize: 9.5, fontWeight: "800" as const, letterSpacing: 0.8 },
   emptyWrap: { paddingVertical: 30, alignItems: "center" },
@@ -1214,6 +1663,17 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 14,
   },
+  modalCardWide: {
+    width: "100%",
+    maxWidth: 560,
+    maxHeight: "88%",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    backgroundColor: Colors.card,
+    overflow: "hidden",
+  },
+  modalScrollContent: { padding: 18, gap: 14 },
   modalHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   modalIcon: {
     width: 44,
@@ -1227,7 +1687,36 @@ const styles = StyleSheet.create({
   modalSub: { color: Colors.muted, fontSize: 12, marginTop: 2 },
   modalBody: { color: Colors.text, fontSize: 14, lineHeight: 20 },
   modalNote: { color: Colors.muted, fontSize: 12, lineHeight: 18 },
+  modalMetricRow: { flexDirection: "row", gap: 8 },
+  miniMetric: { flex: 1, borderRadius: 13, borderWidth: 1, borderColor: Colors.line, backgroundColor: Colors.cardSoft, padding: 10, gap: 4 },
+  miniMetricLabel: { color: Colors.muted2, fontSize: 9, fontWeight: "800" as const, letterSpacing: 0.8, textTransform: "uppercase" },
+  miniMetricValue: { color: Colors.text, fontSize: 12, fontWeight: "800" as const },
+  controlPanel: { borderRadius: 18, borderWidth: 1, borderColor: Colors.line, backgroundColor: "rgba(255,255,255,0.025)", padding: 12, gap: 10 },
+  switchLine: { flexDirection: "row", alignItems: "center", gap: 10 },
+  switchLineCompact: { flexDirection: "row", alignItems: "center", gap: 10, justifyContent: "space-between" },
+  controlTitle: { color: Colors.text, fontSize: 13, fontWeight: "800" as const },
+  controlSub: { color: Colors.muted, fontSize: 11, lineHeight: 16, marginTop: 2 },
+  controlLabel: { color: Colors.muted2, fontSize: 9.5, fontWeight: "900" as const, letterSpacing: 1.1, textTransform: "uppercase" },
+  statusRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  statusChip: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: Colors.line, backgroundColor: Colors.cardSoft },
+  statusChipText: { color: Colors.muted, fontSize: 10, fontWeight: "800" as const, letterSpacing: 0.7 },
+  doubleInputRow: { flexDirection: "row", gap: 10 },
+  labeledInputWrap: { flex: 1, gap: 6 },
+  ownerInput: { color: Colors.text, backgroundColor: Colors.cardSoft, borderWidth: 1, borderColor: Colors.line, borderRadius: 12, paddingHorizontal: 11, paddingVertical: 9, fontSize: 13 },
+  ownerTextArea: { minHeight: 76, color: Colors.text, backgroundColor: Colors.cardSoft, borderWidth: 1, borderColor: Colors.line, borderRadius: 12, paddingHorizontal: 11, paddingVertical: 10, fontSize: 13, textAlignVertical: "top" },
+  jsonArea: { minHeight: 108, color: Colors.text, backgroundColor: "#050812", borderWidth: 1, borderColor: Colors.line, borderRadius: 12, paddingHorizontal: 11, paddingVertical: 10, fontSize: 12, lineHeight: 17, textAlignVertical: "top" },
+  panelTitle: { color: Colors.text, fontSize: 13, fontWeight: "900" as const, marginTop: 2 },
+  sourceList: { gap: 8 },
+  sourceRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, borderRadius: 13, borderWidth: 1, borderColor: Colors.line, backgroundColor: Colors.cardSoft, padding: 10 },
+  sourceTitle: { color: Colors.text, fontSize: 12, fontWeight: "800" as const, textTransform: "capitalize" },
+  sourceSub: { color: Colors.muted, fontSize: 11, lineHeight: 15, marginTop: 2 },
+  bulletGrid: { gap: 8 },
+  bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.025)", padding: 9 },
+  bulletText: { flex: 1, color: Colors.muted, fontSize: 11.5, lineHeight: 16 },
+  runRow: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 13, borderWidth: 1, borderColor: Colors.line, backgroundColor: Colors.cardSoft, padding: 10 },
+  runStatus: { color: Colors.goldBright, fontSize: 10, fontWeight: "900" as const, letterSpacing: 0.8 },
   modalActions: { flexDirection: "row", gap: 10 },
+  modalActionsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   modalBtnPrimary: {
     flex: 1,
     paddingVertical: 12,
@@ -1246,4 +1735,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalBtnGhostText: { color: Colors.text, fontSize: 14, fontWeight: "700" as const },
+  disabledBtn: { opacity: 0.5 },
 });

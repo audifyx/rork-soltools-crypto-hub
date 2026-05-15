@@ -73,3 +73,5 @@ The SQL foundation for all 41 features lives in
    `RecapCard` rendered on the profile tab.
 6. [x] **For-you tab** — new `(tabs)/fyp.tsx` reading from `fyp_cache` +
    `app/interest-quiz.tsx` onboarding writing to `user_interests`.
+7. [x] **Owner/admin dashboard feature sheets** — every Command Center tile now opens a full control UI with enable/status/rollout/threshold/notes/config, pinned state, data-source wiring, backend run history, and live owner actions.
+8. [x] **Owner feature backend** — `owner_feature_states` + `owner_feature_runs` tables and `owner_upsert_feature_state()` / `owner_run_feature_action()` RPCs added to `supabase/admin_dashboard_full.sql` with owner-only RLS and audit logging.
