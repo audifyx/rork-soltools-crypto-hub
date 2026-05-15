@@ -1,4 +1,5 @@
 import { BlurView } from "expo-blur";
+import GlassBg from "@/components/ui/GlassBg";
 import { AlertOctagon, Check, Flag, X } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -71,7 +72,8 @@ export default function ReportSheet() {
     <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen" onRequestClose={handleDismiss}>
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={handleDismiss} />
-        <BlurView intensity={70} tint="dark" style={styles.sheet}>
+        <View style={styles.sheet}>
+          <GlassBg intensity={70} tint="dark" />
           <SafeAreaView edges={["bottom"]} style={styles.sheetInner}>
             <View style={styles.handle} />
             <View style={styles.header}>
@@ -144,7 +146,7 @@ export default function ReportSheet() {
               </Pressable>
             </View>
           </SafeAreaView>
-        </BlurView>
+        </View>
       </View>
     </Modal>
   );

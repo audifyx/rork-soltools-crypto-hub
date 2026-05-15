@@ -1,9 +1,18 @@
 import { BlurView } from "expo-blur";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 
 import Colors from "@/constants/colors";
+
+const LIQUID_AVAILABLE = (() => {
+  try {
+    return isLiquidGlassAvailable();
+  } catch {
+    return false;
+  }
+})();
 
 interface GlassCardProps {
   children: React.ReactNode;
@@ -57,19 +66,26 @@ export default function GlassCard({
       testID={testID}
     >
       <View style={[styles.surface, { borderRadius: radius }]}>
-        {blurAvailable ? (
+        {LIQUID_AVAILABLE && Platform.OS === "ios" ? (
+          <GlassView
+            glassEffectStyle="regular"
+            style={StyleSheet.absoluteFill}
+          />
+        ) : blurAvailable ? (
           <BlurView
             intensity={intensity}
             tint={tint}
             style={StyleSheet.absoluteFill}
           />
         ) : null}
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: tint === "dark" ? "rgba(12,10,5,0.70)" : "rgba(247,242,231,0.62)" },
-          ]}
-        />
+        {!(LIQUID_AVAILABLE && Platform.OS === "ios") ? (
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: tint === "dark" ? "rgba(12,10,5,0.55)" : "rgba(247,242,231,0.55)" },
+            ]}
+          />
+        ) : null}
         <LinearGradient
           colors={grad}
           start={{ x: 0, y: 0 }}

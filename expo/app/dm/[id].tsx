@@ -1,4 +1,5 @@
 import { BlurView } from "expo-blur";
+import GlassBg, { LIQUID_AVAILABLE } from "@/components/ui/GlassBg";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
@@ -464,7 +465,8 @@ export default function DMThreadScreen() {
       />
 
       <SafeAreaView edges={["top"]} style={styles.safe}>
-        <BlurView intensity={Platform.OS === "ios" ? 60 : 40} tint="dark" style={styles.header}>
+        <View style={styles.header}>
+          <GlassBg intensity={Platform.OS === "ios" ? 60 : 40} tint="dark" />
           <Pressable
             onPress={() => navigateBack(router, "/messages")}
             style={styles.iconBtn}
@@ -548,7 +550,7 @@ export default function DMThreadScreen() {
           >
             <MoreHorizontal color={IOS_BLUE} size={18} strokeWidth={2.4} />
           </Pressable>
-        </BlurView>
+        </View>
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -618,7 +620,8 @@ export default function DMThreadScreen() {
           ) : null}
 
           {picker ? (
-            <BlurView intensity={Platform.OS === "ios" ? 50 : 30} tint="dark" style={styles.tickerStrip}>
+            <View style={styles.tickerStrip}>
+              <GlassBg intensity={Platform.OS === "ios" ? 50 : 30} tint="dark" />
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -640,10 +643,11 @@ export default function DMThreadScreen() {
                   </Pressable>
                 ))}
               </ScrollView>
-            </BlurView>
+            </View>
           ) : null}
 
-          <BlurView intensity={Platform.OS === "ios" ? 70 : 40} tint="dark" style={styles.composer}>
+          <View style={styles.composer}>
+            <GlassBg intensity={Platform.OS === "ios" ? 70 : 40} tint="dark" />
             <Pressable
               onPress={() => {
                 Haptics.selectionAsync().catch(() => {});

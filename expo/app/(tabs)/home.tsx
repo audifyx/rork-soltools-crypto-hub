@@ -1,4 +1,5 @@
 import { BlurView } from "expo-blur";
+import GlassBg from "@/components/ui/GlassBg";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
@@ -1275,7 +1276,7 @@ function PairCard({ pair, onPress }: { pair: LaunchToken; onPress: () => void })
     >
       <View style={styles.pairInner}>
         {Platform.OS === "ios" ? (
-          <BlurView intensity={42} tint="dark" style={StyleSheet.absoluteFill} />
+          <GlassBg intensity={42} tint="dark" />
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.pairAndroidBase]} />
         )}

@@ -1,5 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
+import GlassBg from "@/components/ui/GlassBg";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
@@ -208,9 +209,7 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
       statusBarTranslucent
     >
       <Pressable style={styles.backdrop} onPress={onClose} testID="quick-menu-backdrop">
-        {Platform.OS !== "web" ? (
-          <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFill} />
-        ) : null}
+        <GlassBg intensity={28} tint="dark" />
         <View style={styles.dim} pointerEvents="none" />
       </Pressable>
 

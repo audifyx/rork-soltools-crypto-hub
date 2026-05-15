@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { BlurView } from "expo-blur";
+import GlassBg from "@/components/ui/GlassBg";
 import { hapticSelect } from "@/lib/haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Compass, House, MessageCircle, Sparkles, User, Zap } from "lucide-react-native";
@@ -12,9 +12,7 @@ import { useMessages } from "@/providers/messages-provider";
 const TabBarBackground = memo(function TabBarBackground() {
   return (
     <View style={styles.barBgWrap} pointerEvents="none">
-      {Platform.OS !== "web" ? (
-        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-      ) : null}
+      <GlassBg intensity={20} tint="dark" />
       <View style={styles.barBg} />
       <LinearGradient
         colors={["rgba(244,198,91,0.24)", "rgba(221,227,236,0.10)", "rgba(0,0,0,0.04)"]}

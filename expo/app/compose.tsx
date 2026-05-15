@@ -4,6 +4,7 @@ import { Image as ExpoImage } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
+import GlassBg from "@/components/ui/GlassBg";
 import { Stack, useRouter } from "expo-router";
 import {
   CheckCircle2,
@@ -620,7 +621,8 @@ export default function ComposeScreen() {
 
           {/* Floating bottom toolbar */}
           <View style={styles.toolbarShell}>
-            <BlurView intensity={Platform.OS === "ios" ? 40 : 0} tint="dark" style={styles.toolbarBlur}>
+            <View style={styles.toolbarBlur}>
+              <GlassBg intensity={Platform.OS === "ios" ? 40 : 0} tint="dark" />
               <View style={styles.toolbar}>
                 <View style={styles.toolbarLeft}>
                   <Pressable
@@ -706,7 +708,7 @@ export default function ComposeScreen() {
                   </View>
                 </View>
               </View>
-            </BlurView>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
