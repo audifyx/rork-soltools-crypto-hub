@@ -3,7 +3,6 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
-  Bell,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -20,7 +19,6 @@ import {
   Settings,
   Shield,
   Sparkles,
-  Trophy,
   Users,
   UserPlus,
   Wallet,
@@ -139,7 +137,6 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
           { key: "tools", label: "Tools hub", description: "OG scanner, lookup, AI, trading", Icon: Wrench, color: Colors.goldBright, path: "/(tabs)/tools" },
           { key: "portfolio", label: "Portfolio tracker", description: "Multi-wallet balances and P&L", Icon: Wallet, color: Colors.cyan, path: "/wallet" },
           { key: "kol", label: "KOL scan", description: "Smart money live activity", Icon: Radio, color: Colors.magenta, path: "/kol-scan" },
-          { key: "alerts", label: "Price alerts", description: "Pings when tokens hit levels", Icon: Bell, color: Colors.orange, path: "/notifications" },
           { key: "trends", label: "Market trends", description: "Live trending pairs and gainers", Icon: Flame, color: Colors.violet, path: "/(tabs)/discover" },
         ],
       },
@@ -161,13 +158,12 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
       {
         key: "discover",
         label: "Discover",
-        caption: "News, invites, achievements",
+        caption: "News and invites",
         Icon: Compass,
         color: Colors.mint,
         items: [
           { key: "news", label: "Crypto news", description: "Headlines and viral mentions", Icon: Newspaper, color: Colors.mint, path: "/crypto-news" },
           { key: "invites", label: "Invite friends", description: "Codes, referrals, leaderboard", Icon: UserPlus, color: Colors.cyan, path: "/invites" },
-          { key: "achievements", label: "Achievements", description: "Badges, streaks, weekly recap", Icon: Trophy, color: Colors.orange, path: "/(tabs)/profile" },
         ],
       },
       {
