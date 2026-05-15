@@ -90,7 +90,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   });
 
   const signUp = useMutation({
-    mutationFn: async (input: { email: string; password: string; username?: string }) => {
+    mutationFn: async (input: { email: string; password: string; username?: string; inviteCode?: string }) => {
       const email = input.email.trim().toLowerCase();
       const username = normalizeUsername(input.username, email);
       const { data, error } = await supabase.auth.signUp({
@@ -109,6 +109,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           });
         } catch (e) {
           console.log("[auth] profile create best-effort failed", e);
+        }
+      }
+      const code = input.inviteCode?.trim();
+      if (code && data.session) {
+        try {
+          const { error: rErr } = await supabase.rpc("redeem_invite_code", { p_code: code });
+          if (rErr) console.log("[auth] redeem invite failed", rErr.message);
+        } catch (e) {
+          console.log("[auth] redeem invite threw", e);
         }
       }
       return data;

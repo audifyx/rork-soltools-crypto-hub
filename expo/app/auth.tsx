@@ -12,6 +12,7 @@ import {
   Mail,
   ShieldCheck,
   Sparkles,
+  TicketPercent,
   UserRound,
 } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
@@ -44,6 +45,7 @@ export default function AuthScreen() {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [username, setUsername] = useState<string>("");
+  const [inviteCode, setInviteCode] = useState<string>("");
   const [showPassword, setShowPassword] = useState<boolean>(false);
 
   const isBusy = isSigningIn || isSigningUp;
@@ -66,7 +68,7 @@ export default function AuthScreen() {
           Alert.alert("Missing username", "Pick a username for your trader profile.");
           return;
         }
-        await signUp({ email, password, username });
+        await signUp({ email, password, username, inviteCode: inviteCode.trim() || undefined });
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       router.replace("/(tabs)/home");
@@ -76,7 +78,7 @@ export default function AuthScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       Alert.alert(mode === "signin" ? "Sign in failed" : "Sign up failed", msg);
     }
-  }, [email, password, username, mode, signIn, signUp]);
+  }, [email, password, username, inviteCode, mode, signIn, signUp]);
 
   const onForgot = useCallback(async () => {
     if (!email.trim()) {
@@ -159,6 +161,23 @@ export default function AuthScreen() {
                   placeholderTextColor={Colors.muted}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  style={styles.input}
+                />
+              </View>
+            ) : null}
+
+            {mode === "signup" ? (
+              <View style={styles.field}>
+                <TicketPercent color={Colors.muted} size={18} />
+                <TextInput
+                  testID="invite-code-input"
+                  value={inviteCode}
+                  onChangeText={(t) => setInviteCode(t.toUpperCase())}
+                  placeholder="Invite code (optional)"
+                  placeholderTextColor={Colors.muted}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={16}
                   style={styles.input}
                 />
               </View>
