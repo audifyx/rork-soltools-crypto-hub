@@ -225,14 +225,20 @@ export default function NotificationsScreen() {
       }, 350);
     };
 
-    const channel = supabase
-      .channel(`notifications-screen-${userId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, scheduleRefresh)
-      .subscribe();
+    const channelName = `notifications-screen-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const channel = supabase.channel(channelName);
+    channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+      scheduleRefresh,
+    );
+    channel.subscribe();
 
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
-      supabase.removeChannel(channel).catch(() => {});
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
     };
   }, [queryClient, userId]);
 
