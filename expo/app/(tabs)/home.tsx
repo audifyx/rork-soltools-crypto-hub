@@ -1649,7 +1649,9 @@ function isVideoUri(uri: string): boolean {
   return /\.(mp4|mov|m4v|webm|qt)(\?|$)/i.test(uri);
 }
 
-function PostMediaItem({ uri }: { uri: string }) {
+function PostMediaItem({ uri, onFail }: { uri: string; onFail?: () => void }) {
+  const [failed, setFailed] = useState<boolean>(false);
+  if (failed) return null;
   if (isVideoUri(uri)) {
     const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}video{width:100%;height:100%;object-fit:cover;background:#000}</style></head><body><video controls playsinline webkit-playsinline preload="metadata" src="${uri.replace(/"/g, "&quot;")}"></video></body></html>`;
     return (
@@ -1662,28 +1664,52 @@ function PostMediaItem({ uri }: { uri: string }) {
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
+        onError={() => {
+          setFailed(true);
+          onFail?.();
+        }}
       />
     );
   }
-  return <ExpoImage source={{ uri }} style={styles.imgFill} contentFit="cover" />;
+  return (
+    <ExpoImage
+      source={{ uri }}
+      style={styles.imgFill}
+      contentFit="cover"
+      transition={180}
+      onError={() => {
+        setFailed(true);
+        onFail?.();
+      }}
+    />
+  );
 }
 
 function PostImageGrid({ images }: { images: string[] }) {
-  const count = Math.min(images.length, 4);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const visible = images.filter((u) => !hidden.has(u));
+  const markFailed = useCallback((u: string) => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      next.add(u);
+      return next;
+    });
+  }, []);
+  const count = Math.min(visible.length, 4);
   if (count === 0) return null;
   if (count === 1) {
     return (
       <View style={styles.imgGridSolo} testID="post-images-1">
-        <PostMediaItem uri={images[0]} />
+        <PostMediaItem uri={visible[0]} onFail={() => markFailed(visible[0])} />
       </View>
     );
   }
   if (count === 2) {
     return (
       <View style={styles.imgGridRow} testID="post-images-2">
-        {images.slice(0, 2).map((u, i) => (
+        {visible.slice(0, 2).map((u, i) => (
           <View key={`${u}-${i}`} style={styles.imgHalf}>
-            <PostMediaItem uri={u} />
+            <PostMediaItem uri={u} onFail={() => markFailed(u)} />
           </View>
         ))}
       </View>
@@ -1693,14 +1719,14 @@ function PostImageGrid({ images }: { images: string[] }) {
     return (
       <View style={styles.imgGridRow} testID="post-images-3">
         <View style={styles.imgHalf}>
-          <PostMediaItem uri={images[0]} />
+          <PostMediaItem uri={visible[0]} onFail={() => markFailed(visible[0])} />
         </View>
         <View style={styles.imgHalf}>
           <View style={styles.imgQuarter}>
-            <PostMediaItem uri={images[1]} />
+            <PostMediaItem uri={visible[1]} onFail={() => markFailed(visible[1])} />
           </View>
           <View style={[styles.imgQuarter, { marginTop: 4 }]}>
-            <PostMediaItem uri={images[2]} />
+            <PostMediaItem uri={visible[2]} onFail={() => markFailed(visible[2])} />
           </View>
         </View>
       </View>
@@ -1708,9 +1734,9 @@ function PostImageGrid({ images }: { images: string[] }) {
   }
   return (
     <View style={styles.imgGrid4} testID="post-images-4">
-      {images.slice(0, 4).map((u, i) => (
+      {visible.slice(0, 4).map((u, i) => (
         <View key={`${u}-${i}`} style={styles.imgQuad}>
-          <PostMediaItem uri={u} />
+          <PostMediaItem uri={u} onFail={() => markFailed(u)} />
         </View>
       ))}
     </View>
@@ -3252,8 +3278,9 @@ const styles = StyleSheet.create({
   imgGridSolo: {
     marginTop: 12,
     width: "100%",
-    aspectRatio: 16 / 10,
-    borderRadius: 16,
+    aspectRatio: 4 / 5,
+    maxHeight: 520,
+    borderRadius: 18,
     overflow: "hidden",
     backgroundColor: Colors.card,
     borderWidth: 1,
@@ -3263,8 +3290,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
     flexDirection: "row",
     gap: 4,
-    height: 200,
-    borderRadius: 16,
+    height: 280,
+    borderRadius: 18,
     overflow: "hidden",
   },
   imgHalf: {
