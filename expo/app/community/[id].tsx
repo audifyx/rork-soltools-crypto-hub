@@ -2276,7 +2276,7 @@ export default function CommunityDetailScreen() {
                 <X color={Colors.text} size={18} strokeWidth={2.6} />
               </Pressable>
               <Text style={styles.threadTitle}>
-                {interactionMode === "quote" ? "Quote post" : interactionMode === "reply" ? "Reply" : "Thread"}
+                {interactionMode === "quote" ? "Quote post" : interactionMode === "reply" ? "Reply" : "Post"}
               </Text>
               <View style={styles.threadClose} />
             </View>
@@ -2285,31 +2285,28 @@ export default function CommunityDetailScreen() {
               <FlatList
                 data={interactionMode === "quote" ? [] : replies}
                 keyExtractor={(p) => p.id}
-                renderItem={({ item }) => (
-                  <PostRow
+                renderItem={({ item, index }) => (
+                  <XCommentRow
                     post={item}
-                    compact
+                    parentHandle={activePost.authorUsername ?? activePost.authorHandle}
+                    showThreadLine={index < replies.length - 1}
                     onLike={() => void onToggleLike(item)}
-                    onComment={() => openThread(item)}
                     onReply={() => openReply(item)}
                     onRepost={() => void onToggleRepost(item)}
                     onQuote={() => openQuote(item)}
                     onBookmark={() => void onToggleBookmark(item)}
                     onShare={() => void onSharePost(item)}
                     onReport={() => onReportPost(item)}
-                    canPin={canModeratePosts}
-                    onPin={() => void onTogglePin(item)}
                     canDelete={canDeletePost(item)}
                     onDelete={() => onDeletePost(item)}
-                    onTokenChart={openTokenChart}
+                    onOpen={() => openThread(item)}
                   />
                 )}
                 ListHeaderComponent={
                   <View>
-                    <PostRow
+                    <XHeroPost
                       post={activePost}
                       onLike={() => void onToggleLike(activePost)}
-                      onComment={() => openThread(activePost)}
                       onReply={() => openReply(activePost)}
                       onRepost={() => void onToggleRepost(activePost)}
                       onQuote={() => openQuote(activePost)}
@@ -2327,6 +2324,13 @@ export default function CommunityDetailScreen() {
                         <Quote color={Colors.mint} size={15} strokeWidth={2.6} />
                         <Text style={styles.quoteComposerText}>Add your take above the quoted post.</Text>
                       </View>
+                    ) : interactionMode !== "quote" && replies.length > 0 ? (
+                      <View style={styles.repliesHeader}>
+                        <Text style={styles.repliesHeaderText}>
+                          {fmtCount(replies.length)} {replies.length === 1 ? "reply" : "replies"}
+                        </Text>
+                        <View style={styles.repliesHeaderLine} />
+                      </View>
                     ) : null}
                     {interactionMode !== "quote" && repliesQuery.isLoading ? (
                       <ActivityIndicator color={Colors.mint} style={{ marginVertical: 18 }} />
@@ -2337,7 +2341,8 @@ export default function CommunityDetailScreen() {
                   interactionMode === "quote" || repliesQuery.isLoading ? null : (
                     <View style={styles.threadEmpty}>
                       <MessageCircle color={Colors.muted} size={22} strokeWidth={2.4} />
-                      <Text style={styles.threadEmptyText}>No replies yet. Start the thread.</Text>
+                      <Text style={styles.threadEmptyTitle}>Start the conversation</Text>
+                      <Text style={styles.threadEmptyText}>Be the first to reply. Your take posts straight into the thread.</Text>
                     </View>
                   )
                 }
@@ -2347,28 +2352,39 @@ export default function CommunityDetailScreen() {
             ) : null}
 
             {activePost ? (
-              <View style={styles.threadComposer}>
-                <View style={[styles.composerAvatar, { backgroundColor: profile.avatarColor }]}>
-                  <Text style={styles.composerInit}>{(profile.displayName || "Y").slice(0, 1).toUpperCase()}</Text>
+              <View style={styles.threadComposerWrap}>
+                {interactionMode !== "quote" ? (
+                  <Text style={styles.composerReplyingTo}>
+                    Replying to <Text style={styles.composerReplyingHandle}>{activePost.authorUsername ? `@${activePost.authorUsername}` : activePost.authorHandle || activePost.authorName}</Text>
+                  </Text>
+                ) : null}
+                <View style={styles.threadComposer}>
+                  <View style={[styles.composerAvatarRound, { backgroundColor: profile.avatarColor }]}>
+                    {profile.avatarUrl ? (
+                      <Image source={{ uri: profile.avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                    ) : (
+                      <Text style={styles.composerInit}>{(profile.displayName || "Y").slice(0, 1).toUpperCase()}</Text>
+                    )}
+                  </View>
+                  <TextInput
+                    value={interactionText}
+                    onChangeText={setInteractionText}
+                    placeholder={interactionMode === "quote" ? "Add a quote..." : "Post your reply"}
+                    placeholderTextColor={Colors.muted}
+                    style={styles.threadInput}
+                    multiline
+                    autoFocus={interactionMode === "reply" || interactionMode === "quote"}
+                    testID="community-interaction-input"
+                  />
+                  <Pressable
+                    onPress={submitInteraction}
+                    disabled={interactionText.trim().length === 0}
+                    style={[styles.replyBtn, interactionText.trim().length === 0 && { opacity: 0.42 }]}
+                    testID="community-interaction-send"
+                  >
+                    <Text style={styles.replyBtnText}>Reply</Text>
+                  </Pressable>
                 </View>
-                <TextInput
-                  value={interactionText}
-                  onChangeText={setInteractionText}
-                  placeholder={interactionMode === "quote" ? "Add a quote..." : `Reply to ${activePost.authorName}...`}
-                  placeholderTextColor={Colors.muted}
-                  style={styles.threadInput}
-                  multiline
-                  autoFocus={interactionMode === "reply" || interactionMode === "quote"}
-                  testID="community-interaction-input"
-                />
-                <Pressable
-                  onPress={submitInteraction}
-                  disabled={interactionText.trim().length === 0}
-                  style={[styles.sendBtn, interactionText.trim().length === 0 && { opacity: 0.42 }]}
-                  testID="community-interaction-send"
-                >
-                  <Send color={Colors.ink} size={14} strokeWidth={2.8} />
-                </Pressable>
               </View>
             ) : null}
           </SafeAreaView>
@@ -2912,6 +2928,237 @@ function CommunityTokenPreviewCard({
         </View>
       </View>
       <Text style={styles.tokenAddress} numberOfLines={1}>SOL CA · {shortAddress(token.address)}</Text>
+    </Pressable>
+  );
+}
+
+function XHeroPost({
+  post,
+  onLike,
+  onReply,
+  onRepost,
+  onQuote,
+  onBookmark,
+  onShare,
+  onReport,
+  canPin,
+  onPin,
+  canDelete,
+  onDelete,
+  onTokenChart,
+}: {
+  post: CommunityPost;
+  onLike: () => void;
+  onReply: () => void;
+  onRepost: () => void;
+  onQuote: () => void;
+  onBookmark: () => void;
+  onShare: () => void;
+  onReport?: () => void;
+  canPin?: boolean;
+  onPin?: () => void;
+  canDelete?: boolean;
+  onDelete?: () => void;
+  onTokenChart?: (token: CommunityTokenCard) => void;
+}) {
+  const quote = post.quote;
+  const handleText = post.authorUsername ? `@${post.authorUsername}` : post.authorHandle || "";
+  const dt = new Date(post.createdAt);
+  const timeStr = dt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const dateStr = dt.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+  return (
+    <View style={styles.xHero} testID={`post-${post.id}`}>
+      {post.pinned ? (
+        <View style={styles.pinnedTag}>
+          <Pin color={Colors.orange} size={10} strokeWidth={2.8} />
+          <Text style={styles.pinnedText}>PINNED</Text>
+        </View>
+      ) : null}
+      <View style={styles.xHeroHead}>
+        <View style={[styles.xHeroAvatar, { backgroundColor: post.authorColor }]}>
+          {post.authorAvatarUrl ? (
+            <Image source={{ uri: post.authorAvatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          ) : (
+            <Text style={styles.xHeroInit}>{post.authorName.slice(0, 1).toUpperCase()}</Text>
+          )}
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={styles.xHeroNameRow}>
+            <Text style={styles.xHeroName} numberOfLines={1}>{post.authorName}</Text>
+            {post.authorVerified ? <BadgeCheck color={Colors.mint} size={14} strokeWidth={2.8} fill={Colors.mint} /> : null}
+          </View>
+          {handleText ? <Text style={styles.xHeroHandle} numberOfLines={1}>{handleText}</Text> : null}
+        </View>
+        {canPin ? (
+          <Pressable onPress={onPin} style={[styles.deletePostBtn, styles.pinPostBtn]} hitSlop={8} testID={`pin-post-${post.id}`}>
+            <Pin color={post.pinned ? Colors.orange : Colors.muted} size={14} strokeWidth={2.6} />
+          </Pressable>
+        ) : null}
+        {canDelete ? (
+          <Pressable onPress={onDelete} style={styles.deletePostBtn} hitSlop={8} testID={`delete-post-${post.id}`}>
+            <Trash2 color={Colors.rose} size={14} strokeWidth={2.6} />
+          </Pressable>
+        ) : null}
+      </View>
+      {post.replyTo ? (
+        <Text style={styles.replyingTo}>
+          Replying to <Text style={styles.replyingToHandle}>{post.replyTo.authorHandle || post.replyTo.authorName}</Text>
+        </Text>
+      ) : null}
+      {post.content.length > 0 ? <Text style={styles.xHeroBody}>{post.content}</Text> : null}
+      {post.imageUrl ? (
+        <Image source={{ uri: post.imageUrl }} style={styles.xHeroImage} contentFit="cover" />
+      ) : null}
+      {post.token ? (
+        <CommunityTokenPreviewCard token={post.token} onPress={() => onTokenChart?.(post.token!)} />
+      ) : null}
+      {quote ? (
+        <View style={styles.quoteCard}>
+          <View style={styles.quoteTop}>
+            <Quote color={Colors.mint} size={13} strokeWidth={2.6} />
+            <Text style={styles.quoteAuthor} numberOfLines={1}>
+              {quote.authorName} {quote.authorHandle ? `· ${quote.authorHandle}` : ""}
+            </Text>
+            {quote.createdAt ? <Text style={styles.quoteTime}>· {timeAgo(quote.createdAt)}</Text> : null}
+          </View>
+          {quote.content ? <Text style={styles.quoteBody} numberOfLines={4}>{quote.content}</Text> : null}
+          {quote.imageUrl ? <Image source={{ uri: quote.imageUrl }} style={styles.quoteImage} contentFit="cover" /> : null}
+          {quote.ticker ? <Text style={styles.quoteTicker}>{quote.ticker}</Text> : null}
+        </View>
+      ) : null}
+      <Text style={styles.xHeroMeta}>
+        {timeStr} · {dateStr}
+      </Text>
+      <View style={styles.xHeroStatsDivider} />
+      <View style={styles.xHeroStatsRow}>
+        <View style={styles.xHeroStat}><Text style={styles.xHeroStatNum}>{fmtCount(post.reposts ?? 0)}</Text><Text style={styles.xHeroStatLabel}>Reposts</Text></View>
+        <View style={styles.xHeroStat}><Text style={styles.xHeroStatNum}>{fmtCount(post.comments ?? 0)}</Text><Text style={styles.xHeroStatLabel}>Replies</Text></View>
+        <View style={styles.xHeroStat}><Text style={styles.xHeroStatNum}>{fmtCount(post.likes ?? 0)}</Text><Text style={styles.xHeroStatLabel}>Likes</Text></View>
+      </View>
+      <View style={styles.xHeroStatsDivider} />
+      <View style={styles.xHeroActions}>
+        <Pressable onPress={onReply} style={styles.xHeroActionBtn} hitSlop={6} testID={`hero-reply-${post.id}`}>
+          <MessageCircle color={Colors.muted} size={18} strokeWidth={2.4} />
+        </Pressable>
+        <Pressable onPress={onRepost} style={styles.xHeroActionBtn} hitSlop={6} testID={`hero-repost-${post.id}`}>
+          <Repeat2 color={post.reposted ? Colors.mint : Colors.muted} size={18} strokeWidth={2.4} />
+        </Pressable>
+        <Pressable onPress={onLike} style={styles.xHeroActionBtn} hitSlop={6} testID={`hero-like-${post.id}`}>
+          <Heart color={post.liked ? Colors.rose : Colors.muted} fill={post.liked ? Colors.rose : "transparent"} size={18} strokeWidth={2.4} />
+        </Pressable>
+        <Pressable onPress={onQuote} style={styles.xHeroActionBtn} hitSlop={6} testID={`hero-quote-${post.id}`}>
+          <Quote color={Colors.muted} size={17} strokeWidth={2.4} />
+        </Pressable>
+        <Pressable onPress={onBookmark} style={styles.xHeroActionBtn} hitSlop={6} testID={`hero-bookmark-${post.id}`}>
+          <Bookmark color={post.bookmarked ? Colors.orange : Colors.muted} fill={post.bookmarked ? Colors.orange : "transparent"} size={17} strokeWidth={2.4} />
+        </Pressable>
+        <Pressable onPress={onShare} style={styles.xHeroActionBtn} hitSlop={6} testID={`hero-share-${post.id}`}>
+          <Share2 color={Colors.muted} size={17} strokeWidth={2.4} />
+        </Pressable>
+        {onReport ? (
+          <Pressable onPress={onReport} style={styles.xHeroActionBtn} hitSlop={6} testID={`hero-report-${post.id}`}>
+            <Flag color={post.reported ? Colors.rose : Colors.muted} size={17} strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function XCommentRow({
+  post,
+  parentHandle,
+  showThreadLine,
+  onLike,
+  onReply,
+  onRepost,
+  onQuote,
+  onBookmark,
+  onShare,
+  onReport,
+  canDelete,
+  onDelete,
+  onOpen,
+}: {
+  post: CommunityPost;
+  parentHandle?: string | null;
+  showThreadLine?: boolean;
+  onLike: () => void;
+  onReply: () => void;
+  onRepost: () => void;
+  onQuote: () => void;
+  onBookmark: () => void;
+  onShare: () => void;
+  onReport?: () => void;
+  canDelete?: boolean;
+  onDelete?: () => void;
+  onOpen: () => void;
+}) {
+  const handleText = post.authorUsername ? `@${post.authorUsername}` : post.authorHandle || "";
+  const replyHandle = parentHandle ? (parentHandle.startsWith("@") ? parentHandle : `@${parentHandle}`) : null;
+  return (
+    <Pressable onPress={onOpen} style={styles.xRow} testID={`x-comment-${post.id}`}>
+      <View style={styles.xRowLeft}>
+        <View style={[styles.xRowAvatar, { backgroundColor: post.authorColor }]}>
+          {post.authorAvatarUrl ? (
+            <Image source={{ uri: post.authorAvatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          ) : (
+            <Text style={styles.xRowInit}>{post.authorName.slice(0, 1).toUpperCase()}</Text>
+          )}
+        </View>
+        {showThreadLine ? <View style={styles.xRowLine} /> : null}
+      </View>
+      <View style={styles.xRowMain}>
+        <View style={styles.xRowHead}>
+          <Text style={styles.xRowName} numberOfLines={1}>{post.authorName}</Text>
+          {post.authorVerified ? <BadgeCheck color={Colors.mint} size={12} strokeWidth={2.8} fill={Colors.mint} /> : null}
+          <Text style={styles.xRowHandle} numberOfLines={1}>{handleText}</Text>
+          <Text style={styles.xRowDot}>·</Text>
+          <Text style={styles.xRowTime}>{timeAgo(post.createdAt)}</Text>
+          {canDelete ? (
+            <Pressable onPress={onDelete} style={styles.xRowMore} hitSlop={6} testID={`x-delete-${post.id}`}>
+              <Trash2 color={Colors.rose} size={13} strokeWidth={2.6} />
+            </Pressable>
+          ) : null}
+        </View>
+        {replyHandle ? (
+          <Text style={styles.xRowReplyingTo}>
+            Replying to <Text style={styles.xRowReplyingHandle}>{replyHandle}</Text>
+          </Text>
+        ) : null}
+        {post.content.length > 0 ? <Text style={styles.xRowBody}>{post.content}</Text> : null}
+        {post.imageUrl ? (
+          <Image source={{ uri: post.imageUrl }} style={styles.xRowImage} contentFit="cover" />
+        ) : null}
+        <View style={styles.xRowActions}>
+          <Pressable onPress={onReply} style={styles.xRowAction} hitSlop={6} testID={`x-reply-${post.id}`}>
+            <MessageCircle color={Colors.muted} size={14} strokeWidth={2.4} />
+            <Text style={styles.xRowActionText}>{fmtCount(post.comments ?? 0)}</Text>
+          </Pressable>
+          <Pressable onPress={onRepost} style={styles.xRowAction} hitSlop={6} testID={`x-repost-${post.id}`}>
+            <Repeat2 color={post.reposted ? Colors.mint : Colors.muted} size={14} strokeWidth={2.4} />
+            <Text style={[styles.xRowActionText, post.reposted && { color: Colors.mint }]}>{fmtCount(post.reposts ?? 0)}</Text>
+          </Pressable>
+          <Pressable onPress={onLike} style={styles.xRowAction} hitSlop={6} testID={`x-like-${post.id}`}>
+            <Heart color={post.liked ? Colors.rose : Colors.muted} fill={post.liked ? Colors.rose : "transparent"} size={14} strokeWidth={2.4} />
+            <Text style={[styles.xRowActionText, post.liked && { color: Colors.rose }]}>{fmtCount(post.likes ?? 0)}</Text>
+          </Pressable>
+          <Pressable onPress={onQuote} style={styles.xRowAction} hitSlop={6} testID={`x-quote-${post.id}`}>
+            <Quote color={Colors.muted} size={13} strokeWidth={2.4} />
+          </Pressable>
+          <Pressable onPress={onBookmark} style={styles.xRowAction} hitSlop={6} testID={`x-bookmark-${post.id}`}>
+            <Bookmark color={post.bookmarked ? Colors.orange : Colors.muted} fill={post.bookmarked ? Colors.orange : "transparent"} size={13} strokeWidth={2.4} />
+          </Pressable>
+          {onReport ? (
+            <Pressable onPress={onReport} style={styles.xRowAction} hitSlop={6} testID={`x-report-${post.id}`}>
+              <Flag color={post.reported ? Colors.rose : Colors.muted} size={13} strokeWidth={2.4} />
+            </Pressable>
+          ) : null}
+          <Pressable onPress={onShare} style={styles.xRowAction} hitSlop={6} testID={`x-share-${post.id}`}>
+            <Share2 color={Colors.muted} size={13} strokeWidth={2.4} />
+          </Pressable>
+        </View>
+      </View>
     </Pressable>
   );
 }
@@ -3740,22 +3987,64 @@ const styles = StyleSheet.create({
   },
   threadTitle: { color: Colors.text, fontSize: 15, fontWeight: "900" },
   threadList: { paddingBottom: 110 },
-  threadEmpty: { alignItems: "center", gap: 8, paddingVertical: 30 },
-  threadEmptyText: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  threadEmpty: { alignItems: "center", gap: 8, paddingVertical: 40, paddingHorizontal: 30 },
+  threadEmptyTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", marginTop: 4 },
+  threadEmptyText: { color: Colors.muted, fontSize: 12, fontWeight: "600", textAlign: "center", lineHeight: 18 },
+  repliesHeader: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 6 },
+  repliesHeaderText: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" as const },
+  repliesHeaderLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.06)" },
+
+  xHero: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
+  xHeroHead: { flexDirection: "row", alignItems: "center", gap: 12 },
+  xHeroAvatar: { width: 46, height: 46, borderRadius: 999, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  xHeroInit: { color: Colors.ink, fontSize: 18, fontWeight: "900" },
+  xHeroNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  xHeroName: { color: Colors.text, fontSize: 15, fontWeight: "900", flexShrink: 1 },
+  xHeroHandle: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 1 },
+  xHeroBody: { color: Colors.text, fontSize: 17, lineHeight: 24, fontWeight: "500", marginTop: 14, letterSpacing: -0.1 },
+  xHeroImage: { width: "100%", height: 220, borderRadius: 18, marginTop: 14, backgroundColor: "rgba(255,255,255,0.05)" },
+  xHeroMeta: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 14 },
+  xHeroStatsDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.06)", marginTop: 12 },
+  xHeroStatsRow: { flexDirection: "row", alignItems: "center", gap: 22, paddingVertical: 12 },
+  xHeroStat: { flexDirection: "row", alignItems: "baseline", gap: 5 },
+  xHeroStatNum: { color: Colors.text, fontSize: 13, fontWeight: "900" },
+  xHeroStatLabel: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  xHeroActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 },
+  xHeroActionBtn: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  replyingToHandle: { color: Colors.mint, fontWeight: "900" },
+
+  xRow: { flexDirection: "row", paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8, gap: 10, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.04)" },
+  xRowLeft: { alignItems: "center", width: 38 },
+  xRowAvatar: { width: 38, height: 38, borderRadius: 999, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  xRowInit: { color: Colors.ink, fontSize: 14, fontWeight: "900" },
+  xRowLine: { width: 2, flex: 1, marginTop: 4, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 999 },
+  xRowMain: { flex: 1, minWidth: 0 },
+  xRowHead: { flexDirection: "row", alignItems: "center", gap: 4 },
+  xRowName: { color: Colors.text, fontSize: 13, fontWeight: "900", maxWidth: "45%" },
+  xRowHandle: { color: Colors.muted, fontSize: 12, fontWeight: "600", flexShrink: 1 },
+  xRowDot: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  xRowTime: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  xRowMore: { marginLeft: "auto", width: 24, height: 24, alignItems: "center", justifyContent: "center" },
+  xRowReplyingTo: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  xRowReplyingHandle: { color: Colors.mint, fontWeight: "900" },
+  xRowBody: { color: Colors.text, fontSize: 14, lineHeight: 20, fontWeight: "500", marginTop: 4 },
+  xRowImage: { width: "100%", height: 170, borderRadius: 16, marginTop: 8, backgroundColor: "rgba(255,255,255,0.05)" },
+  xRowActions: { flexDirection: "row", alignItems: "center", marginTop: 8, marginLeft: -6, justifyContent: "space-between", maxWidth: 320 },
+  xRowAction: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6, paddingVertical: 4 },
+  xRowActionText: { color: Colors.muted, fontSize: 11, fontWeight: "800" },
+
+  threadComposerWrap: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: "rgba(9,14,16,0.98)", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 8, paddingBottom: 16 },
+  composerReplyingTo: { color: Colors.muted, fontSize: 12, fontWeight: "700", paddingHorizontal: 16, marginBottom: 4 },
+  composerReplyingHandle: { color: Colors.mint, fontWeight: "900" },
+  composerAvatarRound: { width: 32, height: 32, borderRadius: 999, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  replyBtn: { paddingHorizontal: 14, height: 32, borderRadius: 999, backgroundColor: Colors.mint, alignItems: "center", justifyContent: "center" },
+  replyBtnText: { color: Colors.ink, fontSize: 12, fontWeight: "900", letterSpacing: 0.2 },
   threadComposer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 10,
     paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 16,
-    backgroundColor: "rgba(9,14,16,0.98)",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.08)",
+    paddingTop: 8,
   },
   threadInput: {
     flex: 1,
