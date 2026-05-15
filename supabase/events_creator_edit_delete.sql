@@ -181,6 +181,30 @@ grant execute on function public.admin_update_event(
 ) to authenticated;
 
 -- =============================================================================
+-- Ensure dependent rows are removed when an event is deleted.
+-- (event_rsvps may have been created without ON DELETE CASCADE.)
+-- =============================================================================
+do $
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'event_rsvps'
+  ) then
+    begin
+      alter table public.event_rsvps
+        drop constraint if exists event_rsvps_event_id_fkey;
+    exception when others then null;
+    end;
+    begin
+      alter table public.event_rsvps
+        add constraint event_rsvps_event_id_fkey
+        foreign key (event_id) references public.events(id) on delete cascade;
+    exception when others then null;
+    end;
+  end if;
+end$;
+
+-- =============================================================================
 -- Admin RPC: delete event (creator-only)
 -- =============================================================================
 create or replace function public.admin_delete_event(p_event_id uuid)
@@ -188,7 +212,7 @@ returns void
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $
 declare
   v_uid uuid := auth.uid();
   v_host uuid;
@@ -205,7 +229,9 @@ begin
     raise exception 'Only the creator can delete this event';
   end if;
 
+  -- Belt-and-suspenders: remove dependents explicitly in case the FK is not cascaded.
+  delete from public.event_rsvps where event_id = p_event_id;
   delete from public.events where id = p_event_id;
-end$$;
+end$;
 
 grant execute on function public.admin_delete_event(uuid) to authenticated;

@@ -493,6 +493,13 @@ export async function deleteMyEvent(eventId: string): Promise<void> {
   const { data: userData } = await supabase.auth.getUser();
   const uid = userData.user?.id;
   if (!uid) throw new Error("Sign in required.");
+  // Use the SECURITY DEFINER RPC so the delete also clears dependent rows
+  // (event_rsvps) and is not blocked by missing ON DELETE CASCADE.
+  const { error: rpcError } = await supabase.rpc("admin_delete_event", { p_event_id: eventId });
+  if (!rpcError) return;
+  console.log("[events] admin_delete_event failed, falling back", rpcError.message);
+  // Fallback: try to clear RSVPs then delete via RLS-protected table.
+  await supabase.from("event_rsvps").delete().eq("event_id", eventId);
   const { error } = await supabase
     .from("events")
     .delete()
