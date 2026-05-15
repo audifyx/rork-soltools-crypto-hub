@@ -56,6 +56,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import DexChart from "@/components/DexChart";
+import LiquidGlass from "@/components/ui/LiquidGlass";
 import Colors from "@/constants/colors";
 import { navigateBack } from "@/lib/navigation";
 import {
@@ -1655,6 +1656,13 @@ export default function CommunityDetailScreen() {
                 }}
                 testID="community-members"
               >
+                <LiquidGlass
+                  style={StyleSheet.absoluteFill}
+                  radius={18}
+                  intensity={32}
+                  tint="dark"
+                  sheen
+                />
                 <View style={styles.memberStack}>
                   {(members.length > 0 ? members.slice(0, 4) : placeholderMembers()).map(
                     (m, i) => (
@@ -3137,11 +3145,12 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.42)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(255,255,255,0.16)",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   bannerIconActive: {
     borderColor: "rgba(85,245,178,0.55)",
@@ -3182,9 +3191,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 6,
-    paddingRight: 8,
-    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    overflow: "hidden",
+    backgroundColor: "rgba(18,16,12,0.32)",
   },
   memberStack: { flexDirection: "row", alignItems: "center" },
   stackAvatar: {
@@ -3209,6 +3222,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
   headCircleActive: {
     borderColor: "rgba(85,245,178,0.5)",

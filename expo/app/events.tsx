@@ -23,6 +23,7 @@ import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text,
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
+import LiquidGlass from "@/components/ui/LiquidGlass";
 import Colors from "@/constants/colors";
 import { deleteMyEvent, listEventRsvps, listUpcomingEvents, rsvpEvent, type EventRow, type EventRsvpUser } from "@/lib/api/platform";
 import { hapticSelect } from "@/lib/haptics";
@@ -197,6 +198,13 @@ export default function EventsScreen() {
             const isOwner = !!myId && !!hostId && hostId === myId;
             return (
               <View style={styles.card} testID={`event-${item.id}`}>
+                <LiquidGlass
+                  style={StyleSheet.absoluteFill}
+                  radius={22}
+                  intensity={36}
+                  tint="dark"
+                  sheen
+                />
                 {item.banner_url ? (
                   <View style={styles.banner}>
                     <ExpoImage source={{ uri: item.banner_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
@@ -490,14 +498,15 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: "row", gap: 8, paddingHorizontal: 14, marginTop: 8, marginBottom: 6, flexWrap: "wrap" },
   filterChip: {
     paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.14)",
+    overflow: "hidden",
   },
   filterChipActive: { backgroundColor: Colors.goldBright, borderColor: Colors.goldBright },
   filterText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
   filterTextActive: { color: Colors.ink },
   list: { paddingHorizontal: 14, paddingBottom: 140, paddingTop: 8 },
   sep: { height: 12 },
-  card: { borderRadius: 22, backgroundColor: Colors.card, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
+  card: { borderRadius: 22, backgroundColor: "rgba(18,16,12,0.42)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", overflow: "hidden" },
   banner: { height: 110 },
   bannerFallback: { backgroundColor: Colors.violet },
   bannerTag: {
@@ -528,9 +537,9 @@ const styles = StyleSheet.create({
   pollPeekText: { color: Colors.muted, fontSize: 10, fontWeight: "800", letterSpacing: 0.3 },
   sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
   sheet: {
-    backgroundColor: Colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    backgroundColor: "rgba(18,16,12,0.78)", borderTopLeftRadius: 24, borderTopRightRadius: 24,
     paddingTop: 10, paddingBottom: 28, maxHeight: "80%",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
   },
   sheetHandle: { alignSelf: "center", width: 38, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.18)", marginBottom: 10 },
   sheetTitle: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.3, paddingHorizontal: 18, marginBottom: 10 },
