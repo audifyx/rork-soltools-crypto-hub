@@ -633,10 +633,11 @@ export default function ProfileScreen() {
             />
           }
         >
+          {/* HEADER */}
           <View style={styles.topBar}>
             <View style={styles.topTitleBlock}>
-              <Text style={styles.headerKicker}>Profile</Text>
-              <Text style={styles.headerTitle}>{profile.handle}</Text>
+              <Text style={styles.headerKicker}>PROFILE</Text>
+              <Text style={styles.headerTitle} numberOfLines={1}>{profile.displayName}</Text>
             </View>
             <View style={styles.headerActions}>
               <Pressable onPress={onShareProfile} style={styles.iconBtn} testID="share-profile">
@@ -648,203 +649,209 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <Pressable onPress={onPickBanner} style={styles.bannerCard} testID="pick-banner">
-            {profile.bannerUrl ? (
-              <Image
-                source={{ uri: profile.bannerUrl }}
-                style={StyleSheet.absoluteFillObject}
-                contentFit="cover"
-              />
-            ) : (
+          {/* HERO: banner + identity */}
+          <View style={styles.heroShell}>
+            <Pressable onPress={onPickBanner} style={styles.bannerWrap} testID="pick-banner">
+              {profile.bannerUrl ? (
+                <Image
+                  source={{ uri: profile.bannerUrl }}
+                  style={StyleSheet.absoluteFillObject}
+                  contentFit="cover"
+                />
+              ) : (
+                <LinearGradient
+                  colors={["#0A1224", "#06080F", "#000000"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              )}
               <LinearGradient
-                colors={["#050505", "#15120A", "#000000"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.25)", "rgba(6,8,15,0.95)"]}
+                locations={[0, 0.55, 1]}
                 style={StyleSheet.absoluteFillObject}
+                pointerEvents="none"
               />
-            )}
-            {!profile.bannerUrl ? <View style={styles.bannerTexture} pointerEvents="none" /> : null}
-            <LinearGradient
-              colors={["rgba(0,0,0,0.02)", "rgba(0,0,0,0.20)", "rgba(0,0,0,0.82)"]}
-              locations={[0, 0.5, 1]}
-              style={StyleSheet.absoluteFillObject}
-              pointerEvents="none"
-            />
-            <View style={styles.bannerEditBtn}>
-              <Camera color={Colors.text} size={12} strokeWidth={2.8} />
-              <Text style={styles.bannerEditText}>BANNER</Text>
-            </View>
-            <View style={styles.bannerBadgeRow}>
-              <View style={[styles.rankBadge, { borderColor: `${rank.color}88` }]}>
-                <rank.Icon color={rank.color} size={11} strokeWidth={3} />
-                <Text style={[styles.rankBadgeText, { color: rank.color }]}>
-                  LVL {rank.level} · {rank.name.toUpperCase()}
-                </Text>
-              </View>
-            </View>
-            {isUploading ? (
-              <View style={[styles.bannerOverlay, styles.bannerUploadingBox]}>
-                <Text style={styles.bannerUploading}>Uploading…</Text>
-              </View>
-            ) : null}
-          </Pressable>
-
-          <View style={styles.profileCard}>
-            <View style={styles.heroBody}>
-              <Pressable onPress={onPickAvatar} style={styles.avatarWrap} testID="pick-avatar">
-                <Animated.View style={[styles.avatarRingOuter, { opacity: ringOpacity }]}>
-                  <LinearGradient
-                    colors={[rank.color, Colors.cyan, Colors.mint, rank.color]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFillObject}
-                  />
-                </Animated.View>
-                <View style={styles.avatarRing}>
-                  {profile.avatarUrl ? (
-                    <Image
-                      source={{ uri: profile.avatarUrl }}
-                      style={styles.avatarImage}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <View style={[styles.avatar, { backgroundColor: profile.avatarColor }]}>
-                      <Text style={styles.avatarText}>
-                        {(profile.displayName || "S").slice(0, 1).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                <View style={styles.avatarEditDot}>
-                  <Camera color={Colors.ink} size={11} strokeWidth={3} />
-                </View>
-              </Pressable>
-
-              <View style={styles.heroActions}>
-                <Pressable onPress={() => setEditOpen(true)} style={styles.actionBtn} testID="edit-profile">
-                  <Edit3 color={Colors.text} size={13} strokeWidth={2.6} />
-                  <Text style={styles.actionBtnText}>Edit profile</Text>
-                </Pressable>
-                <Pressable onPress={onCopyAddress} style={styles.actionBtn} testID="copy-address">
-                  <Copy color={Colors.text} size={13} strokeWidth={2.6} />
-                  <Text style={styles.actionBtnText}>
-                    {profile.walletAddress ? shorten(profile.walletAddress) : "Add wallet"}
+              <View style={styles.bannerTopRow}>
+                <View style={[styles.rankBadge, { borderColor: `${rank.color}66`, backgroundColor: "rgba(6,8,15,0.7)" }]}>
+                  <rank.Icon color={rank.color} size={11} strokeWidth={3} />
+                  <Text style={[styles.rankBadgeText, { color: rank.color }]}>
+                    LVL {rank.level} · {rank.name.toUpperCase()}
                   </Text>
-                </Pressable>
+                </View>
+                <View style={styles.bannerEditBtn}>
+                  <Camera color={Colors.text} size={11} strokeWidth={2.8} />
+                </View>
               </View>
-
-              <View style={styles.socialNameRow}>
-                <Text style={styles.displayName}>{profile.displayName}</Text>
-                {profile.verified ? (
-                  <View style={styles.socialVerified}>
-                    <ShieldCheck color={Colors.ink} size={12} strokeWidth={3} />
-                  </View>
-                ) : null}
-              </View>
-              <View style={styles.handleRow}>
-                <Text style={styles.handle}>{profile.handle}</Text>
-              </View>
-              {stackedBadges.length > 0 ? (
-                <View style={styles.badgeRow}>
-                  <BadgeRow badges={stackedBadges} />
+              {isUploading ? (
+                <View style={styles.bannerUploadingBox}>
+                  <Text style={styles.bannerUploading}>Uploading…</Text>
                 </View>
               ) : null}
-              <Text style={[styles.bio, !profile.bio && styles.socialBioEmpty]}>
-                {profile.bio || "Add a bio, links, and your best alpha so people know why they should follow."}
-              </Text>
+            </Pressable>
 
-              <View style={styles.metaRow}>
-                {profile.location ? (
-                  <View style={styles.metaItem}>
-                    <MapPin color={Colors.muted} size={11} strokeWidth={2.4} />
-                    <Text style={styles.metaText}>{profile.location}</Text>
+            <View style={styles.heroBody2}>
+              <View style={styles.heroTopRow}>
+                <Pressable onPress={onPickAvatar} style={styles.avatarWrap} testID="pick-avatar">
+                  <View style={styles.avatarRing}>
+                    {profile.avatarUrl ? (
+                      <Image
+                        source={{ uri: profile.avatarUrl }}
+                        style={styles.avatarImage}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={[styles.avatar, { backgroundColor: profile.avatarColor }]}>
+                        <Text style={styles.avatarText}>
+                          {(profile.displayName || "S").slice(0, 1).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                ) : null}
-                {profile.website ? (
-                  <Pressable onPress={() => onOpenLink(profile.website)} style={styles.metaItem}>
-                    <Globe color={Colors.cyan} size={11} strokeWidth={2.4} />
-                    <Text style={[styles.metaText, { color: Colors.cyan }]}>{profile.website}</Text>
+                  <View style={styles.avatarEditDot}>
+                    <Camera color={Colors.ink} size={11} strokeWidth={3} />
+                  </View>
+                </Pressable>
+
+                <View style={styles.heroActionsRow}>
+                  <Pressable onPress={() => setEditOpen(true)} style={styles.primaryActionBtn} testID="edit-profile">
+                    <Edit3 color={Colors.ink} size={13} strokeWidth={2.8} />
+                    <Text style={styles.primaryActionText}>Edit</Text>
                   </Pressable>
-                ) : null}
-                {profile.twitterHandle ? (
-                  <Pressable
-                    onPress={() => onOpenLink(`x.com/${profile.twitterHandle.replace("@", "")}`)}
-                    style={styles.metaItem}
-                  >
-                    <Twitter color={Colors.cyan} size={11} strokeWidth={2.4} />
-                    <Text style={[styles.metaText, { color: Colors.cyan }]}>
-                      {profile.twitterHandle.startsWith("@") ? profile.twitterHandle : `@${profile.twitterHandle}`}
+                  <Pressable onPress={onCopyAddress} style={styles.ghostActionBtn} testID="copy-address">
+                    <Copy color={Colors.text} size={13} strokeWidth={2.6} />
+                    <Text style={styles.ghostActionText}>
+                      {profile.walletAddress ? shorten(profile.walletAddress) : "Add wallet"}
                     </Text>
                   </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.identityBlock}>
+                <View style={styles.nameRow2}>
+                  <Text style={styles.displayName} numberOfLines={1}>{profile.displayName}</Text>
+                  {profile.verified ? (
+                    <View style={styles.socialVerified}>
+                      <ShieldCheck color={Colors.ink} size={12} strokeWidth={3} />
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.handle}>{profile.handle}</Text>
+                {stackedBadges.length > 0 ? (
+                  <View style={styles.badgeRow}>
+                    <BadgeRow badges={stackedBadges} />
+                  </View>
                 ) : null}
-                <View style={styles.metaItem}>
-                  <Star color={Colors.muted} size={11} strokeWidth={2.4} />
-                  <Text style={styles.metaText}>
-                    Joined {new Date(profile.joinedAt).toLocaleDateString(undefined, { month: "short", year: "numeric" })}
-                  </Text>
-                </View>
-              </View>
+                <Text style={[styles.bio, !profile.bio && styles.socialBioEmpty]}>
+                  {profile.bio || "Add a bio, links, and your best alpha so people know why they should follow."}
+                </Text>
 
-              <View style={styles.followRow}>
-                <Pressable
-                  style={styles.followItem}
-                  onPress={() => setFollowersOpen("following")}
-                  testID="open-following"
-                >
-                  <Text style={styles.followNum}>{followingCount}</Text>
-                  <Text style={styles.followKey}>Following</Text>
-                </Pressable>
-                <View style={styles.followDivider} />
-                <Pressable
-                  style={styles.followItem}
-                  onPress={() => setFollowersOpen("followers")}
-                  testID="open-followers"
-                >
-                  <Text style={styles.followNum}>{followersCount}</Text>
-                  <Text style={styles.followKey}>Followers</Text>
-                </Pressable>
-                <View style={styles.followDivider} />
-                <View style={styles.followItem}>
-                  <Text style={styles.followNum}>{stats.posts}</Text>
-                  <Text style={styles.followKey}>Posts</Text>
-                </View>
-              </View>
-
-              <View style={styles.xpBox}>
-                <View style={styles.xpHeader}>
-                  <Text style={styles.xpLabel}>
-                    {rank.name} → {rank.next}
-                  </Text>
-                  <Text style={styles.xpValue}>
-                    {rank.xpInLevel}/{rank.xpForNext} XP
-                  </Text>
-                </View>
-                <View style={styles.xpTrack}>
-                  <Animated.View style={[styles.xpFillWrap, { width: xpFillWidth }]}>
-                    <LinearGradient
-                      colors={[Colors.mint, Colors.cyan, "#B8BEC8"]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={StyleSheet.absoluteFillObject}
-                    />
-                  </Animated.View>
-                </View>
+                {(profile.location || profile.website || profile.twitterHandle) ? (
+                  <View style={styles.metaRow}>
+                    {profile.location ? (
+                      <View style={styles.metaItem}>
+                        <MapPin color={Colors.muted} size={11} strokeWidth={2.4} />
+                        <Text style={styles.metaText}>{profile.location}</Text>
+                      </View>
+                    ) : null}
+                    {profile.website ? (
+                      <Pressable onPress={() => onOpenLink(profile.website)} style={styles.metaItem}>
+                        <Globe color={Colors.cyan} size={11} strokeWidth={2.4} />
+                        <Text style={[styles.metaText, { color: Colors.cyan }]} numberOfLines={1}>{profile.website}</Text>
+                      </Pressable>
+                    ) : null}
+                    {profile.twitterHandle ? (
+                      <Pressable
+                        onPress={() => onOpenLink(`x.com/${profile.twitterHandle.replace("@", "")}`)}
+                        style={styles.metaItem}
+                      >
+                        <Twitter color={Colors.cyan} size={11} strokeWidth={2.4} />
+                        <Text style={[styles.metaText, { color: Colors.cyan }]}>
+                          {profile.twitterHandle.startsWith("@") ? profile.twitterHandle : `@${profile.twitterHandle}`}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    <View style={styles.metaItem}>
+                      <Star color={Colors.muted} size={11} strokeWidth={2.4} />
+                      <Text style={styles.metaText}>
+                        Joined {new Date(profile.joinedAt).toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+                      </Text>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.metaRow}>
+                    <View style={styles.metaItem}>
+                      <Star color={Colors.muted} size={11} strokeWidth={2.4} />
+                      <Text style={styles.metaText}>
+                        Joined {new Date(profile.joinedAt).toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </View>
             </View>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.highlightsRow}
-            style={styles.highlightsScroll}
-          >
-            <HighlightBubble label="Watchlist" value={stats.watching} accent={Colors.mint} Icon={Eye} onPress={() => setTab("watchlist")} />
-            <HighlightBubble label="Alerts" value={stats.alerts} accent={Colors.orange} Icon={Bell} onPress={() => setTab("alerts")} />
-            <HighlightBubble label="Wallets" value={stats.wallets} accent={Colors.cyan} Icon={Wallet} onPress={() => setTab("wallets")} />
-            <HighlightBubble label="Listed" value={stats.listed} accent={Colors.rose} Icon={Rocket} onPress={() => setTab("listings")} />
-            <HighlightBubble label="Badges" value={unlockedCount} accent={rank.color} Icon={Trophy} onPress={() => setTab("overview")} />
-          </ScrollView>
+          {/* STATS GRID */}
+          <View style={styles.statsGridRow}>
+            <Pressable
+              style={styles.statGridCell}
+              onPress={() => setFollowersOpen("following")}
+              testID="open-following"
+            >
+              <Text style={styles.statGridNum}>{followingCount}</Text>
+              <Text style={styles.statGridKey}>Following</Text>
+            </Pressable>
+            <View style={styles.statGridDiv} />
+            <Pressable
+              style={styles.statGridCell}
+              onPress={() => setFollowersOpen("followers")}
+              testID="open-followers"
+            >
+              <Text style={styles.statGridNum}>{followersCount}</Text>
+              <Text style={styles.statGridKey}>Followers</Text>
+            </Pressable>
+            <View style={styles.statGridDiv} />
+            <View style={styles.statGridCell}>
+              <Text style={styles.statGridNum}>{stats.posts}</Text>
+              <Text style={styles.statGridKey}>Posts</Text>
+            </View>
+            <View style={styles.statGridDiv} />
+            <View style={styles.statGridCell}>
+              <Text style={styles.statGridNum}>{stats.watching}</Text>
+              <Text style={styles.statGridKey}>Watching</Text>
+            </View>
+          </View>
+
+          {/* LEVEL CARD */}
+          <View style={styles.levelCard}>
+            <View style={styles.levelHeader}>
+              <View style={styles.levelTitleRow}>
+                <View style={[styles.levelIcon, { backgroundColor: `${rank.color}22`, borderColor: `${rank.color}55` }]}>
+                  <rank.Icon color={rank.color} size={14} strokeWidth={2.8} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.levelEyebrow}>RANK PROGRESS</Text>
+                  <Text style={styles.levelTitle} numberOfLines={1}>
+                    {rank.name} → {rank.next}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.levelXP}>
+                {rank.xpInLevel}/{rank.xpForNext} XP
+              </Text>
+            </View>
+            <View style={styles.xpTrack}>
+              <Animated.View style={[styles.xpFillWrap, { width: xpFillWidth }]}>
+                <LinearGradient
+                  colors={[Colors.mint, Colors.cyan, Colors.neon]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              </Animated.View>
+            </View>
+          </View>
 
           <PortfolioCard />
 
@@ -852,41 +859,34 @@ export default function ProfileScreen() {
             <RecapCard userId={userId ?? null} />
           </View>
 
-          <Pressable onPress={() => router.push("/list-token")} style={styles.cta} testID="profile-list-token">
-            <LinearGradient
-              colors={[Colors.mint, Colors.cyan]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.ctaGrad}
+          {/* TABS — underline segmented */}
+          <View style={styles.tabsBar}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tabsRow}
             >
-              <Rocket color={Colors.ink} size={16} strokeWidth={3} />
-              <Text style={styles.ctaText}>List a token in Discover</Text>
-            </LinearGradient>
-          </Pressable>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tabsRow}
-          >
-            {TABS.map((t) => {
-              const active = tab === t.id;
-              return (
-                <Pressable
-                  key={t.id}
-                  onPress={() => {
-                    tap();
-                    setTab(t.id);
-                  }}
-                  style={[styles.tabBtn, active && styles.tabBtnActive]}
-                  testID={`profile-tab-${t.id}`}
-                >
-                  <t.Icon color={active ? Colors.ink : Colors.text} size={13} strokeWidth={2.6} />
-                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+              {TABS.map((t) => {
+                const active = tab === t.id;
+                return (
+                  <Pressable
+                    key={t.id}
+                    onPress={() => {
+                      tap();
+                      setTab(t.id);
+                    }}
+                    style={styles.tabBtn}
+                    testID={`profile-tab-${t.id}`}
+                  >
+                    <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                      {t.label}
+                    </Text>
+                    <View style={[styles.tabIndicator, active && styles.tabIndicatorActive]} />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
 
           {false && tab === ("overview" as unknown as Tab) && (
             <View style={styles.section}>
@@ -2438,7 +2438,7 @@ const profileBlockStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.ink, overflow: "hidden" },
   safe: { flex: 1 },
-  scroll: { paddingHorizontal: 20, paddingBottom: 140 },
+  scroll: { paddingHorizontal: 18, paddingBottom: 140 },
 
   headerRow: {
     flexDirection: "row",
@@ -2451,11 +2451,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingTop: 4,
-    paddingBottom: 10,
+    paddingBottom: 12,
+    gap: 12,
   },
   topTitleBlock: { flex: 1, minWidth: 0 },
-  headerKicker: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1.6, textTransform: "uppercase" },
-  headerTitle: { color: Colors.text, fontSize: 24, fontWeight: "900", letterSpacing: -0.7, marginTop: 2 },
+  headerKicker: { color: Colors.muted2, fontSize: 10, fontWeight: "900", letterSpacing: 1.8, textTransform: "uppercase" },
+  headerTitle: { color: Colors.text, fontSize: 22, fontWeight: "900", letterSpacing: -0.6, marginTop: 3 },
   headerActions: { flexDirection: "row", gap: 8 },
   iconBtn: {
     width: 40,
@@ -2475,6 +2476,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
     backgroundColor: Colors.card,
+  },
+  heroShell: {
+    borderRadius: 22,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Colors.card,
+  },
+  bannerWrap: {
+    height: 132,
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: Colors.cardSoft,
+  },
+  bannerTopRow: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    top: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   bannerCard: {
     marginTop: 4,
@@ -2532,32 +2555,68 @@ const styles = StyleSheet.create({
   rankBadgeText: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
 
   heroBody: { padding: 16, paddingTop: 0 },
-  avatarWrap: { marginTop: -52, width: 106, height: 106 },
+  heroBody2: { padding: 16, paddingTop: 0 },
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  heroActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingBottom: 6,
+  },
+  primaryActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: Colors.text,
+  },
+  primaryActionText: { color: Colors.ink, fontSize: 12, fontWeight: "900", letterSpacing: 0.2 },
+  ghostActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  ghostActionText: { color: Colors.text, fontSize: 12, fontWeight: "900" },
+  identityBlock: { marginTop: 14 },
+  nameRow2: { flexDirection: "row", alignItems: "center", gap: 8 },
+  avatarWrap: { marginTop: -52, width: 96, height: 96 },
   avatarRingOuter: {
     position: "absolute",
     inset: 0,
-    width: 106,
-    height: 106,
-    borderRadius: 53,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     overflow: "hidden",
   },
   avatarRing: {
-    width: 106,
-    height: 106,
-    borderRadius: 53,
-    padding: 5,
-    backgroundColor: "#080807",
-    borderWidth: 5,
-    borderColor: "#080807",
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    padding: 4,
+    backgroundColor: Colors.card,
+    borderWidth: 4,
+    borderColor: Colors.card,
   },
   avatar: {
     flex: 1,
-    borderRadius: 48,
+    borderRadius: 44,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { color: Colors.ink, fontSize: 34, fontWeight: "900" },
-  avatarImage: { flex: 1, borderRadius: 48 },
+  avatarText: { color: Colors.ink, fontSize: 32, fontWeight: "900" },
+  avatarImage: { flex: 1, borderRadius: 44 },
   avatarEditDot: {
     position: "absolute",
     left: -4,
@@ -2572,27 +2631,22 @@ const styles = StyleSheet.create({
     borderColor: "#080807",
   },
   bannerEditBtn: {
-    position: "absolute",
-    bottom: 12,
-    right: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(6,8,15,0.7)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    flexDirection: "row",
+    borderColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
   },
   bannerEditText: { color: Colors.text, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  bannerUploadingBox: { alignItems: "center", justifyContent: "center" },
+  bannerUploadingBox: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.45)" },
   bannerUploading: {
     color: Colors.text,
     fontSize: 12,
     fontWeight: "800",
     textAlign: "center",
-    marginTop: 40,
   },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
   badgeRowSmall: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 },
@@ -2735,6 +2789,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
+  statsGridRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  statGridCell: { flex: 1, alignItems: "center", paddingHorizontal: 4 },
+  statGridDiv: { width: 1, height: 26, backgroundColor: "rgba(255,255,255,0.08)" },
+  statGridNum: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.4 },
+  statGridKey: { color: Colors.muted2, fontSize: 9, fontWeight: "900", letterSpacing: 1, marginTop: 4, textTransform: "uppercase" },
+  levelCard: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  levelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 12,
+  },
+  levelTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
+  levelIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  levelEyebrow: { color: Colors.muted2, fontSize: 9, fontWeight: "900", letterSpacing: 1.4, textTransform: "uppercase" },
+  levelTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2, marginTop: 2 },
+  levelXP: { color: Colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
   followItem: { flex: 1, alignItems: "center" },
   followNum: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.4 },
   followKey: { color: Colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.7, marginTop: 3, textTransform: "uppercase" },
@@ -2804,21 +2900,29 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: Colors.ink, fontSize: 13, fontWeight: "900", letterSpacing: 0.3 },
 
-  tabsRow: { flexDirection: "row", gap: 6, marginTop: 18, paddingRight: 4 },
+  tabsBar: {
+    marginTop: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  tabsRow: { flexDirection: "row", gap: 4, paddingRight: 4 },
   tabBtn: {
-    flexDirection: "row",
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 0,
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
   },
   tabBtnActive: { backgroundColor: Colors.mint, borderColor: Colors.mint },
-  tabText: { color: Colors.text, fontSize: 12, fontWeight: "800" },
-  tabTextActive: { color: Colors.ink, fontWeight: "900" },
+  tabText: { color: Colors.muted, fontSize: 13, fontWeight: "800", letterSpacing: -0.1 },
+  tabTextActive: { color: Colors.text, fontWeight: "900" },
+  tabIndicator: {
+    height: 2,
+    width: "100%",
+    marginTop: 10,
+    borderRadius: 2,
+    backgroundColor: "transparent",
+  },
+  tabIndicatorActive: { backgroundColor: Colors.mint },
 
   section: { marginTop: 14 },
   sectionTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2 },
