@@ -36,7 +36,7 @@ import {
   Users,
   X,
 } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -68,6 +68,7 @@ import { verifyHolder } from "@/lib/holder-verify";
 import { SOLTOOLS_TOKEN_MINT } from "@/lib/badge-system";
 import { deleteOwnCommunity } from "@/lib/api/platform";
 import { supabase } from "@/lib/supabase";
+import { isFreshOnline, lastSeenToMs, presenceLabel } from "@/lib/presence";
 import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
 import { useAdmin } from "@/providers/admin-provider";
@@ -88,6 +89,8 @@ interface CommunityMember {
   verified?: boolean;
   followersCount?: number;
   isFollowing?: boolean;
+  isOnline?: boolean;
+  lastSeenAt?: number | null;
 }
 
 const MEMBER_COLORS = [Colors.mint, Colors.violet, Colors.cyan, Colors.rose, Colors.orange];
@@ -268,7 +271,7 @@ export default function CommunityDetailScreen() {
         if (userIds.length === 0) return [];
         const { data: profs } = await supabase
           .from("profiles")
-          .select("id,user_id,username,display_name,avatar_url,avatar_color,verified,followers_count")
+          .select("id,user_id,username,display_name,avatar_url,avatar_color,verified,followers_count,is_online,last_seen_at")
           .or(`id.in.(${userIds.join(",")}),user_id.in.(${userIds.join(",")})`);
         const normalizedProfiles = (profs ?? []).map((p) => ({
           row: p,
@@ -304,6 +307,8 @@ export default function CommunityDetailScreen() {
             verified: !!p.verified,
             followersCount: Number(p.followers_count ?? 0),
             isFollowing: followees.has(memberId),
+            isOnline: !!p.is_online,
+            lastSeenAt: lastSeenToMs((p.last_seen_at as string | number | null) ?? null),
           };
         });
       } catch (e) {
@@ -314,6 +319,41 @@ export default function CommunityDetailScreen() {
     staleTime: 30_000,
   });
   const members = membersQ.data ?? [];
+
+  // Subscribe to live_presence + profile presence changes to refresh online dots in realtime.
+  useEffect(() => {
+    if (!community?.id) return;
+    const memberIds = (membersQ.data ?? []).map((m) => m.id).filter(Boolean);
+    if (memberIds.length === 0) return;
+    const invalidate = () => {
+      featureQueryClient.invalidateQueries({
+        queryKey: ["community", "members", community.id],
+      });
+    };
+    const channel = supabase
+      .channel(`community-presence-${community.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "live_presence" },
+        invalidate,
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          const newRow = (payload.new ?? {}) as { id?: string; user_id?: string };
+          const newId = String(newRow.user_id ?? newRow.id ?? "");
+          if (newId && memberIds.includes(newId)) invalidate();
+        },
+      )
+      .subscribe();
+    // Also refetch every 60s so labels ("5m ago") stay fresh even without events.
+    const tick = setInterval(invalidate, 60_000);
+    return () => {
+      clearInterval(tick);
+      void supabase.removeChannel(channel);
+    };
+  }, [community?.id, membersQ.data, featureQueryClient]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -1688,6 +1728,9 @@ export default function CommunityDetailScreen() {
                             {m.name.slice(0, 1).toUpperCase()}
                           </Text>
                         )}
+                        {isFreshOnline(m.isOnline, m.lastSeenAt ?? null) ? (
+                          <View style={styles.stackOnlineDot} />
+                        ) : null}
                       </View>
                     ),
                   )}
@@ -2656,15 +2699,20 @@ function CommunityMemberRow({
   onKick: () => void;
   onBan: () => void;
 }) {
+  const online = isFreshOnline(member.isOnline, member.lastSeenAt ?? null);
+  const status = presenceLabel(member.isOnline, member.lastSeenAt ?? null);
   return (
     <Pressable onPress={onOpen} style={styles.memberSheetRow} testID={`community-member-${member.id}`}>
-      {member.avatarUrl ? (
-        <Image source={{ uri: member.avatarUrl }} style={styles.memberSheetAvatar} contentFit="cover" />
-      ) : (
-        <View style={[styles.memberSheetAvatar, { backgroundColor: member.color }]}> 
-          <Text style={styles.memberSheetInit}>{member.name.slice(0, 1).toUpperCase()}</Text>
-        </View>
-      )}
+      <View style={styles.memberSheetAvatarWrap}>
+        {member.avatarUrl ? (
+          <Image source={{ uri: member.avatarUrl }} style={styles.memberSheetAvatar} contentFit="cover" />
+        ) : (
+          <View style={[styles.memberSheetAvatar, { backgroundColor: member.color }]}> 
+            <Text style={styles.memberSheetInit}>{member.name.slice(0, 1).toUpperCase()}</Text>
+          </View>
+        )}
+        {online ? <View style={styles.memberSheetOnlineDot} /> : null}
+      </View>
       <View style={styles.memberSheetCopy}>
         <View style={styles.memberSheetNameRow}>
           <Text style={styles.memberSheetName} numberOfLines={1}>{member.name}</Text>
@@ -2673,6 +2721,14 @@ function CommunityMemberRow({
         <Text style={styles.memberSheetHandle} numberOfLines={1}>
           {member.handle || "@user"} · {fmtCount(member.followersCount ?? 0)} followers
         </Text>
+        {status ? (
+          <Text
+            style={[styles.memberSheetPresence, online && styles.memberSheetPresenceOnline]}
+            numberOfLines={1}
+          >
+            {online ? "● " : ""}{status}
+          </Text>
+        ) : null}
       </View>
       {!isSelf ? (
         <View style={styles.memberActionRow}>
@@ -3210,6 +3266,31 @@ const styles = StyleSheet.create({
     borderColor: Colors.ink,
   },
   stackInit: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
+  stackOnlineDot: {
+    position: "absolute",
+    bottom: -1,
+    right: -1,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: Colors.mint,
+    borderWidth: 1.5,
+    borderColor: Colors.ink,
+  },
+  memberSheetAvatarWrap: { width: 44, height: 44, position: "relative" },
+  memberSheetOnlineDot: {
+    position: "absolute",
+    bottom: -1,
+    right: -1,
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    backgroundColor: Colors.mint,
+    borderWidth: 2.5,
+    borderColor: Colors.ink,
+  },
+  memberSheetPresence: { color: Colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  memberSheetPresenceOnline: { color: Colors.mint },
   memberCountWrap: { flex: 1, minWidth: 0 },
   memberCount: { color: Colors.text, fontSize: 13, fontWeight: "900" },
   memberCountHint: { color: Colors.mint, fontSize: 10, fontWeight: "900", marginTop: 1, textTransform: "uppercase", letterSpacing: 0.5 },
