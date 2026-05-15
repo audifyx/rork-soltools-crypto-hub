@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { setHapticsEnabled } from "@/lib/haptics";
 
+import { DEFAULT_BRAND_AVATAR_URI, DEFAULT_BRAND_BANNER_URI } from "@/lib/brand-media";
 import { normalizeMediaUrl } from "@/lib/media";
 import { findPostEverywhere, patchPostEverywhere } from "@/lib/post-sync";
 import { fetchOwnProfileRow, saveOwnProfilePatch, type ProfilePatch } from "@/lib/profile-db";
@@ -128,6 +129,8 @@ const DEFAULT_PROFILE: UserProfile = {
   avatarColor: "#55F5B2",
   bannerFrom: "#FF5D8F",
   bannerTo: "#38D7FF",
+  avatarUrl: DEFAULT_BRAND_AVATAR_URI,
+  bannerUrl: DEFAULT_BRAND_BANNER_URI,
   walletAddress: "",
   twitterHandle: "",
   website: "",

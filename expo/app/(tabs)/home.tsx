@@ -71,8 +71,10 @@ import {
 } from "@/lib/api/market";
 import { type DexPair, useDexTokens } from "@/lib/api/dexscreener";
 import { getOgMemeTokens, getMemeTokens, getCelebrityTokens, getUtilityTokens } from "@/lib/alpha-runners";
+import { withDefaultAvatar } from "@/lib/brand-media";
 import { patchPostEverywhere } from "@/lib/post-sync";
 import { isSafeToken } from "@/lib/safety";
+import { createShareLink } from "@/lib/share-links";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
@@ -404,8 +406,9 @@ export default function HomeFeedScreen() {
     const author = post.authorUsername
       ? `@${post.authorUsername}`
       : post.authorDisplayName ?? "a trader";
-    const url = `https://rork.com/post/${post.id}`;
-    const body = `${post.text || "Crypto Community App post"}${ticker}\n\n— ${author}\n${url}`;
+    const link = await createShareLink("post", post.id, { author, ticker: post.ticker ?? null });
+    const url = link.url;
+    const body = `${post.text || "SolTools post"}${ticker}\n\n— ${author}\n${url}`;
     try {
       const result = await Share.share({ message: body, url, title: "Share post" });
       if (result.action === Share.dismissedAction) {
@@ -785,21 +788,15 @@ export default function HomeFeedScreen() {
         <View style={styles.topBar}>
           <Pressable
             onPress={() => router.push("/(tabs)/profile")}
-            style={[styles.avatarBtn, { backgroundColor: profile.avatarColor }]}
+            style={styles.avatarBtn}
             hitSlop={6}
             testID="profile-btn"
           >
-            {profile.avatarUrl ? (
-              <ExpoImage
-                source={{ uri: profile.avatarUrl }}
-                style={styles.avatarImg}
-                contentFit="cover"
-              />
-            ) : (
-              <Text style={styles.avatarBtnText}>
-                {profile.displayName.slice(0, 1).toUpperCase()}
-              </Text>
-            )}
+            <ExpoImage
+              source={{ uri: withDefaultAvatar(profile.avatarUrl) }}
+              style={styles.avatarImg}
+              contentFit="cover"
+            />
           </Pressable>
           <View style={styles.homeTitleWrap}>
             <Text style={styles.homeTitle}>Crypto Community App</Text>

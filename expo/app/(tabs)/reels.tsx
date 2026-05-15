@@ -26,6 +26,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import ReelCard from "@/components/ReelCard";
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
+import { createShareLink } from "@/lib/share-links";
 import {
   addReelComment,
   deleteReel,
@@ -171,11 +172,15 @@ export default function ReelsScreen() {
   const onShare = useCallback(async (reel: Reel) => {
     Haptics.selectionAsync().catch(() => {});
     try {
-      const url = typeof reel.videoUrl === "string" ? reel.videoUrl : "";
+      const link = await createShareLink("reel", reel.id, {
+        author: reel.author.handle,
+        caption: reel.caption,
+      });
+      const url = link.url;
       await Share.share({
-        message: `${reel.caption || "Crypto Community App reel"}${url ? `\n${url}` : ""}`,
+        message: `${reel.caption || "SolTools reel"}\n${url}`,
         url,
-        title: "Crypto Community App Reel",
+        title: "SolTools Reel",
       });
       patchReel(reel.id, (current) => ({ ...current, sharesCount: current.sharesCount + 1 }));
       await shareReel(reel.id, userId, Platform.OS);

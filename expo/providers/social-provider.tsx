@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Colors from "@/constants/colors";
+import { withDefaultAvatar, withDefaultBanner } from "@/lib/brand-media";
 import type { CommunityTokenCard } from "@/lib/community-token";
 import { loadAccessMap } from "@/lib/community-access";
 import { normalizeMediaUrl } from "@/lib/media";
@@ -189,8 +190,8 @@ function applyPersistedCommunityRow(community: Community, row: PersistedCommunit
   if (typeof row.created_at === "string" && row.created_at.length > 0) {
     community.createdAt = new Date(row.created_at).getTime();
   }
-  if (row.avatar_url !== undefined) community.avatarUrl = normalizeMediaUrl(row.avatar_url);
-  if (row.banner_url !== undefined) community.bannerUrl = normalizeMediaUrl(row.banner_url);
+  if (row.avatar_url !== undefined) community.avatarUrl = withDefaultAvatar(normalizeMediaUrl(row.avatar_url));
+  if (row.banner_url !== undefined) community.bannerUrl = withDefaultBanner(normalizeMediaUrl(row.banner_url));
   if (typeof row.is_private === "boolean") community.isPrivate = row.is_private;
   if (typeof row.holder_only === "boolean") community.holderOnly = row.holder_only;
   if (typeof row.access_type === "string" && row.access_type.length > 0) {
@@ -236,8 +237,8 @@ function rowToCommunity(row: CommunityRow, ownerHandle: string): Community {
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     rules,
     tags,
-    avatarUrl: normalizeMediaUrl(row.avatar_url),
-    bannerUrl: normalizeMediaUrl(row.banner_url),
+    avatarUrl: withDefaultAvatar(normalizeMediaUrl(row.avatar_url)),
+    bannerUrl: withDefaultBanner(normalizeMediaUrl(row.banner_url)),
     isPrivate: !!row.is_private,
     holderOnly: !!row.holder_only,
     gateTokenMint: row.gate_token_mint ?? null,
@@ -321,7 +322,7 @@ const COMMUNITY_POST_SELECT = "id,user_id,community_id,content,image_url,ticker,
 function communityPostFromRow(row: PostRowRecord, fallbackCommunityId: string): CommunityPost {
   const postId = String(row.id);
   const username = (row.username as string | null) ?? "";
-  const avatarUrl = normalizeMediaUrl(row.avatar_url) ?? null;
+  const avatarUrl = withDefaultAvatar(normalizeMediaUrl(row.avatar_url));
   const quoteUsername = (row.quote_author_username as string | null) ?? "";
   const quoteId = (row.quote_post_id as string | null) ?? null;
   const parentUsername = (row.parent_author_username as string | null) ?? "";
@@ -897,7 +898,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
           const profs = [...(byId.data ?? []), ...(byUserId.data ?? [])];
           profs.forEach((p) => {
             const entry = {
-              avatar_url: normalizeMediaUrl(p.avatar_url) ?? null,
+              avatar_url: withDefaultAvatar(normalizeMediaUrl(p.avatar_url)),
               username: (p.username as string | null) ?? null,
               display_name: (p.display_name as string | null) ?? null,
               avatar_color: (p.avatar_color as string | null) ?? null,
@@ -972,7 +973,7 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
                 username: author.username,
                 display_name: author.display_name,
                 avatar_color: author.avatar_color,
-                avatar_url: normalizeMediaUrl(author.avatar_url) ?? null,
+                avatar_url: withDefaultAvatar(normalizeMediaUrl(author.avatar_url)),
                 liked: interactions.liked.has(postId),
                 reposted: interactions.reposted.has(postId),
                 bookmarked: interactions.bookmarked.has(postId),
@@ -1556,8 +1557,8 @@ export const [SocialProvider, useSocial] = createContextHook(() => {
         createdAt: Date.now(),
         rules: input.rules.filter((r) => r.trim().length > 0),
         tags: input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean),
-        avatarUrl: normalizeMediaUrl(input.avatarUrl),
-        bannerUrl: normalizeMediaUrl(input.bannerUrl),
+        avatarUrl: withDefaultAvatar(normalizeMediaUrl(input.avatarUrl)),
+        bannerUrl: withDefaultBanner(normalizeMediaUrl(input.bannerUrl)),
         isPrivate: !!input.isPrivate || !!input.holderOnly,
         holderOnly: !!input.holderOnly,
         gateTokenMint: input.gateTokenMint ?? null,

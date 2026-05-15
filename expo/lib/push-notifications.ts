@@ -205,6 +205,7 @@ export function resolveNotificationRoute(payload: PushTapPayload | undefined | n
   if (kind === "comment" && targetId) return `/post/${targetId}`;
   if (kind === "like" && targetId) return `/post/${targetId}`;
   if (kind === "repost" && targetId) return `/post/${targetId}`;
+  if (kind === "community_invite" && targetId) return `/community/${targetId}`;
   if ((kind === "lobby_invite" || kind === "lobby_event") && targetId) return `/space/${targetId}`;
   if (kind === "launchpad_update" && targetId) return `/launch/${targetId}`;
   if (kind === "whale" || kind === "trade" || kind === "alert") return "/notifications";

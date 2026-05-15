@@ -1,3 +1,4 @@
+import { withDefaultAvatar } from "@/lib/brand-media";
 import { normalizeMediaUrl } from "@/lib/media";
 import { supabase } from "@/lib/supabase";
 
@@ -102,7 +103,7 @@ function authorFromProfile(userId: string, profile?: ProfileRow): ReelAuthor {
     userId,
     handle,
     displayName: profile?.display_name?.trim() || username || `Trader ${fallback}`,
-    avatarUrl: normalizeMediaUrl(profile?.avatar_url ?? null),
+    avatarUrl: withDefaultAvatar(normalizeMediaUrl(profile?.avatar_url ?? null)),
     avatarColor: profile?.avatar_color ?? colorFor(userId),
     verified: !!profile?.verified,
   };

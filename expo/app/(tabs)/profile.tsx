@@ -70,6 +70,7 @@ import PortfolioCard from "@/components/profile/PortfolioCard";
 import RecapCard from "@/components/profile/RecapCard";
 import BadgeRow from "@/components/social/BadgeRow";
 import { DEFAULT_BADGES, sortBadges, type UserBadge } from "@/lib/badge-system";
+import { createShareLink } from "@/lib/share-links";
 import { useAdmin } from "@/providers/admin-provider";
 import { useApp, type Currency, type Language, type ThemeMode, type UserPost, type UserPrefs } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
@@ -343,13 +344,19 @@ export default function ProfileScreen() {
 
   const onShareProfile = useCallback(async () => {
     try {
+      const handle = profile.handle.replace(/^@/, "") || userId || "profile";
+      const link = await createShareLink("profile", handle, {
+        displayName: profile.displayName,
+        handle: profile.handle,
+      });
       await Share.share({
-        message: `Follow ${profile.displayName} (${profile.handle}) on Crypto Community App — pro Solana trading suite.`,
+        message: `Follow ${profile.displayName} (${profile.handle}) on SolTools — ${link.url}`,
+        url: link.url,
       });
     } catch (e) {
       console.log("[profile] share failed", e);
     }
-  }, [profile.displayName, profile.handle]);
+  }, [profile.displayName, profile.handle, userId]);
 
   const onPickAvatar = useCallback(async () => {
     if (!isAuthenticated) {
@@ -507,9 +514,10 @@ export default function ProfileScreen() {
     tap();
     const author = post.authorUsername ? `@${post.authorUsername}` : profile.handle || profile.displayName;
     const ticker = post.ticker ? `\n\n${post.ticker.replace("$", "")}` : "";
-    const url = `https://rork.com/post/${post.id}`;
+    const link = await createShareLink("post", post.id, { author, ticker: post.ticker ?? null });
+    const url = link.url;
     try {
-      await Share.share({ message: `${post.text || "Crypto Community App post"}${ticker}\n\n— ${author}\n${url}`, url });
+      await Share.share({ message: `${post.text || "SolTools post"}${ticker}\n\n— ${author}\n${url}`, url });
     } catch (e) {
       console.log("[profile] share post failed", e);
       await Clipboard.setStringAsync(url).catch(() => {});

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 
+import { withDefaultAvatar, withDefaultBanner } from "@/lib/brand-media";
 import { normalizeMediaUrl } from "@/lib/media";
 import { fetchOwnProfileRow, saveOwnProfilePatch, type ProfilePatch } from "@/lib/profile-db";
 import { supabase } from "@/lib/supabase";
@@ -411,8 +412,8 @@ function publicProfileFromRow(row: Record<string, unknown>): PublicProfile {
     username,
     display_name: normalizeDisplayName(row.display_name, username),
     bio: (row.bio as string | null) ?? null,
-    avatar_url: normalizeMediaUrl(row.avatar_url),
-    banner_url: normalizeMediaUrl(row.banner_url),
+    avatar_url: withDefaultAvatar(normalizeMediaUrl(row.avatar_url)),
+    banner_url: withDefaultBanner(normalizeMediaUrl(row.banner_url)),
     avatar_color: (row.avatar_color as string | null) ?? null,
     banner_from: (row.banner_from as string | null) ?? null,
     banner_to: (row.banner_to as string | null) ?? null,
@@ -453,7 +454,7 @@ function profileSummaryFromRow(row: Record<string, unknown>, fallbackUserId?: st
     user_id: userId,
     username,
     display_name: normalizeDisplayName(rawDisplayName, username),
-    avatar_url: normalizeMediaUrl(row.avatar_url ?? row.follower_avatar_url ?? row.followee_avatar_url),
+    avatar_url: withDefaultAvatar(normalizeMediaUrl(row.avatar_url ?? row.follower_avatar_url ?? row.followee_avatar_url)),
     verified: !!(row.verified ?? row.follower_verified ?? row.followee_verified),
     custom_badges: normalizeBadges(row.custom_badges ?? row.follower_custom_badges ?? row.followee_custom_badges),
     followers_count: Number(row.followers_count ?? row.follower_followers_count ?? row.followee_followers_count ?? 0),
@@ -467,8 +468,8 @@ function platformUserFromRow(row: Record<string, unknown>): PlatformUser {
     user_id: userId,
     username,
     display_name: normalizeDisplayName(row.display_name, username),
-    avatar_url: normalizeMediaUrl(row.avatar_url),
-    banner_url: normalizeMediaUrl(row.banner_url),
+    avatar_url: withDefaultAvatar(normalizeMediaUrl(row.avatar_url)),
+    banner_url: withDefaultBanner(normalizeMediaUrl(row.banner_url)),
     bio: (row.bio as string | null) ?? null,
     verified: !!row.verified,
     custom_badges: normalizeBadges(row.custom_badges),

@@ -35,10 +35,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
+import { withDefaultAvatar } from "@/lib/brand-media";
 import { hapticMedium, hapticSelect } from "@/lib/haptics";
 import { normalizeMediaUrl } from "@/lib/media";
 import { navigateBack } from "@/lib/navigation";
 import { patchPostEverywhere } from "@/lib/post-sync";
+import { createShareLink } from "@/lib/share-links";
 import { supabase } from "@/lib/supabase";
 import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
@@ -295,8 +297,9 @@ export default function PostDetailScreen() {
   const onShare = useCallback(async () => {
     if (!post) return;
     hapticSelect();
-    const url = `https://rork.com/post/${post.id}`;
     const author = post.authorUsername ? `@${post.authorUsername}` : post.authorName;
+    const link = await createShareLink("post", post.id, { author, communityId: post.communityId });
+    const url = link.url;
     const body = `${post.content || "Check this post"}\n\n— ${author}\n${url}`;
     try {
       await Share.share({ message: body, url, title: "Share post" });
@@ -321,16 +324,12 @@ export default function PostDetailScreen() {
     return (
       <View style={styles.postWrap}>
         <Pressable onPress={onOpenAuthor} style={styles.authorRow} hitSlop={6}>
-          <View style={[styles.avatar, { backgroundColor: post.authorAvatarColor }]}>
-            {post.authorAvatarUrl ? (
-              <ExpoImage
-                source={{ uri: post.authorAvatarUrl }}
-                style={styles.fillImg}
-                contentFit="cover"
-              />
-            ) : (
-              <Text style={styles.avatarText}>{post.authorName.slice(0, 1).toUpperCase()}</Text>
-            )}
+          <View style={styles.avatar}>
+            <ExpoImage
+              source={{ uri: withDefaultAvatar(post.authorAvatarUrl) }}
+              style={styles.fillImg}
+              contentFit="cover"
+            />
           </View>
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
@@ -500,7 +499,8 @@ export default function PostDetailScreen() {
                   }}
                   onShare={async () => {
                     hapticSelect();
-                    const url = `https://rork.com/post/${item.id}`;
+                    const link = await createShareLink("post", item.id, { author: item.authorHandle || item.authorName, parentPostId: post.id });
+                    const url = link.url;
                     const body = `${item.content || "Check this reply"}\n\n— ${item.authorHandle || item.authorName}\n${url}`;
                     try {
                       await Share.share({ message: body, url, title: "Share reply" });
@@ -617,18 +617,12 @@ export default function PostDetailScreen() {
           ) : null}
 
           <View style={styles.composerBar}>
-            <View style={[styles.composerAvatar, { backgroundColor: profile.avatarColor }]}>
-              {profile.avatarUrl ? (
-                <ExpoImage
-                  source={{ uri: profile.avatarUrl }}
-                  style={styles.fillImg}
-                  contentFit="cover"
-                />
-              ) : (
-                <Text style={styles.composerAvatarText}>
-                  {profile.displayName.slice(0, 1).toUpperCase()}
-                </Text>
-              )}
+            <View style={styles.composerAvatar}>
+              <ExpoImage
+                source={{ uri: withDefaultAvatar(profile.avatarUrl) }}
+                style={styles.fillImg}
+                contentFit="cover"
+              />
             </View>
             <TextInput
               value={draft}
@@ -704,18 +698,12 @@ function CommentRow({
         }}
         hitSlop={6}
       >
-        <View style={[styles.commentAvatar, { backgroundColor: reply.authorColor }]}>
-          {reply.authorAvatarUrl ? (
-            <ExpoImage
-              source={{ uri: reply.authorAvatarUrl }}
-              style={styles.fillImg}
-              contentFit="cover"
-            />
-          ) : (
-            <Text style={styles.commentAvatarText}>
-              {(reply.authorName ?? "U").slice(0, 1).toUpperCase()}
-            </Text>
-          )}
+        <View style={styles.commentAvatar}>
+          <ExpoImage
+            source={{ uri: withDefaultAvatar(reply.authorAvatarUrl) }}
+            style={styles.fillImg}
+            contentFit="cover"
+          />
         </View>
       </Pressable>
       <View style={{ flex: 1 }}>

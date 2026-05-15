@@ -37,7 +37,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import AppBackground from "@/components/ui/AppBackground";
+import { withDefaultAvatar } from "@/lib/brand-media";
 import { navigateBack } from "@/lib/navigation";
+import { createShareLink } from "@/lib/share-links";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { useApp } from "@/providers/app-provider";
@@ -261,8 +263,9 @@ export default function PostsFeedScreen() {
     Haptics.selectionAsync().catch(() => {});
     const ticker = post.ticker ? `\n\n${post.ticker.replace("$", "")}` : "";
     const author = post.authorHandle || post.authorName;
-    const url = `https://rork.com/post/${post.id}`;
-    const body = `${post.text || "Crypto Community App post"}${ticker}\n\n— ${author}\n${url}`;
+    const link = await createShareLink("post", post.id, { author, ticker: post.ticker ?? null });
+    const url = link.url;
+    const body = `${post.text || "SolTools post"}${ticker}\n\n— ${author}\n${url}`;
     try {
       await Share.share({ message: body, url, title: "Share post" });
     } catch (e) {
@@ -468,14 +471,8 @@ function ComposeBar({
       </View>
 
       <Pressable style={styles.composer} onPress={onPress} testID="composer-prompt">
-        <View style={[styles.composerAvatar, { backgroundColor: avatarColor }]}>
-          {avatarUrl ? (
-            <ExpoImage source={{ uri: avatarUrl }} style={styles.fillImg} contentFit="cover" />
-          ) : (
-            <Text style={styles.composerAvatarText}>
-              {displayName.slice(0, 1).toUpperCase()}
-            </Text>
-          )}
+        <View style={styles.composerAvatar}>
+          <ExpoImage source={{ uri: withDefaultAvatar(avatarUrl) }} style={styles.fillImg} contentFit="cover" />
         </View>
         <View style={styles.composerCopy}>
           <Text style={styles.composerKicker}>Share a call</Text>
@@ -547,16 +544,12 @@ function PostRow({
       ) : null}
 
       <Pressable onPress={onOpenAuthor} hitSlop={4}>
-        <View style={[styles.avatar, { backgroundColor: post.authorAvatarColor }]}>
-          {post.authorAvatarUrl ? (
-            <ExpoImage
-              source={{ uri: post.authorAvatarUrl }}
-              style={styles.fillImg}
-              contentFit="cover"
-            />
-          ) : (
-            <Text style={styles.avatarText}>{post.authorName.slice(0, 1).toUpperCase()}</Text>
-          )}
+        <View style={styles.avatar}>
+          <ExpoImage
+            source={{ uri: withDefaultAvatar(post.authorAvatarUrl) }}
+            style={styles.fillImg}
+            contentFit="cover"
+          />
         </View>
       </Pressable>
 

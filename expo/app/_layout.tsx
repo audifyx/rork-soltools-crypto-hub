@@ -1,5 +1,6 @@
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter } from "expo-router";
+import * as Linking from "expo-linking";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -12,6 +13,7 @@ import Colors from "@/constants/colors";
 import { checkTeamStatus } from "@/lib/check-team-status";
 import { registerKOLSync } from "@/lib/kol-background";
 import { attachNotificationTapHandler, ensureNotificationPermission } from "@/lib/push-notifications";
+import { routeForIncomingShareUrl } from "@/lib/share-links";
 import { AdminProvider } from "@/providers/admin-provider";
 import { AppProvider } from "@/providers/app-provider";
 import ModerationGate from "@/components/ui/ModerationGate";
@@ -137,20 +139,37 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => voi
 function RootLayoutNav() {
   const router = useRouter();
   useEffect(() => {
-    let teardown: (() => void) | null = null;
-    attachNotificationTapHandler((route) => {
+    let notificationTeardown: (() => void) | null = null;
+    let alive = true;
+
+    const pushRoute = (route: string) => {
       try {
         router.push(route as never);
       } catch (error) {
-        console.log("SolTools notification route push skipped", error instanceof Error ? error.message : error);
+        console.log("SolTools route push skipped", error instanceof Error ? error.message : error);
       }
-    })
+    };
+
+    const handleIncomingUrl = (url: string | null) => {
+      if (!url) return;
+      void routeForIncomingShareUrl(url).then((route) => {
+        if (alive && route) pushRoute(route);
+      });
+    };
+
+    attachNotificationTapHandler(pushRoute)
       .then((fn) => {
-        teardown = fn;
+        notificationTeardown = fn;
       })
       .catch(() => {});
+
+    Linking.getInitialURL().then(handleIncomingUrl).catch(() => {});
+    const linkSub = Linking.addEventListener("url", ({ url }) => handleIncomingUrl(url));
+
     return () => {
-      if (teardown) teardown();
+      alive = false;
+      if (notificationTeardown) notificationTeardown();
+      linkSub.remove();
     };
   }, [router]);
   return (
@@ -208,6 +227,7 @@ function RootLayoutNav() {
       <Stack.Screen name="communities" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="community/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="community/create" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+      <Stack.Screen name="l/[code]" options={{ animation: "fade" }} />
       <Stack.Screen name="spaces" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="space/[id]" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="messages" options={{ animation: "slide_from_right" }} />

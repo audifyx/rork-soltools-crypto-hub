@@ -69,6 +69,9 @@ import { SOLTOOLS_TOKEN_MINT } from "@/lib/badge-system";
 import { deleteOwnCommunity } from "@/lib/api/platform";
 import { supabase } from "@/lib/supabase";
 import { isFreshOnline, lastSeenToMs, presenceLabel } from "@/lib/presence";
+import { createShareLink } from "@/lib/share-links";
+import { kickPushDispatch } from "@/lib/push-notifications";
+import { withDefaultAvatar, withDefaultBanner } from "@/lib/brand-media";
 import { uploadCommunityMedia } from "@/lib/upload";
 import { useApp } from "@/providers/app-provider";
 import { useAdmin } from "@/providers/admin-provider";
@@ -91,6 +94,16 @@ interface CommunityMember {
   isFollowing?: boolean;
   isOnline?: boolean;
   lastSeenAt?: number | null;
+}
+
+interface InvitableUser {
+  userId: string;
+  username: string | null;
+  displayName: string;
+  avatarUrl: string | null;
+  avatarColor: string;
+  verified: boolean;
+  followersCount: number;
 }
 
 const MEMBER_COLORS = [Colors.mint, Colors.violet, Colors.cyan, Colors.rose, Colors.orange];
@@ -192,6 +205,10 @@ export default function CommunityDetailScreen() {
   const [notifyOn, setNotifyOn] = useState<boolean>(true);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [membersOpen, setMembersOpen] = useState<boolean>(false);
+  const [inviteOpen, setInviteOpen] = useState<boolean>(false);
+  const [inviteSearch, setInviteSearch] = useState<string>("");
+  const [invitingIds, setInvitingIds] = useState<Set<string>>(() => new Set<string>());
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(() => new Set<string>());
   const [toast, setToast] = useState<string | null>(null);
   const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
   const [activePost, setActivePost] = useState<CommunityPost | null>(null);
@@ -313,7 +330,7 @@ export default function CommunityDetailScreen() {
             username: username || null,
             name: display || "User",
             color: (p.avatar_color as string | null) ?? memberColorFor(memberId || username),
-            avatarUrl: (p.avatar_url as string | null) ?? null,
+            avatarUrl: withDefaultAvatar((p.avatar_url as string | null) ?? null),
             verified: !!p.verified,
             followersCount: Number(p.followers_count ?? 0),
             isFollowing: followees.has(memberId),
@@ -329,6 +346,35 @@ export default function CommunityDetailScreen() {
     staleTime: 30_000,
   });
   const members = membersQ.data ?? [];
+
+  const invitableUsersQ = useQuery<InvitableUser[]>({
+    queryKey: ["community", "invitable-users", community?.id ?? "", inviteSearch.trim()],
+    enabled: inviteOpen && !!community?.id && isAuthenticated,
+    queryFn: async () => {
+      if (!community?.id) return [];
+      const { data, error } = await supabase.rpc("list_invitable_users", {
+        p_community_id: community.id,
+        p_limit: 80,
+        p_search: inviteSearch.trim() || null,
+      });
+      if (error) throw error;
+      return ((data ?? []) as Record<string, unknown>[]).map((row): InvitableUser => {
+        const userIdValue = String(row.user_id ?? "");
+        const username = typeof row.username === "string" && row.username.length > 0 ? row.username : null;
+        return {
+          userId: userIdValue,
+          username,
+          displayName: (row.display_name as string | null) ?? username ?? `Trader ${userIdValue.slice(0, 6)}`,
+          avatarUrl: withDefaultAvatar((row.avatar_url as string | null) ?? null),
+          avatarColor: (row.avatar_color as string | null) ?? Colors.mint,
+          verified: !!row.verified,
+          followersCount: Number(row.followers_count ?? 0),
+        };
+      });
+    },
+    staleTime: 20_000,
+  });
+  const invitableUsers = invitableUsersQ.data ?? [];
 
   // Subscribe to live_presence + profile presence changes to refresh online dots in realtime.
   useEffect(() => {
@@ -438,51 +484,84 @@ export default function CommunityDetailScreen() {
     }
   }, [composer, community, composerImage, detectedTokenAddress, ensureSignedIn, addCommunityPost, tokenPreview, viewer]);
 
-  const shareLink = useMemo(
-    () =>
-      community
-        ? `https://ogscan.fun/community/${community.handle ?? community.id}`
-        : "",
-    [community],
-  );
+  const getCommunityShare = useCallback(async () => {
+    if (!community) return null;
+    return createShareLink("community", community.id, {
+      name: community.name,
+      slug: community.handle,
+      kind: "community_invite",
+    });
+  }, [community]);
 
   const onShareVia = useCallback(async () => {
     setMenuOpen(false);
     if (!community) return;
+    Haptics.selectionAsync().catch(() => {});
     try {
+      const link = await getCommunityShare();
+      const url = link?.url ?? `https://ogscan.fun/community/${community.id}`;
       await Share.share({
-        message: `Join the ${community.name} community on Crypto Community App — ${shareLink}`,
-        url: shareLink,
+        message: `Join the ${community.name} community on SolTools — ${url}`,
+        url,
       });
     } catch (e) {
       console.log("[community] share failed", e);
     }
-  }, [community, shareLink]);
+  }, [community, getCommunityShare]);
 
   const onCopyLink = useCallback(async () => {
     setMenuOpen(false);
+    if (!community) return;
     try {
-      await Clipboard.setStringAsync(shareLink);
+      const link = await getCommunityShare();
+      await Clipboard.setStringAsync(link?.url ?? `https://ogscan.fun/community/${community.id}`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      showToast("Link copied");
+      showToast("Deep link copied");
     } catch (e) {
       console.log("[community] copy failed", e);
     }
-  }, [shareLink, showToast]);
+  }, [community, getCommunityShare, showToast]);
 
-  const onInvite = useCallback(async () => {
+  const onInvite = useCallback(() => {
     setMenuOpen(false);
     if (!community) return;
+    if (!ensureSignedIn("Sign in to invite members.")) return;
     Haptics.selectionAsync().catch(() => {});
+    setInviteSearch("");
+    setInvitedIds(new Set<string>());
+    setInviteOpen(true);
+  }, [community, ensureSignedIn]);
+
+  const onInviteUser = useCallback(async (targetUserId: string) => {
+    if (!community) return;
+    setInvitingIds((prev) => new Set(prev).add(targetUserId));
     try {
-      await Share.share({
-        message: `Join ${community.name} on Crypto Community App: ${shareLink}`,
-        url: shareLink,
+      const { error } = await supabase.rpc("create_community_invite", {
+        p_community_id: community.id,
+        p_target_user_id: targetUserId,
       });
+      if (error) throw error;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      showToast("Invite sent");
+      setInvitedIds((prev) => new Set(prev).add(targetUserId));
+      void kickPushDispatch();
+      featureQueryClient.invalidateQueries({ queryKey: ["community", "invitable-users", community.id] });
     } catch (e) {
-      console.log("[community] invite failed", e);
+      console.log("[community] invite user failed", e);
+      Alert.alert("Invite failed", e instanceof Error ? e.message : "Try again.");
+    } finally {
+      setInvitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(targetUserId);
+        return next;
+      });
     }
-  }, [community, shareLink]);
+  }, [community, featureQueryClient, showToast]);
+
+  const visibleInvitableUsers = useMemo(
+    () => invitableUsers.filter((user) => !invitedIds.has(user.userId)),
+    [invitableUsers, invitedIds],
+  );
 
   const isOwner = !!community && !!userId && community.ownerId === userId;
 
@@ -1036,14 +1115,20 @@ export default function CommunityDetailScreen() {
 
   const onSharePost = useCallback(async (post: CommunityPost) => {
     try {
+      Haptics.selectionAsync().catch(() => {});
+      const link = await createShareLink("post", post.id, {
+        communityId: post.communityId,
+        communityName: community?.name ?? null,
+        authorName: post.authorName,
+      });
       await Share.share({
-        message: `${post.authorName} in ${community?.name ?? "Crypto Community App"}: ${post.content}\n${shareLink}?post=${post.id}`,
-        url: `${shareLink}?post=${post.id}`,
+        message: `${post.authorName} in ${community?.name ?? "SolTools"}: ${post.content || "Shared a post"}\n${link.url}`,
+        url: link.url,
       });
     } catch (e) {
       console.log("[community] post share failed", e);
     }
-  }, [community?.name, shareLink]);
+  }, [community?.name]);
 
   const onDeletePost = useCallback(
     (post: CommunityPost) => {
@@ -1242,11 +1327,7 @@ export default function CommunityDetailScreen() {
               keyboardShouldPersistTaps="handled"
             >
               <View style={styles.gateScreenAvatar}>
-                {community.avatarUrl ? (
-                  <Image source={{ uri: community.avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
-                ) : (
-                  <Text style={styles.gateScreenAvatarEmoji}>{community.iconEmoji}</Text>
-                )}
+                <Image source={{ uri: withDefaultAvatar(community.avatarUrl) }} style={StyleSheet.absoluteFill} contentFit="cover" />
               </View>
               <View style={styles.gateScreenLockChip}>
                 {effectiveAccessType === "holders" ? (
@@ -1443,11 +1524,7 @@ export default function CommunityDetailScreen() {
               keyboardShouldPersistTaps="handled"
             >
               <View style={styles.gateScreenAvatar}>
-                {community.avatarUrl ? (
-                  <Image source={{ uri: community.avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
-                ) : (
-                  <Text style={styles.gateScreenAvatarEmoji}>{community.iconEmoji}</Text>
-                )}
+                <Image source={{ uri: withDefaultAvatar(community.avatarUrl) }} style={StyleSheet.absoluteFill} contentFit="cover" />
               </View>
               <View style={styles.gateScreenLockChip}>
                 {effectiveAccessType === "holders" ? (
@@ -1576,25 +1653,12 @@ export default function CommunityDetailScreen() {
         ListHeaderComponent={
           <View>
             <View style={styles.bannerWrap}>
-              <LinearGradient
-                colors={[community.accent[0], community.accent[1]]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+              <Image
+                source={{ uri: withDefaultBanner(community.bannerUrl) }}
                 style={StyleSheet.absoluteFill}
+                contentFit="cover"
               />
-              {community.bannerUrl ? (
-                <Image
-                  source={{ uri: community.bannerUrl }}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                />
-              ) : null}
               <View style={styles.bannerScrim} />
-              {community.bannerUrl ? null : (
-                <View style={styles.bannerEmojiWrap}>
-                  <Text style={styles.bannerEmoji}>{community.iconEmoji}</Text>
-                </View>
-              )}
               <SafeAreaView edges={["top"]} style={styles.bannerSafe}>
                 <View style={styles.bannerBar}>
                   <Pressable
@@ -1639,21 +1703,11 @@ export default function CommunityDetailScreen() {
                   style={styles.headAvatar}
                   testID="community-edit-avatar"
                 >
-                  <LinearGradient
-                    colors={[community.accent[0], community.accent[1]]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
+                  <Image
+                    source={{ uri: withDefaultAvatar(community.avatarUrl) }}
                     style={StyleSheet.absoluteFill}
+                    contentFit="cover"
                   />
-                  {community.avatarUrl ? (
-                    <Image
-                      source={{ uri: community.avatarUrl }}
-                      style={StyleSheet.absoluteFill}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <Text style={styles.headAvatarEmoji}>{community.iconEmoji}</Text>
-                  )}
                   {canEditMedia ? (
                     <View style={styles.avatarCameraBadge}>
                       {uploadingKind === "avatar" ? (
@@ -1727,17 +1781,11 @@ export default function CommunityDetailScreen() {
                           },
                         ]}
                       >
-                        {m.avatarUrl ? (
-                          <Image
-                            source={{ uri: m.avatarUrl }}
-                            style={StyleSheet.absoluteFill}
-                            contentFit="cover"
-                          />
-                        ) : (
-                          <Text style={styles.stackInit}>
-                            {m.name.slice(0, 1).toUpperCase()}
-                          </Text>
-                        )}
+                        <Image
+                          source={{ uri: withDefaultAvatar(m.avatarUrl) }}
+                          style={StyleSheet.absoluteFill}
+                          contentFit="cover"
+                        />
                         {isFreshOnline(m.isOnline, m.lastSeenAt ?? null) ? (
                           <View style={styles.stackOnlineDot} />
                         ) : null}
@@ -1949,15 +1997,8 @@ export default function CommunityDetailScreen() {
 
             {tab === "recent" && !isLocked ? (
               <View style={styles.composer}>
-                <View
-                  style={[
-                    styles.composerAvatar,
-                    { backgroundColor: profile.avatarColor },
-                  ]}
-                >
-                  <Text style={styles.composerInit}>
-                    {(profile.displayName || "Y").slice(0, 1).toUpperCase()}
-                  </Text>
+                <View style={styles.composerAvatar}>
+                  <Image source={{ uri: withDefaultAvatar(profile.avatarUrl) }} style={StyleSheet.absoluteFill} contentFit="cover" />
                 </View>
                 <View style={styles.composerMain}>
                   <TextInput
@@ -2274,6 +2315,68 @@ export default function CommunityDetailScreen() {
       </Modal>
 
       <Modal
+        visible={inviteOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setInviteOpen(false)}
+      >
+        <Pressable style={styles.membersBackdrop} onPress={() => setInviteOpen(false)}>
+          <Pressable style={styles.membersSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.membersHandle} />
+            <View style={styles.membersHeader}>
+              <View>
+                <Text style={styles.membersTitle}>Invite members</Text>
+                <Text style={styles.membersSub}>Send a community invite notification</Text>
+              </View>
+              <Pressable onPress={() => setInviteOpen(false)} style={styles.threadClose} hitSlop={8}>
+                <X color={Colors.text} size={18} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+            <View style={styles.inviteSearchBox}>
+              <Search color={Colors.muted} size={15} strokeWidth={2.5} />
+              <TextInput
+                value={inviteSearch}
+                onChangeText={setInviteSearch}
+                placeholder="Search users to invite..."
+                placeholderTextColor={Colors.muted}
+                style={styles.inviteInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+                testID="community-invite-search"
+              />
+            </View>
+            {invitableUsersQ.isLoading ? (
+              <View style={styles.membersLoading}>
+                <ActivityIndicator color={Colors.mint} />
+              </View>
+            ) : visibleInvitableUsers.length === 0 ? (
+              <View style={styles.membersEmpty}>
+                <UserPlus color={Colors.muted} size={24} strokeWidth={2.4} />
+                <Text style={styles.membersEmptyTitle}>No users to invite</Text>
+                <Text style={styles.membersEmptyBody}>Everyone matching this search is already in the community or was just invited.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={visibleInvitableUsers}
+                keyExtractor={(user) => user.userId}
+                renderItem={({ item }) => (
+                  <InvitableUserRow
+                    user={item}
+                    inviting={invitingIds.has(item.userId)}
+                    onInvite={() => void onInviteUser(item.userId)}
+                  />
+                )}
+                ItemSeparatorComponent={() => <View style={styles.memberDivider} />}
+                contentContainerStyle={styles.membersList}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={!!activePost}
         transparent
         animationType="slide"
@@ -2371,12 +2474,8 @@ export default function CommunityDetailScreen() {
                   </Text>
                 ) : null}
                 <View style={styles.threadComposer}>
-                  <View style={[styles.composerAvatarRound, { backgroundColor: profile.avatarColor }]}>
-                    {profile.avatarUrl ? (
-                      <Image source={{ uri: profile.avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
-                    ) : (
-                      <Text style={styles.composerInit}>{(profile.displayName || "Y").slice(0, 1).toUpperCase()}</Text>
-                    )}
+                  <View style={styles.composerAvatarRound}>
+                    <Image source={{ uri: withDefaultAvatar(profile.avatarUrl) }} style={StyleSheet.absoluteFill} contentFit="cover" />
                   </View>
                   <TextInput
                     value={interactionText}
@@ -2732,13 +2831,7 @@ function CommunityMemberRow({
   return (
     <Pressable onPress={onOpen} style={styles.memberSheetRow} testID={`community-member-${member.id}`}>
       <View style={styles.memberSheetAvatarWrap}>
-        {member.avatarUrl ? (
-          <Image source={{ uri: member.avatarUrl }} style={styles.memberSheetAvatar} contentFit="cover" />
-        ) : (
-          <View style={[styles.memberSheetAvatar, { backgroundColor: member.color }]}> 
-            <Text style={styles.memberSheetInit}>{member.name.slice(0, 1).toUpperCase()}</Text>
-          </View>
-        )}
+        <Image source={{ uri: withDefaultAvatar(member.avatarUrl) }} style={styles.memberSheetAvatar} contentFit="cover" />
         {online ? <View style={styles.memberSheetOnlineDot} /> : null}
       </View>
       <View style={styles.memberSheetCopy}>
@@ -2805,6 +2898,49 @@ function CommunityMemberRow({
         <Text style={styles.memberSelfText}>You</Text>
       )}
     </Pressable>
+  );
+}
+
+function InvitableUserRow({
+  user,
+  inviting,
+  onInvite,
+}: {
+  user: InvitableUser;
+  inviting: boolean;
+  onInvite: () => void;
+}) {
+  const handle = user.username ? `@${user.username}` : "@user";
+  return (
+    <View style={styles.memberSheetRow} testID={`community-invite-user-${user.userId}`}>
+      <View style={styles.memberSheetAvatarWrap}>
+        <Image source={{ uri: withDefaultAvatar(user.avatarUrl) }} style={styles.memberSheetAvatar} contentFit="cover" />
+      </View>
+      <View style={styles.memberSheetCopy}>
+        <View style={styles.memberSheetNameRow}>
+          <Text style={styles.memberSheetName} numberOfLines={1}>{user.displayName}</Text>
+          {user.verified ? <BadgeCheck color={Colors.cyan} size={13} strokeWidth={2.8} /> : null}
+        </View>
+        <Text style={styles.memberSheetHandle} numberOfLines={1}>
+          {handle} · {fmtCount(user.followersCount)} followers
+        </Text>
+      </View>
+      <Pressable
+        onPress={onInvite}
+        disabled={inviting}
+        style={[styles.memberFollowBtn, inviting && { opacity: 0.6 }]}
+        testID={`community-invite-send-${user.userId}`}
+      >
+        {inviting ? (
+          <ActivityIndicator color={Colors.ink} size="small" />
+        ) : (
+          <>
+            <UserPlus color={Colors.ink} size={13} strokeWidth={3} />
+            <Text style={styles.memberFollowText}>Invite</Text>
+          </>
+        )}
+      </Pressable>
+    </View>
   );
 }
 
@@ -2987,12 +3123,8 @@ function XHeroPost({
         </View>
       ) : null}
       <View style={styles.xHeroHead}>
-        <View style={[styles.xHeroAvatar, { backgroundColor: post.authorColor }]}>
-          {post.authorAvatarUrl ? (
-            <Image source={{ uri: post.authorAvatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
-          ) : (
-            <Text style={styles.xHeroInit}>{post.authorName.slice(0, 1).toUpperCase()}</Text>
-          )}
+        <View style={styles.xHeroAvatar}>
+          <Image source={{ uri: withDefaultAvatar(post.authorAvatarUrl) }} style={StyleSheet.absoluteFill} contentFit="cover" />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={styles.xHeroNameRow}>
@@ -3115,12 +3247,8 @@ function XCommentRow({
   return (
     <Pressable onPress={onOpen} style={styles.xRow} testID={`x-comment-${post.id}`}>
       <View style={styles.xRowLeft}>
-        <View style={[styles.xRowAvatar, { backgroundColor: post.authorColor }]}>
-          {post.authorAvatarUrl ? (
-            <Image source={{ uri: post.authorAvatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
-          ) : (
-            <Text style={styles.xRowInit}>{post.authorName.slice(0, 1).toUpperCase()}</Text>
-          )}
+        <View style={styles.xRowAvatar}>
+          <Image source={{ uri: withDefaultAvatar(post.authorAvatarUrl) }} style={StyleSheet.absoluteFill} contentFit="cover" />
         </View>
         {showThreadLine ? <View style={styles.xRowLine} /> : null}
       </View>
@@ -3233,20 +3361,14 @@ function PostRow({
           onPress={onAvatarPress}
           hitSlop={6}
           disabled={!onAvatarPress}
-          style={[styles.postAvatar, { backgroundColor: post.authorColor }]}
+          style={styles.postAvatar}
           testID={`post-avatar-${post.id}`}
         >
-          {post.authorAvatarUrl ? (
-            <Image
-              source={{ uri: post.authorAvatarUrl }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-            />
-          ) : (
-            <Text style={styles.postInit}>
-              {post.authorName.slice(0, 1).toUpperCase()}
-            </Text>
-          )}
+          <Image
+            source={{ uri: withDefaultAvatar(post.authorAvatarUrl) }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
         </Pressable>
         <Pressable
           onPress={onAvatarPress}
@@ -3852,6 +3974,20 @@ const styles = StyleSheet.create({
   membersEmptyTitle: { color: Colors.text, fontSize: 15, fontWeight: "900" },
   membersEmptyBody: { color: Colors.muted, fontSize: 12, fontWeight: "700", textAlign: "center", lineHeight: 17 },
   membersList: { paddingHorizontal: 18, paddingBottom: 28 },
+  inviteSearchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 18,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.045)",
+    borderWidth: 1,
+    borderColor: "rgba(85,245,178,0.18)",
+  },
+  inviteInput: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: "700", padding: 0 },
   memberSheetRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13 },
   memberSheetAvatar: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   memberSheetInit: { color: Colors.ink, fontSize: 16, fontWeight: "900" },

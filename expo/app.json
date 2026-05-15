@@ -16,6 +16,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.rork.ct333efmdotyxkemvlyk6",
+      "associatedDomains": [
+        "applinks:ogscan.fun",
+        "applinks:www.ogscan.fun"
+      ],
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Crypto Community App needs the microphone to let you speak in live Spaces."
       },
@@ -28,6 +32,58 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#030708"
       },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "ogscan.fun",
+              "pathPrefix": "/l"
+            },
+            {
+              "scheme": "https",
+              "host": "ogscan.fun",
+              "pathPrefix": "/post"
+            },
+            {
+              "scheme": "https",
+              "host": "ogscan.fun",
+              "pathPrefix": "/community"
+            },
+            {
+              "scheme": "https",
+              "host": "ogscan.fun",
+              "pathPrefix": "/reel"
+            },
+            {
+              "scheme": "https",
+              "host": "www.ogscan.fun",
+              "pathPrefix": "/l"
+            },
+            {
+              "scheme": "https",
+              "host": "www.ogscan.fun",
+              "pathPrefix": "/post"
+            },
+            {
+              "scheme": "https",
+              "host": "www.ogscan.fun",
+              "pathPrefix": "/community"
+            },
+            {
+              "scheme": "https",
+              "host": "www.ogscan.fun",
+              "pathPrefix": "/reel"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "package": "app.rork.ct333efmdotyxkemvlyk6",
       "permissions": [
         "RECORD_AUDIO",
