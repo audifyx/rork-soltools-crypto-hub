@@ -233,7 +233,7 @@ export default function CreateEventScreen() {
                     <Pressable
                       key={d.toISOString()}
                       onPress={() => {
-                        hapticSelect().catch(() => {});
+                        hapticSelect();
                         setDay(d);
                       }}
                       style={[styles.dayPill, active && styles.dayPillActive]}
@@ -254,7 +254,7 @@ export default function CreateEventScreen() {
                     <Pressable
                       key={h}
                       onPress={() => {
-                        hapticSelect().catch(() => {});
+                        hapticSelect();
                         setHM(h, startDate.getMinutes());
                       }}
                       style={[styles.hourPill, active && styles.hourPillActive]}

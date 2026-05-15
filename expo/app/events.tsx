@@ -117,7 +117,7 @@ export default function EventsScreen() {
               <Pressable
                 key={f.id}
                 onPress={() => {
-                  hapticSelect().catch(() => {});
+                  hapticSelect();
                   setFilter(f.id);
                 }}
                 style={[styles.filterChip, active && styles.filterChipActive]}

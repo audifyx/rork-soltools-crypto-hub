@@ -78,7 +78,7 @@ export default function ChatToolsSheet({ open, conversationId, onClose }: Props)
 
   const setTimer = async (seconds: number) => {
     if (!conversationId) return;
-    hapticSelect().catch(() => {});
+    hapticSelect();
     try {
       await setDisappearing(conversationId, seconds);
       queryClient.invalidateQueries({ queryKey: ["messages"] }).catch(() => {});
@@ -135,7 +135,7 @@ export default function ChatToolsSheet({ open, conversationId, onClose }: Props)
                   <Pressable
                     key={it.id}
                     onPress={() => {
-                      hapticSelect().catch(() => {});
+                      hapticSelect();
                       setPane(it.id);
                     }}
                     style={styles.menuRow}
