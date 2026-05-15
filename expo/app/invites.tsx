@@ -83,6 +83,7 @@ export default function InvitesScreen() {
     queryFn: () => getOrCreateInviteCode(),
     enabled: isAuthenticated,
     staleTime: 60_000,
+    retry: 1,
   });
 
   const statsQ = useQuery<InviteStats>({
@@ -249,14 +250,32 @@ export default function InvitesScreen() {
                     ) : null}
                   </View>
 
-                  {codeQ.isLoading || !code ? (
+                  {codeQ.isLoading ? (
                     <View style={styles.codeLoading}>
                       <ActivityIndicator color={Colors.cyan} />
                     </View>
-                  ) : (
+                  ) : code ? (
                     <Text style={styles.codeText} selectable>
                       {code}
                     </Text>
+                  ) : (
+                    <View style={styles.codeLoading}>
+                      <Text style={styles.codeErrorText}>
+                        {codeQ.error instanceof Error
+                          ? codeQ.error.message
+                          : "Couldn't load your invite code."}
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          hapticSelect();
+                          codeQ.refetch().catch(() => {});
+                        }}
+                        style={styles.retryBtn}
+                        testID="invites-retry"
+                      >
+                        <Text style={styles.retryText}>Try again</Text>
+                      </Pressable>
+                    </View>
                   )}
 
                   <View style={styles.codeActions}>
@@ -636,7 +655,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: 6,
   },
-  codeLoading: { height: 60, alignItems: "center", justifyContent: "center" },
+  codeLoading: { minHeight: 60, alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 12 },
+  codeErrorText: { color: Colors.muted, fontSize: 12, fontWeight: "700", textAlign: "center", paddingHorizontal: 12 },
+  retryBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "rgba(63,169,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(63,169,255,0.32)",
+  },
+  retryText: { color: Colors.cyan, fontSize: 12, fontWeight: "900" },
   codeActions: { flexDirection: "row", gap: 10 },
   actionBtn: {
     flex: 1,

@@ -43,7 +43,7 @@ export async function getOrCreateInviteCode(): Promise<InviteCode | null> {
   const { data, error } = await supabase.rpc("generate_invite_code");
   if (error) {
     console.log("[invites] generate failed", error.message);
-    return null;
+    throw new Error(error.message || "Could not load invite code");
   }
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
