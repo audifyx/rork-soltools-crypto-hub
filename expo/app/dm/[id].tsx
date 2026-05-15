@@ -1464,7 +1464,7 @@ const styles = StyleSheet.create({
   },
   blurbBannerWrap: { height: 110, width: "100%", backgroundColor: IOS_CARD_SOFT, position: "relative", overflow: "hidden" },
   blurbBannerImg: { width: "100%", height: "100%" },
-  blurbInner: { paddingHorizontal: 18, paddingBottom: 18, paddingTop: 0, alignItems: "center", backgroundColor: IOS_CARD, marginTop: -42 },
+  blurbInner: { paddingHorizontal: 18, paddingBottom: 20, paddingTop: 14, alignItems: "center", justifyContent: "center", backgroundColor: IOS_CARD },
   blurbAvatar: {
     width: 84,
     height: 84,
@@ -1477,8 +1477,8 @@ const styles = StyleSheet.create({
   },
   blurbAvatarImg: { width: "100%", height: "100%" },
   blurbInit: { color: "#FFFFFF", fontSize: 30, fontWeight: "800" },
-  blurbName: { color: IOS_TEXT, fontSize: 20, fontWeight: "700", marginTop: 12, letterSpacing: -0.4 },
-  blurbHandle: { color: IOS_SECONDARY, fontSize: 13, fontWeight: "500", marginTop: 2 },
+  blurbName: { color: IOS_TEXT, fontSize: 20, fontWeight: "700", marginTop: 14, letterSpacing: -0.4, textAlign: "center" },
+  blurbHandle: { color: IOS_SECONDARY, fontSize: 13, fontWeight: "500", marginTop: 2, textAlign: "center" },
   blurbBio: {
     color: IOS_SECONDARY,
     fontSize: 13,
