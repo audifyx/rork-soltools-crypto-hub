@@ -200,7 +200,6 @@ export function resolveNotificationRoute(payload: PushTapPayload | undefined | n
   const targetId = payload.targetId ?? null;
   const actor = (payload.actor ?? "").toString().replace(/^@/, "");
   if ((kind === "dm_message" || kind === "dm_reaction") && targetId) return `/dm/${targetId}`;
-  if (kind === "follow_request") return "/follow-requests";
   if (kind === "follow" && actor) return `/u/${actor}`;
   if (kind === "mention" && targetId) return `/post/${targetId}`;
   if (kind === "comment" && targetId) return `/post/${targetId}`;

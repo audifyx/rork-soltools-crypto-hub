@@ -10,9 +10,7 @@ import {
   HelpCircle,
   Languages,
   Link as LinkIcon,
-  Lock,
   LogOut,
-  UserPlus,
   Palette,
   Shield,
   Sparkles,
@@ -34,7 +32,7 @@ import { useApp } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 
 type LucideIcon = React.ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
-type Section = "overview" | "notifications" | "privacy" | "appearance" | "account" | "support";
+type Section = "overview" | "notifications" | "appearance" | "account" | "support";
 
 const languages: { id: Language; label: string }[] = [
   { id: "en", label: "English" },
@@ -185,7 +183,6 @@ export default function SettingsScreen() {
 
               <Group title="SETTINGS">
                 <MenuRow Icon={Bell} label="Notifications" sub="Push, whales, haptics" onPress={() => openSection("notifications")} />
-                <MenuRow Icon={Shield} label="Privacy" sub="Private profile and follow requests" onPress={() => openSection("privacy")} />
                 <MenuRow Icon={Palette} label="Appearance" sub={`${prefs.theme} · ${prefs.currency} · ${prefs.language.toUpperCase()}`} onPress={() => openSection("appearance")} />
                 <MenuRow Icon={UserRound} label="Account" sub="Auth and data controls" onPress={() => openSection("account")} />
                 <MenuRow Icon={HelpCircle} label="Support & legal" sub="Help, terms, privacy, licenses" onPress={() => openSection("support")} />
@@ -198,13 +195,6 @@ export default function SettingsScreen() {
               <ToggleRow Icon={Bell} label="Push notifications" sub="Price moves, replies, mentions" value={prefs.push} onChange={(push) => setPrefs({ push })} />
               <ToggleRow Icon={Gem} label="Whale alerts" sub="Large buys and sells above your threshold" value={prefs.whaleAlerts} onChange={(whaleAlerts) => setPrefs({ whaleAlerts })} />
               <ToggleRow Icon={Vibrate} label="Haptics" sub="Tactile feedback for actions" value={prefs.haptics} onChange={(haptics) => setPrefs({ haptics })} />
-            </Group>
-          ) : null}
-
-          {section === "privacy" ? (
-            <Group title="PRIVACY">
-              <ToggleRow Icon={Lock} label="Private profile" sub="Only followers can see your posts, reels and activity" value={prefs.privateProfile} onChange={(privateProfile) => setPrefs({ privateProfile })} />
-              <MenuRow Icon={UserPlus} label="Follow requests" sub="Approve or reject who can follow you" onPress={() => router.push("/follow-requests")} />
             </Group>
           ) : null}
 

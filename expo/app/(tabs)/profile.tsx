@@ -1972,7 +1972,7 @@ function SettingsModal({
   const { isAuthenticated, signOut, deleteAccount, isDeletingAccount } = useAuth();
   const { profile } = useApp();
   const accountLabel = profile.handle || profile.displayName || "Signed in";
-  const [section, setSection] = useState<"main" | "privacy" | "appearance" | "about">("main");
+  const [section, setSection] = useState<"main" | "appearance" | "about">("main");
 
   const onConfirmDelete = useCallback(() => {
     if (!isAuthenticated) {
@@ -2082,12 +2082,6 @@ function SettingsModal({
 
                 <Text style={styles.settingsGroup}>PREFERENCES</Text>
                 <MenuRow
-                  Icon={Lock}
-                  label="Privacy"
-                  sub="Private profile controls"
-                  onPress={() => setSection("privacy")}
-                />
-                <MenuRow
                   Icon={Sparkles}
                   label="Appearance"
                   sub="Theme, language, currency"
@@ -2160,20 +2154,6 @@ function SettingsModal({
                       router.push("/auth");
                     }
                   }}
-                />
-                <View style={{ height: 24 }} />
-              </>
-            )}
-
-            {section === "privacy" && (
-              <>
-                <Text style={styles.settingsGroup}>PROFILE PRIVACY</Text>
-                <SettingRow
-                  label="Private profile"
-                  sub="Only followers see your posts, reels & activity"
-                  Icon={Lock}
-                  value={prefs.privateProfile}
-                  onChange={(v) => onUpdate({ privateProfile: v })}
                 />
                 <View style={{ height: 24 }} />
               </>

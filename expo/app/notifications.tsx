@@ -22,7 +22,6 @@ type NotifKind =
   | "comment"
   | "mention"
   | "follow"
-  | "follow_request"
   | "trade"
   | "whale"
   | "alert"
@@ -80,7 +79,6 @@ const KIND_META: Record<NotifKind, { Icon: LucideIcon; color: string; bg: string
   comment: { Icon: MessageCircle, color: Colors.cyan, bg: "rgba(98,208,255,0.14)" },
   mention: { Icon: AtSign, color: Colors.mint, bg: "rgba(63,169,255,0.14)" },
   follow: { Icon: UserPlus, color: Colors.violet, bg: "rgba(91,141,239,0.16)" },
-  follow_request: { Icon: UserPlus, color: "#FFB84C", bg: "rgba(255,184,76,0.16)" },
   trade: { Icon: TrendingUp, color: "#55F5B2", bg: "rgba(85,245,178,0.14)" },
   whale: { Icon: Waves, color: Colors.cyan, bg: "rgba(98,208,255,0.14)" },
   alert: { Icon: Bell, color: "#FFB84C", bg: "rgba(255,184,76,0.16)" },
@@ -247,7 +245,7 @@ export default function NotificationsScreen() {
 
   const filtered = useMemo(() => {
     if (tab === "mentions") return items.filter((i) => i.kind === "mention" || i.kind === "comment");
-    if (tab === "social") return items.filter((i) => ["like", "repost", "follow", "follow_request"].includes(i.kind));
+    if (tab === "social") return items.filter((i) => ["like", "repost", "follow"].includes(i.kind));
     if (tab === "trades") return items.filter((i) => i.kind === "trade" || i.kind === "alert" || i.kind === "launchpad_update");
     if (tab === "whales") return items.filter((i) => i.kind === "whale");
     return items;
@@ -263,7 +261,7 @@ export default function NotificationsScreen() {
       if (!isUnread) continue;
       counts.all += 1;
       if (i.kind === "mention" || i.kind === "comment") counts.mentions += 1;
-      if (["like", "repost", "follow", "follow_request"].includes(i.kind)) counts.social += 1;
+      if (["like", "repost", "follow"].includes(i.kind)) counts.social += 1;
       if (i.kind === "trade" || i.kind === "alert" || i.kind === "launchpad_update") counts.trades += 1;
       if (i.kind === "whale") counts.whales += 1;
     }
@@ -297,8 +295,7 @@ export default function NotificationsScreen() {
       tap();
       markLocalRead(n);
       if (n.remoteId && n.unread) markReadMut.mutate(n.remoteId);
-      if (n.kind === "follow_request") router.push("/follow-requests");
-      else if ((n.kind === "follow" || n.kind === "mention" || n.kind === "like" || n.kind === "repost" || n.kind === "comment") && n.actor) {
+      if ((n.kind === "follow" || n.kind === "mention" || n.kind === "like" || n.kind === "repost" || n.kind === "comment") && n.actor) {
         router.push({ pathname: "/u/[handle]", params: { handle: n.actor.replace(/^@/, "") } });
       } else if ((n.kind === "dm_message" || n.kind === "dm_reaction") && n.targetId) {
         router.push({ pathname: "/dm/[id]", params: { id: n.targetId } });

@@ -112,7 +112,6 @@ export interface UserPrefs {
   push: boolean;
   haptics: boolean;
   whaleAlerts: boolean;
-  privateProfile: boolean;
   currency: Currency;
   theme: ThemeMode;
   language: Language;
@@ -148,7 +147,6 @@ const DEFAULT_PREFS: UserPrefs = {
   push: true,
   haptics: true,
   whaleAlerts: true,
-  privateProfile: false,
   currency: "USD",
   theme: "dark",
   language: "en",
@@ -439,7 +437,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         const { data, error } = await supabase
           .from("user_settings")
           .select(
-            "push,haptics,whale_alerts,private_profile,currency,theme,language,slippage,priority_fee,mev_protection",
+            "push,haptics,whale_alerts,currency,theme,language,slippage,priority_fee,mev_protection",
           )
           .eq("user_id", userId)
           .maybeSingle();
@@ -449,7 +447,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
           push: data.push ?? localPrefs.push,
           haptics: data.haptics ?? localPrefs.haptics,
           whaleAlerts: data.whale_alerts ?? localPrefs.whaleAlerts,
-          privateProfile: data.private_profile ?? localPrefs.privateProfile,
           currency: (data.currency as Currency | null) ?? localPrefs.currency,
           theme: (data.theme as ThemeMode | null) ?? localPrefs.theme,
           language: (data.language as Language | null) ?? localPrefs.language,
@@ -1060,7 +1057,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
                 push: next.push,
                 haptics: next.haptics,
                 whale_alerts: next.whaleAlerts,
-                private_profile: next.privateProfile,
                 currency: next.currency,
                 theme: next.theme,
                 language: next.language,

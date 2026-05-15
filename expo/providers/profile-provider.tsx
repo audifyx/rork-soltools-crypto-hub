@@ -55,13 +55,6 @@ export interface ProfileSummary {
   followers_count?: number;
 }
 
-export interface FollowRequestRow extends ProfileSummary {
-  request_id: string;
-  created_at: string;
-}
-
-export type FollowRequestStatus = "none" | "requested" | "following";
-
 export interface PlatformUser {
   user_id: string;
   username: string | null;
@@ -380,62 +373,6 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
     },
   });
 
-  const requestFollowMutation = useMutation({
-    mutationFn: async (target: string): Promise<FollowRequestStatus> => {
-      const { data, error } = await supabase.rpc("request_follow", { target_user_id: target });
-      if (error) throw error;
-      const status = String(data ?? "none");
-      if (status === "following" || status === "already_following") return "following";
-      if (status === "requested" || status === "already_requested") return "requested";
-      return "none";
-    },
-    onSuccess: (status, target) => {
-      qc.setQueriesData<FollowRequestStatus>({ queryKey: ["profile", "request-status", target] }, status);
-      if (status === "following") {
-        qc.setQueriesData<PublicProfile | null>({ queryKey: ["profile", "public"] }, (curr) => {
-          if (!curr || curr.user_id !== target) return curr;
-          if (curr.is_following) return curr;
-          return {
-            ...curr,
-            is_following: true,
-            followers_count: Math.max(0, curr.followers_count + 1),
-          };
-        });
-      }
-      qc.invalidateQueries({ queryKey: ["profile", "follow-counts"] });
-      qc.invalidateQueries({ queryKey: ["profile", "followers"] });
-      qc.invalidateQueries({ queryKey: ["profile", "following"] });
-      qc.invalidateQueries({ queryKey: ["home", "following-feed"] });
-    },
-  });
-
-  const cancelFollowRequestMutation = useMutation({
-    mutationFn: async (target: string): Promise<boolean> => {
-      const { data, error } = await supabase.rpc("cancel_follow_request", { target_user_id: target });
-      if (error) throw error;
-      return !!data;
-    },
-    onSuccess: (_data, target) => {
-      qc.setQueriesData<FollowRequestStatus>({ queryKey: ["profile", "request-status", target] }, "none");
-    },
-  });
-
-  const respondFollowRequestMutation = useMutation({
-    mutationFn: async (input: { requestId: string; accept: boolean }): Promise<string> => {
-      const { data, error } = await supabase.rpc("respond_follow_request", {
-        p_request_id: input.requestId,
-        p_accept: input.accept,
-      });
-      if (error) throw error;
-      return String(data ?? "");
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["follow-requests"] });
-      qc.invalidateQueries({ queryKey: ["profile", "follow-counts"] });
-      qc.invalidateQueries({ queryKey: ["profile", "followers"] });
-    },
-  });
-
   return useMemo(
     () => ({
       myBadges: myBadgesQ.data ?? [],
@@ -444,12 +381,6 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       isUploading: uploadMutation.isPending,
       toggleFollow: followMutation.mutateAsync,
       isToggling: followMutation.isPending,
-      requestFollow: requestFollowMutation.mutateAsync,
-      isRequesting: requestFollowMutation.isPending,
-      cancelFollowRequest: cancelFollowRequestMutation.mutateAsync,
-      isCancellingRequest: cancelFollowRequestMutation.isPending,
-      respondFollowRequest: respondFollowRequestMutation.mutateAsync,
-      isRespondingRequest: respondFollowRequestMutation.isPending,
     }),
     [
       myBadgesQ.data,
@@ -458,58 +389,9 @@ export const [ProfileProvider, useProfileProvider] = createContextHook(() => {
       uploadMutation.isPending,
       followMutation.mutateAsync,
       followMutation.isPending,
-      requestFollowMutation.mutateAsync,
-      requestFollowMutation.isPending,
-      cancelFollowRequestMutation.mutateAsync,
-      cancelFollowRequestMutation.isPending,
-      respondFollowRequestMutation.mutateAsync,
-      respondFollowRequestMutation.isPending,
     ],
   );
 });
-
-export function useFollowRequestStatus(targetUserId: string | null | undefined) {
-  return useQuery<FollowRequestStatus>({
-    queryKey: ["profile", "request-status", targetUserId ?? "none"],
-    enabled: !!targetUserId,
-    queryFn: async () => {
-      if (!targetUserId) return "none";
-      const { data, error } = await supabase.rpc("get_follow_request_status", { target_user_id: targetUserId });
-      if (error) {
-        console.log("[profile] request status error", error.message);
-        return "none";
-      }
-      const status = String(data ?? "none");
-      if (status === "following" || status === "requested") return status;
-      return "none";
-    },
-    staleTime: 15_000,
-  });
-}
-
-export function useIncomingFollowRequests(enabled: boolean = true) {
-  return useQuery<FollowRequestRow[]>({
-    queryKey: ["follow-requests", "incoming"],
-    enabled,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("list_follow_requests");
-      if (error) {
-        console.log("[profile] follow requests error", error.message);
-        return [];
-      }
-      return ((data ?? []) as Record<string, unknown>[]).map((row) => {
-        const summary = profileSummaryFromRow(row);
-        return {
-          ...summary,
-          request_id: String(row.request_id ?? ""),
-          created_at: String(row.created_at ?? new Date().toISOString()),
-        } satisfies FollowRequestRow;
-      });
-    },
-    staleTime: 10_000,
-    refetchInterval: 30_000,
-  });
-}
 
 /**
  * Hook for loading another user's profile by handle (X-style).

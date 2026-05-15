@@ -131,12 +131,6 @@ const RULES: Rule[] = [
       "Theme, currency, and language switch in Settings > Appearance. Themes include Dark, Midnight, and Sunset.",
   },
   {
-    id: "privacy",
-    keywords: [["private"], ["privacy"], ["hide", "balance"], ["two", "factor"], ["2fa"]],
-    answer:
-      "Privacy controls (private profile, follow requests) live in Settings > Privacy.",
-  },
-  {
     id: "delete",
     keywords: [["delete", "account"], ["reset", "data"], ["clear", "cache"], ["sign", "out"], ["logout"]],
     answer:
