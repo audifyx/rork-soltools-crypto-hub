@@ -28,7 +28,7 @@ import { deleteMyEvent, listEventRsvps, listUpcomingEvents, rsvpEvent, type Even
 import { hapticSelect } from "@/lib/haptics";
 import { navigateBack } from "@/lib/navigation";
 import { useAuth } from "@/providers/auth-provider";
-import { supabase } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase";
 
 type Filter = "all" | "today" | "week" | "virtual" | "going";
 
