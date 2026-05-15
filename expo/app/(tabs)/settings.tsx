@@ -187,7 +187,7 @@ export default function SettingsScreen() {
                 <MenuRow Icon={Bell} label="Notifications" sub="Push, whales, haptics" onPress={() => openSection("notifications")} />
                 <MenuRow Icon={Shield} label="Privacy" sub="Private profile and follow requests" onPress={() => openSection("privacy")} />
                 <MenuRow Icon={Palette} label="Appearance" sub={`${prefs.theme} · ${prefs.currency} · ${prefs.language.toUpperCase()}`} onPress={() => openSection("appearance")} />
-                <MenuRow Icon={UserRound} label="Account" sub="Connected accounts, auth, data controls" onPress={() => openSection("account")} />
+                <MenuRow Icon={UserRound} label="Account" sub="Auth and data controls" onPress={() => openSection("account")} />
                 <MenuRow Icon={HelpCircle} label="Support & legal" sub="Help, terms, privacy, licenses" onPress={() => openSection("support")} />
               </Group>
             </>
@@ -218,7 +218,6 @@ export default function SettingsScreen() {
 
           {section === "account" ? (
             <Group title="ACCOUNT">
-              <MenuRow Icon={LinkIcon} label="Connected accounts" sub="Wallets, X, Discord connection hub" onPress={() => Alert.alert("Connected accounts", "Connection management is ready for the next auth providers.")} />
               <MenuRow Icon={Wrench} label="Admin dashboard" sub="Open platform admin tools" onPress={() => router.push("/admin")} />
               <MenuRow Icon={Trash2} label="Reset local data" sub="Clear device cache and local saved data" danger onPress={resetLocalData} />
               <MenuRow Icon={LogOut} label={isAuthenticated ? "Sign out" : "Sign in / Create account"} sub={isAuthenticated ? accountLabel : "Sync profile and settings"} danger={isAuthenticated} onPress={confirmSignOut} />

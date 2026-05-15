@@ -2149,12 +2149,6 @@ function SettingsModal({
 
                 <Text style={styles.settingsGroup}>ACCOUNT</Text>
                 <MenuRow
-                  Icon={LinkIcon}
-                  label="Connected accounts"
-                  sub="Wallets, X, Discord"
-                  onPress={() => Alert.alert("Soon", "Connect more accounts in the next update.")}
-                />
-                <MenuRow
                   Icon={Users}
                   label="Blocked users"
                   sub="Manage blocked traders"
