@@ -18,12 +18,12 @@ import {
   X,
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
-import { deleteMyEvent, listUpcomingEvents, rsvpEvent, type EventRow } from "@/lib/api/platform";
+import { deleteMyEvent, listEventRsvps, listUpcomingEvents, rsvpEvent, type EventRow, type EventRsvpUser } from "@/lib/api/platform";
 import { hapticSelect } from "@/lib/haptics";
 import { navigateBack } from "@/lib/navigation";
 import { useAuth } from "@/providers/auth-provider";
@@ -70,6 +70,15 @@ export default function EventsScreen() {
   }, [userId]);
 
   const myId = userId ?? authUid;
+
+  const [rsvpSheet, setRsvpSheet] = useState<{ eventId: string; title: string; tab: "going" | "interested" } | null>(null);
+
+  const rsvpListQuery = useQuery<EventRsvpUser[]>({
+    queryKey: ["event-rsvps", rsvpSheet?.eventId ?? null, rsvpSheet?.tab ?? null],
+    queryFn: () => (rsvpSheet ? listEventRsvps(rsvpSheet.eventId, rsvpSheet.tab) : Promise.resolve([])),
+    enabled: !!rsvpSheet,
+    staleTime: 10_000,
+  });
 
   const query = useQuery<EventRow[]>({
     queryKey: ["events", "upcoming"],
@@ -248,7 +257,16 @@ export default function EventsScreen() {
                       <Clock color={Colors.muted} size={11} strokeWidth={2.4} />
                       <Text style={styles.metaText}>{d.time}</Text>
                       <View style={styles.metaDot} />
-                      <Text style={styles.metaText}>{item.going_count} going</Text>
+                      <Pressable
+                        onPress={() => {
+                          hapticSelect();
+                          setRsvpSheet({ eventId: item.id, title: item.title, tab: "going" });
+                        }}
+                        testID={`event-going-list-${item.id}`}
+                        hitSlop={6}
+                      >
+                        <Text style={[styles.metaText, styles.metaLink]}>{item.going_count} going</Text>
+                      </Pressable>
                     </View>
                     {item.description ? (
                       <Text style={styles.eventBody} numberOfLines={2}>
@@ -284,6 +302,35 @@ export default function EventsScreen() {
                     </>
                   ) : (
                   <>
+                  <View style={styles.pollWrap}>
+                    <Pressable
+                      onPress={() => {
+                        hapticSelect();
+                        setRsvpSheet({ eventId: item.id, title: item.title, tab: "going" });
+                      }}
+                      style={styles.pollPeek}
+                      testID={`rsvp-going-peek-${item.id}`}
+                      hitSlop={4}
+                    >
+                      <Text style={styles.pollPeekText}>See who&apos;s going</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        hapticSelect();
+                        setRsvpSheet({ eventId: item.id, title: item.title, tab: "interested" });
+                      }}
+                      style={styles.pollPeek}
+                      testID={`rsvp-interested-peek-${item.id}`}
+                      hitSlop={4}
+                    >
+                      <Text style={styles.pollPeekText}>See who&apos;s interested</Text>
+                    </Pressable>
+                  </View>
+                  </>
+                  )}
+                </View>
+                {!isOwner && (
+                <View style={styles.actions}>
                   <Pressable
                     onPress={() => rsvp.mutate({ id: item.id, status: "going" })}
                     style={[styles.actionBtn, item.my_status === "going" && styles.actionBtnActive]}
@@ -322,9 +369,8 @@ export default function EventsScreen() {
                       <X color={Colors.muted} size={14} strokeWidth={2.7} />
                     </Pressable>
                   ) : null}
-                  </>
-                  )}
                 </View>
+                )}
               </View>
             );
           }}
@@ -337,6 +383,87 @@ export default function EventsScreen() {
           }
         />
       </SafeAreaView>
+
+      <Modal
+        visible={!!rsvpSheet}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setRsvpSheet(null)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setRsvpSheet(null)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle} numberOfLines={1}>{rsvpSheet?.title ?? "RSVPs"}</Text>
+            <View style={styles.sheetTabs}>
+              {((["going", "interested"] as const)).map((t) => {
+                const active = rsvpSheet?.tab === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => {
+                      hapticSelect();
+                      if (rsvpSheet) setRsvpSheet({ ...rsvpSheet, tab: t });
+                    }}
+                    style={[styles.sheetTab, active && styles.sheetTabActive]}
+                    testID={`rsvp-sheet-tab-${t}`}
+                  >
+                    <Text style={[styles.sheetTabText, active && styles.sheetTabTextActive]}>
+                      {t === "going" ? "Going" : "Interested"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {rsvpListQuery.isLoading ? (
+              <View style={styles.sheetLoading}>
+                <ActivityIndicator color={Colors.goldBright} />
+              </View>
+            ) : (
+              <FlatList
+                data={rsvpListQuery.data ?? []}
+                keyExtractor={(u) => u.user_id}
+                contentContainerStyle={styles.sheetList}
+                showsVerticalScrollIndicator={false}
+                ItemSeparatorComponent={() => <View style={styles.sheetSep} />}
+                renderItem={({ item: u }) => {
+                  const name = (u.display_name && u.display_name.trim()) || (u.username && `@${u.username.replace(/^@/, "")}`) || "Anon";
+                  const handle = u.username ? `@${u.username.replace(/^@/, "")}` : "";
+                  return (
+                    <Pressable
+                      onPress={() => {
+                        setRsvpSheet(null);
+                        router.push({ pathname: "/u/[id]", params: { id: u.user_id } });
+                      }}
+                      style={styles.sheetRow}
+                      testID={`rsvp-user-${u.user_id}`}
+                    >
+                      {u.avatar_url ? (
+                        <ExpoImage source={{ uri: u.avatar_url }} style={styles.sheetAvatar} contentFit="cover" />
+                      ) : (
+                        <View style={[styles.sheetAvatar, { backgroundColor: u.avatar_color ?? Colors.violet, alignItems: "center", justifyContent: "center" }]}>
+                          <Text style={styles.sheetAvatarInitial}>{(name[0] ?? "?").toUpperCase()}</Text>
+                        </View>
+                      )}
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.sheetName} numberOfLines={1}>{name}</Text>
+                        {handle ? <Text style={styles.sheetHandle} numberOfLines={1}>{handle}</Text> : null}
+                      </View>
+                    </Pressable>
+                  );
+                }}
+                ListEmptyComponent={
+                  <View style={styles.sheetEmpty}>
+                    <Text style={styles.sheetEmptyTitle}>Nobody yet</Text>
+                    <Text style={styles.sheetEmptyBody}>
+                      Be the first to tap {rsvpSheet?.tab === "going" ? "Going" : "Interested"}.
+                    </Text>
+                  </View>
+                }
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -385,6 +512,45 @@ const styles = StyleSheet.create({
   eventTitle: { color: Colors.text, fontSize: 16, fontWeight: "900", letterSpacing: -0.3 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 },
   metaText: { color: Colors.muted, fontSize: 11, fontWeight: "700" },
+  metaLink: { color: Colors.text, textDecorationLine: "underline", textDecorationColor: "rgba(255,255,255,0.25)" },
+  pollWrap: { flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingBottom: 4, paddingTop: 0 },
+  pollPeek: {
+    flex: 1, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+  },
+  pollPeekText: { color: Colors.muted, fontSize: 10, fontWeight: "800", letterSpacing: 0.3 },
+  sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: Colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 10, paddingBottom: 28, maxHeight: "80%",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+  },
+  sheetHandle: { alignSelf: "center", width: 38, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.18)", marginBottom: 10 },
+  sheetTitle: { color: Colors.text, fontSize: 17, fontWeight: "900", letterSpacing: -0.3, paddingHorizontal: 18, marginBottom: 10 },
+  sheetTabs: { flexDirection: "row", gap: 8, paddingHorizontal: 14, marginBottom: 6 },
+  sheetTab: {
+    flex: 1, paddingVertical: 9, borderRadius: 12, alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)",
+  },
+  sheetTabActive: { backgroundColor: Colors.goldBright, borderColor: Colors.goldBright },
+  sheetTabText: { color: Colors.text, fontSize: 12, fontWeight: "900" },
+  sheetTabTextActive: { color: Colors.ink },
+  sheetLoading: { paddingVertical: 40, alignItems: "center" },
+  sheetList: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8 },
+  sheetSep: { height: 8 },
+  sheetRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 8, paddingHorizontal: 8, borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  sheetAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.08)" },
+  sheetAvatarInitial: { color: Colors.text, fontSize: 16, fontWeight: "900" },
+  sheetName: { color: Colors.text, fontSize: 14, fontWeight: "800" },
+  sheetHandle: { color: Colors.muted, fontSize: 12, fontWeight: "700", marginTop: 1 },
+  sheetEmpty: { alignItems: "center", paddingVertical: 40, gap: 6 },
+  sheetEmptyTitle: { color: Colors.text, fontSize: 16, fontWeight: "900" },
+  sheetEmptyBody: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
   metaDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: Colors.muted2 },
   eventBody: { color: Colors.muted, fontSize: 12, fontWeight: "650", marginTop: 6, lineHeight: 17 },
   actions: { flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingBottom: 14 },

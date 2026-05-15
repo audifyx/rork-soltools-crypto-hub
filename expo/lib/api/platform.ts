@@ -383,6 +383,35 @@ export async function rsvpEvent(eventId: string, status: "going" | "interested" 
   if (error) throw error;
 }
 
+export interface EventRsvpUser {
+  user_id: string;
+  status: "going" | "interested";
+  created_at: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  avatar_color: string | null;
+  verified: boolean | null;
+}
+
+/** Returns the list of users who RSVP'd to an event. */
+export async function listEventRsvps(
+  eventId: string,
+  status?: "going" | "interested" | null,
+  limit: number = 100,
+): Promise<EventRsvpUser[]> {
+  const { data, error } = await supabase.rpc("list_event_rsvps", {
+    p_event_id: eventId,
+    p_status: status ?? null,
+    p_limit: limit,
+  });
+  if (error) {
+    console.log("[events] list rsvps failed", error.message);
+    return [];
+  }
+  return (data ?? []) as EventRsvpUser[];
+}
+
 /* =========================== ADMIN EVENTS ============================= */
 
 export interface AdminEventInput {
