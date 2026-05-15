@@ -155,7 +155,7 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
           { key: "reels", label: "Reels", description: "Short-form video", Icon: Film, color: Colors.magenta, path: "/(tabs)/reels" },
           { key: "spaces", label: "Spaces", description: "Live audio rooms and AMAs", Icon: Headphones, color: Colors.rose, path: "/spaces" },
           { key: "events", label: "Events", description: "Community events and RSVPs", Icon: CalendarDays, color: Colors.mint, path: "/events" },
-          { key: "communities", label: "Communities", description: "Discover and join groups", Icon: Compass, color: Colors.cyan, path: "/(tabs)/community" },
+          { key: "communities", label: "Communities", description: "Discover and join groups", Icon: Compass, color: Colors.cyan, path: "/communities" },
           { key: "messages", label: "Messages", description: "DMs, group chats, notes-to-self", Icon: MessageCircle, color: Colors.violet, path: "/(tabs)/messages" },
         ],
       },

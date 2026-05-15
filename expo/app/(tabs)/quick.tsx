@@ -133,7 +133,7 @@ export default function QuickAccessScreen() {
           { key: "reels", category: "social", label: "Reels", description: "Short-form video", Icon: Film, color: Colors.magenta, path: "/(tabs)/reels" },
           { key: "spaces", category: "social", label: "Spaces", description: "Live audio rooms", Icon: Headphones, color: Colors.rose, path: "/spaces" },
           { key: "events", category: "social", label: "Events", description: "RSVP and meetups", Icon: CalendarDays, color: Colors.mint, path: "/events" },
-          { key: "communities", category: "social", label: "Communities", description: "Discover groups", Icon: Compass, color: Colors.cyan, path: "/(tabs)/community" },
+          { key: "communities", category: "social", label: "Communities", description: "Discover groups", Icon: Compass, color: Colors.cyan, path: "/communities" },
           { key: "messages", category: "social", label: "Messages", description: "DMs and group chats", Icon: MessageCircle, color: Colors.violet, path: "/(tabs)/messages" },
         ],
       },
