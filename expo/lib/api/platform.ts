@@ -438,6 +438,53 @@ export async function adminDeleteEvent(eventId: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function updateMyEvent(eventId: string, input: Partial<AdminEventInput>): Promise<void> {
+  const patch: Record<string, unknown> = {};
+  if (input.title !== undefined) patch.title = input.title;
+  if (input.description !== undefined) patch.description = input.description;
+  if (input.bannerUrl !== undefined) patch.banner_url = input.bannerUrl;
+  if (input.startsAt !== undefined) patch.starts_at = input.startsAt;
+  if (input.endsAt !== undefined) patch.ends_at = input.endsAt;
+  if (input.location !== undefined) patch.location = input.location;
+  if (input.isVirtual !== undefined) patch.is_virtual = input.isVirtual;
+  if (input.category !== undefined) patch.category = input.category;
+  if (input.eventUrl !== undefined) patch.url = input.eventUrl;
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) throw new Error("Sign in required.");
+  const { error } = await supabase
+    .from("events")
+    .update(patch)
+    .eq("id", eventId)
+    .eq("host_user_id", uid);
+  if (error) throw error;
+}
+
+export async function deleteMyEvent(eventId: string): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) throw new Error("Sign in required.");
+  const { error } = await supabase
+    .from("events")
+    .delete()
+    .eq("id", eventId)
+    .eq("host_user_id", uid);
+  if (error) throw error;
+}
+
+export async function getEventById(eventId: string): Promise<EventRow | null> {
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (error) {
+    console.log("[events] get failed", error.message);
+    return null;
+  }
+  return (data as EventRow) ?? null;
+}
+
 export async function adminListEvents(): Promise<EventRow[]> {
   const { data, error } = await supabase
     .from("events")

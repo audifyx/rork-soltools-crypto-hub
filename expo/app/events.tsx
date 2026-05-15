@@ -10,8 +10,11 @@ import {
   Clock,
   Globe2,
   MapPin,
+  MoreHorizontal,
+  Pencil,
   Sparkles,
   Star,
+  Trash2,
   X,
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
@@ -20,7 +23,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBackground from "@/components/ui/AppBackground";
 import Colors from "@/constants/colors";
-import { listUpcomingEvents, rsvpEvent, type EventRow } from "@/lib/api/platform";
+import { deleteMyEvent, listUpcomingEvents, rsvpEvent, type EventRow } from "@/lib/api/platform";
 import { hapticSelect } from "@/lib/haptics";
 import { navigateBack } from "@/lib/navigation";
 import { useAuth } from "@/providers/auth-provider";
@@ -71,6 +74,37 @@ export default function EventsScreen() {
     if (filter === "going") return events.filter((e) => e.my_status === "going");
     return events;
   }, [events, filter]);
+
+  const del = useMutation({
+    mutationFn: async (id: string) => {
+      await deleteMyEvent(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["events"] }).catch(() => {});
+    },
+    onError: (e: unknown) => {
+      Alert.alert("Couldn't delete", e instanceof Error ? e.message : "Try again.");
+    },
+  });
+
+  const openOwnerMenu = (item: EventRow) => {
+    Alert.alert(item.title, "Manage this event", [
+      {
+        text: "Edit",
+        onPress: () => router.push({ pathname: "/events/edit/[id]", params: { id: item.id } }),
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () =>
+          Alert.alert("Delete event?", "This cannot be undone.", [
+            { text: "Cancel", style: "cancel" },
+            { text: "Delete", style: "destructive", onPress: () => del.mutate(item.id) },
+          ]),
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
 
   const rsvp = useMutation({
     mutationFn: async (input: { id: string; status: "going" | "interested" | "no" }) => {
@@ -137,6 +171,7 @@ export default function EventsScreen() {
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           renderItem={({ item }) => {
             const d = formatDay(item.starts_at);
+            const isOwner = !!userId && item.host_user_id === userId;
             return (
               <View style={styles.card} testID={`event-${item.id}`}>
                 {item.banner_url ? (
@@ -156,6 +191,16 @@ export default function EventsScreen() {
                         {item.is_virtual ? "Virtual" : item.location ?? "In person"}
                       </Text>
                     </View>
+                    {isOwner ? (
+                      <Pressable
+                        onPress={() => openOwnerMenu(item)}
+                        style={styles.ownerBtn}
+                        testID={`event-owner-${item.id}`}
+                        hitSlop={10}
+                      >
+                        <MoreHorizontal color={Colors.text} size={16} strokeWidth={2.6} />
+                      </Pressable>
+                    ) : null}
                   </View>
                 ) : (
                   <View style={[styles.banner, styles.bannerFallback]}>
@@ -165,6 +210,16 @@ export default function EventsScreen() {
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                     />
+                    {isOwner ? (
+                      <Pressable
+                        onPress={() => openOwnerMenu(item)}
+                        style={styles.ownerBtn}
+                        testID={`event-owner-${item.id}`}
+                        hitSlop={10}
+                      >
+                        <MoreHorizontal color={Colors.text} size={16} strokeWidth={2.6} />
+                      </Pressable>
+                    ) : null}
                   </View>
                 )}
                 <View style={styles.body}>
@@ -190,6 +245,32 @@ export default function EventsScreen() {
                   </View>
                 </View>
                 <View style={styles.actions}>
+                  {isOwner ? (
+                    <>
+                      <Pressable
+                        onPress={() => router.push({ pathname: "/events/edit/[id]", params: { id: item.id } })}
+                        style={[styles.actionBtn, styles.actionBtnEdit]}
+                        testID={`event-edit-${item.id}`}
+                      >
+                        <Pencil color={Colors.text} size={14} strokeWidth={2.7} />
+                        <Text style={styles.actionText}>Edit</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() =>
+                          Alert.alert("Delete event?", "This cannot be undone.", [
+                            { text: "Cancel", style: "cancel" },
+                            { text: "Delete", style: "destructive", onPress: () => del.mutate(item.id) },
+                          ])
+                        }
+                        style={[styles.actionBtn, styles.actionBtnDelete]}
+                        testID={`event-delete-${item.id}`}
+                      >
+                        <Trash2 color={Colors.danger ?? "#ff5d6c"} size={14} strokeWidth={2.7} />
+                        <Text style={[styles.actionText, { color: Colors.danger ?? "#ff5d6c" }]}>Delete</Text>
+                      </Pressable>
+                    </>
+                  ) : (
+                  <>
                   <Pressable
                     onPress={() => rsvp.mutate({ id: item.id, status: "going" })}
                     style={[styles.actionBtn, item.my_status === "going" && styles.actionBtnActive]}
@@ -228,6 +309,8 @@ export default function EventsScreen() {
                       <X color={Colors.muted} size={14} strokeWidth={2.7} />
                     </Pressable>
                   ) : null}
+                  </>
+                  )}
                 </View>
               </View>
             );
@@ -302,6 +385,14 @@ const styles = StyleSheet.create({
   actionText: { color: Colors.text, fontSize: 12, fontWeight: "900" },
   actionTextActive: { color: Colors.ink },
   clearBtn: { width: 40, height: 40, borderRadius: 13, backgroundColor: "rgba(255,255,255,0.04)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
+  ownerBtn: {
+    position: "absolute", right: 10, top: 10,
+    width: 32, height: 32, borderRadius: 11,
+    backgroundColor: "rgba(0,0,0,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center", justifyContent: "center",
+  },
+  actionBtnEdit: { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.16)" },
+  actionBtnDelete: { backgroundColor: "rgba(255,93,108,0.12)", borderColor: "rgba(255,93,108,0.40)" },
   empty: { alignItems: "center", paddingHorizontal: 30, paddingVertical: 56, gap: 10 },
   emptyTitle: { color: Colors.text, fontSize: 18, fontWeight: "900" },
   emptyBody: { color: Colors.muted, fontSize: 13, fontWeight: "700", textAlign: "center", lineHeight: 19 },
