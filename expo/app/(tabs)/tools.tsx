@@ -728,7 +728,9 @@ const ALL_TOOLS_BASE: Tool[] = uniqueToolsById([
   ...OG_WEB_TOOLS_AS_TOOLS,
   ...TOOLS,
   ...PLATFORM_MODULE_TOOLS,
-]).filter(hasFullUI);
+])
+  .filter((tool) => tool.id !== "admin-dashboard")
+  .filter(hasFullUI);
 
 type RecentItem = { id: string; ts: number };
 type OgScanSection = "home" | "scan" | "live" | "watch" | "more";
