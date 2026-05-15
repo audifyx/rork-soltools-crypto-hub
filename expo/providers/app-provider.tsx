@@ -31,6 +31,7 @@ export interface UserPost {
   comments: number;
   liked: boolean;
   reposted?: boolean;
+  communityId?: string | null;
   authorId?: string;
   authorUsername?: string | null;
   authorDisplayName?: string | null;
@@ -228,14 +229,31 @@ export const [AppProvider, useApp] = createContextHook(() => {
         try {
           const { data, error } = await supabase
             .from("community_posts")
-            .select("id,user_id,content,image_url,ticker,change_pct,token_address,likes_count,reposts_count,comments_count,created_at")
+            .select("id,user_id,community_id,content,image_url,ticker,change_pct,token_address,likes_count,reposts_count,comments_count,created_at")
             .eq("user_id", userId)
-            .is("community_id", null)
             .is("parent_post_id", null)
             .order("created_at", { ascending: false })
             .limit(200);
           if (error) throw error;
-          const remotePosts = (data ?? []).map((row): UserPost => ({
+          const rows = data ?? [];
+          const postIds = rows.map((row) => row.id as string).filter(Boolean);
+          const [likesRes, repostsRes] = postIds.length > 0
+            ? await Promise.all([
+                supabase
+                  .from("community_post_likes")
+                  .select("post_id")
+                  .eq("user_id", userId)
+                  .in("post_id", postIds),
+                supabase
+                  .from("community_post_reposts")
+                  .select("post_id")
+                  .eq("user_id", userId)
+                  .in("post_id", postIds),
+              ])
+            : [{ data: [] }, { data: [] }];
+          const likedSet = new Set((likesRes.data ?? []).map((r) => r.post_id as string));
+          const repostedSet = new Set((repostsRes.data ?? []).map((r) => r.post_id as string));
+          const remotePosts = rows.map((row): UserPost => ({
             id: row.id as string,
             text: (row.content as string) ?? "",
             ticker: (row.ticker as string) ?? undefined,
@@ -246,14 +264,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
             likes: (row.likes_count as number) ?? 0,
             reposts: (row.reposts_count as number) ?? 0,
             comments: (row.comments_count as number) ?? 0,
-            liked: false,
-            reposted: false,
+            liked: likedSet.has(row.id as string),
+            reposted: repostedSet.has(row.id as string),
+            communityId: (row.community_id as string | null) ?? null,
             authorId: row.user_id as string,
+            authorUsername: null,
+            authorDisplayName: null,
+            authorAvatarUrl: null,
+            authorAvatarColor: null,
+            authorVerified: false,
           }));
           // Only show posts authored by the current user. Drop stray local posts
           // (e.g. created while signed out or under a different account) so the
           // profile feed never surfaces other people's posts.
-          const merged = mergePosts(localPosts, remotePosts);
+          const merged = mergePosts(remotePosts, localPosts);
           return merged.filter((p) => !p.authorId || p.authorId === userId);
         } catch (e) {
           console.log("[app] posts fetch fallback", e);
@@ -556,6 +580,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
           reposts: (data.reposts_count as number) ?? 0,
           comments: (data.comments_count as number) ?? 0,
           liked: false,
+          reposted: false,
+          communityId: null,
           authorId: data.user_id as string,
           authorUsername: profile.handle.replace(/^@/, "") || null,
           authorDisplayName: profile.displayName || null,
@@ -581,6 +607,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         comments: 0,
         liked: false,
         reposted: false,
+        communityId: null,
       };
       const latestLocal = await loadJson<UserPost[]>(POSTS_KEY, []);
       const next = mergePosts([post], mergePosts(latestLocal, posts));

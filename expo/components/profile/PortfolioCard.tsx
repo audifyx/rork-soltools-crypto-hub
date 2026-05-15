@@ -133,10 +133,10 @@ export default function PortfolioCard() {
           <View style={[styles.iconBox, { backgroundColor: `${accent}1F` }]}>
             <Wallet color={accent} size={14} strokeWidth={2.6} />
           </View>
-          <View>
-            <Text style={styles.eyebrow}>ON-CHAIN PORTFOLIO · LIVE SCAN</Text>
-            <Text style={styles.balance}>{balanceText}</Text>
-            <Text style={styles.subBalance}>{solText} · {addresses.length} wallet{addresses.length === 1 ? "" : "s"}</Text>
+          <View style={styles.headTextBlock}>
+            <Text style={styles.eyebrow} numberOfLines={1}>ON-CHAIN PORTFOLIO · LIVE SCAN</Text>
+            <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.76}>{balanceText}</Text>
+            <Text style={styles.subBalance} numberOfLines={1}>{solText} · {addresses.length} wallet{addresses.length === 1 ? "" : "s"}</Text>
           </View>
         </View>
         <View style={styles.headRight}>
@@ -298,8 +298,9 @@ function StatCell({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginHorizontal: 14,
-    marginTop: 12,
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 12,
     padding: 16,
     borderRadius: 24,
     backgroundColor: "rgba(8,8,9,0.88)",
@@ -312,9 +313,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   bgGrad: { ...StyleSheet.absoluteFillObject },
-  head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  headLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
-  headRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  head: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
+  headLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
+  headTextBlock: { flex: 1, minWidth: 0 },
+  headRight: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
   iconBox: {
     width: 32,
     height: 32,
@@ -333,7 +335,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(95,196,232,0.35)",
     backgroundColor: "rgba(95,196,232,0.10)",
-    marginLeft: "auto" as const,
   },
   readOnlyText: { color: Colors.cyan, fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
   addressList: { marginTop: 10, gap: 6 },
@@ -368,7 +369,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  changeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
+  changeRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 10 },
   changePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -398,8 +399,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "rgba(255,255,255,0.06)",
   },
-  allocLegend: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  allocItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  allocLegend: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  allocItem: { flexDirection: "row", alignItems: "center", gap: 5, maxWidth: "48%" },
   allocDot: { width: 8, height: 8, borderRadius: 4 },
   allocLabel: { color: Colors.text, fontSize: 11, fontWeight: "800" },
   allocPct: { color: Colors.muted, fontSize: 10, fontWeight: "700" },

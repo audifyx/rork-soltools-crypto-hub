@@ -5,7 +5,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Award,
@@ -22,13 +22,17 @@ import {
   Flame,
   Gem,
   Globe,
+  Heart,
   HelpCircle,
   Languages,
   Link as LinkIcon,
   Lock,
   LogOut,
   MapPin,
+  MessageCircle,
   Pencil,
+  Quote,
+  Repeat2,
   Rocket,
   Settings,
   Share2,
@@ -53,6 +57,7 @@ import {
   Alert,
   Animated,
   Easing,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -75,9 +80,11 @@ import RecapCard from "@/components/profile/RecapCard";
 import BadgeRow from "@/components/social/BadgeRow";
 import { DEFAULT_BADGES, getHolderBadge, sortBadges, type UserBadge } from "@/lib/badge-system";
 import { useAdmin } from "@/providers/admin-provider";
-import { useApp, type Currency, type Language, type ThemeMode, type UserPrefs } from "@/providers/app-provider";
+import { useApp, type Currency, type Language, type ThemeMode, type UserPost, type UserPrefs } from "@/providers/app-provider";
 import { useAuth } from "@/providers/auth-provider";
 import { useLaunchpad } from "@/providers/launchpad-provider";
+import { patchPostEverywhere } from "@/lib/post-sync";
+import { type Community, type CommunityPost, useSocial } from "@/providers/social-provider";
 import {
   useFollowCounts,
   useFollowList,
@@ -274,6 +281,16 @@ function timeAgo(ts: number): string {
   return `${d}d ago`;
 }
 
+function shortTimeAgo(ts: number): string {
+  return timeAgo(ts).replace(" ago", "");
+}
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`;
+  return `${n}`;
+}
+
 export default function ProfileScreen() {
   const router = useRouter();
   const {
@@ -290,12 +307,15 @@ export default function ProfileScreen() {
     wallets,
     removeWallet,
     posts,
+    togglePostLike,
+    togglePostRepost,
     deletePost,
   } = useApp();
   const { listings } = useLaunchpad();
   const { isAuthenticated, signOut, userId } = useAuth();
   const { isAdmin, isTeam, role: adminRole } = useAdmin();
   const { uploadMedia, isUploading } = useProfileProvider();
+  const { communities, joinedCommunities, addPostReply, quotePost } = useSocial();
   const qc = useQueryClient();
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
@@ -309,6 +329,8 @@ export default function ProfileScreen() {
       qc.invalidateQueries({ queryKey: ["app", "watch"] });
       qc.invalidateQueries({ queryKey: ["app", "alerts"] });
       qc.invalidateQueries({ queryKey: ["app", "wallets"] });
+      qc.invalidateQueries({ queryKey: ["social", "communities"] });
+      qc.invalidateQueries({ queryKey: ["social", "memberships"] });
       return undefined;
     }, [qc]),
   );
@@ -323,6 +345,8 @@ export default function ProfileScreen() {
         qc.refetchQueries({ queryKey: ["app", "watch"] }),
         qc.refetchQueries({ queryKey: ["app", "alerts"] }),
         qc.refetchQueries({ queryKey: ["app", "wallets"] }),
+        qc.refetchQueries({ queryKey: ["social", "communities"] }),
+        qc.refetchQueries({ queryKey: ["social", "memberships"] }),
       ]);
     } finally {
       setRefreshing(false);
@@ -360,6 +384,9 @@ export default function ProfileScreen() {
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [followersOpen, setFollowersOpen] = useState<"followers" | "following" | null>(null);
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
+  const [postInteraction, setPostInteraction] = useState<{ mode: "reply" | "quote"; post: UserPost } | null>(null);
+  const [postInteractionText, setPostInteractionText] = useState<string>("");
+  const [submittingInteraction, setSubmittingInteraction] = useState<boolean>(false);
   const followersQ = useFollowList(userId, "followers");
   const followingQ = useFollowList(userId, "following");
   const followCountsQ = useFollowCounts(userId);
@@ -370,6 +397,12 @@ export default function ProfileScreen() {
     () => listings.filter((l) => !!userId && l.ownerId === userId),
     [listings, userId],
   );
+
+  const communityById = useMemo(() => {
+    const map = new Map<string, Community>();
+    communities.forEach((community) => map.set(community.id, community));
+    return map;
+  }, [communities]);
 
   const computedXp = useMemo(() => profile.xp, [profile.xp]);
 
@@ -603,6 +636,97 @@ export default function ProfileScreen() {
       Alert.alert("Couldn't open link", safe);
     });
   }, []);
+
+  const buildCommunityPostRef = useCallback(
+    (post: UserPost): CommunityPost => ({
+      id: post.id,
+      communityId: post.communityId ?? "",
+      authorUserId: post.authorId ?? userId ?? null,
+      authorHandle: post.authorUsername ? `@${post.authorUsername}` : (profile.handle || "@you"),
+      authorName: post.authorDisplayName ?? profile.displayName ?? "You",
+      authorColor: post.authorAvatarColor ?? profile.avatarColor,
+      authorAvatarUrl: post.authorAvatarUrl ?? profile.avatarUrl ?? null,
+      authorUsername: post.authorUsername ?? (profile.handle.replace(/^@/, "") || null),
+      content: post.text,
+      imageUrl: post.images?.[0] ?? null,
+      ticker: post.ticker,
+      changePct: post.changePct,
+      createdAt: post.createdAt,
+      likes: post.likes,
+      comments: post.comments,
+      reposts: post.reposts,
+      liked: !!post.liked,
+      reposted: !!post.reposted,
+      bookmarked: false,
+      parentPostId: null,
+      quotePostId: null,
+      quote: null,
+      replyTo: null,
+      token: null,
+    }),
+    [profile.avatarColor, profile.avatarUrl, profile.displayName, profile.handle, userId],
+  );
+
+  const closePostInteraction = useCallback(() => {
+    setPostInteraction(null);
+    setPostInteractionText("");
+  }, []);
+
+  const openPostInteraction = useCallback(
+    (mode: "reply" | "quote", post: UserPost) => {
+      if (!isAuthenticated) {
+        Alert.alert("Sign in", mode === "reply" ? "Sign in to reply." : "Sign in to quote posts.");
+        return;
+      }
+      tap();
+      setPostInteraction({ mode, post });
+      setPostInteractionText("");
+    },
+    [isAuthenticated],
+  );
+
+  const submitPostInteraction = useCallback(async () => {
+    if (!postInteraction) return;
+    const text = postInteractionText.trim();
+    if (!text) return;
+    setSubmittingInteraction(true);
+    try {
+      const viewer = {
+        authorHandle: profile.handle || "@you",
+        authorName: profile.displayName || "You",
+        authorColor: profile.avatarColor,
+      };
+      const target = buildCommunityPostRef(postInteraction.post);
+      if (postInteraction.mode === "reply") {
+        await addPostReply({ post: target, content: text, ...viewer });
+        patchPostEverywhere(qc, postInteraction.post.id, { commentsDelta: 1 });
+      } else {
+        await quotePost({ post: target, content: text, ...viewer });
+        patchPostEverywhere(qc, postInteraction.post.id, { reposted: true, repostsDelta: postInteraction.post.reposted ? 0 : 1 });
+      }
+      closePostInteraction();
+    } catch (e) {
+      Alert.alert(
+        postInteraction.mode === "reply" ? "Reply failed" : "Quote failed",
+        e instanceof Error ? e.message : "Try again.",
+      );
+    } finally {
+      setSubmittingInteraction(false);
+    }
+  }, [addPostReply, buildCommunityPostRef, closePostInteraction, postInteraction, postInteractionText, profile.avatarColor, profile.displayName, profile.handle, qc, quotePost]);
+
+  const onSharePost = useCallback(async (post: UserPost) => {
+    tap();
+    const author = post.authorUsername ? `@${post.authorUsername}` : profile.handle || profile.displayName;
+    const ticker = post.ticker ? `\n\n${post.ticker.replace("$", "")}` : "";
+    const url = `https://rork.com/post/${post.id}`;
+    try {
+      await Share.share({ message: `${post.text || "Crypto Community App post"}${ticker}\n\n— ${author}\n${url}`, url });
+    } catch (e) {
+      console.log("[profile] share post failed", e);
+      await Clipboard.setStringAsync(url).catch(() => {});
+    }
+  }, [profile.displayName, profile.handle]);
 
   return (
     <View style={styles.root} testID="profile-screen">
@@ -1023,13 +1147,25 @@ export default function ProfileScreen() {
 
           {tab === "communities" && (
             <View style={styles.section}>
-              <EmptyTab
-                Icon={Users}
-                title="No communities yet"
-                body="Join holders-only and public communities. Token-gated rooms unlock when you hold $SOLTOOLS."
-                ctaLabel="Browse communities"
-                onCta={() => router.push("/communities")}
-              />
+              {joinedCommunities.length === 0 ? (
+                <EmptyTab
+                  Icon={Users}
+                  title="No communities yet"
+                  body="Join holders-only and public communities. Communities you join will show here on your profile."
+                  ctaLabel="Browse communities"
+                  onCta={() => router.push("/communities")}
+                />
+              ) : (
+                <View style={styles.communityProfileGrid}>
+                  {joinedCommunities.map((community) => (
+                    <ProfileCommunityCard
+                      key={community.id}
+                      community={community}
+                      onPress={() => router.push({ pathname: "/community/[id]", params: { id: community.id } })}
+                    />
+                  ))}
+                </View>
+              )}
             </View>
           )}
 
@@ -1121,32 +1257,39 @@ export default function ProfileScreen() {
                   onCta={() => router.push("/compose")}
                 />
               ) : (
-                posts.map((p) => (
-                  <View key={p.id} style={styles.postItem} testID={`my-post-${p.id}`}>
-                    <Text style={styles.postText}>{p.text}</Text>
-                    {p.ticker ? (
-                      <View style={styles.postPill}>
-                        <Text style={styles.postPillText}>${p.ticker}</Text>
-                      </View>
-                    ) : null}
-                    <View style={styles.postFooter}>
-                      <View style={styles.postStats}>
-                        <View style={styles.postStat}>
-                          <Star color={Colors.muted} size={11} strokeWidth={2.6} />
-                          <Text style={styles.postStatText}>{p.likes}</Text>
-                        </View>
-                        <View style={styles.postStat}>
-                          <TrendingUp color={Colors.muted} size={11} strokeWidth={2.6} />
-                          <Text style={styles.postStatText}>{p.reposts}</Text>
-                        </View>
-                        <Text style={styles.postStatText}>{timeAgo(p.createdAt)}</Text>
-                      </View>
-                      <Pressable onPress={() => onConfirmDelete("post", () => deletePost(p.id))} hitSlop={6}>
-                        <X color={Colors.muted} size={14} strokeWidth={2.6} />
-                      </Pressable>
-                    </View>
-                  </View>
-                ))
+                <View style={styles.profileFeedList}>
+                  {posts.map((p) => (
+                    <ProfileFeedPostCard
+                      key={p.id}
+                      post={p}
+                      displayName={profile.displayName || "You"}
+                      handle={profile.handle || "@you"}
+                      avatarColor={profile.avatarColor}
+                      avatarUrl={profile.avatarUrl ?? null}
+                      verified={profile.verified}
+                      community={p.communityId ? communityById.get(p.communityId) : undefined}
+                      onOpenCommunity={(id) => router.push({ pathname: "/community/[id]", params: { id } })}
+                      onLike={() => {
+                        tap();
+                        togglePostLike(p.id).catch((e) => {
+                          console.log("[profile] like failed", e);
+                          Alert.alert("Like failed", e instanceof Error ? e.message : "Try again.");
+                        });
+                      }}
+                      onRepost={() => {
+                        tap();
+                        togglePostRepost(p.id).catch((e) => {
+                          console.log("[profile] repost failed", e);
+                          Alert.alert("Repost failed", e instanceof Error ? e.message : "Try again.");
+                        });
+                      }}
+                      onQuote={() => openPostInteraction("quote", p)}
+                      onComment={() => openPostInteraction("reply", p)}
+                      onShare={() => onSharePost(p)}
+                      onDelete={() => onConfirmDelete("post", () => deletePost(p.id))}
+                    />
+                  ))}
+                </View>
               )}
             </View>
           )}
@@ -1271,6 +1414,15 @@ export default function ProfileScreen() {
           setSettingsOpen(false);
           Alert.alert("Reset", "All local data was cleared.");
         }}
+      />
+
+      <PostInteractionModal
+        interaction={postInteraction}
+        text={postInteractionText}
+        submitting={submittingInteraction}
+        onChangeText={setPostInteractionText}
+        onClose={closePostInteraction}
+        onSubmit={submitPostInteraction}
       />
     </View>
   );
@@ -2311,6 +2463,218 @@ function SettingRow({
   );
 }
 
+function ProfileFeedPostCard({
+  post,
+  displayName,
+  handle,
+  avatarColor,
+  avatarUrl,
+  verified,
+  community,
+  onOpenCommunity,
+  onLike,
+  onRepost,
+  onQuote,
+  onComment,
+  onShare,
+  onDelete,
+}: {
+  post: UserPost;
+  displayName: string;
+  handle: string;
+  avatarColor: string;
+  avatarUrl?: string | null;
+  verified: boolean;
+  community?: Community;
+  onOpenCommunity: (id: string) => void;
+  onLike: () => void;
+  onRepost: () => void;
+  onQuote: () => void;
+  onComment: () => void;
+  onShare: () => void;
+  onDelete: () => void;
+}) {
+  const shownHandle = handle.startsWith("@") ? handle : `@${handle}`;
+  return (
+    <View style={styles.feedPostCard} testID={`my-post-${post.id}`}>
+      <View style={[styles.feedPostAvatar, { backgroundColor: avatarColor || Colors.mint }]}>
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={styles.feedPostAvatarImg} contentFit="cover" />
+        ) : (
+          <Text style={styles.feedPostAvatarText}>{displayName.slice(0, 1).toUpperCase()}</Text>
+        )}
+      </View>
+      <View style={styles.feedPostBody}>
+        <View style={styles.feedPostHeaderRow}>
+          <Text style={styles.feedPostName} numberOfLines={1}>{displayName}</Text>
+          {verified ? <ShieldCheck color={Colors.cyan} size={13} strokeWidth={3} /> : null}
+          <Text style={styles.feedPostHandle} numberOfLines={1}>{shownHandle}</Text>
+          <Text style={styles.feedPostDot}>·</Text>
+          <Text style={styles.feedPostTime}>{shortTimeAgo(post.createdAt)}</Text>
+          <Pressable onPress={onDelete} hitSlop={8} style={styles.feedDeleteBtn} testID={`delete-post-${post.id}`}>
+            <X color={Colors.muted} size={14} strokeWidth={2.6} />
+          </Pressable>
+        </View>
+        {community ? (
+          <Pressable onPress={() => onOpenCommunity(community.id)} style={styles.feedCommunityChip} testID={`post-community-${post.id}`}>
+            <Text style={styles.feedCommunityEmoji}>{community.iconEmoji}</Text>
+            <Text style={styles.feedCommunityText} numberOfLines={1}>{community.name}</Text>
+          </Pressable>
+        ) : null}
+        {post.text ? <Text style={styles.feedPostText}>{post.text}</Text> : null}
+        {post.images && post.images.length > 0 ? <ProfilePostImageGrid images={post.images} /> : null}
+        {post.ticker ? <ProfileTickerCard ticker={post.ticker} changePct={post.changePct ?? 0} /> : null}
+        <View style={styles.feedActionsRow}>
+          <Pressable onPress={onComment} style={styles.feedActionBtn} hitSlop={8} testID={`comment-profile-${post.id}`}>
+            <MessageCircle color={Colors.muted} size={16} strokeWidth={2.3} />
+            <Text style={styles.feedActionText}>{formatCount(post.comments)}</Text>
+          </Pressable>
+          <Pressable onPress={onRepost} style={styles.feedActionBtn} hitSlop={8} testID={`repost-profile-${post.id}`}>
+            <Repeat2 color={post.reposted ? Colors.mint : Colors.muted} size={17} strokeWidth={2.3} />
+            <Text style={[styles.feedActionText, post.reposted && { color: Colors.mint }]}>{formatCount(post.reposts)}</Text>
+          </Pressable>
+          <Pressable onPress={onQuote} style={styles.feedActionBtn} hitSlop={8} testID={`quote-profile-${post.id}`}>
+            <Quote color={Colors.muted} size={15} strokeWidth={2.3} />
+          </Pressable>
+          <Pressable onPress={onLike} style={styles.feedActionBtn} hitSlop={8} testID={`like-profile-${post.id}`}>
+            <Heart color={post.liked ? Colors.rose : Colors.muted} fill={post.liked ? Colors.rose : "transparent"} size={16} strokeWidth={2.3} />
+            <Text style={[styles.feedActionText, post.liked && { color: Colors.rose }]}>{formatCount(post.likes)}</Text>
+          </Pressable>
+          <Pressable onPress={onShare} style={styles.feedActionBtn} hitSlop={8} testID={`share-profile-post-${post.id}`}>
+            <Share2 color={Colors.muted} size={15} strokeWidth={2.3} />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ProfilePostImageGrid({ images }: { images: string[] }) {
+  const visible = images.filter(Boolean).slice(0, 4);
+  if (visible.length === 0) return null;
+  if (visible.length === 1) {
+    return (
+      <View style={styles.feedImageSolo}>
+        <Image source={{ uri: visible[0] }} style={styles.feedImage} contentFit="cover" />
+      </View>
+    );
+  }
+  return (
+    <View style={visible.length === 2 ? styles.feedImageRow : styles.feedImageGrid}>
+      {visible.map((uri, index) => (
+        <View key={`${uri}-${index}`} style={visible.length === 2 ? styles.feedImageHalf : styles.feedImageQuad}>
+          <Image source={{ uri }} style={styles.feedImage} contentFit="cover" />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function ProfileTickerCard({ ticker, changePct }: { ticker: string; changePct: number }) {
+  const up = changePct >= 0;
+  const clean = ticker.replace("$", "").toUpperCase();
+  return (
+    <View style={styles.feedTickerCard}>
+      <View style={styles.feedTickerIcon}>
+        <Text style={styles.feedTickerIconText}>{clean.slice(0, 2)}</Text>
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.feedTickerName}>${clean}</Text>
+        <Text style={styles.feedTickerSub}>Linked token</Text>
+      </View>
+      <View style={[styles.feedTickerChange, { backgroundColor: up ? "rgba(63,169,255,0.14)" : "rgba(230,242,255,0.10)" }]}>
+        {up ? <TrendingUp color={Colors.mint} size={12} strokeWidth={3} /> : <TrendingDown color={Colors.rose} size={12} strokeWidth={3} />}
+        <Text style={[styles.feedTickerChangeText, { color: up ? Colors.mint : Colors.rose }]}>{up ? "+" : ""}{changePct.toFixed(1)}%</Text>
+      </View>
+    </View>
+  );
+}
+
+function ProfileCommunityCard({ community, onPress }: { community: Community; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={styles.profileCommunityCard} testID={`profile-community-${community.id}`}>
+      <LinearGradient
+        colors={[`${community.accent[0]}33`, "rgba(11,15,26,0.92)", `${community.accent[1]}22`]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      {community.bannerUrl ? <Image source={{ uri: community.bannerUrl }} style={styles.profileCommunityBanner} contentFit="cover" /> : null}
+      <View style={styles.profileCommunityTop}>
+        <View style={[styles.profileCommunityAvatar, { borderColor: `${community.accent[0]}66` }]}>
+          {community.avatarUrl ? (
+            <Image source={{ uri: community.avatarUrl }} style={styles.profileCommunityAvatarImg} contentFit="cover" />
+          ) : (
+            <Text style={styles.profileCommunityEmojiLarge}>{community.iconEmoji}</Text>
+          )}
+        </View>
+        {community.verified ? <ShieldCheck color={Colors.cyan} size={16} strokeWidth={3} /> : null}
+      </View>
+      <Text style={styles.profileCommunityName} numberOfLines={1}>{community.name}</Text>
+      <Text style={styles.profileCommunityHandle} numberOfLines={1}>/{community.handle}</Text>
+      <Text style={styles.profileCommunityDesc} numberOfLines={2}>{community.description}</Text>
+      <View style={styles.profileCommunityStats}>
+        <Text style={styles.profileCommunityStat}>{formatCount(community.members)} members</Text>
+        <Text style={styles.profileCommunityDot}>•</Text>
+        <Text style={styles.profileCommunityStat}>{formatCount(community.online)} online</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function PostInteractionModal({
+  interaction,
+  text,
+  submitting,
+  onChangeText,
+  onClose,
+  onSubmit,
+}: {
+  interaction: { mode: "reply" | "quote"; post: UserPost } | null;
+  text: string;
+  submitting: boolean;
+  onChangeText: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const title = interaction?.mode === "reply" ? "Reply to post" : "Quote post";
+  return (
+    <Modal visible={!!interaction} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.interactionBackdrop}>
+        <Pressable style={styles.interactionDim} onPress={onClose}>
+          <Pressable style={styles.interactionSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{title}</Text>
+              <Pressable onPress={onClose} hitSlop={8}>
+                <X color={Colors.muted} size={18} strokeWidth={2.6} />
+              </Pressable>
+            </View>
+            {interaction ? (
+              <View style={styles.interactionQuotedPost}>
+                <Text style={styles.interactionQuotedText} numberOfLines={3}>{interaction.post.text || "Media post"}</Text>
+              </View>
+            ) : null}
+            <TextInput
+              value={text}
+              onChangeText={onChangeText}
+              style={styles.interactionInput}
+              placeholder={interaction?.mode === "reply" ? "Write your reply…" : "Add your quote…"}
+              placeholderTextColor={Colors.muted2}
+              multiline
+              maxLength={280}
+              autoFocus
+            />
+            <Pressable disabled={submitting || text.trim().length === 0} onPress={onSubmit} style={[styles.interactionSubmit, (submitting || text.trim().length === 0) && { opacity: 0.55 }]}>
+              <Text style={styles.interactionSubmitText}>{submitting ? "Sending…" : interaction?.mode === "reply" ? "Reply" : "Quote"}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 const profileBlockStyles = StyleSheet.create({
   gap: { gap: 12, marginTop: 14, marginHorizontal: 14 },
 });
@@ -2825,6 +3189,144 @@ const styles = StyleSheet.create({
 
   section: { marginTop: 14 },
   sectionTitle: { color: Colors.text, fontSize: 14, fontWeight: "900", letterSpacing: -0.2 },
+  profileFeedList: { gap: 10 },
+  feedPostCard: {
+    flexDirection: "row",
+    gap: 10,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: "rgba(11,15,26,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  feedPostAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  feedPostAvatarImg: { width: "100%", height: "100%" },
+  feedPostAvatarText: { color: Colors.ink, fontSize: 16, fontWeight: "900" },
+  feedPostBody: { flex: 1, minWidth: 0 },
+  feedPostHeaderRow: { flexDirection: "row", alignItems: "center", gap: 5, minWidth: 0 },
+  feedPostName: { color: Colors.text, fontSize: 14, fontWeight: "900", maxWidth: 104 },
+  feedPostHandle: { color: Colors.muted, fontSize: 12, fontWeight: "700", maxWidth: 82 },
+  feedPostDot: { color: Colors.muted2, fontSize: 12, fontWeight: "900" },
+  feedPostTime: { color: Colors.muted, fontSize: 12, fontWeight: "700" },
+  feedDeleteBtn: { marginLeft: "auto" as const, width: 24, height: 24, alignItems: "center", justifyContent: "center" },
+  feedCommunityChip: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(63,169,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(98,208,255,0.20)",
+  },
+  feedCommunityEmoji: { fontSize: 11 },
+  feedCommunityText: { color: Colors.cyan, fontSize: 10, fontWeight: "900", maxWidth: 160 },
+  feedPostText: { color: Colors.text, fontSize: 15, fontWeight: "500", lineHeight: 21, marginTop: 8 },
+  feedImageSolo: { height: 210, borderRadius: 16, overflow: "hidden", marginTop: 10, backgroundColor: Colors.cardSoft },
+  feedImageRow: { flexDirection: "row", gap: 4, height: 170, marginTop: 10 },
+  feedImageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 10 },
+  feedImageHalf: { flex: 1, borderRadius: 14, overflow: "hidden", backgroundColor: Colors.cardSoft },
+  feedImageQuad: { width: "49%", height: 116, borderRadius: 14, overflow: "hidden", backgroundColor: Colors.cardSoft },
+  feedImage: { width: "100%", height: "100%" },
+  feedTickerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  feedTickerIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.mint },
+  feedTickerIconText: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
+  feedTickerName: { color: Colors.text, fontSize: 13, fontWeight: "900" },
+  feedTickerSub: { color: Colors.muted, fontSize: 10, fontWeight: "700", marginTop: 1 },
+  feedTickerChange: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999 },
+  feedTickerChangeText: { fontSize: 11, fontWeight: "900" },
+  feedActionsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 11, paddingRight: 4 },
+  feedActionBtn: { flexDirection: "row", alignItems: "center", gap: 4, minWidth: 34, paddingVertical: 4 },
+  feedActionText: { color: Colors.muted, fontSize: 12, fontWeight: "800" },
+  communityProfileGrid: { gap: 10 },
+  profileCommunityCard: {
+    minHeight: 154,
+    padding: 14,
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Colors.card,
+  },
+  profileCommunityBanner: { ...StyleSheet.absoluteFillObject, opacity: 0.18 },
+  profileCommunityTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  profileCommunityAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+  },
+  profileCommunityAvatarImg: { width: "100%", height: "100%" },
+  profileCommunityEmojiLarge: { fontSize: 24 },
+  profileCommunityName: { color: Colors.text, fontSize: 17, fontWeight: "900", marginTop: 12, letterSpacing: -0.3 },
+  profileCommunityHandle: { color: Colors.cyan, fontSize: 12, fontWeight: "800", marginTop: 2 },
+  profileCommunityDesc: { color: Colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 17, marginTop: 7 },
+  profileCommunityStats: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 11 },
+  profileCommunityStat: { color: Colors.text, fontSize: 11, fontWeight: "900" },
+  profileCommunityDot: { color: Colors.muted2, fontSize: 11, fontWeight: "900" },
+  interactionBackdrop: { flex: 1, justifyContent: "flex-end" },
+  interactionDim: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.62)" },
+  interactionSheet: {
+    padding: 18,
+    paddingBottom: 34,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: Colors.card,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.10)",
+  },
+  interactionQuotedPost: {
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    marginTop: 8,
+  },
+  interactionQuotedText: { color: Colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 17 },
+  interactionInput: {
+    minHeight: 112,
+    maxHeight: 180,
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: "600",
+    lineHeight: 22,
+    textAlignVertical: "top",
+    padding: 12,
+    marginTop: 10,
+    borderRadius: 16,
+    backgroundColor: Colors.cardSoft,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  interactionSubmit: { marginTop: 12, paddingVertical: 14, borderRadius: 16, alignItems: "center", backgroundColor: Colors.mint },
+  interactionSubmitText: { color: Colors.ink, fontSize: 14, fontWeight: "900" },
 
   perfCard: {
     padding: 14,
