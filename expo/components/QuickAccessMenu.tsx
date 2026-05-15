@@ -4,7 +4,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
   Bell,
-  Bookmark,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -162,12 +161,11 @@ export default function QuickAccessMenu({ visible, onClose }: QuickAccessMenuPro
       {
         key: "discover",
         label: "Discover",
-        caption: "News, search, bookmarks",
+        caption: "News, invites, achievements",
         Icon: Compass,
         color: Colors.mint,
         items: [
           { key: "news", label: "Crypto news", description: "Headlines and viral mentions", Icon: Newspaper, color: Colors.mint, path: "/crypto-news" },
-          { key: "bookmarks", label: "Bookmarks", description: "Saved posts and collections", Icon: Bookmark, color: Colors.goldBright, path: "/bookmarks" },
           { key: "invites", label: "Invite friends", description: "Codes, referrals, leaderboard", Icon: UserPlus, color: Colors.cyan, path: "/invites" },
           { key: "achievements", label: "Achievements", description: "Badges, streaks, weekly recap", Icon: Trophy, color: Colors.orange, path: "/(tabs)/profile" },
         ],
