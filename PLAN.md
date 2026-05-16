@@ -1,8 +1,7 @@
 # 41 platform features — implementation plan
 
 Status legend: `[x]` SQL/data layer done · `[~]` UI in progress · `[ ]` not started.
-The SQL foundation for all 41 features lives in
-`supabase/migrations/2026_05_12_full_platform_features.sql`.
+The SQL foundation for these features has been deployed; local migration artifacts were removed from the public repo cleanup.
 
 ---
 
@@ -74,4 +73,4 @@ The SQL foundation for all 41 features lives in
 6. [x] **For-you tab** — new `(tabs)/fyp.tsx` reading from `fyp_cache` +
    `app/interest-quiz.tsx` onboarding writing to `user_interests`.
 7. [x] **Owner/admin dashboard feature sheets** — every Command Center tile now opens a full control UI with enable/status/rollout/threshold/notes/config, pinned state, data-source wiring, backend run history, and live owner actions.
-8. [x] **Owner feature backend** — `owner_feature_states` + `owner_feature_runs` tables and `owner_upsert_feature_state()` / `owner_run_feature_action()` RPCs added to `supabase/admin_dashboard_full.sql` with owner-only RLS and audit logging.
+8. [x] **Owner feature backend** — `owner_feature_states` + `owner_feature_runs` tables and `owner_upsert_feature_state()` / `owner_run_feature_action()` RPCs deployed with owner-only RLS and audit logging.

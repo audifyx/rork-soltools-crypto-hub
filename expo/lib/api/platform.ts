@@ -1,6 +1,5 @@
 /**
- * Unified RPC wrappers for the 41 platform features migration
- * (supabase/migrations/2026_05_12_full_platform_features.sql).
+ * Unified RPC wrappers for deployed Supabase platform features.
  * Keeps UI files lean by hiding raw supabase.rpc/from calls.
  */
 import { supabase } from "@/lib/supabase";

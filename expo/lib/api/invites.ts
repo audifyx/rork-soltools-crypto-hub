@@ -1,6 +1,5 @@
 /**
- * Invite system RPC wrappers.
- * Backed by supabase/invite_system.sql.
+ * Invite system RPC wrappers backed by deployed Supabase functions/RPCs.
  */
 import { supabase } from "@/lib/supabase";
 
