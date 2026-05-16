@@ -140,6 +140,7 @@ export default function DMThreadScreen() {
     editMessage,
   } = useMessages();
   const [uploading, setUploading] = useState<boolean>(false);
+  const [missingGraceActive, setMissingGraceActive] = useState<boolean>(true);
   const typingQuery = useDmTyping(id, !!id);
   const otherTyping = (typingQuery.data ?? []).length > 0;
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -159,6 +160,13 @@ export default function DMThreadScreen() {
     const fromThread = threadQ.data ?? [];
     return fromThread.length > 0 ? fromThread : fallbackMessages;
   }, [threadQ.data, fallbackMessages]);
+
+  useEffect(() => {
+    setMissingGraceActive(true);
+    if (!id || conv) return;
+    const timer = setTimeout(() => setMissingGraceActive(false), 1800);
+    return () => clearTimeout(timer);
+  }, [conv, id]);
 
   const [text, setText] = useState<string>("");
   const [picker, setPicker] = useState<boolean>(false);
@@ -392,7 +400,7 @@ export default function DMThreadScreen() {
   }, []);
 
   if (!conv) {
-    const stillLoading = !hydrated || !!peerProfile.isLoading;
+    const stillLoading = !hydrated || threadQ.isLoading || threadQ.isFetching || missingGraceActive;
     return (
       <View style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
