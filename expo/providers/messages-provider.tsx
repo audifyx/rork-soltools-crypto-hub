@@ -206,7 +206,9 @@ function conversationFromRow(row: ConversationRow): Conversation {
 
 function messageFromRow(row: MessageRow, currentUserId: string | null, user?: DMUser): DMMessage {
   const mine = row.sender_id === currentUserId;
-  const type = normalizeMessageType(row.message_type);
+  const rawType = normalizeMessageType(row.message_type);
+  const imageUrl = normalizeMediaUrl(row.image_url) ?? undefined;
+  const type: DMMessage["type"] = imageUrl ? "image" : rawType;
   const deliveredAt = row.delivered_at ? toMs(row.delivered_at) : null;
   const readAt = row.read_at ? toMs(row.read_at) : null;
   const editedAt = row.edited_at ? toMs(row.edited_at) : null;
@@ -235,7 +237,7 @@ function messageFromRow(row: MessageRow, currentUserId: string | null, user?: DM
     createdAt: toMs(row.created_at),
     type: deletedAt ? "system" : type,
     ticker: row.ticker ?? undefined,
-    imageUrl: deletedAt ? undefined : row.image_url ?? undefined,
+    imageUrl: deletedAt ? undefined : imageUrl,
     read: !!row.read || !!readAt || mine,
     deliveredAt,
     readAt,
