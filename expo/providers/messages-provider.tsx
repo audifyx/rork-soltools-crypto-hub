@@ -504,7 +504,25 @@ export const [MessagesProvider, useMessages] = createContextHook(() => {
       if (!user.userId) throw new Error("This user profile is missing a messaging id.");
       const id = await safeRpc<string>("get_or_create_dm", { other_user_id: user.userId });
       if (!id) throw new Error("Could not start this conversation.");
-      await queryClient.refetchQueries({ queryKey: ["messages", "conversations", userId] });
+      const convKey = ["messages", "conversations", userId] as const;
+      queryClient.setQueryData<Conversation[]>(convKey, (prev) => {
+        const list = prev ?? [];
+        if (list.some((c) => c.id === id)) return list;
+        return [
+          {
+            id,
+            user,
+            lastMessage: "",
+            lastAt: Date.now(),
+            unread: 0,
+            pinned: false,
+            muted: false,
+            request: false,
+          },
+          ...list,
+        ];
+      });
+      queryClient.refetchQueries({ queryKey: ["messages", "conversations", userId] }).catch(() => {});
       return id;
     },
     [conversations, isAuthenticated, queryClient, userId],
